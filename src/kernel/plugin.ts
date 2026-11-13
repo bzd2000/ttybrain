@@ -39,6 +39,8 @@ export interface PluginContext {
   readonly records: {
     resolve(ref: string): Promise<{ type: string; id: number } | null>
     label(ref: string): Promise<string>
+    // The display ref of (record type, id); `<type>:<id>` when the type is not registered.
+    refOf(type: string, id: number): Promise<string>
     // Whether a record type of this name is registered (its plugin is loaded): lets a plugin validate a soft
     // reference to an optional plugin's records only when that plugin is there.
     hasType(name: string): boolean

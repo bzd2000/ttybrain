@@ -30,7 +30,7 @@ describe("bin/pm.ts", () => {
   test("runs a command and exits with its code", async () => {
     const list = await pm("plugin", "list", "--json")
     expect({ code: list.code, err: list.err }).toEqual({ code: 0, err: "" })
-    expect(JSON.parse(list.out).map((p: { id: string; status: string }) => `${p.id} ${p.status}`)).toEqual(["people ok", "projects ok"])
+    expect(JSON.parse(list.out).map((p: { id: string; status: string }) => `${p.id} ${p.status}`)).toEqual(["people ok", "projects ok", "inbox ok"])
     const r = await pm("nope", "--json")
     expect(r.code).toBe(1)
     expect(JSON.parse(r.out).error.code).toBe("validation")

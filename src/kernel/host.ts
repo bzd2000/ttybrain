@@ -218,7 +218,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         live()
         records.register({ ...def, plugin: id })
       },
-      records: { resolve: (ref) => records.resolveAny(ref), label: (ref) => records.label(ref), hasType: (name) => records.byName(name) !== undefined },
+      records: { resolve: (ref) => records.resolveAny(ref), label: (ref) => records.label(ref), refOf: (type, id) => records.refOf(type, id), hasType: (name) => records.byName(name) !== undefined },
       tagType: (def) => {
         live()
         tags.register(def, id)

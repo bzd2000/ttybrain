@@ -104,6 +104,14 @@ describe("a working kernel", () => {
     expect(has!("meeting")).toBe(false)
   })
 
+  test("ctx.records.refOf gives the display ref of (type, id), `type:id` for an unknown type", async () => {
+    let refOf: ((t: string, id: number) => Promise<string>) | undefined
+    const probe = definePlugin({ id: "probe", name: "Probe", version: "1.0.0", apiVersion: 1, activate: (ctx) => void (refOf = ctx.records.refOf) })
+    const k = await boot({ plugins: [alpha(), probe] })
+    expect(await refOf!("alpha-item", 3)).toBe("AL-3")
+    expect(await refOf!("meeting", 3)).toBe("meeting:3")
+  })
+
   test("context() comes from the clock; an origin is carried", async () => {
     const k = await boot({ today: "2026-11-20" })
     expect(k.context()).toEqual({ actor: "me", today: "2026-11-20", now: "2026-11-20T09:00:00" })
