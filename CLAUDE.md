@@ -51,4 +51,4 @@ TUI tests use `testRender(() => <App />, { width, height })` from `@opentui/soli
 
 ## CI
 
-GitLab CI (`.gitlab-ci.yml`), stage `test`: job `test` (`oven/bun:1.3.14`: `bun install --frozen-lockfile && bun typecheck && bun test`), job `node-smoke` (`node:26`: `npm ci && bash scripts/smoke-node.sh`) and GitLab's SAST template. Keep `bun.lock` and `package-lock.json` in sync with `package.json`.
+GitLab CI (`.gitlab-ci.yml`), stage `test`: job `test` (`oven/bun:1.4.4`, the version that writes `bun.lock`: `bun install --frozen-lockfile && bun typecheck && bun test`), job `node-smoke` (`node:26`: `npm ci && bash scripts/smoke-node.sh`) and GitLab's SAST template. Keep `bun.lock` and `package-lock.json` in sync with `package.json`.
