@@ -33,13 +33,29 @@ type SchemaObject = { type: string; name: string; tbl_name: string; sql: string 
 
 const quote = (name: string) => `"${name.replace(/"/g, '""')}"`
 
+// Root page -> the table it belonged to (for a table or index b-tree), taken before a migration. Names can be
+// changed by ALTER TABLE RENAME, root pages cannot, so this is how a migration tells whose table it really is.
+export type RootOwners = Map<number, string>
+
+export function rootOwners(kdb: KernelDb): RootOwners {
+  const rows = kdb.raw.prepare("SELECT rootpage, tbl_name FROM sqlite_schema WHERE rootpage > 0").all([])
+  return new Map(rows.map((r) => [Number(r.rootpage), String(r.tbl_name)]))
+}
+
+const isOwnName = (pluginId: string, name: string) => name.toLowerCase().startsWith(`${pluginId}_`) && !isReservedName(name)
+
 // A plugin's own tables, read from the live schema: `<pluginId>_<short>`, minus the kernel-reserved `<pluginId>__*`.
-export function ownTablesOf(kdb: KernelDb, pluginId: string): Set<string> {
+// With `roots` (during a migration), a table whose root page belonged to someone else before it is never own,
+// whatever it is called now.
+export function ownTablesOf(kdb: KernelDb, pluginId: string, roots?: RootOwners): Set<string> {
   const prefix = `${pluginId}_`
   const out = new Set<string>()
-  for (const r of kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all([])) {
+  for (const r of kdb.raw.prepare("SELECT name, rootpage FROM sqlite_schema WHERE type = 'table'").all([])) {
     const name = String(r.name)
-    if (name.toLowerCase().startsWith(prefix) && !name.toLowerCase().startsWith(`${pluginId}__`) && !isReservedName(name)) out.add(name.slice(prefix.length))
+    if (!isOwnName(pluginId, name) || name.toLowerCase().startsWith(`${pluginId}__`)) continue
+    const was = roots?.get(Number(r.rootpage))
+    if (was !== undefined && !isOwnName(pluginId, was)) continue
+    out.add(name.slice(prefix.length))
   }
   return out
 }
@@ -133,24 +149,40 @@ export class MigrationRunner {
 
   private async apply(pluginId: string, m: Migration, external: boolean): Promise<void> {
     let active = true // the db handed to `up` may outlive the migration; it loses migration mode with it
+    let roots: RootOwners = new Map()
+    let before = new Map<string, SchemaObject>()
+    let beforeTemp = new Map<string, SchemaObject>()
+    let violation: string | undefined // sticky: a plugin that catches the error still gets rolled back
+    const fail = (problem: string) => new IsolationError(`migration "${m.id}" of plugin "${pluginId}" rolled back: ${problem}`)
     const access: TableAccess = {
-      ownTables: () => ownTablesOf(this.kdb, pluginId),
+      ownTables: () => ownTablesOf(this.kdb, pluginId, roots),
       views: () => new Map(), // published views are created after migrations
-      migrating: () => active,
+      migrating: () => active && violation === undefined,
       ownerOf: (name) => ownerOf(this.kdb, name),
+      ownsPhysical: (physical) => this.ownsPhysical(pluginId, physical, roots),
+      // Every schema statement is checked at once, so no intermediate state (a foreign table renamed into the
+      // plugin's namespace, a trigger created and dropped again) can be used before the final diff.
+      afterSchemaChange: () => {
+        const problem = this.checkRoots(pluginId, roots) ?? this.check(pluginId, external, before, beforeTemp)
+        if (problem) {
+          violation ??= problem
+          throw fail(problem)
+        }
+      },
     }
     try {
       await this.kdb.withWriteLock(() =>
         this.kdb.transaction(async () => {
           this.kdb.invalidateSchema() // another process may have migrated while we waited for the lock
           if (this.appliedIds(pluginId).has(m.id)) return // ...and applied this one
-          const before = this.snapshot("sqlite_schema")
-          const beforeTemp = this.snapshot("sqlite_temp_schema")
+          roots = rootOwners(this.kdb)
+          before = this.snapshot("sqlite_schema")
+          beforeTemp = this.snapshot("sqlite_temp_schema")
           await m.up(this.kdb.pluginDb(pluginId, access))
           active = false
           this.kdb.invalidateSchema()
-          const problem = this.check(pluginId, external, before, beforeTemp)
-          if (problem) throw new IsolationError(`migration "${m.id}" of plugin "${pluginId}" rolled back: ${problem}`)
+          const problem = violation ?? this.checkRoots(pluginId, roots) ?? this.check(pluginId, external, before, beforeTemp)
+          if (problem) throw fail(problem)
           this.kdb.raw
             .prepare("INSERT INTO kernel_plugin_migration (plugin, id, applied_at) VALUES (?, ?, ?)")
             .run([pluginId, m.id, this.clock.now()])
@@ -160,6 +192,24 @@ export class MigrationRunner {
       active = false
       this.kdb.invalidateSchema()
     }
+  }
+
+  // False if `physical` is (now) the name of a b-tree that belonged to another plugin or the kernel before the migration.
+  private ownsPhysical(pluginId: string, physical: string, roots: RootOwners): boolean {
+    const row = this.kdb.raw.prepare("SELECT rootpage FROM sqlite_schema WHERE name = ? COLLATE NOCASE AND rootpage > 0").all([physical])[0]
+    const was = row ? roots.get(Number(row.rootpage)) : undefined
+    return was === undefined || isOwnName(pluginId, was)
+  }
+
+  // Every b-tree that was not the plugin's before the migration must still exist under the same table name.
+  private checkRoots(pluginId: string, roots: RootOwners): string | undefined {
+    const now = rootOwners(this.kdb)
+    for (const [root, table] of roots) {
+      if (isOwnName(pluginId, table)) continue
+      const current = now.get(root)
+      if (current !== table) return `table "${table}" may not be ${current === undefined ? "dropped" : `renamed to "${current}"`}`
+    }
+    return undefined
   }
 
   private snapshot(table: "sqlite_schema" | "sqlite_temp_schema"): Map<string, SchemaObject> {

@@ -38,6 +38,9 @@ export interface TableAccess {
   views(): Map<string, PublishedView> // keyed "<plugin>.<view>"
   migrating(): boolean
   ownerOf(name: string): string | undefined // kernel-wide: which plugin owns this short or physical table name
+  // Migration hooks, provided by the MigrationRunner:
+  ownsPhysical?(physical: string): boolean // false for an own-prefixed name that is really another owner's table
+  afterSchemaChange?(): void // after each schema statement; throws IsolationError if it broke the schema rules
 }
 
 export const SCHEMA_NODE_KINDS: ReadonlySet<string> = new Set([

@@ -92,14 +92,18 @@ export class PmConnection extends RawConnection {
     const allowed = new Set([...own, ...viewsUsed(compiled.query, this.access)])
     for (const t of this.checker.tablesTouched(compiled.sql)) {
       // Kernel and SQLite tables are never a plugin's, whatever its id (defence in depth for assertPluginId).
-      if (allowed.has(t) && !isReservedName(t)) continue
-      if (migrating && ddl && migrationMayTouch(this.pluginId, t)) continue
+      const owns = this.access.ownsPhysical?.(t) ?? true
+      if (allowed.has(t) && !isReservedName(t) && owns) continue
+      if (migrating && ddl && migrationMayTouch(this.pluginId, t) && owns) continue
       if (t === "sqlite_schema") throw schemaChangesOnlyInMigrations()
       throw new IsolationError(`plugin "${this.pluginId}" may not use table "${t}"`)
     }
 
     const result = await super.executeQuery<R>(compiled)
-    if (ddl) this.onSchemaChange()
+    if (ddl) {
+      this.onSchemaChange()
+      this.access.afterSchemaChange?.()
+    }
     return result
   }
 }

@@ -315,6 +315,99 @@ describe("schema checks", () => {
     expect(e.message).toContain("projects_project")
   })
 
+  describe("foreign table round trip (rename into own namespace, write, rename back)", () => {
+    // Quoted names, as Kysely writes them: ALTER RENAME writes quoted names too, so renaming back leaves
+    // sqlite_schema byte-identical and only a per-statement check can see the round trip.
+    beforeEach(() => {
+      kdb.raw.exec(`CREATE TABLE "projects_item" (id INTEGER PRIMARY KEY, name TEXT)`)
+      kdb.raw.exec(`INSERT INTO projects_item VALUES (1, 'kept')`)
+      kdb.raw.exec(`CREATE TABLE "kernel_q" (id INTEGER PRIMARY KEY, name TEXT)`)
+      kdb.raw.exec(`INSERT INTO kernel_q VALUES (1, 'kept')`)
+      kdb.invalidateSchema()
+    })
+
+    // Runs the statements, swallowing each error like a hostile plugin would, and returns the errors.
+    function roundTrip(table: string, write: string): { migration: Migration; errors: unknown[] } {
+      const errors: unknown[] = []
+      const stmts = [`ALTER TABLE ${table} RENAME TO contracts_tmp`, write, `ALTER TABLE contracts_tmp RENAME TO ${table}`]
+      return {
+        errors,
+        migration: {
+          id: "002",
+          up: async (db) => {
+            for (const s of stmts) {
+              try {
+                await sql.raw(s).execute(db)
+                errors.push(undefined)
+              } catch (e) {
+                errors.push(e)
+              }
+            }
+          },
+        },
+      }
+    }
+
+    const writes = {
+      UPDATE: "UPDATE contracts_tmp SET name = 'pwned'",
+      DELETE: "DELETE FROM contracts_tmp",
+      INSERT: "INSERT INTO contracts_tmp (id, name) VALUES (99, 'injected')",
+    }
+
+    for (const table of ["projects_item", "kernel_q"]) {
+      for (const [kind, write] of Object.entries(writes)) {
+        test(`${table} with ${kind}: rejected at the rename, rows unchanged, not recorded`, async () => {
+          const { migration, errors } = roundTrip(table, write)
+          const before = schema()
+          await rejects(runner.run("contracts", [contracts[0]!, migration], false))
+          expect(errors[0]).toBeInstanceOf(IsolationError) // the RENAME itself fails
+          expect(errors[1]).toBeInstanceOf(IsolationError) // and the renamed table is never treated as own
+          expect(rows(`SELECT id, name FROM ${table}`)).toEqual([{ id: 1, name: "kept" }])
+          expect(schema().filter((o) => o.name !== "contracts_contract")).toEqual(before) // nothing left behind
+          expect(applied().filter((r) => r.plugin === "contracts").map((r) => r.id)).toEqual(["001"])
+        })
+      }
+    }
+  })
+
+  test("a trigger created and dropped within one migration is rejected when created", async () => {
+    let first: unknown
+    await rejects(
+      runner.run(
+        "contracts",
+        [
+          contracts[0]!,
+          {
+            id: "002",
+            up: async (db) => {
+              try {
+                await sql.raw("CREATE TRIGGER contracts_t AFTER INSERT ON contracts_contract BEGIN DELETE FROM projects_project; END").execute(db)
+              } catch (e) {
+                first = e
+              }
+              await sql.raw("INSERT INTO contracts_contract (id, title) VALUES (5, 'x')").execute(db)
+              await sql.raw("DROP TRIGGER IF EXISTS contracts_t").execute(db)
+            },
+          },
+        ],
+        false,
+      ),
+    )
+    expect(first).toBeInstanceOf(IsolationError)
+    expect(applied().filter((r) => r.plugin === "contracts").map((r) => r.id)).toEqual(["001"])
+  })
+
+  // Kysely's alterTable only takes a string and throws a TypeError while building, before any kernel code runs;
+  // the migration still rolls back and nothing of the other plugin changes.
+  test("alterTable with a raw table expression rolls back", async () => {
+    const before = schema()
+    await expect(
+      runner.run("contracts", [contracts[0]!, { id: "002", up: async (db) => void (await db.schema.alterTable(sql.raw("projects_project") as any).addColumn("x", "text").execute()) }], false),
+    ).rejects.toThrow(TypeError)
+    expect(schema().filter((o) => o.name !== "contracts_contract")).toEqual(before)
+    expect(applied().filter((r) => r.plugin === "contracts").map((r) => r.id)).toEqual(["001"])
+  })
+
   test("renaming an own table to a foreign-looking name", async () => {
     const e = await rejected(raw("002", "ALTER TABLE contracts_contract RENAME TO projects_fake"))
     expect(e.message).toContain("projects_fake")
