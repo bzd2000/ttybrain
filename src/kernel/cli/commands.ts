@@ -3,7 +3,21 @@
 import { ValidationError } from "../errors"
 
 // `list` is comma-separated → string[]; `date` accepts the date input forms and is parsed to ISO.
-export type FlagDef = { type: "string" | "boolean" | "number" | "date" | "list"; description: string; required?: boolean; short?: string }
+// `values` restricts a string flag to those values (shown in help as `<a|b|c>`). `placeholder` names the value
+// in help (`--project <code>`); the default comes from the type.
+export type FlagDef = {
+  type: "string" | "boolean" | "number" | "date" | "list"
+  description: string
+  required?: boolean
+  short?: string
+  values?: string[]
+  placeholder?: string
+}
+
+// Things the kernel's own commands use (cli/kernel-commands.ts) and the flags the dispatcher parses on every
+// command (cli/args.ts). Plugins cannot register either.
+export const KERNEL_THINGS: readonly string[] = ["help", "guide", "plugin", "report"]
+export const GLOBAL_FLAG_NAMES: readonly string[] = ["json", "db", "from-inbox", "yes", "help"]
 
 export type CommandDef = {
   thing: string
@@ -26,6 +40,9 @@ export class CommandRegistry {
 
   register(plugin: string, def: CommandDef): void {
     const key = `${def.thing} ${def.verb}`
+    if (KERNEL_THINGS.includes(def.thing)) throw new ValidationError(`"${def.thing}" is a kernel command; plugins cannot register it`)
+    for (const flag of Object.keys(def.flags ?? {}))
+      if (GLOBAL_FLAG_NAMES.includes(flag)) throw new ValidationError(`command "${key}": --${flag} is a global flag`)
     const taken = this.entries.get(key)
     if (taken) throw new ValidationError(`command "${key}" is already registered by plugin "${taken.plugin}"`)
     this.entries.set(key, { plugin, def })

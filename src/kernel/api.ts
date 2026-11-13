@@ -5,6 +5,7 @@ export { sql, type Kysely } from "kysely"
 
 export { definePlugin, type PluginContext, type PluginDef } from "./plugin"
 export type { CommandDef, FlagDef } from "./cli/commands"
+export { formatTable, type CommandResult } from "./cli/output"
 export type { Clock } from "./clock"
 export type { Config } from "./config"
 export { currentContext, type OpContext, type Origin } from "./context"

@@ -28,3 +28,16 @@ describe("CommandRegistry", () => {
     expect(c.find("project", "add")?.plugin).toBe("other")
   })
 })
+
+describe("CommandRegistry: kernel names", () => {
+  test("the kernel's things and global flag names are reserved", () => {
+    const c = new CommandRegistry()
+    for (const thing of ["help", "guide", "plugin", "report"])
+      expect(() => c.register("p", cmd(thing, "x"))).toThrow(new ValidationError(`"${thing}" is a kernel command; plugins cannot register it`))
+    for (const flag of ["json", "db", "from-inbox", "yes", "help"])
+      expect(() => c.register("p", { ...cmd("thing", flag), flags: { [flag]: { type: "boolean", description: "" } } })).toThrow(
+        new ValidationError(`command "thing ${flag}": --${flag} is a global flag`),
+      )
+    expect(c.list()).toEqual([])
+  })
+})

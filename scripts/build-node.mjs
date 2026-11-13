@@ -6,7 +6,7 @@ import ts from "@babel/preset-typescript"
 import moduleResolver from "babel-plugin-module-resolver"
 import solid from "babel-preset-solid"
 import { existsSync } from "node:fs"
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
+import { chmod, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 const root = path.resolve(import.meta.dirname, "..")
@@ -58,4 +58,8 @@ for await (const file of walk(srcDir)) {
   await writeFile(out, result.code)
   count++
 }
+// The CLI entry is `bin.pm` in package.json: make it directly executable (`npm link` puts it on the PATH).
+const bin = path.join(outDir, "bin", "pm.js")
+await writeFile(bin, "#!/usr/bin/env -S node --experimental-ffi\n" + (await readFile(bin, "utf8")))
+await chmod(bin, 0o755)
 console.log(`Compiled ${count} files to ${path.relative(root, outDir)}/`)
