@@ -5,7 +5,7 @@ import type { CompiledQuery, DatabaseConnection, Driver, OperationNode, QueryRes
 import { IsolationError } from "../errors"
 import { isReservedName } from "../plugin-id"
 import type { TableChecker } from "./explain"
-import { SCHEMA_NODE_KINDS, schemaChangesOnlyInMigrations, walk, type TableAccess } from "./scope"
+import { assertMigrationHooks, SCHEMA_NODE_KINDS, schemaChangesOnlyInMigrations, walk, type TableAccess } from "./scope"
 import type { RawDb } from "./sqlite"
 
 // One query on the raw connection.
@@ -85,6 +85,7 @@ export class PmConnection extends RawConnection {
     if (TRANSACTION.has(keyword)) throw kernelOwnsTransactions()
     const ddl = DDL.has(keyword) || SCHEMA_NODE_KINDS.has(compiled.query.kind)
     if (!ddl && !DML.has(keyword)) throw new IsolationError(`plugin "${this.pluginId}" may not run ${keyword || "this"} statements`)
+    assertMigrationHooks(this.access)
     const migrating = this.access.migrating()
     if (ddl && !migrating) throw schemaChangesOnlyInMigrations()
 

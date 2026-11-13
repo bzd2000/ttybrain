@@ -4,7 +4,7 @@ import { Kysely, SqliteAdapter, SqliteIntrospector, SqliteQueryCompiler, type Di
 import { PmConnection, PmDriver, RawConnection, RawDriver } from "./driver"
 import { assertPluginId } from "../plugin-id"
 import { createTableChecker, type TableChecker } from "./explain"
-import { scopePlugin, type TableAccess } from "./scope"
+import { assertMigrationHooks, scopePlugin, type TableAccess } from "./scope"
 import type { RawDb } from "./sqlite"
 
 export { RawConnection, RawDriver } from "./driver"
@@ -91,6 +91,7 @@ export class KernelDb {
   // The plugin's `ctx.data`: layer 1 (query tree) as a Kysely plugin, layer 2 (EXPLAIN) in the connection.
   pluginDb(pluginId: string, access: TableAccess): Kysely<any> {
     assertPluginId(pluginId)
+    assertMigrationHooks(access)
     const connection = new PmConnection(this.raw, pluginId, access, this.tables, () => this.invalidateSchema())
     return kyselyOver(new PmDriver(connection)).withPlugin(scopePlugin(pluginId, access, (t) => this.columnsOf(t)))
   }

@@ -61,7 +61,7 @@ export function ownTablesOf(kdb: KernelDb, pluginId: string, roots?: RootOwners)
 }
 
 // Kernel-wide owner of a short or physical table name, for error messages.
-function ownerOf(kdb: KernelDb, name: string): string | undefined {
+export function ownerOf(kdb: KernelDb, name: string): string | undefined {
   for (const r of kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE type IN ('table', 'view')").all([])) {
     const physical = String(r.name)
     const i = physical.indexOf("_")

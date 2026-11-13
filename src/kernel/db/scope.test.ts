@@ -26,6 +26,9 @@ function access(): TableAccess {
       new Map([["projects.project", { physical: "projects__pub_project", columns: ["id", "code"], baseTables: ["projects_project"] }]]),
     migrating: () => migrating,
     ownerOf: (name) => owners[name],
+    // Migration mode requires both hooks; these tests check layers 1 and 2 alone.
+    ownsPhysical: () => true,
+    afterSchemaChange: () => {},
   }
 }
 
@@ -315,5 +318,29 @@ describe("reserved plugin ids", () => {
     expect(kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE name = 'kernel_plugin_migration'").all([])).toEqual([
       { name: "kernel_plugin_migration" },
     ])
+  })
+})
+
+describe("migration mode fails closed without its hooks", () => {
+  function bare(): TableAccess {
+    const { ownsPhysical: _o, afterSchemaChange: _a, ...rest } = access()
+    return rest
+  }
+
+  test("pluginDb refuses an access that is migrating without ownsPhysical/afterSchemaChange", () => {
+    migrating = true
+    expect(() => kdb.pluginDb("contracts", bare())).toThrow("migration mode requires the ownsPhysical and afterSchemaChange hooks")
+    expect(() => kdb.pluginDb("contracts", { ...access(), afterSchemaChange: undefined })).toThrow(IsolationError)
+    expect(() => kdb.pluginDb("contracts", { ...access(), ownsPhysical: undefined })).toThrow(IsolationError)
+  })
+
+  test("an access that switches to migrating later is refused at query time, before anything runs", async () => {
+    const db = kdb.pluginDb("contracts", bare())
+    migrating = true
+    const e = await rejects(() => db.schema.createTable("x").addColumn("id", "integer").execute())
+    expect(e.message).toBe("migration mode requires the ownsPhysical and afterSchemaChange hooks")
+    await rejects(() => sql`CREATE TABLE contracts_y (id INTEGER)`.execute(db))
+    await rejects(() => db.selectFrom("contract").selectAll().execute())
+    expect(kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE name IN ('contracts_x', 'contracts_y')").all([])).toEqual([])
   })
 })

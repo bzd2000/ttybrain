@@ -25,7 +25,7 @@ import {
   type UnknownRow,
   type UpdateQueryNode,
 } from "kysely"
-import { IsolationError } from "../errors"
+import { IsolationError, ViewUnavailableError } from "../errors"
 
 export interface PublishedView {
   physical: string
@@ -36,11 +36,20 @@ export interface PublishedView {
 export interface TableAccess {
   ownTables(): Set<string> // short names
   views(): Map<string, PublishedView> // keyed "<plugin>.<view>"
+  reads?(): Set<string> // plugin ids declared in `reads`: a missing view of theirs is ViewUnavailableError
   migrating(): boolean
   ownerOf(name: string): string | undefined // kernel-wide: which plugin owns this short or physical table name
-  // Migration hooks, provided by the MigrationRunner:
+  // Migration hooks, provided by the MigrationRunner. Required whenever migrating() is true (assertMigrationHooks):
   ownsPhysical?(physical: string): boolean // false for an own-prefixed name that is really another owner's table
   afterSchemaChange?(): void // after each schema statement; throws IsolationError if it broke the schema rules
+}
+
+// Migration mode without its checks would skip the per-statement schema rules, so it is refused (fail closed).
+// Called by pluginDb, by layer 1 and by layer 2, since migrating() may turn true after the db was handed out.
+export function assertMigrationHooks(access: TableAccess): void {
+  if (access.migrating() && (!access.ownsPhysical || !access.afterSchemaChange)) {
+    throw new IsolationError("migration mode requires the ownsPhysical and afterSchemaChange hooks")
+  }
 }
 
 export const SCHEMA_NODE_KINDS: ReadonlySet<string> = new Set([
@@ -95,6 +104,7 @@ export class ScopeTransformer extends OperationNodeTransformer {
     super()
     this.prefix = `${pluginId}_`
     this.ddl = SCHEMA_NODE_KINDS.has(root.kind)
+    assertMigrationHooks(access)
     if (this.ddl && !access.migrating()) throw schemaChangesOnlyInMigrations()
   }
 
@@ -163,9 +173,11 @@ export class ScopeTransformer extends OperationNodeTransformer {
   }
 
   private view(schema: string, name: string): PublishedView {
-    const v = this.access.views().get(`${schema}.${name}`)
-    if (!v) throw new IsolationError(`${schema}.${name} is not a published view`)
-    return v
+    const key = `${schema}.${name}`
+    const v = this.access.views().get(key)
+    if (v) return v
+    if (this.access.reads?.().has(schema)) throw new ViewUnavailableError(key)
+    throw new IsolationError(`${key} is not a published view`)
   }
 
   private rejectViewTarget(target: OperationNode | undefined) {
