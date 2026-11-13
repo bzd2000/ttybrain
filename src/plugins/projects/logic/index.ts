@@ -1,8 +1,11 @@
 // The projects plugin: the portfolio, and what you follow up per project (plugin reference §2). Part 1:
-// projects, health, context and involvement.
+// projects, health, context and involvement. Part 2: milestones, deliverables, risks and decisions.
 import { definePlugin } from "../../../kernel/api"
 import { registerCommands } from "./commands"
+import { registerItemCommands } from "./commands-items"
 import { registerGuide } from "./guide"
+import { makeItems, registerItemRecordTypes } from "./items"
+import { registerItemOps } from "./ops-items"
 import { registerProjectOps } from "./ops-project"
 import { makeStore, registerRecordTypes } from "./records"
 import { registerSchema } from "./schema"
@@ -21,7 +24,11 @@ export const projects = definePlugin({
     registerViews(ctx)
     registerRecordTypes(ctx, store)
     registerProjectOps(ctx, store)
+    const items = makeItems(ctx, store)
+    registerItemRecordTypes(ctx, items)
+    registerItemOps(ctx, store, items)
     registerCommands(ctx, store)
+    registerItemCommands(ctx, store, items)
     registerGuide(ctx)
   },
 })

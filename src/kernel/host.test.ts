@@ -95,6 +95,15 @@ describe("a working kernel", () => {
     expect(k.commands.find("alpha", "add")?.plugin).toBe("alpha")
   })
 
+  test("ctx.records.hasType tells whether a record type is registered", async () => {
+    let has: ((n: string) => boolean) | undefined
+    const probe = definePlugin({ id: "probe", name: "Probe", version: "1.0.0", apiVersion: 1, activate: (ctx) => void (has = ctx.records.hasType) })
+    const k = await boot({ plugins: [alpha(), probe] })
+    expect(k.plugins.map((p) => p.status)).toEqual(["ok", "ok"])
+    expect(has!("alpha-item")).toBe(true)
+    expect(has!("meeting")).toBe(false)
+  })
+
   test("context() comes from the clock; an origin is carried", async () => {
     const k = await boot({ today: "2026-11-20" })
     expect(k.context()).toEqual({ actor: "me", today: "2026-11-20", now: "2026-11-20T09:00:00" })

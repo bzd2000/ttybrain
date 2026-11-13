@@ -62,11 +62,11 @@ const COLUMNS = {
 const DATE_FIELDS = new Set(["startDate", "endDate"])
 const CODE_HINT = "2–8 letters or digits, e.g. CRM"
 
-const now = () => currentContext().now
-const today = () => currentContext().today
+export const now = () => currentContext().now
+export const today = () => currentContext().today
 // Free text: trimmed, and empty means none.
-const clean = (v: string | null | undefined) => (v === undefined ? undefined : v === null || v.trim() === "" ? null : v.trim())
-const date = (input: string, field: string) => {
+export const clean = (v: string | null | undefined) => (v === undefined ? undefined : v === null || v.trim() === "" ? null : v.trim())
+export const date = (input: string, field: string) => {
   try {
     return parseDate(input, today())
   } catch (e) {

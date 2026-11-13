@@ -92,4 +92,50 @@ export function registerViews(ctx: PluginContext): void {
     columns: { project_id: "integer", person_id: "integer", role: "text" },
     query: (db) => db.selectFrom("involvement").select(["project_id", "person_id", "role"]),
   })
+
+  // `late` uses SQLite's own date('now'): a view takes no injected clock. It is a display convenience; logic that
+  // needs "today" (reports, tests) compares due_date with the context's today itself.
+  ctx.publish("milestone", {
+    version: 1,
+    columns: { id: "integer", project_id: "integer", title: "text", due_date: "date", done_date: "date", late: "boolean" },
+    query: (db) =>
+      db
+        .selectFrom("milestone as m")
+        .select([
+          "m.id",
+          "m.project_id",
+          "m.title",
+          "m.due_date",
+          "m.done_date",
+          (eb) => eb.and([eb("m.done_date", "is", null), eb("m.due_date", "<", sql<string>`date('now')`)]).as("late"),
+        ]),
+  })
+
+  ctx.publish("deliverable", {
+    version: 1,
+    columns: {
+      id: "integer",
+      project_id: "integer",
+      title: "text",
+      owner_id: "integer",
+      due_date: "date",
+      status: "text",
+      status_changed_at: "text",
+      milestone_id: "integer",
+    },
+    query: (db) =>
+      db.selectFrom("deliverable").select(["id", "project_id", "title", "owner_id", "due_date", "status", "status_changed_at", "milestone_id"]),
+  })
+
+  ctx.publish("risk", {
+    version: 1,
+    columns: { id: "integer", project_id: "integer", type: "text", title: "text", severity: "text", owner_id: "integer", status: "text", closed_date: "date" },
+    query: (db) => db.selectFrom("risk").select(["id", "project_id", "type", "title", "severity", "owner_id", "status", "closed_date"]),
+  })
+
+  ctx.publish("decision", {
+    version: 1,
+    columns: { id: "integer", project_id: "integer", date: "date", title: "text", decided_by: "text", meeting_id: "integer" },
+    query: (db) => db.selectFrom("decision").select(["id", "project_id", "date", "title", "decided_by", "meeting_id"]),
+  })
 }
