@@ -121,11 +121,13 @@ describe("allowed", () => {
     ])
   })
 
-  test("insert and update", async () => {
-    const ins = await contracts.insertInto("contract").values({ project_id: 2, title: "Hosting", value: 50 }).executeTakeFirst()
-    expect(ins.insertId).toBe(4n)
-    const upd = await contracts.updateTable("contract").set({ value: 130 }).where("id", "=", 1).executeTakeFirst()
-    expect(upd.numUpdatedRows).toBe(1n)
+  test("insert and update (inside a write)", async () => {
+    await kdb.write(async () => {
+      const ins = await contracts.insertInto("contract").values({ project_id: 2, title: "Hosting", value: 50 }).executeTakeFirst()
+      expect(ins.insertId).toBe(4n)
+      const upd = await contracts.updateTable("contract").set({ value: 130 }).where("id", "=", 1).executeTakeFirst()
+      expect(upd.numUpdatedRows).toBe(1n)
+    })
     expect(kdb.raw.prepare("SELECT title, value FROM contracts_contract WHERE id IN (1, 4) ORDER BY id").all([])).toEqual([
       { title: "SaaS licence", value: 130 },
       { title: "Hosting", value: 50 },
@@ -260,11 +262,13 @@ describe("nested builder queries", () => {
   })
 
   test("insert ... select with a ctx.data expression", async () => {
-    await contracts
-      .insertInto("contract")
-      .columns(["project_id", "title", "value"])
-      .expression(contracts.selectFrom("party").select([(eb) => eb.val(9).as("project_id"), "name", (eb) => eb.val(1).as("value")]))
-      .execute()
+    await kdb.write(() =>
+      contracts
+        .insertInto("contract")
+        .columns(["project_id", "title", "value"])
+        .expression(contracts.selectFrom("party").select([(eb) => eb.val(9).as("project_id"), "name", (eb) => eb.val(1).as("value")]))
+        .execute(),
+    )
     expect(kdb.raw.prepare("SELECT title FROM contracts_contract WHERE project_id = 9 ORDER BY id").all([])).toEqual([
       { title: "Vendor B" },
       { title: "Integrator C" },
@@ -377,10 +381,54 @@ describe("pragmas never reach prepare", () => {
   })
 
   test("legitimate DML and migration DDL still pass", async () => {
-    await sql`UPDATE contracts_contract SET value = value + 1 WHERE id = 1`.execute(contracts)
+    await kdb.write(() => sql`UPDATE contracts_contract SET value = value + 1 WHERE id = 1`.execute(contracts))
     expect(await contracts.selectFrom("contract").select("value").where("id", "=", 1).executeTakeFirst()).toEqual({ value: 121 })
     migrating = true
     await sql`/* own */ CREATE TABLE contracts_extra (id INTEGER PRIMARY KEY)`.execute(contracts)
     expect(kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE name = 'contracts_extra'").all([])).toEqual([{ name: "contracts_extra" }])
+  })
+})
+
+describe("data changes need a write (R15)", () => {
+  const OUTSIDE = "data changes must run inside a write operation"
+  const count = () => kdb.raw.prepare("SELECT count(*) AS n FROM contracts_contract").all([])[0]!.n
+
+  test("insert, update, delete and raw REPLACE outside a write are rejected; reads are not", async () => {
+    for (const q of [
+      () => contracts.insertInto("contract").values({ title: "x" }).execute(),
+      () => contracts.updateTable("contract").set({ value: 1 }).execute(),
+      () => contracts.deleteFrom("contract").where("id", "=", 1).execute(),
+      () => contracts.replaceInto("contract").values({ id: 1, title: "x" }).execute(),
+      () => sql`INSERT INTO contracts_contract (title) VALUES ('x')`.execute(contracts),
+    ]) {
+      const e = await rejects(q)
+      expect(e.message).toBe(OUTSIDE)
+    }
+    expect(count()).toBe(3)
+    expect(await contracts.selectFrom("contract").select("id").execute()).toHaveLength(3)
+  })
+
+  test("the table checks still come first: a foreign table outside a write names the table", async () => {
+    const e = await rejects(() => contracts.updateTable("project").set({ code: "X" }).execute())
+    expect(e.message).not.toBe(OUTSIDE)
+  })
+
+  test("the same insert inside a write runs", async () => {
+    await kdb.write(() => contracts.insertInto("contract").values({ title: "x" }).execute())
+    expect(count()).toBe(4)
+  })
+
+  test("a kernel transaction that is not a write (a view build) does not allow it either", async () => {
+    await expect(kdb.transaction(() => contracts.insertInto("contract").values({ title: "x" }).execute())).rejects.toThrow(OUTSIDE)
+    expect(count()).toBe(3)
+  })
+
+  test("migrations are unaffected", async () => {
+    migrating = true
+    await kdb.transaction(async () => {
+      await contracts.insertInto("contract").values({ title: "seed" }).execute()
+      await contracts.updateTable("contract").set({ value: 0 }).where("title", "=", "seed").execute()
+    })
+    expect(count()).toBe(4)
   })
 })

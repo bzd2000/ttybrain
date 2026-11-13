@@ -228,6 +228,7 @@ export class KernelDb {
       this.tables,
       () => this.invalidateSchema(),
       () => this.checkStatement(),
+      () => this.inWrite(),
     )
     return kyselyOver(new PmDriver(connection)).withPlugin(scopePlugin(pluginId, access, (t) => this.columnsOf(t)))
   }

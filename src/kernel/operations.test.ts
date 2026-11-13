@@ -7,7 +7,7 @@ import { fixedClock } from "./clock"
 import { currentContext, runWithContext, type OpContext, type Origin } from "./context"
 import { KernelDb } from "./db/kernel-db"
 import { openRaw } from "./db/sqlite"
-import { NotFoundError, ValidationError } from "./errors"
+import { IsolationError, NotFoundError, ValidationError } from "./errors"
 import { EventBus } from "./events"
 import { MigrationRunner } from "./migrations"
 import { OperationRegistry, type ReadOp, type WriteOp } from "./operations"
@@ -271,5 +271,41 @@ describe("OperationRegistry: registry", () => {
     ops.remove("fixture")
     expect(ops.api("fixture")).toBeUndefined()
     expect(ops.list()).toEqual([])
+  })
+})
+
+describe("OperationRegistry: data changes need a write (R15)", () => {
+  const fixtureDb = () =>
+    kdb.pluginDb("fixture", {
+      ownTables: () => new Set(["item"]),
+      views: () => new Map(),
+      migrating: () => false,
+      ownerOf: (name) => (name === "item" || name === "fixture_item" ? "fixture" : undefined),
+    })
+
+  test("a read op that inserts is rejected; the same insert in a write op runs", async () => {
+    const data = fixtureDb()
+    const insert = (title: string) => data.insertInto("item").values({ title }).executeTakeFirstOrThrow()
+    ops.expose("fixture", {
+      read: { sneaky: { ...count, run: async () => (await insert("from read"), { n: 0 }) } },
+      write: { add: { ...add, run: async (i) => ({ ref: "F-1", id: Number((await insert(i.title)).insertId) }) } },
+    })
+    const api = ops.api("fixture")!
+    const err = await inCtx(() => api.read.sneaky!({})).catch((e) => e)
+    expect(err).toBeInstanceOf(IsolationError)
+    expect(err.message).toBe("data changes must run inside a write operation")
+    expect(titles()).toEqual([])
+    expect(await inCtx(() => api.write.add!({ title: "from write" }))).toEqual({ ref: "F-1", id: 1 })
+    expect(titles()).toEqual(["from write"])
+  })
+
+  test("a read op called from inside a write op is part of that write", async () => {
+    const data = fixtureDb()
+    ops.expose("fixture", {
+      read: { helper: { ...count, run: async () => (await data.insertInto("item").values({ title: "via read" }).execute(), { n: 1 }) } },
+      write: { outer: { ...add, run: async () => (await ops.api("fixture")!.read.helper!({}), { ref: "F-1", id: 1 }) } },
+    })
+    expect(await inCtx(() => ops.api("fixture")!.write.outer!({ title: "x" }))).toEqual({ ref: "F-1", id: 1 })
+    expect(titles()).toEqual(["via read"])
   })
 })

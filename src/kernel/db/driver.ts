@@ -54,6 +54,7 @@ export class RawDriver implements Driver {
 
 const DDL = new Set(["CREATE", "ALTER", "DROP"])
 const TRANSACTION = new Set(["BEGIN", "COMMIT", "END", "ROLLBACK", "SAVEPOINT", "RELEASE"])
+const DATA_CHANGE = new Set(["INSERT", "UPDATE", "DELETE", "REPLACE"])
 
 function viewsUsed(query: OperationNode, access: TableAccess): string[] {
   const byPhysical = new Map([...access.views().values()].map((v) => [v.physical, v]))
@@ -74,6 +75,7 @@ export class PmConnection extends RawConnection {
     private readonly checker: TableChecker,
     private readonly onSchemaChange: () => void,
     private readonly statementGuard: () => void = () => {},
+    private readonly inWrite: () => boolean = () => false,
   ) {
     super(raw, statementGuard)
   }
@@ -98,6 +100,10 @@ export class PmConnection extends RawConnection {
       if (t === "sqlite_schema") throw schemaChangesOnlyInMigrations()
       throw new IsolationError(`plugin "${this.pluginId}" may not use table "${t}"`)
     }
+
+    // R15: a data change outside a kernel write (a read op, a stray async chain) would land in whatever
+    // transaction or savepoint happens to be open on the shared connection. Migrations have their own.
+    if (DATA_CHANGE.has(keyword) && !migrating && !this.inWrite()) throw new IsolationError("data changes must run inside a write operation")
 
     const result = await super.executeQuery<R>(compiled)
     if (ddl) {
