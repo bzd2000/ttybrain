@@ -34,9 +34,16 @@ export function createTableChecker(raw: RawDb): TableChecker {
       const map = rootPages()
       const out = new Set<string>()
       for (const op of ops) {
-        if (op.opcode !== "OpenRead" && op.opcode !== "OpenWrite") continue
-        // p3 is the database index (0 = main). Anything else (temp/attached) is reported unmapped, never guessed.
-        out.add(Number(op.p3) === 0 ? (map.get(Number(op.p2)) ?? `page${op.p2}`) : `db${op.p3}:page${op.p2}`)
+        // Opcodes that address an existing b-tree by root page: [root page, database index].
+        // Clear is what `DELETE FROM t` (no WHERE) compiles to, with no OpenWrite at all; Destroy is DROP.
+        let root: number, db: number
+        if (op.opcode === "OpenRead" || op.opcode === "OpenWrite") [root, db] = [Number(op.p2), Number(op.p3)]
+        else if (op.opcode === "Clear") [root, db] = [Number(op.p1), Number(op.p2)]
+        else if (op.opcode === "Destroy") [root, db] = [Number(op.p1), Number(op.p3)]
+        else if (op.opcode === "Vacuum") [root, db] = [1, 0] // rewrites the whole file: report as the schema table
+        else continue
+        // db 0 = main. Anything else (temp/attached) is reported unmapped, never guessed (fail closed).
+        out.add(db === 0 ? (map.get(root) ?? `page${root}`) : `db${db}:page${root}`)
       }
       const result = [...out]
       cache.set(sql, result)

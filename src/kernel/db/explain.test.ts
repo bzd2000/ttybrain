@@ -51,4 +51,33 @@ describe("createTableChecker", () => {
     const a = c.tablesTouched("SELECT * FROM a_t1")
     expect(c.tablesTouched("SELECT * FROM a_t1")).toBe(a)
   })
+  test("truncate-style delete (OP_Clear) reports its table", () => {
+    const c = createTableChecker(raw)
+    expect(c.tablesTouched("DELETE FROM b_t2")).toEqual(["b_t2"])
+  })
+  test("triggers: writes by a trigger on another table are reported", () => {
+    raw.exec("CREATE TRIGGER a_del AFTER DELETE ON a_t1 BEGIN DELETE FROM b_t2; END")
+    raw.exec("CREATE TRIGGER a_ins AFTER INSERT ON a_t1 BEGIN INSERT INTO b_t2 (z) VALUES ('x'); END")
+    const c = createTableChecker(raw)
+    expect(c.tablesTouched("DELETE FROM a_t1").sort()).toEqual(["a_t1", "b_t2"])
+    expect(c.tablesTouched("INSERT INTO a_t1 (x) VALUES (?)").sort()).toEqual(["a_t1", "b_t2"])
+  })
+  test("DROP TABLE reports the table (Destroy) and the schema table", () => {
+    const c = createTableChecker(raw)
+    const t = c.tablesTouched("DROP TABLE b_t2")
+    expect(t).toContain("b_t2")
+    expect(t).toContain("sqlite_schema")
+  })
+  test("temp tables are reported as non-table names (fail closed)", () => {
+    raw.exec("CREATE TEMP TABLE tt (i)")
+    const c = createTableChecker(raw)
+    for (const sql of ["DELETE FROM tt", "SELECT * FROM tt"]) {
+      const t = c.tablesTouched(sql)
+      expect(t).toHaveLength(1)
+      expect(t[0]).toMatch(/^db1:page\d+$/)
+    }
+  })
+  test("VACUUM is reported as the schema table", () => {
+    expect(createTableChecker(raw).tablesTouched("VACUUM")).toEqual(["sqlite_schema"])
+  })
 })
