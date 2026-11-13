@@ -20,9 +20,13 @@ export function kyselyOver(driver: Driver): Kysely<any> {
   return new Kysely<any>({ dialect })
 }
 
-type WriteScope = { open: boolean; queue: Promise<unknown> } // queue: this write's nested writes, in order
+type Hooks = Array<() => void>
+// One per open `write`. `queue` chains the nested writes started inside it; `hooks` are its after-commit hooks.
+type WriteScope = { open: boolean; queue: Promise<unknown>; hooks: Hooks }
+const newScope = (): WriteScope => ({ open: true, queue: Promise.resolve(), hooks: [] })
+const LATE = "write started after its parent write ended; await nested writes"
 
-function runHooks(hooks: Array<() => void>): void {
+function runHooks(hooks: Hooks): void {
   for (const hook of hooks) {
     try {
       hook()
@@ -41,8 +45,8 @@ export class KernelDb {
   private savepoints = 0
   private lock: Promise<unknown> = Promise.resolve()
   private closed = false
-  private readonly writing = new AsyncLocalStorage<WriteScope>() // the innermost open `write`
-  private readonly commitHooks: Array<Array<() => void>> = [] // one frame per open transaction/savepoint
+  private readonly writing = new AsyncLocalStorage<WriteScope>() // the innermost `write`
+  private readonly frames: Hooks[] = [] // after-commit hooks of plain (non-write) transactions
 
   constructor(raw: RawDb) {
     this.raw = raw
@@ -50,29 +54,37 @@ export class KernelDb {
     this.tables = createTableChecker(raw)
   }
 
+  // Inside a `write` this is a nested write. Otherwise (kernel code holding the lock: migrations, views) it is
+  // a plain transaction, a savepoint when nested, with its after-commit hooks kept on `frames`.
   async transaction<T>(fn: () => Promise<T>): Promise<T> {
     if (this.closed) throw new Error("database is closed")
-    if (this.depth > 0) return this.nested(fn)
-    const { result, hooks } = await this.outer(fn)
-    runHooks(hooks)
+    if (this.writing.getStore()) return this.write(fn)
+    const parent = this.frames[this.frames.length - 1]
+    const frame: Hooks = []
+    this.frames.push(frame)
+    let result: T
+    try {
+      result = this.depth > 0 ? await this.nested(fn) : await this.outer(fn)
+    } finally {
+      this.frames.pop()
+    }
+    if (parent) parent.push(...frame) // kept only if the parent commits
+    else runHooks(frame)
     return result
   }
 
-  // Commits and hands back the after-commit hooks, for the caller to run once it is out of the transaction.
-  private async outer<T>(fn: () => Promise<T>): Promise<{ result: T; hooks: Array<() => void> }> {
+  private async outer<T>(fn: () => Promise<T>): Promise<T> {
     this.raw.exec("BEGIN IMMEDIATE")
     this.depth++
-    this.commitHooks.push([])
     try {
       const result = await fn()
       this.ensureOpen()
       this.raw.exec("COMMIT")
-      return { result, hooks: this.commitHooks[this.commitHooks.length - 1]! }
+      return result
     } catch (e) {
       if (!this.closed && this.raw.inTransaction()) this.raw.exec("ROLLBACK")
       throw e
     } finally {
-      this.commitHooks.pop()
       this.depth--
     }
   }
@@ -81,13 +93,10 @@ export class KernelDb {
     const name = `sp_${++this.savepoints}`
     this.raw.exec(`SAVEPOINT ${name}`)
     this.depth++
-    this.commitHooks.push([])
-    let released = false
     try {
       const result = await fn()
       this.ensureOpen()
       this.raw.exec(`RELEASE ${name}`)
-      released = true
       return result
     } catch (e) {
       if (!this.closed && this.raw.inTransaction()) {
@@ -96,47 +105,69 @@ export class KernelDb {
       }
       throw e
     } finally {
-      const hooks = this.commitHooks.pop()!
-      if (released) this.commitHooks[this.commitHooks.length - 1]!.push(...hooks) // kept only if the parent commits
       this.depth--
     }
   }
 
   // Runs `fn` after the outermost transaction commits; dropped if it (or the enclosing savepoint) rolls back.
   afterCommit(fn: () => void): void {
-    const frame = this.commitHooks[this.commitHooks.length - 1]
+    const scope = this.writing.getStore()
+    const frame = scope?.open ? scope.hooks : this.frames[this.frames.length - 1]
     if (!frame) throw new Error("afterCommit needs an open transaction")
     frame.push(fn)
   }
 
-  // A kernel write. The outermost call takes the write lock and opens the transaction. A call made inside
-  // it (a write operation calling another plugin's write operation) reuses it as a savepoint, without the
-  // lock, which is not re-entrant. "Inside" follows the async call chain, so concurrent outermost writes
-  // queue on the lock instead of being mistaken for nested ones. Sibling nested writes (`Promise.all` in a
-  // write) queue on their parent's scope, so their savepoints never interleave.
+  // A kernel write.
+  // - The outermost call takes the write lock and opens the transaction. "Outermost" follows the async call
+  //   chain (AsyncLocalStorage), so concurrent outermost writes queue on the lock.
+  // - A call made inside it (a write operation calling another plugin's write operation) is a savepoint,
+  //   without the lock, which is not re-entrant. Sibling nested writes (`Promise.all`) queue on their parent's
+  //   scope, so their savepoints never interleave.
+  // - Before a write commits, releases or rolls back, it waits for every nested write started inside it, so
+  //   an un-awaited nested write commits or rolls back with its parent. A write started from a scope that has
+  //   already ended (a timer) is rejected.
+  // - Known limit: a nested write that awaits a sibling started after it deadlocks (it queues behind itself).
   write<T>(fn: () => Promise<T>): Promise<T> {
     const parent = this.writing.getStore()
-    if (!parent?.open || this.depth === 0) return this.outermost(fn)
-    const run = parent.queue.then(() => {
-      // The parent may have ended while this write waited (a leaked, un-awaited call): start afresh.
-      if (!parent.open || this.depth === 0) return this.outermost(fn)
-      const scope: WriteScope = { open: true, queue: Promise.resolve() }
-      return this.writing.run(scope, () => this.nested(fn)).finally(() => (scope.open = false))
+    if (!parent) return this.outermost(fn)
+    if (!parent.open) return Promise.reject(new Error(LATE))
+    const run = parent.queue.then(async () => {
+      if (!parent.open) throw new Error(LATE)
+      const scope = newScope()
+      const result = await this.writing.run(scope, () => this.nested(() => this.drained(scope, fn)))
+      parent.hooks.push(...scope.hooks) // kept only if the parent commits
+      return result
     })
     parent.queue = run.catch(() => {})
     return run
   }
 
-  // After-commit hooks run once the lock is released and outside the write scope, so a hook that writes
-  // (a `record.changed` handler) queues as a fresh outermost write.
+  // After-commit hooks run once the lock is released and outside any write scope, so a hook that writes
+  // (a `record.changed` handler) is a fresh outermost write.
   private async outermost<T>(fn: () => Promise<T>): Promise<T> {
     if (this.closed) throw new Error("database is closed")
-    const { result, hooks } = await this.withWriteLock(() => {
-      const scope: WriteScope = { open: true, queue: Promise.resolve() } // closed when the write ends
-      return this.writing.run(scope, () => this.outer(fn)).finally(() => (scope.open = false))
-    })
-    this.writing.exit(() => runHooks(hooks))
+    const scope = newScope()
+    const result = await this.withWriteLock(() => this.writing.run(scope, () => this.outer(() => this.drained(scope, fn))))
+    this.writing.exit(() => runHooks(scope.hooks))
     return result
+  }
+
+  // `fn`, then every nested write queued on `scope` (including ones queued meanwhile), then the scope closes.
+  // The outcome is fn's: nested writes that failed were already rolled back to their own savepoints.
+  private async drained<T>(scope: WriteScope, fn: () => Promise<T>): Promise<T> {
+    let outcome: { ok: true; value: T } | { ok: false; error: unknown }
+    try {
+      outcome = { ok: true, value: await fn() }
+    } catch (error) {
+      outcome = { ok: false, error }
+    }
+    for (let q = scope.queue; ; q = scope.queue) {
+      await q
+      if (q === scope.queue) break
+    }
+    scope.open = false
+    if (!outcome.ok) throw outcome.error
+    return outcome.value
   }
 
   inWrite(): boolean {

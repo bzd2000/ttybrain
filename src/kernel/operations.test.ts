@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import Type from "typebox"
 import { fixedClock } from "./clock"
-import { runWithContext, type OpContext, type Origin } from "./context"
+import { currentContext, runWithContext, type OpContext, type Origin } from "./context"
 import { KernelDb } from "./db/kernel-db"
 import { openRaw } from "./db/sqlite"
 import { NotFoundError, ValidationError } from "./errors"
@@ -199,6 +199,22 @@ describe("OperationRegistry: writes", () => {
     await expect(queued).rejects.toThrow("boom")
     await fromHandler
     expect(titles()).toEqual(["first", "from-handler"])
+  })
+
+  test("a record.changed handler runs without the triggering write's origin: its writes record no provenance", async () => {
+    const api = expose()
+    let fromHandler: Promise<unknown> | undefined
+    let seen: unknown
+    events.on("record.changed", (p) => {
+      if (p.ref !== "F-1") return
+      seen = currentContext()
+      fromHandler = api.write.add!({ title: "from-handler" }) // no runWithContext: the hook provides one
+    })
+    await inCtx(() => api.write.add!({ title: "from inbox" }), { type: "inbox", ref: "I-3" })
+    await fromHandler
+    expect(seen).toEqual({ actor: "me", today: "2026-11-13", now: "2026-11-13T10:00:00" })
+    expect(titles()).toEqual(["from inbox", "from-handler"])
+    expect((await provenance.createdFrom("inbox", "I-3")).map((p) => p.ref)).toEqual(["F-1"])
   })
 
   test("an operation called outside an operation context fails before it runs", async () => {

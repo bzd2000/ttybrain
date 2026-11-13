@@ -3,7 +3,7 @@
 // in its transaction (a savepoint when nested), records provenance and emits `record.changed`.
 import type { TSchema } from "typebox"
 import Value from "typebox/value"
-import { currentContext, type Origin } from "./context"
+import { currentContext, runWithContext, type Origin } from "./context"
 import type { KernelDb } from "./db/kernel-db"
 import { NotFoundError, ValidationError } from "./errors"
 import type { EventBus } from "./events"
@@ -136,7 +136,10 @@ export class OperationRegistry {
       const origin = ctx.origin
       if (origin) await this.recordProvenance(key, out.ref, origin)
       const payload = { plugin: e.plugin, op: e.name, ref: out.ref }
-      db.afterCommit(() => events.emit("record.changed", payload))
+      // Handlers run in the same actor/today/now but without the origin, so their own writes are not
+      // recorded as created from it.
+      const hookCtx = { actor: ctx.actor, today: ctx.today, now: ctx.now }
+      db.afterCommit(() => void runWithContext(hookCtx, async () => events.emit("record.changed", payload)))
       return out
     })
   }

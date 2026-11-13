@@ -236,16 +236,72 @@ describe("KernelDb.write", () => {
     expect(ran).toEqual(["q"])
   })
 
-  test("a nested write left running after its parent ended takes the lock as an outermost write", async () => {
-    let leaked!: Promise<unknown>
-    await kdb.write(async () => {
-      leaked = new Promise((r) => setTimeout(r, 5)).then(() =>
-        kdb.write(async () => kdb.kysely.insertInto("t").values({ name: "late" }).execute()),
-      )
+  describe("un-awaited nested writes are drained into their parent", () => {
+    const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms))
+    const insert = (name: string) => kdb.kysely.insertInto("t").values({ name }).execute()
+    const errors: string[] = []
+    const track = (p: Promise<unknown>) => p.catch((e) => void errors.push(e.message))
+    beforeEach(() => void (errors.length = 0))
+
+    test("R3d: parent throws → its un-awaited nested writes roll back with it", async () => {
+      let s1!: Promise<unknown>, s2!: Promise<unknown>
+      const parent = kdb.write(async () => {
+        s1 = kdb.write(async () => (await tick(), insert("s1")))
+        s2 = kdb.write(async () => insert("s2"))
+        throw new Error("parent fails")
+      })
+      await expect(parent).rejects.toThrow("parent fails")
+      await Promise.allSettled([s1, s2])
+      expect(names(kdb.raw)).toEqual([])
+      expect(kdb.raw.inTransaction()).toBe(false)
     })
-    await leaked
-    expect(names(kdb.raw)).toEqual(["late"])
-    expect(kdb.raw.inTransaction()).toBe(false)
+
+    test("R3: parent succeeds → nested writes still running when it returns commit with it", async () => {
+      let s1!: Promise<unknown>
+      await kdb.write(async () => {
+        await insert("parent")
+        s1 = track(kdb.write(async () => (await tick(), insert("s1"))))
+      })
+      expect(names(kdb.raw)).toEqual(["parent", "s1"]) // committed before the parent's promise resolved
+      await s1
+      expect(errors).toEqual([])
+    })
+
+    test("R3b: parent fails while a nested write is in flight → nothing persists", async () => {
+      let s1!: Promise<unknown>
+      const parent = kdb.write(async () => {
+        await insert("parent")
+        s1 = track(kdb.write(async () => (await tick(), insert("s1"))))
+        await tick(1)
+        throw new Error("parent fails")
+      })
+      await expect(parent).rejects.toThrow("parent fails")
+      await s1
+      expect(names(kdb.raw)).toEqual([])
+      expect(errors.filter((m) => m.includes("savepoint"))).toEqual([])
+    })
+
+    test("H1: the parent's own after-commit hook survives an un-awaited nested write's frame", async () => {
+      const ran: string[] = []
+      await kdb.write(async () => {
+        track(kdb.write(async () => (await tick(), kdb.afterCommit(() => ran.push("child")))))
+        await tick(1)
+        kdb.afterCommit(() => ran.push("parent"))
+      })
+      expect(ran.sort()).toEqual(["child", "parent"])
+    })
+
+    test("H2: a write started from a timer after its parent ended is rejected, not run in another chain's transaction", async () => {
+      let late!: Promise<unknown>
+      await kdb.write(async () => {
+        late = tick(5).then(() => kdb.write(async () => insert("late")))
+      })
+      const other = kdb.write(async () => (await insert("other"), await tick(10)))
+      await expect(late).rejects.toThrow("write started after its parent write ended; await nested writes")
+      await other
+      expect(names(kdb.raw)).toEqual(["other"])
+      expect(kdb.raw.inTransaction()).toBe(false)
+    })
   })
 
   test("afterCommit outside a transaction throws", () => {
