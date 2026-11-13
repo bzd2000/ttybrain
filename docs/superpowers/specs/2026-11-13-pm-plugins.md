@@ -9,6 +9,7 @@ Companion to [`2026-11-13-pm-design.md`](2026-11-13-pm-design.md). That document
 - **Cross-plugin reads** mostly use **published views** (design §3.3.3), queried as `<plugin>.<view>` in `ctx.data`.
 - **Read operations** are kept only for reads with logic. **Write operations** handle every change.
 - Operations are called as `ctx.use("<plugin>").read.<op>(input)` or `.write.<op>(input)`.
+- **Logic and TUI parts** (design §3.1). In each plugin below, *Data*, *Published views*, *Exposed operations*, *CLI* and the logic-side contributions (`tagType`, `report`, `reportSection`, `guideSection`, `assistantProvider`) belong to `src/plugins/<id>/logic/`. Screens, tabs, panels, columns, global actions, badges and quick-action menus belong to `src/plugins/<id>/tui/`.
 - Every exposed operation and every published view is also an assistant tool (design §3.3.2–3.3.3), unless it's marked *no tool*.
 
 ## Overview
