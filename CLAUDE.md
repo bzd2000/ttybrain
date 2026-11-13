@@ -17,24 +17,24 @@ Project agents:
 - `pm-developer` implements plan tasks.
 - `pm-reviewer` reviews changes against the architecture (read-only).
 
-Until phase 2, the files under "How it's wired" below describe the starter UI only.
-
 ## Commands
 
 - `bun start`: run the app (it needs a real TTY, so it can't be driven from a non-interactive shell; use tests instead)
 - `bun dev`: run with `--watch`
 - `bun test`: run all tests. Run a single test with `bun test ./src/App.test.tsx` (the `./` makes it a path) or `bun test -t "<name pattern>"`
 - `bun typecheck`: type-check (`bun check`)
+- `bun run pm <thing> <verb> …`: run the CLI (`bun src/bin/pm.ts`); `PM_HOME=<dir>` or `--db <file>` points it at a scratch database
+- `bash scripts/smoke-node.sh`: build for Node, run the self-checks and a CLI walk-through on Node 26 (needs only node/npm); the last line is `smoke ok`. Run it after touching SQLite, isolation, transactions, process handling or module loading
+- `bun src/kernel/isolation-selfcheck.ts`: the isolation self-check on Bun (`node dist-node/kernel/isolation-selfcheck.js` on Node)
 - `npm run start:node`: run on Node. It runs `build:node` (`scripts/build-node.mjs`, which compiles `src/` to `dist-node/` with Babel), then `node --experimental-ffi dist-node/index.js`
 
 ## How it's wired
 
+- `src/kernel/` is the plugin kernel, `src/plugins/<id>/logic/` the built-in plugins (`people`, `projects`, `inbox`), `src/bin/pm.ts` the CLI entry point, `src/plugins/index.ts` the list of built-ins. See `docs/architecture.md` for the file-by-file layout and the rules.
+- Plugins import kernel things only from `src/kernel/api.ts` and use only `ctx.*`. Only `src/kernel/db/sqlite.ts` touches `bun:sqlite`/`node:sqlite`. Logic and kernel code never import `solid-js` or `@opentui/*`.
 - `bunfig.toml` preloads `@opentui/solid/preload` for both runs and tests. It compiles Solid JSX. Without it, `.tsx` files fail. `tsconfig.json` uses `"jsx": "preserve"` with `jsxImportSource: "@opentui/solid"`.
-- Node has no runtime JSX transform (`@opentui/solid/preload` throws on Node), so `scripts/build-node.mjs` compiles ahead of time. It uses `babel-preset-solid` with `generate: "universal"` and `moduleName: "@opentui/solid"`, the same settings as the package's internal transform. It also rewrites imports: `solid-js` → `solid-js/dist/solid.js`, because Node's `node` export condition would otherwise load Solid's non-reactive server build, and extensionless relative imports get `.js`. Keep using extensionless relative imports in `src/`. Use only ESM. Bun-only APIs (`Bun.*`, `@opentui/three`, runtime plugins) would break the Node path.
-- `src/index.tsx` calls `render()`, which creates the renderer. Components get it with `useRenderer()`. Quitting means calling `renderer.destroy()`, which also disposes the Solid root.
-- `src/App.tsx` owns app state (selected section, focused pane) and the global keys (`q`, `tab`). Arrow keys go to whichever `select`/`scrollbox` has `focused={true}`. Focus is a prop driven by the `focus` signal, not imperative `.focus()` calls. If you add an `input`/`textarea`, guard the global `q` handler so typing doesn't quit.
-- `src/sections.tsx` is the registry of screens. Each entry gives a sidebar item plus a `view()` for the main panel. Add screens there.
-- `src/theme.ts` holds all colors.
+- Node has no runtime JSX transform, so `scripts/build-node.mjs` compiles `src/` to `dist-node/` ahead of time with Babel (`babel-preset-solid`, `generate: "universal"`, `moduleName: "@opentui/solid"`). It rewrites `solid-js` → `solid-js/dist/solid.js` (Node's `node` export condition would otherwise load the non-reactive server build) and adds `.js` to relative imports. Keep relative imports in `src/` extensionless. Use only ESM. `Bun.*` outside `sqlite.ts`, `@opentui/three` and runtime plugins would break the Node path.
+- The starter UI (phase 2 replaces it): `src/index.tsx` calls `render()`; `src/App.tsx` owns app state and the global keys (`q`, `tab`); arrow keys go to whichever `select`/`scrollbox` has `focused={true}` (focus is a prop driven by the `focus` signal, not imperative `.focus()`); if you add an `input`/`textarea`, guard the global `q` handler; `src/sections.tsx` registers screens; `src/theme.ts` holds all colors. Quitting means `renderer.destroy()`.
 
 ## OpenTUI/Solid gotchas
 
@@ -45,8 +45,10 @@ Until phase 2, the files under "How it's wired" below describe the starter UI on
 
 ## Testing
 
-Tests use `testRender(() => <App />, { width, height })` from `@opentui/solid`. Drive input with `mockInput.pressArrow/pressTab/pressKey/typeText`. Call `await renderOnce()` before `captureCharFrame()`, which returns the screen as plain text. Always call `renderer.destroy()` in `finally`. Printing `captureCharFrame()` is the easiest way to see the layout without a TTY.
+Kernel and plugin tests: `makeTestKernel({ plugins, today })` from `tests/helpers.ts` gives a temp `PM_HOME`, `PM_TEST=1` and a fixed clock (default `2026-11-13`, a Friday); call `kernel.cleanup()` afterwards. Drive commands with `runCli([...], kernel, io)` (`src/kernel/cli/dispatch.ts`) and assert on exact output and exit codes; never use the real clock. Run `bash scripts/smoke-node.sh` for anything runtime-sensitive.
+
+TUI tests use `testRender(() => <App />, { width, height })` from `@opentui/solid`. Drive input with `mockInput.pressArrow/pressTab/pressKey/typeText`. Call `await renderOnce()` before `captureCharFrame()`, which returns the screen as plain text. Always call `renderer.destroy()` in `finally`. Printing `captureCharFrame()` is the easiest way to see the layout without a TTY.
 
 ## CI
 
-GitLab CI (`.gitlab-ci.yml`) runs only GitLab's SAST template in the `test` stage. It doesn't run the tests or the type-check.
+GitLab CI (`.gitlab-ci.yml`), stage `test`: job `test` (`oven/bun:1.3.14`: `bun install --frozen-lockfile && bun typecheck && bun test`), job `node-smoke` (`node:26`: `npm ci && bash scripts/smoke-node.sh`) and GitLab's SAST template. Keep `bun.lock` and `package-lock.json` in sync with `package.json`.
