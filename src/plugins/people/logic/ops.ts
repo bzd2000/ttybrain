@@ -5,6 +5,7 @@ import {
   ConflictError,
   currentContext,
   makeHandle,
+  NonBlank,
   normalizeCode,
   normalizeHandle,
   parseDate,
@@ -16,8 +17,8 @@ import {
 import type { Store } from "./records"
 import { GoalRecord, GoalStatus, Level, NoteKind, NoteRecord, PersonRecord, type GoalRecord as Goal, type PersonRecord as Person } from "./schema"
 
-const Name = Type.String({ minLength: 1 })
-const Ref = Type.String({ minLength: 1 })
+const Name = NonBlank()
+const Ref = NonBlank()
 const Clearable = Type.Optional(Type.Union([Type.String(), Type.Null()]))
 const LevelOrNone = Type.Optional(Type.Union([Level, Type.Null()]))
 
@@ -248,7 +249,7 @@ export function registerOps(ctx: PluginContext, store: Store): void {
               project_id,
               kind: i.kind,
               date: i.date !== undefined ? date(i.date, "date") : today(),
-              text: i.text,
+              text: i.text.trim(),
               created_at: t,
               updated_at: t,
             })
@@ -264,7 +265,7 @@ export function registerOps(ctx: PluginContext, store: Store): void {
           const n = await store.note(i.ref)
           await store.activePerson(n.person)
           const set: Record<string, unknown> = { updated_at: now() }
-          if (i.text !== undefined) set.text = i.text
+          if (i.text !== undefined) set.text = i.text.trim()
           if (i.kind !== undefined) set.kind = i.kind
           if (i.date !== undefined) set.date = date(i.date, "date")
           if (i.project !== undefined) set.project_id = i.project === null ? null : await store.projectId(i.project)

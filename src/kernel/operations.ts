@@ -45,8 +45,21 @@ function firstError(schema: TSchema, value: unknown): { field?: string; text: st
   const missing = e.keyword === "required" ? (e.params as { requiredProperties?: string[] }).requiredProperties?.[0] : undefined
   if (missing !== undefined) path.push(missing)
   const field = path.length ? path.join(".") : undefined
-  const text = missing !== undefined ? `${field} is required` : field ? `${field} ${e.message}` : e.message
+  const message = errorMessageAt(schema, e.schemaPath) ?? e.message
+  const text = missing !== undefined ? `${field} is required` : field ? `${field} ${message}` : message
   return { field, text }
+}
+
+// A schema may give its own wording for a failed check (`errorMessage`, as NonBlank does): "name must not be blank"
+// reads better than TypeBox's "must match pattern".
+function errorMessageAt(schema: TSchema, schemaPath: string): string | undefined {
+  let node: unknown = schema
+  for (const part of schemaPath.replace(/^#\/?/, "").split("/").filter(Boolean)) {
+    if (typeof node !== "object" || node === null) return undefined
+    node = (node as Record<string, unknown>)[part.replace(/~1/g, "/").replace(/~0/g, "~")]
+  }
+  const m = typeof node === "object" && node !== null ? (node as { errorMessage?: unknown }).errorMessage : undefined
+  return typeof m === "string" ? m : undefined
 }
 
 export class OperationRegistry {

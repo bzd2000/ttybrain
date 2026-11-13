@@ -14,6 +14,7 @@ import { OperationRegistry, type ReadOp, type WriteOp } from "./operations"
 import { resolvePaths } from "./paths"
 import { ProvenanceStore } from "./provenance"
 import { RecordTypeRegistry } from "./records"
+import { NonBlank } from "./schemas"
 
 let dir: string
 let kdb: KernelDb
@@ -84,6 +85,23 @@ describe("OperationRegistry: input validation", () => {
     expect(err.field).toBe("title")
     expect(err.message).toBe("fixture.add: title must be string")
     expect(titles()).toEqual([])
+  })
+
+  test("NonBlank rejects empty and blank text with the field name", async () => {
+    const nested: WriteOp = {
+      ...add,
+      input: Type.Object({ item: Type.Object({ title: NonBlank() }) }),
+      run: (i) => add.run({ title: i.item.title }),
+    }
+    const api = expose({ nested })
+    for (const title of ["", "   "]) {
+      const err = await inCtx(() => api.write.nested!({ item: { title } })).catch((e) => e)
+      expect(err).toBeInstanceOf(ValidationError)
+      expect(err.field).toBe("item.title")
+      expect(err.message).toBe("fixture.nested: item.title must not be blank")
+    }
+    expect(titles()).toEqual([])
+    expect(await inCtx(() => api.write.nested!({ item: { title: " ok " } }))).toEqual({ ref: "F-1", id: 1 })
   })
 
   test("a missing required property names that property", async () => {

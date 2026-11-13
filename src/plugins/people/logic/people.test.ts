@@ -145,7 +145,7 @@ describe("people", () => {
   })
 
   test("person list --stakeholders --json returns last_contact", async () => {
-    await ok("person", "add", "Marie Dubois", "--stakeholder", "--influence", "high", "--interest", "low")
+    await ok("person", "add", "Marie Dubois", "--stakeholder", "--influence", "high", "--interest", "low", "--phone", "+32 470 12 34 56")
     await ok("person", "add", "Anna Peeters", "--team")
     await ok("note", "add", "marie", "Kick-off", "--interaction", "--date", "2026-10-03")
     await ok("note", "add", "marie", "Follow-up", "--interaction", "--date", "2026-10-20")
@@ -159,6 +159,7 @@ describe("people", () => {
         organisation: null,
         job_title: null,
         email: null,
+        phone: "+32 470 12 34 56",
         is_team: false,
         is_stakeholder: true,
         influence: "high",
@@ -169,6 +170,28 @@ describe("people", () => {
     ])
     expect((await ok("person", "list", "--team", "--json")).json.map((p: any) => p.ref)).toEqual(["@anna"])
     expect((await cli("person", "list", "--team", "--stakeholders")).code).toBe(1)
+  })
+
+  test("blank text fields are rejected with the field name", async () => {
+    await ok("person", "add", "Anna Peeters")
+    await ok("note", "add", "anna", "x", "--1on1")
+    await ok("goal", "add", "anna", "Learn SQL")
+    const cases: Array<[string[], string]> = [
+      [["person", "add", "   "], "name"],
+      [["person", "add", ""], "name"],
+      [["person", "edit", "anna", "--name", "  "], "name"],
+      [["note", "add", "anna", "  ", "--1on1"], "text"],
+      [["note", "edit", "N-1", " "], "text"],
+      [["goal", "add", "anna", " "], "title"],
+      [["goal", "edit", "G-1", "--title", "  "], "title"],
+    ]
+    for (const [argv, field] of cases) {
+      const r = await cli(...argv, "--json")
+      expect([argv.join(" "), r.code, r.json.error.field]).toEqual([argv.join(" "), 1, field])
+      expect(r.json.error.message).toEndWith(`${field} must not be blank`)
+    }
+    expect((await ok("person", "show", "anna", "--json")).json.name).toBe("Anna Peeters")
+    expect((await ok("person", "list", "--json")).json.map((p: any) => p.ref)).toEqual(["@anna"])
   })
 
   test("influence and interest are for stakeholders only", async () => {

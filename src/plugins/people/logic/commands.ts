@@ -75,27 +75,11 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
     flags: { team: bool("team members only"), stakeholders: bool("stakeholders only"), archived: bool("archived people only") },
     run: async ({ flags }) => {
       if (flags.team && flags.stakeholders) throw new ValidationError("use --team or --stakeholders, not both", { field: "team" })
-      let q = ctx.data
-        .selectFrom("people.person")
-        .selectAll()
-        .where("archived", "=", flags.archived ? 1 : 0)
-      if (flags.team) q = q.where("is_team", "=", 1)
-      if (flags.stakeholders) q = q.where("is_stakeholder", "=", 1)
-      const rows = (await q.orderBy("name").orderBy("id").execute()).map((r: any) => ({
-        ref: `@${r.handle}`,
-        id: Number(r.id),
-        handle: String(r.handle),
-        name: String(r.name),
-        organisation: r.organisation ?? null,
-        job_title: r.job_title ?? null,
-        email: r.email ?? null,
-        is_team: Number(r.is_team) === 1,
-        is_stakeholder: Number(r.is_stakeholder) === 1,
-        influence: r.influence ?? null,
-        interest: r.interest ?? null,
-        last_contact: r.last_contact ?? null,
-        archived: Number(r.archived) === 1,
-      }))
+      // The own tables, not the view, so a listed row has the same shape as `person show` (phone included).
+      let q = store.personQuery().where("p.archived_at", flags.archived ? "is not" : "is", null)
+      if (flags.team) q = q.where("p.is_team", "=", 1)
+      if (flags.stakeholders) q = q.where("p.is_stakeholder", "=", 1)
+      const rows = (await q.orderBy("p.name").orderBy("p.id").execute()).map(store.toPerson)
       if (flags.stakeholders)
         rows.sort(
           (a, b) => Number(b.influence === "high") - Number(a.influence === "high") || String(a.last_contact ?? "").localeCompare(String(b.last_contact ?? "")),
