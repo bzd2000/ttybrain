@@ -67,7 +67,9 @@ function openBun(path: string): RawDb {
       const stmt = guard(() => db.query(sql))
       return {
         reader: stmt.columnNames.length > 0,
-        all: (params) => guard(() => stmt.all(...bindable(params))).map((r) => plainRow(r as Record<string, unknown>)),
+        // iterate(), not all(): all() leaves EXPLAIN of a write statement un-reset, so a later COMMIT fails
+        // with "SQL statements in progress". A fully consumed iterate() resets the statement.
+        all: (params) => guard(() => [...stmt.iterate(...bindable(params))]).map((r) => plainRow(r as Record<string, unknown>)),
         run: (params) => runResult(guard(() => stmt.run(...bindable(params)))),
       }
     },
@@ -93,9 +95,25 @@ function openNode(path: string): RawDb {
   }
 }
 
+// Switching a new file to WAL needs an exclusive lock and SQLite does not call the busy handler for it, so two
+// processes creating the database at the same time get SQLITE_BUSY at once. Retry for as long as busy_timeout.
+function enableWal(raw: RawDb): void {
+  const deadline = Date.now() + 3000
+  const pause = new Int32Array(new SharedArrayBuffer(4))
+  for (;;) {
+    try {
+      raw.exec("PRAGMA journal_mode = WAL")
+      return
+    } catch (e) {
+      if (!(e instanceof BusyError) || Date.now() > deadline) throw e
+    }
+    Atomics.wait(pause, 0, 0, 20)
+  }
+}
+
 export function openRaw(path: string): RawDb {
   const raw = isBun ? openBun(path) : openNode(path)
   for (const p of PRAGMAS) raw.exec(p)
-  if (isFileDb(path)) raw.exec("PRAGMA journal_mode = WAL")
+  if (isFileDb(path)) enableWal(raw)
   return raw
 }

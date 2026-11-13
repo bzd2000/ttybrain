@@ -51,6 +51,16 @@ describe("openRaw", () => {
     expect(kdb.raw.prepare("INSERT INTO t (name) VALUES (?) RETURNING id").reader).toBe(true)
   })
 
+  // bun:sqlite's all() leaves EXPLAIN of a write statement un-reset, which made COMMIT fail with
+  // "SQL statements in progress" after any layer 2 check inside a transaction.
+  test("all() leaves no statement in progress, so COMMIT succeeds", () => {
+    kdb.raw.exec("BEGIN IMMEDIATE")
+    expect(kdb.raw.prepare("EXPLAIN INSERT INTO t (name) VALUES (?)").all(["a"]).length).toBeGreaterThan(0)
+    kdb.raw.prepare("EXPLAIN CREATE TABLE u (x)").all([])
+    kdb.raw.exec("COMMIT")
+    expect(kdb.raw.inTransaction()).toBe(false)
+  })
+
   test("SQLITE_BUSY is rethrown as BusyError", () => {
     const other = openRaw(file)
     try {
