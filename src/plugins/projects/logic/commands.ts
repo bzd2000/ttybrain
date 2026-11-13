@@ -159,12 +159,21 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
   ctx.command({
     thing: "project",
     verb: "context",
-    summary: "print a project's context Markdown, or replace it from a file or stdin",
+    summary: "print a project's context Markdown, replace it from a file or stdin, or clear it",
     args: [{ name: "project", required: true }],
-    flags: { "set-file": text("replace the context with this Markdown file", "path"), stdin: bool("replace the context with stdin") },
+    flags: {
+      "set-file": text("replace the context with this Markdown file", "path"),
+      stdin: bool("replace the context with stdin"),
+      clear: bool("remove the context"),
+    },
     run: async ({ args, flags, readStdin }) => {
       const file = flags["set-file"] as string | undefined
-      if (file !== undefined && flags.stdin) throw new ValidationError("use --set-file or --stdin, not both", { field: "set-file" })
+      const sources = [file !== undefined && "--set-file", flags.stdin && "--stdin", flags.clear && "--clear"].filter(Boolean)
+      if (sources.length > 1) throw new ValidationError(`use only one of --set-file, --stdin and --clear`, { field: "set-file" })
+      if (flags.clear) {
+        const c: ContextRecord = await write().setContext!({ project: args.project, markdown: "" })
+        return { json: c, text: `${c.ref} context updated (cleared)` }
+      }
       if (file === undefined && !flags.stdin) {
         const c: ContextRecord = await ctx.self().read.getContext!({ project: args.project })
         return { json: c, text: c.markdown ?? `no context for ${c.ref}` }
@@ -178,6 +187,8 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
           throw e
         }
       } else markdown = await readStdin()
+      // An empty pipe or file is almost always a mistake; it must not silently erase the context.
+      if (markdown.trim() === "") throw new ValidationError("the new context is empty", { hint: "use --clear to remove the context" })
       const c: ContextRecord = await write().setContext!({ project: args.project, markdown })
       return { json: c, text: `${c.ref} context updated (${c.markdown === null ? "cleared" : size(c.markdown)})` }
     },

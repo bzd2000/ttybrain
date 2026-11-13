@@ -54,7 +54,7 @@ describe("projects: milestones, deliverables, risks, decisions", () => {
     expect([e.json.severity, e.json.mitigation]).toEqual(["low", "Dual source"])
     expect((await ok("risk", "list", "CRM")).out).toContain("Vendor delay")
     expect((await ok("risk", "list", "--json")).json).toHaveLength(1)
-    expect((await ok("risk", "delete", "R-1", "--yes", "--json")).json.ref).toBe("R-1")
+    expect((await ok("risk", "delete", "R-1", "--yes", "--json")).json).toEqual({ ref: "R-1", deleted: true })
     expect(rows("risk")).toEqual([])
     expect((await run("risk", "delete", "R-1", "--yes", "--json")).code).toBe(2)
   })
@@ -119,7 +119,7 @@ describe("projects: milestones, deliverables, risks, decisions", () => {
     expect((await run("milestone", "delete", "MS-1", "--json")).code).toBe(1) // destructive: needs --yes
     const del = await run("milestone", "delete", "MS-1", "--yes", "--json")
     expect(del.code).toBe(0)
-    expect(del.json.ref).toBe("MS-1")
+    expect(del.json).toEqual({ ref: "MS-1", deleted: true })
     expect(rows("milestone")).toEqual([])
     expect(rows("deliverable")[0].milestone_id).toBe(null)
   })

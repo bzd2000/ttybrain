@@ -37,6 +37,15 @@ const add: WriteOp = {
   },
 }
 const fail: WriteOp = { ...add, describe: () => "! fail", run: async () => Promise.reject(new Error("boom")) }
+const remove: WriteOp = {
+  input: Type.Object({ ref: Type.String() }),
+  output: Type.Object({ ref: Type.String(), deleted: Type.Literal(true) }),
+  describe: (i) => `- item ${i.ref}`,
+  run: async (i) => {
+    await kdb.kysely.deleteFrom("fixture_item").where("id", "=", Number(i.ref.slice(2))).execute()
+    return { ref: i.ref, deleted: true as const }
+  },
+}
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "pm-cs-"))
@@ -58,7 +67,7 @@ beforeEach(async () => {
   })
   provenance = new ProvenanceStore(kdb, records)
   const ops = new OperationRegistry({ db: kdb, events, records, provenance, validateOutputs: true })
-  ops.expose("fixture", { write: { add, fail } })
+  ops.expose("fixture", { write: { add, fail, remove } })
   changeSets = new ChangeSetService({ db: kdb, ops, records, provenance })
 })
 
@@ -169,6 +178,37 @@ describe("ChangeSetService.apply", () => {
       { plugin: "fixture", op: "add", ref: "F-1" },
       { plugin: "fixture", op: "add", ref: "F-2" },
     ])
+  })
+
+  test("a delete in a set records no provenance for its ref and forgets the record's origins", async () => {
+    const result = await inCtx(() =>
+      changeSets.apply(
+        [
+          { plugin: "fixture", operation: "add", input: { title: "first" } },
+          { plugin: "fixture", operation: "add", input: { title: "second" } },
+          { plugin: "fixture", operation: "remove", input: { ref: "F-1" } },
+        ],
+        { type: "inbox", ref: "I-3" },
+      ),
+    )
+    expect(result).toEqual({ id: 1, refs: ["F-1", "F-2", "F-1"] })
+    expect(rows("SELECT record_id, origin_type, origin_ref FROM kernel_record_origin ORDER BY rowid")).toEqual([
+      { record_id: 2, origin_type: "changeset", origin_ref: "CS-1" },
+      { record_id: 2, origin_type: "inbox", origin_ref: "I-3" },
+    ])
+  })
+
+  test("a result ref that does not resolve fails the set (no silent skip)", async () => {
+    const records = new RecordTypeRegistry()
+    records.register({ name: "fixture_item", plugin: "fixture", prefix: "F-", resolve: async () => null, label: async () => "", search: async () => [] })
+    const events = new EventBus()
+    const ops = new OperationRegistry({ db: kdb, events, records, provenance: new ProvenanceStore(kdb, records), validateOutputs: true })
+    ops.expose("fixture", { write: { add } })
+    const cs = new ChangeSetService({ db: kdb, ops, records, provenance: new ProvenanceStore(kdb, records) })
+    await expect(inCtx(() => cs.apply([{ plugin: "fixture", operation: "add", input: { title: "x" } }], { type: "inbox", ref: "I-3" }))).rejects.toThrow(
+      'write operation "fixture.add" returned ref "F-1", which does not resolve',
+    )
+    expect(titles()).toEqual([])
   })
 
   test("without an origin the change set is logged with null origin", async () => {

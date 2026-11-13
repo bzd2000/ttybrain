@@ -183,6 +183,52 @@ describe("OperationRegistry: writes", () => {
     ])
   })
 
+  // A delete returns { ref, deleted: true }: the record is gone, so nothing is recorded for it, and the origins
+  // it had are forgotten (ids are rowids and get reused: a later record must not inherit them).
+  const remove: WriteOp = {
+    input: Type.Object({ ref: Type.String() }),
+    output: Type.Object({ ref: Type.String(), deleted: Type.Literal(true) }),
+    describe: (i) => `- item ${i.ref}`,
+    run: async (i) => {
+      await kdb.kysely.deleteFrom("fixture_item").where("id", "=", Number(i.ref.slice(2))).execute()
+      return { ref: i.ref, deleted: true as const }
+    },
+  }
+  const origins = () => kdb.raw.prepare("SELECT record_type, record_id, origin_ref FROM kernel_record_origin ORDER BY rowid").all([])
+
+  test("a delete with an origin records no provenance and forgets the deleted record's origins", async () => {
+    const api = expose({ remove })
+    await inCtx(() => api.write.add!({ title: "a" }), { type: "inbox", ref: "I-3" })
+    await inCtx(() => api.write.add!({ title: "b" }), { type: "inbox", ref: "I-3" })
+    expect(await inCtx(() => api.write.remove!({ ref: "F-1" }), { type: "inbox", ref: "I-4" })).toEqual({ ref: "F-1", deleted: true })
+    expect(origins()).toEqual([{ record_type: "fixture_item", record_id: 2, origin_ref: "I-3" }])
+    expect(changed).toContainEqual({ plugin: "fixture", op: "remove", ref: "F-1" })
+  })
+
+  test("a delete without an origin forgets the record's origins too; a reused id starts clean", async () => {
+    const api = expose({ remove })
+    await inCtx(() => api.write.add!({ title: "a" }), { type: "inbox", ref: "I-3" })
+    await inCtx(() => api.write.remove!({ ref: "F-1" }))
+    await inCtx(() => api.write.add!({ title: "unrelated" }))
+    expect(titles()).toEqual(["unrelated"])
+    expect(await provenance.createdFrom("inbox", "I-3")).toEqual([])
+  })
+
+  test("a deleted ref of a type whose refs are not numeric fails", async () => {
+    records.register({ name: "coded", plugin: "fixture", prefix: "#", resolve: async () => 1, label: async () => "x", search: async () => [], ref: async () => "#X" })
+    const api = expose({ removeCoded: { ...remove, run: async () => ({ ref: "#X", deleted: true as const }) } })
+    await expect(inCtx(() => api.write.removeCoded!({ ref: "#X" }))).rejects.toThrow(
+      'write operation "fixture.removeCoded" deleted "#X", but only records with numeric refs can be deleted',
+    )
+  })
+
+  test("a write whose ref is its own origin records no provenance", async () => {
+    const api = expose()
+    await inCtx(() => api.write.add!({ title: "a" }))
+    await inCtx(() => api.write.add!({ title: "b" }), { type: "inbox", ref: "F-2" })
+    expect(origins()).toEqual([])
+  })
+
   test("parallel nested writes: the failing one rolls back alone; events and provenance only for survivors", async () => {
     const fail: WriteOp = { ...add, run: async (i) => (await add.run(i), await new Promise((r) => setTimeout(r, 5)), Promise.reject(new Error("boom"))) }
     const api = expose({

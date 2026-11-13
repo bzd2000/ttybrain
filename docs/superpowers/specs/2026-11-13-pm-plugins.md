@@ -100,7 +100,7 @@ pm goal   list|add|edit|done|drop
 | `listColumn` | — (People columns are its own) |
 | `guideSection` | how to record 1:1s and stakeholder interactions |
 
-**Events emitted:** `person.changed`, `note.added`.
+**Events emitted:** `person.changed`, `note.added` (phase 2+; not emitted yet — use `record.changed`).
 
 ---
 
@@ -188,7 +188,7 @@ pm report status <project>
 | `quickAction` on `project` | Update health (`h`) |
 | `guideSection` | how to turn notes into actions, decisions, risks, health and deliverable updates |
 
-**Events emitted:** `project.changed`, `action.changed`, `health.changed`.
+**Events emitted:** `project.changed`, `action.changed`, `health.changed` (phase 2+; not emitted yet — use `record.changed`).
 
 ---
 
@@ -308,7 +308,7 @@ Any write command, in any plugin, accepts `--from-inbox I-n`. That's a kernel fl
 | `quickAction` on `inbox_item` | Process by hand (`p`), Dismiss (`z`), Reopen (`u`) |
 | `guideSection` | the inbox-processing rules for agents |
 
-**Events emitted:** `inbox.captured`.
+**Events emitted:** `inbox.captured` (phase 2+; not emitted yet — use `record.changed`).
 
 ---
 

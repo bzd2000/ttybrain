@@ -225,6 +225,24 @@ describe("runCli: plugin commands", () => {
     expect(JSON.parse(r.out)).toEqual({ words: ["a", "b"], stdin: "piped text" })
   })
 
+  test("--from-inbox naming a registered record type must resolve; without a list command the hint is generic", async () => {
+    const tickets = definePlugin({
+      id: "tickets",
+      name: "Tickets",
+      version: "1.0.0",
+      apiVersion: 1,
+      activate(ctx) {
+        ctx.recordType({ name: "ticket", prefix: "I-", resolve: async (r) => (r.trim() === "I-1" ? 1 : null), label: async () => "one", search: async () => [] })
+      },
+    })
+    await k.cleanup()
+    k = await makeTestKernel({ plugins: [widgets, tickets] })
+    const r = await cli(["widget", "origin", "--from-inbox", "I-9", "--json"])
+    expect(r.code).toBe(2)
+    expect(JSON.parse(r.out)).toEqual({ error: { code: "not_found", message: '--from-inbox: no record "I-9"', hint: 'run "pm help"' } })
+    expect(JSON.parse((await cli(["widget", "origin", "--from-inbox", "I-1", "--json"])).out).origin).toEqual({ type: "inbox", ref: "I-1" })
+  })
+
   test("--from-inbox I-2 sets the origin seen inside run", async () => {
     expect(JSON.parse((await cli(["widget", "origin", "--from-inbox", "I-2", "--json"])).out)).toEqual({
       origin: { type: "inbox", ref: "I-2" },

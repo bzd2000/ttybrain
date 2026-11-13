@@ -90,6 +90,19 @@ describe("people", () => {
     expect(bad.json.error.field).toBe("handle")
   })
 
+  test("the handle me is reserved: it means you", async () => {
+    expect((await ok("person", "add", "Mé Linh", "--json")).json.ref).toBe("@me2")
+    for (const argv of [
+      ["person", "add", "Other", "--handle", "me", "--json"],
+      ["person", "add", "Other", "--handle", "@ME", "--json"],
+      ["person", "edit", "me2", "--handle", "me", "--json"],
+    ]) {
+      const r = await cli(...argv)
+      expect(r.code).toBe(1)
+      expect(r.json.error).toEqual({ code: "validation", field: "handle", message: 'handle "me" is reserved', hint: '"me" means you (as in --owner me); choose another --handle' })
+    }
+  })
+
   test("note on an unknown person is not found, with suggestions", async () => {
     await ok("person", "add", "Petra Janssens")
     const r = await cli("note", "add", "peter", "Worried about budget", "--interaction", "--json")

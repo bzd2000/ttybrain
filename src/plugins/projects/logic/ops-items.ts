@@ -1,7 +1,7 @@
 // The exposed write operations on milestones, deliverables, risks and decisions. Each returns the record with
 // its `ref`; `describe` gives the change-set line (plugin reference §2). Every write needs an active project and
 // active owners: archived ones are refused with a hint to restore them first.
-import { NonBlank, Type, ValidationError, type PluginContext, type Static } from "../../../kernel/api"
+import { Deleted, NonBlank, Type, ValidationError, type PluginContext, type Static } from "../../../kernel/api"
 import { DeliverableRecord, DecisionRecord, DeliverableStatus, MilestoneRecord, RiskRecord, RiskType, Severity, type Items } from "./items"
 import { clean, date, now, today } from "./ops-project"
 import type { Store } from "./records"
@@ -139,7 +139,7 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
       },
       deleteMilestone: {
         input: RefInput,
-        output: MilestoneRecord,
+        output: Deleted,
         describe: async (i: { ref: string }) => `- milestone ${items.refOr("milestone", i.ref)} "${await items.labelOf("milestone", i.ref)}"`,
         run: async (i: { ref: string }) => {
           const m = await items.find("milestone", i.ref)
@@ -147,7 +147,7 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
           // deliverable.milestone_id references milestone.id: unlink first, in this same write.
           await db.updateTable("deliverable").set({ milestone_id: null, updated_at: now() }).where("milestone_id", "=", m.id).execute()
           await db.deleteFrom("milestone").where("id", "=", m.id).execute()
-          return m
+          return { ref: m.ref, deleted: true as const }
         },
       },
 
@@ -234,13 +234,13 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
       },
       deleteDeliverable: {
         input: RefInput,
-        output: DeliverableRecord,
+        output: Deleted,
         describe: async (i: { ref: string }) => `- deliverable ${items.refOr("deliverable", i.ref)} "${await items.labelOf("deliverable", i.ref)}"`,
         run: async (i: { ref: string }) => {
           const d = await items.find("deliverable", i.ref)
           await items.guardProject(d.project)
           await db.deleteFrom("deliverable").where("id", "=", d.id).execute()
-          return d
+          return { ref: d.ref, deleted: true as const }
         },
       },
 
@@ -315,13 +315,13 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
       },
       deleteRisk: {
         input: RefInput,
-        output: RiskRecord,
+        output: Deleted,
         describe: async (i: { ref: string }) => `- risk ${items.refOr("risk", i.ref)} "${await items.labelOf("risk", i.ref)}"`,
         run: async (i: { ref: string }) => {
           const r = await items.find("risk", i.ref)
           await items.guardProject(r.project)
           await db.deleteFrom("risk").where("id", "=", r.id).execute()
-          return r
+          return { ref: r.ref, deleted: true as const }
         },
       },
 
@@ -383,13 +383,13 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
       },
       deleteDecision: {
         input: RefInput,
-        output: DecisionRecord,
+        output: Deleted,
         describe: async (i: { ref: string }) => `- decision ${items.refOr("decision", i.ref)} "${await items.labelOf("decision", i.ref)}"`,
         run: async (i: { ref: string }) => {
           const d = await items.find("decision", i.ref)
           await items.guardProject(d.project)
           await db.deleteFrom("decision").where("id", "=", d.id).execute()
-          return d
+          return { ref: d.ref, deleted: true as const }
         },
       },
     },

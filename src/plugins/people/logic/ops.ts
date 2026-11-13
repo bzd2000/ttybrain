@@ -4,6 +4,7 @@ import {
   addDays,
   ConflictError,
   currentContext,
+  Deleted,
   makeHandle,
   NonBlank,
   normalizeCode,
@@ -48,7 +49,6 @@ const NoteRef = Type.Object({ ref: Ref })
 const AddGoal = Type.Object({ person: Ref, title: Name, target_date: Type.Optional(Type.String()), notes: Type.Optional(Type.String()) })
 const EditGoal = Type.Object({ ref: Ref, title: Type.Optional(Name), target_date: Clearable, notes: Clearable })
 const SetGoalStatus = Type.Object({ ref: Ref, status: GoalStatus })
-const Deleted = Type.Object({ ref: Type.String(), deleted: Type.Literal(true) })
 
 const StaleInput = Type.Object({ days: Type.Integer({ minimum: 0 }), limit: Type.Optional(Type.Integer({ minimum: 1 })) })
 const StaleRow = Type.Object({
@@ -81,12 +81,17 @@ const date = (input: string, field: string) => {
 const roles = (p: { is_team?: boolean; is_stakeholder?: boolean }) =>
   [p.is_team ? "team" : "", p.is_stakeholder ? "stakeholder" : ""].filter(Boolean).join(", ")
 
+// "me" is the CLI token for the user (`--owner me`), so no person may have it as a handle.
+const ME = "me"
+
 export function registerOps(ctx: PluginContext, store: Store): void {
   const db = ctx.data
 
   async function freeHandle(input: string, self?: number): Promise<string> {
     const handle = normalizeHandle(input)
     if (!HANDLE.test(handle)) throw new ValidationError(`invalid handle "${input}"`, { field: "handle", hint: "use lowercase letters, digits and -" })
+    if (handle === ME)
+      throw new ValidationError(`handle "${ME}" is reserved`, { field: "handle", hint: `"${ME}" means you (as in --owner ${ME}); choose another --handle` })
     const other = await store.handleId(handle)
     if (other !== null && other !== self) throw new ConflictError(`handle "${handle}" is taken`, { hint: "choose another --handle" })
     return handle
@@ -94,7 +99,7 @@ export function registerOps(ctx: PluginContext, store: Store): void {
 
   async function newHandle(i: { name: string; handle?: string }): Promise<string> {
     if (i.handle !== undefined) return freeHandle(i.handle)
-    const taken = new Set(await store.handles())
+    const taken = new Set([...(await store.handles()), ME])
     return makeHandle(i.name, (h) => taken.has(h))
   }
 

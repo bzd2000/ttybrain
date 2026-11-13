@@ -1,7 +1,7 @@
 // The exposed write operations on actions. An action's owner is a soft person reference where empty (or `me`)
 // means me; `forPerson` is the stakeholder it is for; the project and meeting are optional. Each write returns
 // the action record with its `ref`; `describe` gives the change-set line (plugin reference §2).
-import { NonBlank, Type, ValidationError, type PluginContext, type Static } from "../../../kernel/api"
+import { Deleted, NonBlank, Type, ValidationError, type PluginContext, type Static } from "../../../kernel/api"
 import { ActionRecord, type Items } from "./items"
 import { clean, date, now, today } from "./ops-project"
 import type { Store } from "./records"
@@ -140,13 +140,13 @@ export function registerActionOps(ctx: PluginContext, store: Store, items: Items
       },
       deleteAction: {
         input: RefInput,
-        output: ActionRecord,
+        output: Deleted,
         describe: async (i: { ref: string }) => `- action ${items.refOr("action", i.ref)} "${await items.labelOf("action", i.ref)}"`,
         run: async (i: { ref: string }) => {
           const a = await items.find("action", i.ref)
           await items.guardProject(a.project)
           await db.deleteFrom("action").where("id", "=", a.id).execute()
-          return a
+          return { ref: a.ref, deleted: true as const }
         },
       },
     },

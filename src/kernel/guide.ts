@@ -10,7 +10,7 @@ const KERNEL = `## Conventions
 - Exit codes: \`0\` OK, \`1\` validation error, \`2\` not found (the hint suggests close matches), \`3\` conflict or database busy (try again).
 - Dates accept \`YYYY-MM-DD\`, \`today\`, \`tomorrow\`, \`+Nd\`, \`+Nw\` and \`mon\` to \`sun\` (the next such day). Output dates are always \`YYYY-MM-DD\`.
 - References: any record by its display ID (\`A-12\`) or bare number (\`12\`), a project by code (\`CRM\` or \`#CRM\`), a person by handle (\`anna\` or \`@anna\`).
-- When a change comes from an inbox item, pass \`--from-inbox I-<n>\` so pm records what the item became.
+- When a change comes from an inbox item, pass \`--from-inbox I-<n>\` on the commands that create or change records for that item (not on \`pm inbox done\`), so pm records what the item became.
 - Commands never prompt. Destructive commands need \`--yes\`.
 - When something is ambiguous (which project, which person, whether something was decided), ask the user instead of guessing.`
 

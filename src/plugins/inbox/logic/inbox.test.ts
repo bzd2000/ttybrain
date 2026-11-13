@@ -99,6 +99,57 @@ describe("inbox", () => {
     expect(s.json.summary).toBe("note on @peter, A-1")
   })
 
+  test("provenance: deletes with --from-inbox succeed and return { ref, deleted: true }", async () => {
+    await ok("inbox", "add", "Peter worried about budget @peter")
+    await ok("note", "add", "peter", "Worried about budget", "--interaction", "--from-inbox", "I-1")
+    await ok("action", "add", "Budget update", "--for", "peter", "--from-inbox", "I-1")
+    await ok("action", "add", "Second", "--for", "peter", "--from-inbox", "I-1")
+    const n = await cli("note", "delete", "N-1", "--yes", "--from-inbox", "I-1")
+    expect(n.code).toBe(0)
+    expect(n.out).toBe("N-1 deleted\n")
+    const a = await cli("action", "delete", "A-2", "--yes", "--from-inbox", "I-1", "--json")
+    expect(a.code).toBe(0)
+    expect(a.json).toEqual({ ref: "A-2", deleted: true })
+    expect((await ok("inbox", "show", "I-1", "--json")).json.created).toEqual([{ ref: "A-1", label: "Budget update" }])
+  })
+
+  test("provenance: a deleted record's id reused later does not show as created from the item", async () => {
+    await ok("inbox", "add", "Peter worried about budget @peter")
+    await ok("action", "add", "Budget update", "--for", "peter", "--from-inbox", "I-1")
+    await ok("action", "delete", "A-1", "--yes")
+    expect((await ok("action", "add", "Unrelated later action", "--json")).json.ref).toBe("A-1")
+    const s = await ok("inbox", "show", "I-1", "--json")
+    expect(s.json.created).toEqual([])
+    expect((await ok("inbox", "show", "I-1")).out).not.toContain("Unrelated")
+  })
+
+  test("provenance: an item is not recorded as created from itself", async () => {
+    await ok("inbox", "add", "first")
+    await ok("inbox", "add", "second")
+    await ok("inbox", "done", "I-2", "--summary", "nothing", "--from-inbox", "I-2")
+    expect((await ok("inbox", "show", "I-2", "--json")).json.created).toEqual([])
+  })
+
+  test("delete outputs: every delete returns { ref, deleted: true }", async () => {
+    await ok("action", "add", "x", "--project", "CRM")
+    await ok("milestone", "add", "CRM", "Design approved", "--due", "2026-12-15")
+    await ok("deliverable", "add", "CRM", "Spec")
+    await ok("risk", "add", "CRM", "Vendor delay", "--type", "risk", "--severity", "high")
+    await ok("decision", "add", "Go with vendor X", "--project", "CRM")
+    for (const [thing, ref] of [["action", "A-1"], ["milestone", "MS-1"], ["deliverable", "D-1"], ["risk", "R-1"], ["decision", "DE-1"]]) {
+      expect((await ok(thing!, "delete", ref!, "--yes", "--json")).json).toEqual({ ref, deleted: true })
+    }
+  })
+
+  test("--from-inbox with an item that does not exist is not found, and nothing is written", async () => {
+    await ok("inbox", "add", "first")
+    const r = await cli("action", "add", "typo", "--for", "peter", "--from-inbox", "I-99", "--json")
+    expect(r.code).toBe(2)
+    expect(r.json).toEqual({ error: { code: "not_found", message: '--from-inbox: no record "I-99"', hint: 'run "pm inbox list"' } })
+    expect((await ok("action", "add", "real", "--for", "peter", "--from-inbox", "I-1", "--json")).json.ref).toBe("A-1")
+    expect((await ok("inbox", "show", "I-1", "--json")).json.created.map((c: any) => c.ref)).toEqual(["A-1"])
+  })
+
   test("done --by, dismiss, reopen, list filters", async () => {
     await ok("inbox", "add", "one")
     await ok("inbox", "add", "two")
@@ -147,5 +198,7 @@ describe("inbox", () => {
     expect(at("Processing the inbox")).toBeGreaterThan(at("Projects"))
     expect(g).toContain("pm inbox list --new --json")
     expect(g).toContain("ask the user when something is ambiguous instead of guessing")
+    expect(g).toContain("on the commands that create or change records for that item (not on `pm inbox done`)")
+    expect(g).not.toContain("on every command")
   })
 })

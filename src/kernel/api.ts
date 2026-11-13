@@ -1,7 +1,7 @@
 // The plugin API (the future `@pm/api`). In phase 1, plugins import only from this module.
 export { default as Type } from "typebox"
 export type { Static, TSchema } from "typebox"
-export { NonBlank } from "./schemas"
+export { Deleted, NonBlank } from "./schemas"
 export { sql, type ExpressionBuilder, type Kysely } from "kysely"
 
 export { definePlugin, type PluginContext, type PluginDef } from "./plugin"

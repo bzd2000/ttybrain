@@ -49,7 +49,7 @@ export class ChangeSetService {
   async apply(ops: ChangeOp[], origin?: Origin): Promise<{ id: number; refs: string[] }> {
     if (ops.length === 0) throw new ValidationError("a change set needs at least one operation")
     const ctx = currentContext()
-    const { db, provenance, records } = this.deps
+    const { db, provenance } = this.deps
     return db.write(async () => {
       const set = await db.kysely
         .insertInto("kernel_change_set")
@@ -63,11 +63,10 @@ export class ChangeSetService {
             const description = await this.deps.ops.describe(op.plugin, op.operation, op.input)
             const call = this.deps.ops.api(op.plugin)?.write[op.operation]
             if (!call) throw new NotFoundError(`no write operation "${op.plugin}.${op.operation}"`)
-            const { ref } = await call(op.input)
-            if (origin) {
-              const found = await records.resolveAny(ref)
-              if (found) await provenance.record(found.type, found.id, origin)
-            }
+            const out = await call(op.input)
+            const ref: string = out.ref
+            // The set's own origin follows the same rule as any write's (operations.ts): deletes record nothing.
+            await provenance.recordWrite(`${op.plugin}.${op.operation}`, out, origin)
             await db.kysely
               .insertInto("kernel_change_set_op")
               .values({

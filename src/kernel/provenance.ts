@@ -3,12 +3,41 @@
 import { currentContext, type Origin } from "./context"
 import type { KernelDb } from "./db/kernel-db"
 import type { RecordTypeRegistry } from "./records"
+import { parseRef } from "./refs"
+
+// What a write operation returns, as far as provenance cares: its main record's ref, and `deleted: true`
+// when the operation deleted that record (the one delete convention).
+export type WriteOutput = { ref: string; deleted?: unknown }
 
 export class ProvenanceStore {
   constructor(
     private readonly kdb: KernelDb,
     private readonly records: RecordTypeRegistry,
   ) {}
+
+  // The kernel's provenance rule for one write's output, inside its transaction. A delete (`deleted: true`)
+  // records nothing and forgets the deleted record's origins: ids are rowids and get reused, and a later record
+  // must not inherit them. Otherwise, with an origin, the ref is resolved (it must resolve) and recorded,
+  // unless it is the origin itself (`pm inbox done I-2 --from-inbox I-2`). Used by operations and change sets.
+  async recordWrite(key: string, out: WriteOutput, origin: Origin | undefined): Promise<void> {
+    const type = this.records.typeOfRef(out.ref)
+    if (out.deleted === true) {
+      if (!type) return // no registered type: nothing can have been recorded for it
+      const id = type.ref ? null : parseRef(out.ref, type.prefix)
+      if (id === null) throw new Error(`write operation "${key}" deleted "${out.ref}", but only records with numeric refs can be deleted`)
+      await this.forget(type.name, id)
+      return
+    }
+    if (!origin || sameRef(out.ref, origin.ref)) return
+    if (!type) throw new Error(`write operation "${key}" returned ref "${out.ref}" of no registered record type`)
+    const id = await type.resolve(out.ref)
+    if (id === null) throw new Error(`write operation "${key}" returned ref "${out.ref}", which does not resolve`)
+    await this.record(type.name, id, origin)
+  }
+
+  async forget(type: string, id: number): Promise<void> {
+    await this.kdb.kysely.deleteFrom("kernel_record_origin").where("record_type", "=", type).where("record_id", "=", id).execute()
+  }
 
   // Inside the write's transaction, so it rolls back with it. Recording the same pair twice is a no-op.
   async record(type: string, id: number, origin: Origin): Promise<void> {
@@ -37,3 +66,5 @@ export class ProvenanceStore {
     )
   }
 }
+
+const sameRef = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()

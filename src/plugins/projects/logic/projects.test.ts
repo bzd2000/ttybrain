@@ -42,6 +42,11 @@ describe("projects", () => {
     await k.cleanup()
   })
 
+  test("declares the views it reads: people's and meetings'", () => {
+    expect(projects.reads).toEqual({ people: "^1", meetings: "^1" })
+    expect(projects.requires).toEqual({ people: "^1" })
+  })
+
   test("boots after people, with every table of migration 001", () => {
     expect(k.plugins.map((p) => `${p.id} ${p.status}`)).toEqual(["people ok", "projects ok"])
     const tables = (k.db.raw.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name LIKE 'projects_%' ORDER BY name").all([]) as any[]).map(
@@ -143,6 +148,30 @@ describe("projects", () => {
       rmSync(dir, { recursive: true, force: true })
     }
     expect((await run("project", "context", "CRM", "--stdin", "--set-file", "x", "--json")).code).toBe(1)
+  })
+
+  test("project context: empty --stdin or --set-file is refused; --clear clears", async () => {
+    await ok("project", "add", "CRM", "CRM replatforming")
+    await cli(["project", "context", "CRM", "--stdin"], "# Background")
+    for (const input of ["", "  \n\t\n"]) {
+      const r = await cli(["project", "context", "CRM", "--stdin", "--json"], input)
+      expect(r.code).toBe(1)
+      expect(r.json.error).toEqual({ code: "validation", message: "the new context is empty", hint: "use --clear to remove the context" })
+    }
+    const dir = mkdtempSync(join(tmpdir(), "pm-ctx-"))
+    try {
+      writeFileSync(join(dir, "empty.md"), "\n\n")
+      const r = await run("project", "context", "CRM", "--set-file", join(dir, "empty.md"), "--json")
+      expect(r.code).toBe(1)
+      expect(r.json.error.hint).toBe("use --clear to remove the context")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+    expect((await ok("project", "show", "CRM", "--json")).json.context).toBe("# Background")
+    expect((await run("project", "context", "CRM", "--clear", "--stdin", "--json")).code).toBe(1)
+    const cleared = await ok("project", "context", "CRM", "--clear")
+    expect(cleared.out).toBe("#CRM context updated (cleared)\n")
+    expect((await ok("project", "show", "CRM", "--json")).json.context).toBe(null)
   })
 
   test("involvement: person refs are validated, and people's staleStakeholders sees the projects", async () => {

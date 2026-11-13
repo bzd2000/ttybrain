@@ -22,10 +22,11 @@ export class ValidationError extends PmError {
 }
 
 export class NotFoundError extends PmError {
-  constructor(message: string, opts: { suggestions?: string[] } = {}) {
+  // The hint is "did you mean …" when there are suggestions, else `opts.hint`.
+  constructor(message: string, opts: { suggestions?: string[]; hint?: string } = {}) {
     const s = opts.suggestions ?? []
     super(message, "not_found", 2, {
-      hint: s.length ? `did you mean ${s.map((x) => `"${x}"`).join(", ")}?` : undefined,
+      hint: s.length ? `did you mean ${s.map((x) => `"${x}"`).join(", ")}?` : opts.hint,
       details: s.length ? { suggestions: s } : undefined,
     })
   }

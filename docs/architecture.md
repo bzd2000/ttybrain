@@ -63,11 +63,12 @@ ctx.expose({
 - Schemas use **TypeBox** (`Type` from `src/kernel/api.ts`). The kernel validates the input before `run` and reports the failing field.
 - Text inputs use `NonBlank(...)` (from `api.ts`) instead of a bare `Type.String()`, so blank strings are rejected as validation errors.
 - **Write outputs must include `ref`**, the display ref of the main record (`"A-41"`). Provenance and change sets depend on it.
+- **One delete convention:** a write that deletes its record returns `Deleted` (from `api.ts`): `{ ref, deleted: true }`. The kernel then records no provenance for it and forgets the record's provenance rows in the same transaction (ids are rowids and get reused). Only records with numeric refs (`A-12`) can be deleted; `#CODE`/`@handle` records are archived instead.
 - `describe(input)` returns the one-line change description shown in change sets.
 - **Read operations are only for logic** (`projectStatus`, `sinceDate`, `staleStakeholders`, `getContext`). Plain lists and joins use views.
 - **Context comes from the kernel** (`currentContext()`: `today`, `now`, `origin`), never from `new Date()`. Use the injected clock everywhere, so tests can pin "today".
 - `ctx.records` offers `resolve(ref)`, `label(ref)`, `refOf(type, id)` and `hasType(name)`; use `hasType` to validate a soft reference to an optional plugin's records only when that plugin is loaded.
-- **Every write emits `record.changed`.** With an origin (`--from-inbox I-n`), the kernel records provenance itself. Don't add `inbox_item_id` columns.
+- **Every write emits `record.changed`.** With an origin (`--from-inbox I-n`), the kernel records provenance itself (not for a delete, and not when the ref is the origin itself). Don't add `inbox_item_id` columns. The CLI refuses an origin whose ref belongs to a registered record type but does not resolve (exit 2).
 
 ## Who owns what
 
@@ -93,7 +94,7 @@ ctx.expose({
   - no prompts, ever; `destructive: true` commands need `--yes`;
   - dates accept `YYYY-MM-DD`, `today`, `tomorrow`, `+Nd`, `+Nw` and `mon`–`sun`, and are output as ISO;
   - references accept `A-12` or `12`, `CRM` or `#CRM`, `anna` or `@anna`.
-- An empty action owner, or the token `me`, means **me**.
+- An empty action owner, or the token `me`, means **me**. So `me` is a reserved handle: no person can have it.
 - **Reports** are registered with `ctx.report({ id, params, prepare?, … })` and extended with `ctx.reportSection(reportId, …)`. The optional `prepare(params)` turns validated params into what the sections get (parsed dates, defaults). Param names `json`, `db`, `from-inbox`, `yes`, `help` and `format` are reserved (they collide with CLI flags).
 
 ## Runtimes

@@ -3,7 +3,7 @@
 // in its transaction (a savepoint when nested), records provenance and emits `record.changed`.
 import type { TSchema } from "typebox"
 import Value from "typebox/value"
-import { currentContext, runWithContext, type Origin } from "./context"
+import { currentContext, runWithContext } from "./context"
 import type { KernelDb } from "./db/kernel-db"
 import { NotFoundError, ValidationError } from "./errors"
 import type { EventBus } from "./events"
@@ -146,8 +146,7 @@ export class OperationRegistry {
       const key = `${e.plugin}.${e.name}`
       if (typeof out?.ref !== "string") throw new Error(`write operation "${key}" must return { ref: string }`)
       this.checkOutput(e, out)
-      const origin = ctx.origin
-      if (origin) await this.recordProvenance(key, out.ref, origin)
+      await this.deps.provenance.recordWrite(key, out, ctx.origin)
       const payload = { plugin: e.plugin, op: e.name, ref: out.ref }
       // Handlers run in the same actor/today/now but without the origin, so their own writes are not
       // recorded as created from it.
@@ -155,14 +154,5 @@ export class OperationRegistry {
       db.afterCommit(() => void runWithContext(hookCtx, async () => events.emit("record.changed", payload)))
       return out
     })
-  }
-
-  private async recordProvenance(key: string, ref: string, origin: Origin) {
-    const { records, provenance } = this.deps
-    const type = records.typeOfRef(ref)
-    if (!type) throw new Error(`write operation "${key}" returned ref "${ref}" of no registered record type`)
-    const id = await type.resolve(ref)
-    if (id === null) throw new Error(`write operation "${key}" returned ref "${ref}", which does not resolve`)
-    await provenance.record(type.name, id, origin)
   }
 }

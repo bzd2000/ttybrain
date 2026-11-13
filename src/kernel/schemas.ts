@@ -7,3 +7,7 @@ import Type from "typebox"
 export function NonBlank(opts: Parameters<typeof Type.String>[0] = {}) {
   return Type.String({ minLength: 1, pattern: "\\S", errorMessage: "must not be blank", ...opts })
 }
+
+// The output of every delete write operation: the deleted record's ref and `deleted: true`. The kernel reads
+// `deleted` to forget the record's provenance instead of recording any (provenance.ts).
+export const Deleted = Type.Object({ ref: Type.String(), deleted: Type.Literal(true) })

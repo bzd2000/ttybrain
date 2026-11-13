@@ -22,7 +22,7 @@ export const projects = definePlugin({
   version: "1.0.0",
   apiVersion: 1,
   requires: { people: "^1" }, // person references (owners, involvement) are people's records
-  reads: { meetings: "^1" }, // meetings.meeting, for meeting titles on actions and decisions (optional)
+  reads: { people: "^1", meetings: "^1" }, // people.person (owners, involvement); meetings.meeting for meeting titles (optional)
   activate(ctx) {
     const store = makeStore(ctx)
     registerSchema(ctx)

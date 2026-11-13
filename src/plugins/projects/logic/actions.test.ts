@@ -129,7 +129,7 @@ describe("projects: actions", () => {
     expect(c.json).toMatchObject({ status: "cancelled", done_date: null })
     expect((await run("action", "cancel", "A-2", "--json")).json.error.message).toBe("A-2 is already cancelled")
     expect((await run("action", "delete", "A-2", "--json")).code).toBe(1) // needs --yes
-    expect((await ok("action", "delete", "A-2", "--yes", "--json")).json.ref).toBe("A-2")
+    expect((await ok("action", "delete", "A-2", "--yes", "--json")).json).toEqual({ ref: "A-2", deleted: true })
     expect(rows("action").map((r) => r.id)).toEqual([1])
     expect((await run("action", "edit", "A-9", "--title", "x", "--json")).code).toBe(2)
   })
