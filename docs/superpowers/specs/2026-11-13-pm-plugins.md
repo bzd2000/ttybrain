@@ -133,8 +133,10 @@ The portfolio, and everything you follow up per project: health, milestones, del
 | `projects.deliverable` | id, project_id, title, owner_id, due_date, status, status_changed_at, milestone_id |
 | `projects.risk` | id, project_id, type, title, severity, owner_id, status, closed_date |
 | `projects.decision` | id, project_id, date, title, decided_by, meeting_id |
-| `projects.action` | id, title, due_date, status, done_date, owner_id, project_id, for_person_id, meeting_id, `overdue` |
+| `projects.action` | id, title, due_date, status, done_date, owner_id, project_id, for_person_id, meeting_id |
 | `projects.involvement` | project_id, person_id, role |
+
+Views take no injected clock, so nothing in them depends on "today": `projects.action` has no `overdue` column, and `late` on `projects.milestone` (computed with SQLite's `date('now')`) is a display convenience only. Logic (reports, `projectStatus`, the TUI's groupings) compares `due_date` with the context's `today` itself.
 
 The project `context` Markdown is **not** in a view, because it's large. It's read with `getContext`.
 
@@ -145,7 +147,7 @@ It reads `people.person`, for owner, `for` and involvement names and for validat
 | Read (with logic) | Input | Returns |
 |---|---|---|
 | `getContext` | `project` | `{ markdown, updatedAt }` |
-| `projectStatus` | `project`, `since` | the structured data behind the prep block (health and "stale" warning, milestones, deliverables, risks, decisions, actions) |
+| `projectStatus` | `project`, `since`, `reference?` (default today), `previousMeeting?` | the structured data behind the prep block (health and "stale" warning, milestones, deliverables, risks, decisions, actions) |
 
 | Write | Input | Change-set line |
 |---|---|---|

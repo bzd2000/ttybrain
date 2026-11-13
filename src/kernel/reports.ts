@@ -6,11 +6,24 @@ import { NotFoundError, suggest, ValidationError } from "./errors"
 
 export type Cell = string | number | null
 export type ReportSectionResult = { title: string; columns: string[]; rows: Array<Record<string, Cell>>; empty: string; note?: string }
-export type ReportDef = { id: string; cliName: string; title: string; params: TSchema; describe: string }
+// `prepare` (optional) turns the validated params into what the sections get (parsed dates, defaults, resolved
+// refs). It runs once per report run, before any section; an error it throws fails the run (exit 1/2), unlike a
+// section's, which becomes a note.
+export type ReportDef = {
+  id: string
+  cliName: string
+  title: string
+  params: TSchema
+  describe: string
+  prepare?: (params: any) => unknown | Promise<unknown>
+}
 export type ReportSectionDef = { id: string; order: number; run(params: any): Promise<ReportSectionResult | null> }
 export type ReportResult = { title: string; sections: ReportSectionResult[] }
 
 type Section = { reportId: string; plugin: string; def: ReportSectionDef }
+
+// `pm report <cliName>` turns params into flags, so they must not shadow the global flags or the report's --format.
+const RESERVED_PARAMS = new Set(["json", "db", "from-inbox", "yes", "help", "format"])
 
 export class ReportRegistry {
   private readonly reports = new Map<string, { def: ReportDef; plugin?: string }>()
@@ -18,6 +31,9 @@ export class ReportRegistry {
 
   // `plugin` lets the host remove a failed plugin's reports.
   report(def: ReportDef, plugin?: string): void {
+    const props = Object.keys((def.params as { properties?: Record<string, unknown> }).properties ?? {})
+    const reserved = props.find((p) => RESERVED_PARAMS.has(p))
+    if (reserved) throw new ValidationError(`report "${def.id}": param "${reserved}" collides with the CLI flag --${reserved}`)
     if (this.reports.has(def.id)) throw new ValidationError(`report "${def.id}" is already registered`)
     const clash = [...this.reports.values()].find((r) => r.def.cliName === def.cliName)
     if (clash) throw new ValidationError(`report name "${def.cliName}" is already used by report "${clash.def.id}"`)
@@ -46,11 +62,12 @@ export class ReportRegistry {
       const field = missing ?? (err.instancePath.split("/").slice(1).join(".") || undefined)
       throw new ValidationError(`report ${reportId}: ${missing ? `${missing} is required` : `${field ?? "params"} ${err.message}`}`, { field })
     }
+    const input = report.prepare ? await report.prepare(params) : params
     const mine = this.sections.filter((s) => s.reportId === reportId).sort((a, b) => a.def.order - b.def.order)
     const sections: ReportSectionResult[] = []
     for (const s of mine) {
       try {
-        const result: unknown = await s.def.run(params)
+        const result: unknown = await s.def.run(input)
         if (result === null || result === undefined) continue
         sections.push(wellFormed(result) ? result : { title: s.def.id, columns: [], rows: [], empty: "", note: "error: malformed section result" })
       } catch (e) {

@@ -1,5 +1,6 @@
 // The published views: projects.project (with the computed health and next-milestone columns),
-// projects.health_update and projects.involvement. They are a versioned contract; other plugins join them,
+// projects.health_update, projects.involvement and one per item table (milestone, deliverable, risk, decision,
+// action). They are a versioned contract; other plugins join them,
 // never the tables. View queries take no bound parameters, so constants are literals (eb.lit / sql.lit).
 import { sql, type ExpressionBuilder, type Kysely, type PluginContext } from "../../../kernel/api"
 
@@ -137,5 +138,23 @@ export function registerViews(ctx: PluginContext): void {
     version: 1,
     columns: { id: "integer", project_id: "integer", date: "date", title: "text", decided_by: "text", meeting_id: "integer" },
     query: (db) => db.selectFrom("decision").select(["id", "project_id", "date", "title", "decided_by", "meeting_id"]),
+  })
+
+  // No `overdue` column: that depends on "today", which a view can't take; consumers compare due_date with their own.
+  ctx.publish("action", {
+    version: 1,
+    columns: {
+      id: "integer",
+      title: "text",
+      due_date: "date",
+      status: "text",
+      done_date: "date",
+      owner_id: "integer",
+      project_id: "integer",
+      for_person_id: "integer",
+      meeting_id: "integer",
+    },
+    query: (db) =>
+      db.selectFrom("action").select(["id", "title", "due_date", "status", "done_date", "owner_id", "project_id", "for_person_id", "meeting_id"]),
   })
 }

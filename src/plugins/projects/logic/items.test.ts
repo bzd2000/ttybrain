@@ -93,6 +93,25 @@ describe("projects: milestones, deliverables, risks, decisions", () => {
     expect(back.json.delivered_date).toBe(null)
   })
 
+  test("R19: an unchanged deliverable status is a no-op; closing a closed risk is refused", async () => {
+    await ok("deliverable", "add", "CRM", "Spec")
+    // set it on an earlier day, through the op, so a second write would show
+    await runWithContext({ actor: "me", today: "2026-10-01", now: "2026-10-01T09:00:00" }, () =>
+      k.ops.api("projects")!.write.setDeliverableStatus!({ ref: "D-1", status: "delivered" }),
+    )
+    const before = rows("deliverable")[0]
+    expect(before).toMatchObject({ status: "delivered", delivered_date: "2026-10-01", status_changed_at: "2026-10-01T09:00:00" })
+    const same = await ok("deliverable", "status", "D-1", "delivered", "--json")
+    expect(same.json).toMatchObject({ ref: "D-1", status: "delivered", delivered_date: "2026-10-01", status_changed_at: "2026-10-01T09:00:00" })
+    expect(rows("deliverable")[0]).toEqual(before)
+    await ok("risk", "add", "CRM", "Vendor delay", "--type", "risk", "--severity", "high")
+    await ok("risk", "close", "R-1", "--date", "2026-11-10")
+    const again = await run("risk", "close", "R-1", "--json")
+    expect(again.code).toBe(1)
+    expect(again.json.error.message).toBe("R-1 is already closed")
+    expect(rows("risk")[0].closed_date).toBe("2026-11-10")
+  })
+
   test("milestone delete clears deliverables", async () => {
     await ok("milestone", "add", "CRM", "Design approved", "--due", "2026-12-15")
     await ok("deliverable", "add", "CRM", "Spec", "--milestone", "MS-1")

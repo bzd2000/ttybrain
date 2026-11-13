@@ -1,5 +1,5 @@
-// Milestones, deliverables, risks and decisions as records: their queries and mappers, lookups by display ref, the
-// soft references they carry (owners, meetings), and the four record types (MS-, D-, R-, DE-).
+// Milestones, deliverables, risks, decisions and actions as records: their queries and mappers, lookups by display
+// ref, the soft references they carry (owners, meetings), and the five record types (MS-, D-, R-, DE-, A-).
 import { formatRef, NotFoundError, parseRef, Type, ValidationError, type PluginContext, type Static } from "../../../kernel/api"
 import type { Store } from "./records"
 
@@ -10,6 +10,8 @@ export const DeliverableStatus = Type.Union([lit("not_started"), lit("in_progres
 export const RiskType = Type.Union([lit("risk"), lit("issue")])
 export const Severity = Type.Union([lit("low"), lit("medium"), lit("high")])
 const RiskStatus = Type.Union([lit("open"), lit("closed")])
+const ActionStatus = Type.Union([lit("open"), lit("done"), lit("cancelled")])
+const OptId = Type.Union([Type.Integer(), Type.Null()])
 
 export const MilestoneRecord = Type.Object({
   ref: Text,
@@ -58,15 +60,36 @@ export const DecisionRecord = Type.Object({
   decided_by: Opt,
   meeting: Opt,
 })
+// An action: the view's columns (ids included, so `owner_id: null` reads as "me"), plus display refs and notes.
+export const ActionRecord = Type.Object({
+  ref: Text,
+  id: Type.Integer(),
+  title: Text,
+  due_date: Opt,
+  status: ActionStatus,
+  done_date: Opt,
+  owner_id: OptId,
+  owner: Opt,
+  project_id: OptId,
+  project: Opt,
+  for_person_id: OptId,
+  for: Opt,
+  meeting_id: OptId,
+  meeting: Opt,
+  notes: Opt,
+})
 export type MilestoneRecord = Static<typeof MilestoneRecord>
 export type DeliverableRecord = Static<typeof DeliverableRecord>
 export type RiskRecord = Static<typeof RiskRecord>
 export type DecisionRecord = Static<typeof DecisionRecord>
+export type ActionRecord = Static<typeof ActionRecord>
 
-export type Kind = "milestone" | "deliverable" | "risk" | "decision"
-export const PREFIX: Record<Kind, string> = { milestone: "MS-", deliverable: "D-", risk: "R-", decision: "DE-" }
+export type Kind = "milestone" | "deliverable" | "risk" | "decision" | "action"
+export const KINDS = ["milestone", "deliverable", "risk", "decision", "action"] as const
+export const PREFIX: Record<Kind, string> = { milestone: "MS-", deliverable: "D-", risk: "R-", decision: "DE-", action: "A-" }
 const MEETING_PREFIX = "M-"
 
+const ALIAS = { milestone: "m", deliverable: "d", risk: "r", decision: "d", action: "a" } as const
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
 const int = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v))
 
@@ -94,6 +117,31 @@ export function makeItems(ctx: PluginContext, store: Store) {
       .selectFrom("decision as d")
       .leftJoin("project as p", "p.id", "d.project_id")
       .select(["d.id", "d.project_id", "d.date", "d.title", "d.description", "d.decided_by", "d.meeting_id", "p.code"])
+  // Owner and for-person handles and names come from people.person; a null owner is me.
+  const actionQuery = () =>
+    db
+      .selectFrom("action as a")
+      .leftJoin("project as p", "p.id", "a.project_id")
+      .leftJoin("people.person as po", "po.id", "a.owner_id")
+      .leftJoin("people.person as pf", "pf.id", "a.for_person_id")
+      .select([
+        "a.id",
+        "a.title",
+        "a.due_date",
+        "a.status",
+        "a.done_date",
+        "a.owner_id",
+        "a.project_id",
+        "a.for_person_id",
+        "a.meeting_id",
+        "a.notes",
+        "p.code",
+        "p.archived_at",
+        "po.handle as owner_handle",
+        "po.name as owner_name",
+        "pf.handle as for_handle",
+        "pf.name as for_name",
+      ])
 
   const owner = (r: any) => (r.owner_id === null ? null : r.handle === null ? `person:${r.owner_id}` : `@${r.handle}`)
   const toMilestone = (r: any): MilestoneRecord => ({
@@ -144,9 +192,28 @@ export function makeItems(ctx: PluginContext, store: Store) {
     meeting: r.meeting_id === null ? null : formatRef(MEETING_PREFIX, Number(r.meeting_id)),
   })
 
-  const queries = { milestone: milestoneQuery, deliverable: deliverableQuery, risk: riskQuery, decision: decisionQuery }
-  const mappers = { milestone: toMilestone, deliverable: toDeliverable, risk: toRisk, decision: toDecision }
-  const alias = { milestone: "m", deliverable: "d", risk: "r", decision: "d" } as const
+  const personRef = (id: unknown, handle: unknown) => (id === null ? null : handle === null ? `person:${id}` : `@${handle}`)
+  const toAction = (r: any): ActionRecord => ({
+    ref: formatRef("A-", Number(r.id)),
+    id: Number(r.id),
+    title: String(r.title),
+    due_date: str(r.due_date),
+    status: r.status,
+    done_date: str(r.done_date),
+    owner_id: int(r.owner_id),
+    owner: personRef(r.owner_id, r.owner_handle),
+    project_id: int(r.project_id),
+    project: r.code === null ? null : `#${r.code}`,
+    for_person_id: int(r.for_person_id),
+    for: personRef(r.for_person_id, r.for_handle),
+    meeting_id: int(r.meeting_id),
+    meeting: r.meeting_id === null ? null : formatRef(MEETING_PREFIX, Number(r.meeting_id)),
+    notes: str(r.notes),
+  })
+
+  const queries = { milestone: milestoneQuery, deliverable: deliverableQuery, risk: riskQuery, decision: decisionQuery, action: actionQuery }
+  const mappers = { milestone: toMilestone, deliverable: toDeliverable, risk: toRisk, decision: toDecision, action: toAction }
+  const alias = ALIAS
 
   // The row behind a display ref (`R-3`, or a bare id); undefined when there is none.
   async function rowById(kind: Kind, id: number): Promise<any | undefined> {
@@ -207,13 +274,13 @@ export function makeItems(ctx: PluginContext, store: Store) {
     return m.id
   }
 
-  return { milestoneQuery, deliverableQuery, riskQuery, decisionQuery, toMilestone, toDeliverable, toRisk, toDecision, find, idOf, refOr, labelOf, guardProject, ownerId, meetingId, milestoneFor }
+  return { milestoneQuery, deliverableQuery, riskQuery, decisionQuery, actionQuery, toMilestone, toDeliverable, toRisk, toDecision, toAction, find, idOf, refOr, labelOf, guardProject, ownerId, meetingId, milestoneFor }
 }
 
 export function registerItemRecordTypes(ctx: PluginContext, items: Items): void {
-  const queries = { milestone: items.milestoneQuery, deliverable: items.deliverableQuery, risk: items.riskQuery, decision: items.decisionQuery }
-  const alias = { milestone: "m", deliverable: "d", risk: "r", decision: "d" }
-  for (const kind of ["milestone", "deliverable", "risk", "decision"] as const) {
+  const queries = { milestone: items.milestoneQuery, deliverable: items.deliverableQuery, risk: items.riskQuery, decision: items.decisionQuery, action: items.actionQuery }
+  const alias = ALIAS
+  for (const kind of KINDS) {
     ctx.recordType({
       name: kind,
       prefix: PREFIX[kind],

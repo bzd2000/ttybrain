@@ -94,6 +94,49 @@ describe("ReportRegistry.run", () => {
     expect(err.field).toBe("project")
   })
 
+  test("param names that collide with the CLI's global flags or --format are rejected at registration", () => {
+    const reports = new ReportRegistry()
+    for (const name of ["json", "db", "from-inbox", "yes", "help", "format"]) {
+      const err = (() => {
+        try {
+          reports.report({ ...def, id: `r-${name}`, cliName: `r-${name}`, params: Type.Object({ [name]: Type.Optional(Type.String()) }) })
+        } catch (e) {
+          return e
+        }
+      })() as ValidationError
+      expect(err).toBeInstanceOf(ValidationError)
+      expect(err.message).toBe(`report "r-${name}": param "${name}" collides with the CLI flag --${name}`)
+    }
+    expect(reports.list()).toEqual([])
+    reports.report({ ...def, params: Type.Object({ project: Type.String(), since: Type.Optional(Type.String()) }) })
+    expect(reports.list().map((d) => d.id)).toEqual(["status"])
+  })
+
+  test("prepare runs once before the sections; its result is what they get, and its errors propagate", async () => {
+    const reports = new ReportRegistry()
+    const seen: unknown[] = []
+    let calls = 0
+    reports.report({
+      ...def,
+      prepare: async (p: { project: string }) => {
+        calls++
+        if (p.project === "bad") throw new ValidationError("bad project", { field: "project" })
+        return { project: p.project.toUpperCase(), since: "2026-10-14" }
+      },
+    })
+    reports.section("status", "projects", { id: "a", order: 1, run: async (p) => (seen.push(p), actions) })
+    reports.section("status", "projects", { id: "b", order: 2, run: async (p) => (seen.push(p), risks) })
+    expect((await reports.run("status", { project: "crm" })).sections).toEqual([actions, risks])
+    expect(calls).toBe(1)
+    expect(seen).toEqual([
+      { project: "CRM", since: "2026-10-14" },
+      { project: "CRM", since: "2026-10-14" },
+    ])
+    const err = await reports.run("status", { project: "bad" }).catch((e) => e)
+    expect(err).toBeInstanceOf(ValidationError)
+    expect(err.message).toBe("bad project")
+  })
+
   test("duplicates throw; remove(plugin) drops its reports and sections", async () => {
     const reports = new ReportRegistry()
     reports.report(def, "projects")

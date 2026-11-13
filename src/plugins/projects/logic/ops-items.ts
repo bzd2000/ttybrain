@@ -1,7 +1,7 @@
 // The exposed write operations on milestones, deliverables, risks and decisions. Each returns the record with
 // its `ref`; `describe` gives the change-set line (plugin reference §2). Every write needs an active project and
 // active owners: archived ones are refused with a hint to restore them first.
-import { NonBlank, Type, type PluginContext, type Static } from "../../../kernel/api"
+import { NonBlank, Type, ValidationError, type PluginContext, type Static } from "../../../kernel/api"
 import { DeliverableRecord, DecisionRecord, DeliverableStatus, MilestoneRecord, RiskRecord, RiskType, Severity, type Items } from "./items"
 import { clean, date, now, today } from "./ops-project"
 import type { Store } from "./records"
@@ -217,6 +217,7 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
         run: async (i: Static<typeof SetStatus>) => {
           const d = await items.find("deliverable", i.ref)
           await items.guardProject(d.project)
+          if (d.status === i.status) return d // unchanged: no write, so status_changed_at keeps meaning "changed"
           await db
             .updateTable("deliverable")
             .set({
@@ -303,6 +304,7 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
         run: async (i: Static<typeof Complete>) => {
           const r = await items.find("risk", i.ref)
           await items.guardProject(r.project)
+          if (r.status === "closed") throw new ValidationError(`${r.ref} is already closed`, { hint: `it was closed on ${r.closed_date}` })
           await db
             .updateTable("risk")
             .set({ status: "closed", closed_date: i.date !== undefined ? date(i.date, "date") : today(), updated_at: now() })
