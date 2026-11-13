@@ -6,6 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A terminal UI built with [OpenTUI](https://opentui.com) (`@opentui/core`) and its Solid binding (`@opentui/solid`), running on **Bun** or **Node.js 26.4+**. Both runtimes must keep working. Bun is installed at `~/.bun/bin` and may not be on `PATH` in non-login shells. The system Node (`/usr/local/bin/node`) is 26.x.
 
+## Architecture (read first)
+
+pm is being rebuilt as a **plugin kernel** (`src/kernel/`) plus plugins (`src/plugins/<id>/logic|tui/`). **Read `docs/architecture.md` before changing kernel or plugin code.** It holds the data-isolation rules, the operation and view conventions, the CLI conventions and a red-flags list.
+- Design: `docs/superpowers/specs/2026-11-13-pm-design.md`
+- Per-plugin reference: `docs/superpowers/specs/2026-11-13-pm-plugins.md`
+- Plans: `docs/superpowers/plans/`
+
+Project agents:
+- `pm-developer` implements plan tasks.
+- `pm-reviewer` reviews changes against the architecture (read-only).
+
+Until phase 2, the files under "How it's wired" below describe the starter UI only.
+
 ## Commands
 
 - `bun start`: run the app (it needs a real TTY, so it can't be driven from a non-interactive shell; use tests instead)

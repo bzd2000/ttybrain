@@ -849,7 +849,7 @@ Tests live next to code as `*.test.ts`, except the cross-cutting ones in `tests/
        - `node dist-node/bin/pm.js project show NOPE` → expect exit 2;
     3. `set -euo pipefail`; print `smoke ok`.
   - **CI**: a job `test` in stage `test`, image `oven/bun:1.3.14`, that runs `bun install --frozen-lockfile && bun typecheck && bun test`. A job `node-smoke`, image `node:26`, that runs `npm ci && bash scripts/smoke-node.sh`. Keep the SAST include.
-  - `CLAUDE.md`: replace the "How it's wired" section with the kernel/plugin layout, the isolation rules, the "logic must not import UI" rule, the test helper, and the new commands (`bun run pm …`, `bash scripts/smoke-node.sh`). `README.md`: add the `pm` CLI usage and how to link it (`npm link` after the Node build, or `bun link`).
+  - `CLAUDE.md` and `docs/architecture.md`: `CLAUDE.md` already points to the primer. Replace its starter-only "How it's wired" section with the actual kernel/plugin layout, and update `docs/architecture.md` wherever the implementation settled details (exact file names, helper names), the isolation rules, the "logic must not import UI" rule, the test helper, and the new commands (`bun run pm …`, `bash scripts/smoke-node.sh`). `README.md`: add the `pm` CLI usage and how to link it (`npm link` after the Node build, or `bun link`).
 
 - [ ] **Step 1: Write the failing test** `tests/isolation-selfcheck.test.ts`: `expect((await runIsolationSelfCheck()).ok).toBe(true)`.
 - [ ] **Step 2: Run** → FAIL.
