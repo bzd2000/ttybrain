@@ -149,6 +149,59 @@ describe("KernelDb.withWriteLock", () => {
   })
 })
 
+describe("KernelDb.write", () => {
+  test("the outermost write takes the lock; a nested write reuses the transaction as a savepoint", async () => {
+    await kdb.write(async () => {
+      await kdb.kysely.insertInto("t").values({ name: "outer" }).execute()
+      await kdb.write(async () => kdb.kysely.insertInto("t").values({ name: "inner" }).execute()) // would deadlock if it took the lock
+      expect(kdb.inWrite()).toBe(true)
+    })
+    expect(kdb.inWrite()).toBe(false)
+    expect(names(kdb.raw)).toEqual(["inner", "outer"])
+  })
+
+  test("concurrent outermost writes are serialised, not treated as nested", async () => {
+    const order: string[] = []
+    const w = (id: string) =>
+      kdb.write(async () => {
+        order.push(`start ${id}`)
+        await new Promise((r) => setTimeout(r, 10))
+        await kdb.kysely.insertInto("t").values({ name: id }).execute()
+        order.push(`end ${id}`)
+      })
+    await Promise.all([w("a"), w("b")])
+    expect(order).toEqual(["start a", "end a", "start b", "end b"])
+    expect(names(kdb.raw)).toEqual(["a", "b"])
+  })
+
+  test("afterCommit runs after the outermost commit, and not for a rolled-back savepoint or transaction", async () => {
+    const ran: string[] = []
+    await kdb.write(async () => {
+      kdb.afterCommit(() => ran.push("outer"))
+      await kdb.write(async () => kdb.afterCommit(() => ran.push("kept")))
+      await kdb
+        .write(async () => {
+          kdb.afterCommit(() => ran.push("dropped"))
+          throw new Error("inner")
+        })
+        .catch(() => {})
+      expect(ran).toEqual([])
+    })
+    expect(ran).toEqual(["outer", "kept"])
+    await kdb
+      .write(async () => {
+        kdb.afterCommit(() => ran.push("never"))
+        throw new Error("outer")
+      })
+      .catch(() => {})
+    expect(ran).toEqual(["outer", "kept"])
+  })
+
+  test("afterCommit outside a transaction throws", () => {
+    expect(() => kdb.afterCommit(() => {})).toThrow("afterCommit needs an open transaction")
+  })
+})
+
 describe("KernelDb.close", () => {
   test("close during an open transaction drops its rows", async () => {
     let release!: () => void

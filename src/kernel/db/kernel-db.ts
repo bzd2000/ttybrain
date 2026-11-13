@@ -1,5 +1,6 @@
 // KernelDb owns the one SQLite connection: kernel-managed transactions (savepoints when nested),
 // the in-process write mutex, and the Kysely instances built on a minimal driver over RawDb.
+import { AsyncLocalStorage } from "node:async_hooks"
 import { Kysely, SqliteAdapter, SqliteIntrospector, SqliteQueryCompiler, type Dialect, type Driver } from "kysely"
 import { PmConnection, PmDriver, RawConnection, RawDriver } from "./driver"
 import { assertPluginId } from "../plugin-id"
@@ -28,6 +29,8 @@ export class KernelDb {
   private savepoints = 0
   private lock: Promise<unknown> = Promise.resolve()
   private closed = false
+  private readonly writing = new AsyncLocalStorage<{ open: boolean }>() // set by the outermost `write`
+  private readonly commitHooks: Array<Array<() => void>> = [] // one frame per open transaction/savepoint
 
   constructor(raw: RawDb) {
     this.raw = raw
@@ -44,16 +47,27 @@ export class KernelDb {
   private async outer<T>(fn: () => Promise<T>): Promise<T> {
     this.raw.exec("BEGIN IMMEDIATE")
     this.depth++
+    this.commitHooks.push([])
+    let hooks: Array<() => void> = []
     try {
       const result = await fn()
       this.ensureOpen()
       this.raw.exec("COMMIT")
+      hooks = this.commitHooks[this.commitHooks.length - 1]!
       return result
     } catch (e) {
       if (!this.closed && this.raw.inTransaction()) this.raw.exec("ROLLBACK")
       throw e
     } finally {
+      this.commitHooks.pop()
       this.depth--
+      for (const hook of hooks) {
+        try {
+          hook()
+        } catch (e) {
+          console.error(`after-commit hook failed: ${e instanceof Error ? e.message : String(e)}`)
+        }
+      }
     }
   }
 
@@ -61,10 +75,13 @@ export class KernelDb {
     const name = `sp_${++this.savepoints}`
     this.raw.exec(`SAVEPOINT ${name}`)
     this.depth++
+    this.commitHooks.push([])
+    let released = false
     try {
       const result = await fn()
       this.ensureOpen()
       this.raw.exec(`RELEASE ${name}`)
+      released = true
       return result
     } catch (e) {
       if (!this.closed && this.raw.inTransaction()) {
@@ -73,8 +90,33 @@ export class KernelDb {
       }
       throw e
     } finally {
+      const hooks = this.commitHooks.pop()!
+      if (released) this.commitHooks[this.commitHooks.length - 1]!.push(...hooks) // kept only if the parent commits
       this.depth--
     }
+  }
+
+  // Runs `fn` after the outermost transaction commits; dropped if it (or the enclosing savepoint) rolls back.
+  afterCommit(fn: () => void): void {
+    const frame = this.commitHooks[this.commitHooks.length - 1]
+    if (!frame) throw new Error("afterCommit needs an open transaction")
+    frame.push(fn)
+  }
+
+  // A kernel write: the outermost call takes the write lock and opens the transaction; a call made inside
+  // it (a write operation calling another plugin's write operation) reuses it as a savepoint, without the
+  // lock, which is not re-entrant. "Inside" follows the async call chain, so concurrent outermost writes
+  // queue on the lock instead of being mistaken for nested ones.
+  write<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.inWrite()) return this.transaction(fn)
+    return this.withWriteLock(() => {
+      const scope = { open: true } // closed when the write ends, so a leaked continuation takes the lock again
+      return this.writing.run(scope, () => this.transaction(fn)).finally(() => (scope.open = false))
+    })
+  }
+
+  inWrite(): boolean {
+    return this.writing.getStore()?.open === true
   }
 
   private ensureOpen() {
