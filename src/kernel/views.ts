@@ -4,7 +4,7 @@
 import type { CompiledQuery, Kysely } from "kysely"
 import type { KernelDb } from "./db/kernel-db"
 import type { PublishedView, TableAccess } from "./db/scope"
-import { IsolationError, ValidationError } from "./errors"
+import { IsolationError, PmError, ValidationError } from "./errors"
 import { ownerOf, ownTablesOf } from "./migrations"
 import { assertPluginId } from "./plugin-id"
 
@@ -21,6 +21,37 @@ const VIEW_NAME = /^[a-z][a-z0-9_]*$/
 const quote = (name: string) => `"${name.replace(/"/g, '""')}"`
 
 type Entry = { pluginId: string; name: string; def: ViewDef }
+
+// True if `sql` has no statement terminator outside string literals, quoted identifiers and comments, and no
+// unterminated literal or comment. Checked by the kernel itself, so Bun and Node behave the same whatever their
+// drivers do with the text after a first statement.
+export function isSingleStatement(sql: string): boolean {
+  let i = 0
+  while (i < sql.length) {
+    const c = sql[i]!
+    if (c === ";") return false
+    if (c === "-" && sql[i + 1] === "-") {
+      const end = sql.indexOf("\n", i)
+      if (end < 0) return true
+      i = end + 1
+    } else if (c === "/" && sql[i + 1] === "*") {
+      const end = sql.indexOf("*/", i + 2)
+      if (end < 0) return false
+      i = end + 2
+    } else if (c === "'" || c === '"' || c === "`" || c === "[") {
+      const close = c === "[" ? "]" : c
+      let j = i + 1
+      for (;;) {
+        j = sql.indexOf(close, j)
+        if (j < 0) return false
+        if (close !== "]" && sql[j + 1] === close) j += 2 // doubled quote is an escaped quote
+        else break
+      }
+      i = j + 1
+    } else i++
+  }
+  return true
+}
 
 export class ViewRegistry {
   private readonly defs = new Map<string, Entry>() // keyed "<plugin>.<view>"
@@ -51,7 +82,13 @@ export class ViewRegistry {
     try {
       await kdb.withWriteLock(() =>
         kdb.transaction(async () => {
-          for (const [key, entry] of this.defs) built.set(key, this.create(kdb, key, entry))
+          for (const [key, entry] of this.defs) {
+            try {
+              built.set(key, this.create(kdb, key, entry))
+            } catch (e) {
+              throw failure(e, key, entry)
+            }
+          }
         }),
       )
     } finally {
@@ -83,10 +120,18 @@ export class ViewRegistry {
     if (compiled.parameters.length > 0) {
       throw new ValidationError("view query may not use parameters", { hint: `view "${key}": use eb.lit(...) or sql.lit(...) for constants` })
     }
+    // Raw fragments and hand-made compile() results bypass layer 1, and this SQL runs on the kernel's connection:
+    // it must be exactly one SELECT, and reads only the owner's tables (EXPLAIN executes nothing).
+    if (compiled.query?.kind !== "SelectQueryNode" || !isSingleStatement(compiled.sql)) {
+      throw new ValidationError(`view "${key}": the query must be a single SELECT statement`)
+    }
+    const notOwn = (t: string) => !(t.startsWith(`${pluginId}_`) && own.has(t.slice(pluginId.length + 1)))
+    const foreign = (t: string) => new IsolationError(`view "${key}" reads table "${t}", which plugin "${pluginId}" does not own`)
+    for (const t of kdb.tables.tablesTouched(compiled.sql)) if (notOwn(t)) throw foreign(t)
 
     const physical = `${pluginId}__pub_${name}`
-    kdb.raw.exec(`DROP VIEW IF EXISTS ${quote(physical)}`)
-    kdb.raw.exec(`CREATE VIEW ${quote(physical)} AS ${compiled.sql}`)
+    kdb.raw.prepare(`DROP VIEW IF EXISTS ${quote(physical)}`).run([])
+    kdb.raw.prepare(`CREATE VIEW ${quote(physical)} AS ${compiled.sql}`).run([])
     kdb.invalidateSchema()
 
     const declared = Object.keys(def.columns)
@@ -97,11 +142,14 @@ export class ViewRegistry {
 
     // Raw `sql` fragments are invisible to layer 1, so the tables SQLite actually reads are checked too.
     const baseTables = kdb.tables.tablesTouched(`SELECT * FROM ${quote(physical)}`).sort()
-    for (const t of baseTables) {
-      if (!(t.startsWith(`${pluginId}_`) && own.has(t.slice(pluginId.length + 1)))) {
-        throw new IsolationError(`view "${key}" reads table "${t}", which plugin "${pluginId}" does not own`)
-      }
-    }
+    for (const t of baseTables) if (notOwn(t)) throw foreign(t)
     return { physical, columns: declared, baseTables }
   }
+}
+
+// Every createAll error names the failing view in `details`, so the host can isolate its plugin (R13).
+function failure(e: unknown, key: string, { pluginId, name }: Entry): PmError {
+  const err = e instanceof PmError ? e : new ValidationError(`view "${key}": ${e instanceof Error ? e.message : String(e)}`)
+  err.details = { plugin: pluginId, view: name }
+  return err
 }

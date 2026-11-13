@@ -3,9 +3,9 @@ import { sql, type Kysely } from "kysely"
 import { KernelDb } from "./db/kernel-db"
 import type { TableAccess } from "./db/scope"
 import { openRaw } from "./db/sqlite"
-import { IsolationError, ValidationError, ViewUnavailableError } from "./errors"
+import { IsolationError, PmError, ValidationError, ViewUnavailableError } from "./errors"
 import { ownTablesOf } from "./migrations"
-import { ViewRegistry, type ViewDef } from "./views"
+import { isSingleStatement, ViewRegistry, type ViewDef } from "./views"
 
 let kdb: KernelDb
 let views: ViewRegistry
@@ -172,5 +172,104 @@ describe("published views", () => {
     const e = await error(() => reader("inbox").selectFrom("people.person").select("id").execute(), IsolationError)
     expect(e).not.toBeInstanceOf(ViewUnavailableError)
     expect(e.message).toBe("people.person is not a published view")
+  })
+})
+
+describe("a view is one checked SELECT statement", () => {
+  function untouched() {
+    expect(kdb.raw.prepare("SELECT count(*) AS n FROM projects_action").all([])).toEqual([{ n: 3 }])
+    expect(kdb.raw.prepare("SELECT count(*) AS n FROM kernel_secret").all([])).toEqual([{ n: 1 }])
+    expect(kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE name = 'evil'").all([])).toEqual([])
+    expect(viewNames()).toEqual([])
+  }
+  const fake = (sqlText: string, kind = "SelectQueryNode"): ViewDef => ({
+    version: 1,
+    columns: { x: "integer" },
+    query: () => ({ compile: () => ({ sql: sqlText, parameters: [], query: { kind } }) as any }),
+  })
+
+  beforeEach(() => {
+    kdb.raw.exec("CREATE TABLE kernel_secret (a INTEGER); INSERT INTO kernel_secret VALUES (1)")
+  })
+
+  test("a statement terminator in a raw fragment is rejected and nothing runs", async () => {
+    views.publish("people", "person", {
+      version: 1,
+      columns: { x: "integer" },
+      query: (db) =>
+        db
+          .selectFrom("person")
+          .select(sql<number>`1`.as("x"))
+          .where(sql<boolean>`1=1; DELETE FROM projects_action; CREATE TABLE evil(a); SELECT 1 AS x`),
+    })
+    const e = await error(() => views.createAll(kdb), ValidationError)
+    expect(e.message).toBe('view "people.person": the query must be a single SELECT statement')
+    untouched()
+  })
+
+  test("a hand-made compile() with several statements is rejected and nothing runs", async () => {
+    views.publish("people", "person", fake("SELECT 1 AS x; UPDATE projects_action SET title = 'x'; DROP TABLE kernel_secret; SELECT 1"))
+    await error(() => views.createAll(kdb), ValidationError)
+    untouched()
+  })
+
+  test("a compiled query that is not a SelectQueryNode is rejected", async () => {
+    views.publish("people", "person", fake("SELECT 1 AS x", "RawNode"))
+    const e = await error(() => views.createAll(kdb), ValidationError)
+    expect(e.message).toBe('view "people.person": the query must be a single SELECT statement')
+    untouched()
+  })
+
+  test("a single SELECT on another plugin's or the kernel's table is rejected before the view exists", async () => {
+    for (const [t, q] of [
+      ["projects_action", "SELECT id AS x FROM projects_action"],
+      ["kernel_secret", "SELECT a AS x FROM kernel_secret"],
+    ]) {
+      views.remove("people")
+      views.publish("people", "person", fake(q!))
+      const e = await error(() => views.createAll(kdb), IsolationError)
+      expect(e.message).toBe(`view "people.person" reads table "${t}", which plugin "people" does not own`)
+      untouched()
+    }
+  })
+
+  test("errors from createAll carry details { plugin, view }", async () => {
+    views.publish("people", "person", person)
+    views.publish("people", "broken", { version: 1, columns: { id: "integer" }, query: (db) => db.selectFrom("person").select("id").where("id", "=", 1) })
+    const a = await error(() => views.createAll(kdb), PmError)
+    expect(a.details).toEqual({ plugin: "people", view: "broken" })
+
+    views.remove("people")
+    views.publish("people", "person", { ...person, columns: { id: "integer" } })
+    const b = await error(() => views.createAll(kdb), ValidationError)
+    expect(b.details).toEqual({ plugin: "people", view: "person" })
+
+    views.remove("people")
+    views.publish("people", "person", { version: 1, columns: { id: "integer" }, query: () => { throw new Error("plugin bug") } })
+    const c = await error(() => views.createAll(kdb), ValidationError)
+    expect(c.message).toBe('view "people.person": plugin bug')
+    expect(c.details).toEqual({ plugin: "people", view: "person" })
+  })
+})
+
+describe("isSingleStatement", () => {
+  test.each([
+    ["SELECT 1 AS x", true],
+    ["SELECT ';' AS x", true],
+    ["SELECT 'it''s;' AS x", true],
+    ['SELECT 1 AS "a;b"', true],
+    ['SELECT 1 AS "a"";b"', true],
+    ["SELECT 1 AS `a;b`", true],
+    ["SELECT 1 AS [a;b]", true],
+    ["SELECT 1 /* ; */ AS x", true],
+    ["SELECT 1; SELECT 2", false],
+    ["SELECT 1;", false],
+    ["SELECT 1 -- it's\n; DROP TABLE t", false],
+    ["SELECT 1 -- ;", true],
+    ["SELECT 'unterminated", false],
+    ['SELECT "unterminated', false],
+    ["SELECT 1 /* unterminated", false],
+  ])("%p → %p", (q, ok) => {
+    expect(isSingleStatement(q)).toBe(ok)
   })
 })
