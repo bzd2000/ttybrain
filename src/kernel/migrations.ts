@@ -247,6 +247,8 @@ export class MigrationRunner {
 
       if (!own(a.tbl_name)) return `${a.type} "${a.name}" is on "${a.tbl_name}", which plugin "${pluginId}" does not own`
       if (!b && !auto && a.name.toLowerCase().startsWith(`${pluginId}__`)) return `"${a.name}" uses the kernel-reserved prefix ${pluginId}__`
+      // `__` is kept for kernel names (`<id>__pub_<view>`), so no plugin object can look like one.
+      if (!b && !auto && a.name.slice(prefix.length).includes("__")) return `"${a.name}": a short name may not contain __`
       if (!b && (a.type === "table" || a.type === "view") && own(a.name.slice(prefix.length))) {
         return `"${a.name}": a short name may not start with ${prefix}`
       }

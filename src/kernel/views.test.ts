@@ -190,6 +190,17 @@ describe("published views", () => {
     expect(await reader("projects").selectFrom("people.person").select("handle").orderBy("id").execute()).toEqual([{ handle: "anna" }, { handle: "peter" }])
   })
 
+  test("createAll keeps private views whose name merely contains __pub_ and drops only <id>__pub_* leftovers", async () => {
+    // Older or hand-made databases: migrations now reject such names, the drop must still not touch them.
+    kdb.raw.exec(`
+      CREATE VIEW people_x__pub_y AS SELECT id FROM people_person;
+      CREATE VIEW gone__pub_v AS SELECT id FROM people_person;
+      CREATE VIEW "Bad__pub_v" AS SELECT id FROM people_person;
+    `)
+    await views.createAll(kdb)
+    expect(viewNames()).toEqual(["Bad__pub_v", "people_x__pub_y"])
+  })
+
   test("createAll drops published views no longer defined", async () => {
     views.publish("people", "person", person)
     await views.createAll(kdb)

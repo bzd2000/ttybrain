@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { alpha, bare, beta, broken, reader } from "../../tests/fixtures/plugins"
+import { alpha, bare, beta, broken, itemView, reader } from "../../tests/fixtures/plugins"
 import { makeTestKernel, type TestKernel } from "../../tests/helpers"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -154,6 +154,56 @@ describe("failure isolation", () => {
       'plugin "late" failed and can no longer register anything',
     )
     expect(k.commands.things()).toEqual([])
+  })
+
+  test("registrations are sealed after boot: a late command or view throws IsolationError", async () => {
+    let kept: any
+    const k = await boot({ plugins: [alpha(), bare("late", { activate: (ctx) => void (kept = ctx) })] })
+    expect(status(k)).toEqual({ alpha: "ok", late: "ok" })
+    const sealed = "plugins can only register during activate"
+    expect(() => kept.command({ thing: "late", verb: "x", summary: "", run: async () => ({ json: null, text: "" }) })).toThrow(new IsolationError(sealed))
+    expect(() => kept.publish("v", itemView)).toThrow(new IsolationError(sealed))
+    expect(k.commands.things()).toEqual(["alpha"])
+  })
+
+  test("a private view with __pub_ in its name cannot be created by a migration", async () => {
+    const k = await boot({
+      plugins: [
+        bare("priv", {
+          activate: (ctx) =>
+            ctx.migration("001", async (db) => {
+              await db.schema.createTable("t").addColumn("id", "integer", (c) => c.primaryKey()).execute()
+              await db.schema.createView("x__pub_y").as(db.selectFrom("t").select("id")).execute()
+            }),
+        }),
+      ],
+    })
+    expect(k.plugins[0]!.error).toContain("a short name may not contain __")
+    expect(k.db.raw.prepare("SELECT name FROM sqlite_schema WHERE name LIKE 'priv%'").all([])).toEqual([])
+  })
+
+  test("a legitimate private view survives a reboot", async () => {
+    const home = mkdtempSync(join(tmpdir(), "pm-host-"))
+    const priv = bare("priv", {
+      activate: (ctx) =>
+        ctx.migration("001", async (db) => {
+          await db.schema.createTable("t").addColumn("id", "integer", (c) => c.primaryKey()).execute()
+          await db.schema.createView("tv").as(db.selectFrom("t").select("id")).execute()
+        }),
+    })
+    try {
+      for (let i = 0; i < 2; i++) {
+        const k = await bootKernel({ env: { PM_HOME: home, PM_TEST: "1" }, plugins: [priv, alpha()], clock: fixedClock("2026-11-13") })
+        expect(k.plugins.map((p) => p.status)).toEqual(["ok", "ok"])
+        expect(k.db.raw.prepare("SELECT name FROM sqlite_schema WHERE type = 'view' ORDER BY name").all([])).toEqual([
+          { name: "alpha__pub_item" },
+          { name: "priv_tv" },
+        ])
+        await k.shutdown()
+      }
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
   })
 
   test("a failing migration fails the plugin and rolls back; the others work", async () => {

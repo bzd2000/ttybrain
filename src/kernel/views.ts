@@ -7,7 +7,7 @@ import type { KernelDb } from "./db/kernel-db"
 import type { PublishedView, TableAccess } from "./db/scope"
 import { IsolationError, PmError, ValidationError } from "./errors"
 import { ownerOf, ownTablesOf } from "./migrations"
-import { assertPluginId } from "./plugin-id"
+import { assertPluginId, PLUGIN_ID } from "./plugin-id"
 
 export type ColumnType = "integer" | "text" | "real" | "boolean" | "date"
 
@@ -89,13 +89,16 @@ export class ViewRegistry {
     this.hidden.delete(pluginId)
   }
 
-  // `<id>__pub_*` names are reserved for the kernel (migrations reject `<id>__` objects), so any such view that
-  // is not a current definition's is a leftover.
+  // `<id>__pub_<view>` names are the kernel's (migrations reject `__` in plugin short names), so a view named so
+  // that is not a current definition's is a leftover. Only that exact shape is dropped: `<id>` is a valid plugin
+  // id (no `_`) directly followed by `__pub_`.
   private dropStale(kdb: KernelDb) {
     const current = new Set([...this.defs.values()].map((e) => `${e.pluginId}__pub_${e.name}`))
-    for (const r of kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE type = 'view' AND instr(name, '__pub_') > 0").all([])) {
+    for (const r of kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE type = 'view'").all([])) {
       const name = String(r.name)
-      if (!current.has(name)) kdb.raw.prepare(`DROP VIEW ${quote(name)}`).run([])
+      const at = name.indexOf("__pub_")
+      if (at <= 0 || name.indexOf("_") !== at || !PLUGIN_ID.test(name.slice(0, at)) || current.has(name)) continue
+      kdb.raw.prepare(`DROP VIEW ${quote(name)}`).run([])
     }
   }
 

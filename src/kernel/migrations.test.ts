@@ -450,6 +450,14 @@ describe("schema checks", () => {
     expect(e.message).toContain('"contracts__pub_fake"')
   })
 
+  test("a short name containing __ (a view x__pub_y, a table a__b, a rename to one)", async () => {
+    const v = await rejected(raw("002", "CREATE VIEW contracts_x__pub_y AS SELECT * FROM contracts_contract"))
+    expect(v.message).toContain('"contracts_x__pub_y": a short name may not contain __')
+    const t = await rejected(raw("002", "CREATE TABLE contracts_a__b (id INTEGER PRIMARY KEY)"))
+    expect(t.message).toContain('"contracts_a__b": a short name may not contain __')
+    await rejected(raw("002", "ALTER TABLE contracts_contract RENAME TO contracts_c__d"))
+  })
+
   test("a change that bypassed layer 2 is still caught by the schema diff", async () => {
     const e = await rejected({ id: "002", up: async () => kdb.raw.exec("ALTER TABLE projects_project ADD COLUMN extra TEXT") })
     expect(e.message).toContain('"projects_project"')

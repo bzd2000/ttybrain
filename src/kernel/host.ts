@@ -11,7 +11,7 @@ import type { OpContext, Origin } from "./context"
 import { KernelDb } from "./db/kernel-db"
 import type { TableAccess } from "./db/scope"
 import { openRaw } from "./db/sqlite"
-import { PmError } from "./errors"
+import { IsolationError, PmError } from "./errors"
 import { EventBus } from "./events"
 import { GuideRegistry } from "./guide"
 import { MigrationRunner, ownerOf, ownTablesOf, type Migration } from "./migrations"
@@ -99,6 +99,8 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const runner = new MigrationRunner(db, paths, clock)
   await runner.ensureKernelTables()
 
+  let sealed = false // set once boot is done: from then on a context registers nothing
+
   // 1. Structural checks: id, duplicates, apiVersion, disabled.
   const disabled = new Set<string>(Array.isArray(config.plugins?.disabled) ? config.plugins.disabled : [])
   const slots: Slot[] = opts.plugins.map((def) => ({ def, status: "pending", migrations: [], off: [] }))
@@ -183,6 +185,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     // A plugin that failed (say, a registration left running after activate threw) can register nothing more.
     const live = () => {
       if (s.status === "failed") throw new Error(`plugin "${id}" failed and can no longer register anything`)
+      if (sealed) throw new IsolationError("plugins can only register during activate")
     }
     const access: TableAccess = {
       ownTables: () => ownTablesOf(db, id),
@@ -290,6 +293,9 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
       .map(([p]) => p)
     views.declareReads(s.def.id, Object.keys(reads), unavailable)
   }
+
+  // Registrations made later (a timer left by activate) would be half-applied: a view would never be created.
+  sealed = true
 
   const plugins: PluginStatus[] = order.map((s) => ({
     id: s.def.id,
