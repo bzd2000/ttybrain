@@ -1,58 +1,12 @@
 // KernelDb owns the one SQLite connection: kernel-managed transactions (savepoints when nested),
 // the in-process write mutex, and the Kysely instances built on a minimal driver over RawDb.
-import {
-  Kysely,
-  SqliteAdapter,
-  SqliteIntrospector,
-  SqliteQueryCompiler,
-  type CompiledQuery,
-  type DatabaseConnection,
-  type Dialect,
-  type Driver,
-  type QueryResult,
-} from "kysely"
-import { IsolationError } from "../errors"
+import { Kysely, SqliteAdapter, SqliteIntrospector, SqliteQueryCompiler, type Dialect, type Driver } from "kysely"
+import { PmConnection, PmDriver, RawConnection, RawDriver } from "./driver"
+import { createTableChecker, type TableChecker } from "./explain"
+import { scopePlugin, type TableAccess } from "./scope"
 import type { RawDb } from "./sqlite"
 
-// One query on the raw connection. Task 5's per-plugin driver wraps this with its isolation checks.
-export class RawConnection implements DatabaseConnection {
-  constructor(protected readonly raw: RawDb) {}
-
-  async executeQuery<R>(compiled: CompiledQuery): Promise<QueryResult<R>> {
-    const stmt = this.raw.prepare(compiled.sql)
-    const params = compiled.parameters as unknown[]
-    if (stmt.reader) return { rows: stmt.all(params) as R[] }
-    const { changes, lastInsertRowid } = stmt.run(params)
-    return { rows: [], numAffectedRows: BigInt(changes), insertId: BigInt(lastInsertRowid) }
-  }
-
-  async *streamQuery<R>(): AsyncIterableIterator<QueryResult<R>> {
-    throw new Error("streaming queries are not supported")
-  }
-}
-
-const kernelOwnsTransactions = () => new IsolationError("transactions are managed by the kernel")
-
-// The connection is shared and synchronous, so there is no pool and no connection mutex.
-// Transactions go through KernelDb.transaction, never through Kysely.
-export class RawDriver implements Driver {
-  constructor(protected readonly connection: DatabaseConnection) {}
-  async init(): Promise<void> {}
-  async acquireConnection(): Promise<DatabaseConnection> {
-    return this.connection
-  }
-  async beginTransaction(): Promise<void> {
-    throw kernelOwnsTransactions()
-  }
-  async commitTransaction(): Promise<void> {
-    throw kernelOwnsTransactions()
-  }
-  async rollbackTransaction(): Promise<void> {
-    throw kernelOwnsTransactions()
-  }
-  async releaseConnection(): Promise<void> {}
-  async destroy(): Promise<void> {} // KernelDb.close closes the raw connection
-}
+export { RawConnection, RawDriver } from "./driver"
 
 export function kyselyOver(driver: Driver): Kysely<any> {
   const dialect: Dialect = {
@@ -67,6 +21,8 @@ export function kyselyOver(driver: Driver): Kysely<any> {
 export class KernelDb {
   readonly raw: RawDb
   readonly kysely: Kysely<any> // unscoped: kernel code only
+  readonly tables: TableChecker // layer 2, shared by all plugin drivers
+  private readonly columns = new Map<string, Set<string>>()
   private depth = 0
   private savepoints = 0
   private lock: Promise<unknown> = Promise.resolve()
@@ -75,6 +31,7 @@ export class KernelDb {
   constructor(raw: RawDb) {
     this.raw = raw
     this.kysely = kyselyOver(new RawDriver(new RawConnection(raw)))
+    this.tables = createTableChecker(raw)
   }
 
   async transaction<T>(fn: () => Promise<T>): Promise<T> {
@@ -130,8 +87,26 @@ export class KernelDb {
     return run
   }
 
-  pluginDb(_pluginId: string): Kysely<any> {
-    throw new Error("pluginDb is implemented in Task 5")
+  // The plugin's `ctx.data`: layer 1 (query tree) as a Kysely plugin, layer 2 (EXPLAIN) in the connection.
+  pluginDb(pluginId: string, access: TableAccess): Kysely<any> {
+    const connection = new PmConnection(this.raw, pluginId, access, this.tables, () => this.invalidateSchema())
+    return kyselyOver(new PmDriver(connection)).withPlugin(scopePlugin(pluginId, access, (t) => this.columnsOf(t)))
+  }
+
+  // Own-table columns for the layer 1 column check, cached until the schema changes.
+  columnsOf(physical: string): Set<string> {
+    let cols = this.columns.get(physical)
+    if (!cols) {
+      cols = new Set(this.raw.prepare(`PRAGMA table_info("${physical.replace(/"/g, '""')}")`).all([]).map((r) => String(r.name)))
+      this.columns.set(physical, cols)
+    }
+    return cols
+  }
+
+  // Call after any schema change made outside a plugin driver (plugin-driver DDL calls it itself).
+  invalidateSchema(): void {
+    this.tables.invalidate()
+    this.columns.clear()
   }
 
   async close(): Promise<void> {

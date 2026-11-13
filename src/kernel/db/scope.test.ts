@@ -1,0 +1,235 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { sql, type Kysely } from "kysely"
+import { IsolationError } from "../errors"
+import { KernelDb } from "./kernel-db"
+import type { TableAccess } from "./scope"
+import { openRaw } from "./sqlite"
+
+let kdb: KernelDb
+let contracts: Kysely<any>
+let migrating = false
+
+const owners: Record<string, string> = {
+  contract: "contracts",
+  party: "contracts",
+  project: "projects",
+  contracts_contract: "contracts",
+  contracts_party: "contracts",
+  projects_project: "projects",
+}
+
+function access(): TableAccess {
+  return {
+    ownTables: () => new Set(["contract", "party"]),
+    views: () =>
+      new Map([["projects.project", { physical: "projects__pub_project", columns: ["id", "code"], baseTables: ["projects_project"] }]]),
+    migrating: () => migrating,
+    ownerOf: (name) => owners[name],
+  }
+}
+
+async function rejects(p: () => Promise<unknown>): Promise<IsolationError> {
+  try {
+    await p()
+  } catch (e) {
+    expect(e).toBeInstanceOf(IsolationError)
+    return e as IsolationError
+  }
+  throw new Error("expected an IsolationError, but the query ran")
+}
+
+beforeEach(() => {
+  migrating = false
+  kdb = new KernelDb(openRaw(":memory:"))
+  kdb.raw.exec(`
+    CREATE TABLE contracts_contract (id INTEGER PRIMARY KEY, project_id INTEGER, title TEXT NOT NULL, value INTEGER);
+    CREATE TABLE contracts_party (id INTEGER PRIMARY KEY, contract_id INTEGER, name TEXT);
+    CREATE TABLE projects_project (id INTEGER PRIMARY KEY, code TEXT, internal_col TEXT);
+    CREATE TABLE kernel_plugin_migration (plugin TEXT, id TEXT);
+    CREATE VIEW projects__pub_project AS SELECT id, code FROM projects_project;
+    INSERT INTO projects_project VALUES (1, 'CRM', 'hidden'), (2, 'ERP', 'hidden');
+    INSERT INTO contracts_contract VALUES (1, 1, 'SaaS licence', 120), (2, 1, 'Implementation', 300), (3, 2, 'Support', 80);
+    INSERT INTO contracts_party VALUES (1, 1, 'Vendor B'), (2, 2, 'Integrator C');
+  `)
+  contracts = kdb.pluginDb("contracts", access())
+})
+
+afterEach(async () => {
+  await kdb.close()
+})
+
+describe("allowed", () => {
+  test("select, where and order on an own table", async () => {
+    const rows = await contracts
+      .selectFrom("contract")
+      .select(["id", "title", "value"])
+      .where("value", ">", 100)
+      .orderBy("value", "desc")
+      .execute()
+    expect(rows).toEqual([
+      { id: 2, title: "Implementation", value: 300 },
+      { id: 1, title: "SaaS licence", value: 120 },
+    ])
+  })
+
+  test("countAll and sum", async () => {
+    const row = await contracts
+      .selectFrom("contract")
+      .select((eb) => [eb.fn.countAll().as("n"), eb.fn.sum("value").as("total")])
+      .executeTakeFirst()
+    expect(row).toEqual({ n: 3, total: 500 })
+  })
+
+  test("select aliases can be ordered by", async () => {
+    const rows = await contracts
+      .selectFrom("contract")
+      .select(["project_id", (eb) => eb.fn.countAll().as("n")])
+      .groupBy("project_id")
+      .orderBy("n", "desc")
+      .execute()
+    expect(rows).toEqual([
+      { project_id: 1, n: 2 },
+      { project_id: 2, n: 1 },
+    ])
+  })
+
+  test("a join of own tables through aliases", async () => {
+    const rows = await contracts
+      .selectFrom("contract as c")
+      .innerJoin("party as p", "p.contract_id", "c.id")
+      .select(["c.title", "p.name"])
+      .orderBy("c.id")
+      .execute()
+    expect(rows).toEqual([
+      { title: "SaaS licence", name: "Vendor B" },
+      { title: "Implementation", name: "Integrator C" },
+    ])
+  })
+
+  test("insert and update", async () => {
+    const ins = await contracts.insertInto("contract").values({ project_id: 2, title: "Hosting", value: 50 }).executeTakeFirst()
+    expect(ins.insertId).toBe(4n)
+    const upd = await contracts.updateTable("contract").set({ value: 130 }).where("id", "=", 1).executeTakeFirst()
+    expect(upd.numUpdatedRows).toBe(1n)
+    expect(kdb.raw.prepare("SELECT title, value FROM contracts_contract WHERE id IN (1, 4) ORDER BY id").all([])).toEqual([
+      { title: "SaaS licence", value: 130 },
+      { title: "Hosting", value: 50 },
+    ])
+  })
+
+  test("a join of an own table with a published view", async () => {
+    const rows = await contracts
+      .selectFrom("contract")
+      .innerJoin("projects.project as pr", "pr.id", "contract.project_id")
+      .select(["contract.title", "pr.code"])
+      .orderBy("contract.id")
+      .execute()
+    expect(rows).toEqual([
+      { title: "SaaS licence", code: "CRM" },
+      { title: "Implementation", code: "CRM" },
+      { title: "Support", code: "ERP" },
+    ])
+  })
+
+  test("schema statements inside a migration are prefixed", async () => {
+    migrating = true
+    await contracts.schema.createTable("x").addColumn("id", "integer", (c) => c.primaryKey()).addColumn("name", "text").execute()
+    await contracts.schema.createIndex("x_name").on("x").column("name").execute()
+    const objs = kdb.raw.prepare("SELECT type, name, tbl_name FROM sqlite_schema WHERE name LIKE 'contracts_x%' ORDER BY name").all([])
+    expect(objs).toEqual([
+      { type: "table", name: "contracts_x", tbl_name: "contracts_x" },
+      { type: "index", name: "contracts_x_name", tbl_name: "contracts_x" },
+    ])
+  })
+})
+
+describe("rejected", () => {
+  test("selectFrom another plugin's table names its owner", async () => {
+    const e = await rejects(() => contracts.selectFrom("project").selectAll().execute())
+    expect(e.message).toBe('table "project" is not owned by plugin "contracts"; read projects.project if published, or use projects.<operation>')
+  })
+
+  test("a join with another plugin's table", async () => {
+    await rejects(() =>
+      contracts.selectFrom("contract").innerJoin("project", "project.id", "contract.project_id").selectAll().execute(),
+    )
+  })
+
+  test("updateTable on another plugin's table", async () => {
+    await rejects(() => contracts.updateTable("project").set({ code: "X" }).execute())
+    expect(kdb.raw.prepare("SELECT code FROM projects_project WHERE id = 1").all([])).toEqual([{ code: "CRM" }])
+  })
+
+  test("a sub-query on another plugin's table", async () => {
+    await rejects(() =>
+      contracts
+        .selectFrom("contract")
+        .selectAll()
+        .where("project_id", "in", (eb: any) => eb.selectFrom("project").select("id"))
+        .execute(),
+    )
+  })
+
+  test("updateTable on a published view is read-only", async () => {
+    const e = await rejects(() => contracts.updateTable("projects.project").set({ code: "X" }).execute())
+    expect(e.message).toBe("projects.project is a published view and is read-only")
+  })
+
+  test("an unpublished view name", async () => {
+    const e = await rejects(() => contracts.selectFrom("projects.secret").selectAll().execute())
+    expect(e.message).toContain("projects.secret")
+  })
+
+  test("raw SQL on another plugin's table (layer 2)", async () => {
+    const e = await rejects(() => sql`SELECT * FROM projects_project`.execute(contracts))
+    expect(e.message).toBe('plugin "contracts" may not use table "projects_project"')
+  })
+
+  test("raw SQL on a kernel table (layer 2)", async () => {
+    await rejects(() => sql`SELECT * FROM kernel_plugin_migration`.execute(contracts))
+  })
+
+  test("a column the view does not publish", async () => {
+    const e = await rejects(() => contracts.selectFrom("projects.project").select("internal_col").execute())
+    expect(e.message).toBe('unknown column "internal_col"')
+  })
+
+  test("createTable outside a migration", async () => {
+    const e = await rejects(() => contracts.schema.createTable("x").addColumn("id", "integer").execute())
+    expect(e.message).toBe("schema changes are only allowed in migrations")
+  })
+
+  test("raw DDL outside a migration (layer 2)", async () => {
+    const e = await rejects(() => sql`CREATE TABLE contracts_y (id INTEGER)`.execute(contracts))
+    expect(e.message).toBe("schema changes are only allowed in migrations")
+  })
+
+  test("raw transaction control", async () => {
+    const e = await rejects(() => sql`BEGIN`.execute(contracts))
+    expect(e.message).toBe("transactions are managed by the kernel")
+  })
+
+  test("raw PRAGMA", async () => {
+    await rejects(() => sql`PRAGMA foreign_keys = OFF`.execute(contracts))
+    expect(kdb.raw.prepare("PRAGMA foreign_keys").all([])).toEqual([{ foreign_keys: 1 }])
+  })
+
+  test("kysely.transaction()", async () => {
+    await rejects(() => contracts.transaction().execute(async () => {}))
+  })
+})
+
+describe("no leaking between queries", () => {
+  test("a query that used projects.project and failed does not allow projects_project afterwards", async () => {
+    // Passes layer 1 (uses the view) but fails while running: SQLite has no such function.
+    await expect(
+      contracts.selectFrom("projects.project").select(sql`no_such_fn(1)`.as("x")).execute(),
+    ).rejects.toThrow()
+    await rejects(() => sql`SELECT * FROM projects_project`.execute(contracts))
+  })
+
+  test("a layer 1 failure on the view does not allow projects_project afterwards", async () => {
+    await rejects(() => contracts.selectFrom("projects.project").select("internal_col").execute())
+    await rejects(() => sql`SELECT * FROM projects_project`.execute(contracts))
+  })
+})
