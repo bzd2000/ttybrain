@@ -87,6 +87,7 @@ export class ScopeTransformer extends OperationNodeTransformer {
     private readonly access: TableAccess,
     private readonly tableAliases: Set<string>,
     root: OperationNode,
+    private readonly columnsOf: (physical: string) => Set<string>,
   ) {
     super()
     this.prefix = `${pluginId}_`
@@ -94,6 +95,10 @@ export class ScopeTransformer extends OperationNodeTransformer {
     if (this.ddl && !access.migrating()) throw schemaChangesOnlyInMigrations()
   }
 
+  // Idempotent: a builder used as an expression (`where("id", "in", db.selectFrom(...))`, `.expression(...)`,
+  // `createView(...).as(...)`) is already rewritten when it is embedded, and Kysely may copy its nodes on the way
+  // (createView's ImmediateValuePlugin), so names are recognised by meaning, not by node identity. A physical name
+  // is kept only if it is valid for THIS plugin; another plugin's tables are rejected wherever they come from.
   protected override transformTable(node: TableNode): TableNode {
     const schema = node.table.schema?.name
     const name = node.table.identifier.name
@@ -102,8 +107,10 @@ export class ScopeTransformer extends OperationNodeTransformer {
       if (this.ddl) throw new IsolationError(`schema statements may not name ${schema}.${name}`)
       return this.rename(node, this.view(schema, name).physical)
     }
+    if (!this.ddl && this.access.ownTables().has(name)) return this.rename(node, this.prefix + name)
+    if (this.isOwnPhysical(name) || this.viewPhysical(name)) return node
     // In a migration a plugin may name tables it is about to create; the prefix keeps them in its namespace.
-    if (this.ddl || this.access.ownTables().has(name)) return this.rename(node, this.prefix + name)
+    if (this.ddl) return this.rename(node, this.prefix + name)
     throw this.notOwned(name)
   }
 
@@ -162,8 +169,21 @@ export class ScopeTransformer extends OperationNodeTransformer {
     walk(target, (n) => {
       if (n.kind !== "TableNode") return
       const t = (n as TableNode).table
-      if (t.schema) throw new IsolationError(`${t.schema.name}.${t.identifier.name} is a published view and is read-only`)
+      const key = t.schema ? `${t.schema.name}.${t.identifier.name}` : this.viewPhysical(t.identifier.name)
+      if (key) throw new IsolationError(`${key} is a published view and is read-only`)
     })
+  }
+
+  private isOwnPhysical(name: string): boolean {
+    if (!name.startsWith(this.prefix)) return false
+    if (this.access.ownTables().has(name.slice(this.prefix.length))) return true
+    return this.ddl && this.columnsOf(name).size > 0 // created earlier in this migration
+  }
+
+  // The `<plugin>.<view>` key of a view physical name this plugin may read, if it is one.
+  private viewPhysical(name: string): string | undefined {
+    for (const [key, v] of this.access.views()) if (v.physical === name) return key
+    return undefined
   }
 
   private notOwned(name: string): IsolationError {
@@ -230,7 +250,7 @@ export function scopePlugin(pluginId: string, access: TableAccess, columnsOf: (p
       for (const a of aliases.tables) {
         if (a.includes("__pub_")) throw new IsolationError(`alias "${a}" is reserved`)
       }
-      const out = new ScopeTransformer(pluginId, access, aliases.tables, node).transformNode(node)
+      const out = new ScopeTransformer(pluginId, access, aliases.tables, node, columnsOf).transformNode(node)
       if (!SCHEMA_NODE_KINDS.has(out.kind)) checkColumns(out, pluginId, access, aliases, columnsOf)
       return out
     },

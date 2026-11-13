@@ -175,6 +175,11 @@ describe("rejected", () => {
     expect(e.message).toBe("projects.project is a published view and is read-only")
   })
 
+  test("a write through a view's physical name is read-only too", async () => {
+    const e = await rejects(() => contracts.updateTable("projects__pub_project").set({ code: "X" }).execute())
+    expect(e.message).toBe("projects.project is a published view and is read-only")
+  })
+
   test("an unpublished view name", async () => {
     const e = await rejects(() => contracts.selectFrom("projects.secret").selectAll().execute())
     expect(e.message).toContain("projects.secret")
@@ -216,6 +221,67 @@ describe("rejected", () => {
 
   test("kysely.transaction()", async () => {
     await rejects(() => contracts.transaction().execute(async () => {}))
+  })
+})
+
+describe("nested builder queries", () => {
+  test("a ctx.data sub-query over an own table", async () => {
+    const rows = await contracts
+      .selectFrom("contract")
+      .select("title")
+      .where("id", "in", contracts.selectFrom("party").select("contract_id"))
+      .orderBy("id")
+      .execute()
+    expect(rows).toEqual([{ title: "SaaS licence" }, { title: "Implementation" }])
+  })
+
+  test("a ctx.data sub-query over a published view", async () => {
+    const rows = await contracts
+      .selectFrom("contract")
+      .select("title")
+      .where("project_id", "in", contracts.selectFrom("projects.project").select("id").where("code", "=", "ERP"))
+      .execute()
+    expect(rows).toEqual([{ title: "Support" }])
+  })
+
+  test("insert ... select with a ctx.data expression", async () => {
+    await contracts
+      .insertInto("contract")
+      .columns(["project_id", "title", "value"])
+      .expression(contracts.selectFrom("party").select([(eb) => eb.val(9).as("project_id"), "name", (eb) => eb.val(1).as("value")]))
+      .execute()
+    expect(kdb.raw.prepare("SELECT title FROM contracts_contract WHERE project_id = 9 ORDER BY id").all([])).toEqual([
+      { title: "Vendor B" },
+      { title: "Integrator C" },
+    ])
+  })
+
+  test("createTable and createView as a ctx.data query in a migration", async () => {
+    migrating = true
+    await contracts.schema.createTable("w").as(contracts.selectFrom("projects.project").select(["id", "code"])).execute()
+    await contracts.schema.createView("v").as(contracts.selectFrom("contract").select(["id", "title"]).where("value", ">", 100)).execute()
+    expect(kdb.raw.prepare("SELECT code FROM contracts_w ORDER BY id").all([])).toEqual([{ code: "CRM" }, { code: "ERP" }])
+    expect(kdb.raw.prepare("SELECT title FROM contracts_v ORDER BY id").all([])).toEqual([
+      { title: "SaaS licence" },
+      { title: "Implementation" },
+    ])
+  })
+
+  test("a sub-query built with another plugin's ctx.data is checked again", async () => {
+    const projects = kdb.pluginDb("projects", {
+      ownTables: () => new Set(["project"]),
+      views: () => new Map(),
+      migrating: () => false,
+      ownerOf: (name) => owners[name],
+    })
+    const e = await rejects(() =>
+      contracts
+        .selectFrom("contract")
+        .selectAll()
+        .where("project_id", "in", projects.selectFrom("project").select("id").where("internal_col", "=", "hidden"))
+        .execute(),
+    )
+    expect(e.message).toBe('table "projects_project" is not owned by plugin "contracts"; read projects.project if published, or use projects.<operation>')
   })
 })
 

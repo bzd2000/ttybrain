@@ -94,11 +94,12 @@ export class KernelDb {
   }
 
   // Own-table columns for the layer 1 column check, cached until the schema changes.
+  // Empty (no such table) is not cached, so a table created later is seen without an invalidation.
   columnsOf(physical: string): Set<string> {
     let cols = this.columns.get(physical)
     if (!cols) {
       cols = new Set(this.raw.prepare(`PRAGMA table_info("${physical.replace(/"/g, '""')}")`).all([]).map((r) => String(r.name)))
-      this.columns.set(physical, cols)
+      if (cols.size > 0) this.columns.set(physical, cols)
     }
     return cols
   }
