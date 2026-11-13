@@ -34,8 +34,8 @@ const add: WriteOp = {
   output: Type.Object({ ref: Type.String(), id: Type.Integer() }),
   describe: (i) => `+ item "${i.title}"`,
   run: async (i) => {
-    const r = kdb.raw.prepare("INSERT INTO fixture_item (title) VALUES (?)").run([i.title])
-    return { ref: `F-${r.lastInsertRowid}`, id: r.lastInsertRowid }
+    const r = await kdb.kysely.insertInto("fixture_item").values({ title: i.title }).executeTakeFirstOrThrow()
+    return { ref: `F-${r.insertId}`, id: Number(r.insertId) }
   },
 }
 const count: ReadOp = {

@@ -22,9 +22,13 @@ export function kyselyOver(driver: Driver): Kysely<any> {
 
 type Hooks = Array<() => void>
 // One per open `write`. `queue` chains the nested writes started inside it; `hooks` are its after-commit hooks.
-type WriteScope = { open: boolean; queue: Promise<unknown>; hooks: Hooks }
-const newScope = (): WriteScope => ({ open: true, queue: Promise.resolve(), hooks: [] })
+type WriteScope = { open: boolean; queue: Promise<unknown>; hooks: Hooks; parent?: WriteScope }
+const newScope = (parent?: WriteScope): WriteScope => ({ open: true, queue: Promise.resolve(), hooks: [], parent })
 const LATE = "write started after its parent write ended; await nested writes"
+const NESTED_RUNNING = "a write ran a statement while one of its nested writes was running; await nested writes"
+const ENDED = "a statement ran after its write ended; await all work inside a write"
+
+const rootOf = (s: WriteScope): WriteScope => (s.parent ? rootOf(s.parent) : s)
 
 function runHooks(hooks: Hooks): void {
   for (const hook of hooks) {
@@ -47,10 +51,12 @@ export class KernelDb {
   private closed = false
   private readonly writing = new AsyncLocalStorage<WriteScope>() // the innermost `write`
   private readonly frames: Hooks[] = [] // after-commit hooks of plain (non-write) transactions
+  private openRoot?: WriteScope // the outermost write whose transaction is open
+  private readonly savepointOwners: WriteScope[] = [] // the nested writes whose savepoints are open, innermost last
 
   constructor(raw: RawDb) {
     this.raw = raw
-    this.kysely = kyselyOver(new RawDriver(new RawConnection(raw)))
+    this.kysely = kyselyOver(new RawDriver(new RawConnection(raw, () => this.checkStatement())))
     this.tables = createTableChecker(raw)
   }
 
@@ -89,10 +95,11 @@ export class KernelDb {
     }
   }
 
-  private async nested<T>(fn: () => Promise<T>): Promise<T> {
+  private async nested<T>(fn: () => Promise<T>, owner?: WriteScope): Promise<T> {
     const name = `sp_${++this.savepoints}`
     this.raw.exec(`SAVEPOINT ${name}`)
     this.depth++
+    if (owner) this.savepointOwners.push(owner)
     try {
       const result = await fn()
       this.ensureOpen()
@@ -105,8 +112,23 @@ export class KernelDb {
       }
       throw e
     } finally {
+      if (owner) this.savepointOwners.pop()
       this.depth--
     }
+  }
+
+  // Every Kysely statement (kernel and plugins) passes here first. While a write's transaction is open, only
+  // the innermost open nested write (or writes nested in it) may run statements: a statement from its parent
+  // would land inside the child's savepoint and be undone if the child rolls back. Code outside any write
+  // (a reader) is not part of the transaction's tree and is unaffected.
+  private checkStatement(): void {
+    const scope = this.writing.getStore()
+    if (!scope) return
+    for (let s: WriteScope | undefined = scope; s; s = s.parent) if (!s.open) throw new Error(ENDED)
+    if (rootOf(scope) !== this.openRoot) return
+    const owner = this.savepointOwners[this.savepointOwners.length - 1] ?? this.openRoot
+    for (let s: WriteScope | undefined = scope; s; s = s.parent) if (s === owner) return
+    throw new Error(NESTED_RUNNING)
   }
 
   // Runs `fn` after the outermost transaction commits; dropped if it (or the enclosing savepoint) rolls back.
@@ -126,6 +148,9 @@ export class KernelDb {
   // - Before a write commits, releases or rolls back, it waits for every nested write started inside it, so
   //   an un-awaited nested write commits or rolls back with its parent. A write started from a scope that has
   //   already ended (a timer) is rejected.
+  // - Rule: a nested write must be awaited before its parent issues further statements. A parent statement
+  //   while a nested write it started is still running throws (see checkStatement) and fails the parent,
+  //   which then rolls back with everything in it; nothing is lost silently.
   // - Known limit: a nested write that awaits a sibling started after it deadlocks (it queues behind itself).
   write<T>(fn: () => Promise<T>): Promise<T> {
     const parent = this.writing.getStore()
@@ -133,8 +158,8 @@ export class KernelDb {
     if (!parent.open) return Promise.reject(new Error(LATE))
     const run = parent.queue.then(async () => {
       if (!parent.open) throw new Error(LATE)
-      const scope = newScope()
-      const result = await this.writing.run(scope, () => this.nested(() => this.drained(scope, fn)))
+      const scope = newScope(parent)
+      const result = await this.writing.run(scope, () => this.nested(() => this.drained(scope, fn), scope))
       parent.hooks.push(...scope.hooks) // kept only if the parent commits
       return result
     })
@@ -147,7 +172,14 @@ export class KernelDb {
   private async outermost<T>(fn: () => Promise<T>): Promise<T> {
     if (this.closed) throw new Error("database is closed")
     const scope = newScope()
-    const result = await this.withWriteLock(() => this.writing.run(scope, () => this.outer(() => this.drained(scope, fn))))
+    const result = await this.withWriteLock(async () => {
+      this.openRoot = scope
+      try {
+        return await this.writing.run(scope, () => this.outer(() => this.drained(scope, fn)))
+      } finally {
+        this.openRoot = undefined
+      }
+    })
     this.writing.exit(() => runHooks(scope.hooks))
     return result
   }
@@ -189,7 +221,14 @@ export class KernelDb {
   pluginDb(pluginId: string, access: TableAccess): Kysely<any> {
     assertPluginId(pluginId)
     assertMigrationHooks(access)
-    const connection = new PmConnection(this.raw, pluginId, access, this.tables, () => this.invalidateSchema())
+    const connection = new PmConnection(
+      this.raw,
+      pluginId,
+      access,
+      this.tables,
+      () => this.invalidateSchema(),
+      () => this.checkStatement(),
+    )
     return kyselyOver(new PmDriver(connection)).withPlugin(scopePlugin(pluginId, access, (t) => this.columnsOf(t)))
   }
 

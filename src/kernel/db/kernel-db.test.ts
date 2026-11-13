@@ -304,6 +304,98 @@ describe("KernelDb.write", () => {
     })
   })
 
+  describe("a parent may not issue statements while a nested write it started is running", () => {
+    const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms))
+    const insert = (name: string) => kdb.kysely.insertInto("t").values({ name }).execute()
+    const NESTED = "a write ran a statement while one of its nested writes was running; await nested writes"
+
+    test("C1: un-awaited child fails later; the parent's statement in between fails the parent, nothing is lost silently", async () => {
+      let child!: Promise<unknown>
+      const parent = kdb.write(async () => {
+        await insert("p-before")
+        child = kdb.write(async () => (await tick(10), Promise.reject(new Error("child fails"))))
+        await tick(2)
+        await insert("p-during")
+        return "parent ok"
+      })
+      await expect(parent).rejects.toThrow(NESTED)
+      await expect(child).rejects.toThrow("child fails")
+      expect(names(kdb.raw)).toEqual([])
+      expect(kdb.raw.inTransaction()).toBe(false)
+    })
+
+    test("C1b: an un-awaited child that succeeds while the parent keeps issuing statements fails the parent too", async () => {
+      let child!: Promise<unknown>
+      const parent = kdb.write(async () => {
+        await insert("p-before")
+        child = kdb.write(async () => (await tick(10), insert("child")))
+        await tick(2)
+        await kdb.kysely.selectFrom("t").selectAll().execute() // reads count too: one rule for every statement
+        return "parent ok"
+      })
+      await expect(parent).rejects.toThrow(NESTED)
+      await child
+      expect(names(kdb.raw)).toEqual([])
+      expect(kdb.raw.inTransaction()).toBe(false)
+    })
+
+    test("C4: one level down, the middle write fails and the outer write can carry on", async () => {
+      let grandchild!: Promise<unknown>
+      let middleError = ""
+      await kdb.write(async () => {
+        await insert("outer")
+        await kdb
+          .write(async () => {
+            await insert("middle")
+            grandchild = kdb.write(async () => (await tick(10), Promise.reject(new Error("grandchild fails"))))
+            await tick(2)
+            await insert("middle-during")
+          })
+          .catch((e) => (middleError = e.message))
+      })
+      await grandchild.catch(() => {})
+      expect(middleError).toBe(NESTED)
+      expect(names(kdb.raw)).toEqual(["outer"])
+      expect(kdb.raw.inTransaction()).toBe(false)
+    })
+
+    test("awaited nested writes, and the nested write's own statements, are the normal case", async () => {
+      await kdb.write(async () => {
+        await insert("a")
+        await kdb.write(async () => {
+          await insert("b")
+          await kdb.write(async () => insert("c"))
+          await insert("d")
+        })
+        await insert("e")
+      })
+      expect(names(kdb.raw)).toEqual(["a", "b", "c", "d", "e"])
+    })
+
+    test("code outside any write may still read while a write has a nested write open", async () => {
+      let release!: () => void
+      const gate = new Promise<void>((r) => (release = r))
+      let opened!: () => void
+      const childOpen = new Promise<void>((r) => (opened = r))
+      const w = kdb.write(async () => {
+        await kdb.write(async () => (await insert("child"), opened(), await gate))
+      })
+      await childOpen
+      expect((await kdb.kysely.selectFrom("t").select("name").execute()).map((r) => r.name)).toEqual(["child"])
+      release()
+      await w
+    })
+
+    test("a statement from a write that already ended is rejected", async () => {
+      let late!: Promise<unknown>
+      await kdb.write(async () => {
+        late = tick(2).then(() => insert("late"))
+      })
+      await expect(late).rejects.toThrow("a statement ran after its write ended; await all work inside a write")
+      expect(names(kdb.raw)).toEqual([])
+    })
+  })
+
   test("afterCommit outside a transaction throws", () => {
     expect(() => kdb.afterCommit(() => {})).toThrow("afterCommit needs an open transaction")
   })

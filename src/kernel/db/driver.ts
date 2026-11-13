@@ -8,11 +8,15 @@ import { ALLOWED_KEYWORDS, firstKeyword, type TableChecker } from "./explain"
 import { assertMigrationHooks, SCHEMA_NODE_KINDS, schemaChangesOnlyInMigrations, walk, type TableAccess } from "./scope"
 import type { RawDb } from "./sqlite"
 
-// One query on the raw connection.
+// One query on the raw connection. `guard` runs before every statement (KernelDb's nested-write rule).
 export class RawConnection implements DatabaseConnection {
-  constructor(protected readonly raw: RawDb) {}
+  constructor(
+    protected readonly raw: RawDb,
+    private readonly guard: () => void = () => {},
+  ) {}
 
   async executeQuery<R>(compiled: CompiledQuery): Promise<QueryResult<R>> {
+    this.guard()
     const stmt = this.raw.prepare(compiled.sql)
     const params = compiled.parameters as unknown[]
     if (stmt.reader) return { rows: stmt.all(params) as R[] }
@@ -69,11 +73,13 @@ export class PmConnection extends RawConnection {
     private readonly access: TableAccess,
     private readonly checker: TableChecker,
     private readonly onSchemaChange: () => void,
+    private readonly statementGuard: () => void = () => {},
   ) {
-    super(raw)
+    super(raw, statementGuard)
   }
 
   override async executeQuery<R>(compiled: CompiledQuery): Promise<QueryResult<R>> {
+    this.statementGuard() // before the EXPLAIN checks too, so the error is the guard's
     const keyword = firstKeyword(compiled.sql)
     if (TRANSACTION.has(keyword)) throw kernelOwnsTransactions()
     const ddl = DDL.has(keyword) || SCHEMA_NODE_KINDS.has(compiled.query.kind)
