@@ -119,6 +119,7 @@ export class OperationRegistry {
   }
 
   private async call(pluginId: string, name: string, kind: Kind, input: unknown): Promise<any> {
+    const ctx = currentContext() // throws before any work when called outside an operation context
     const e = this.find(pluginId, name, kind)
     this.checkInput(e, input)
     if (kind === "read") {
@@ -132,7 +133,7 @@ export class OperationRegistry {
       const key = `${e.plugin}.${e.name}`
       if (typeof out?.ref !== "string") throw new Error(`write operation "${key}" must return { ref: string }`)
       this.checkOutput(e, out)
-      const origin = currentContext().origin
+      const origin = ctx.origin
       if (origin) await this.recordProvenance(key, out.ref, origin)
       const payload = { plugin: e.plugin, op: e.name, ref: out.ref }
       db.afterCommit(() => events.emit("record.changed", payload))

@@ -197,6 +197,57 @@ describe("KernelDb.write", () => {
     expect(ran).toEqual(["outer", "kept"])
   })
 
+  test("an after-commit hook that writes, while another write is queued, gets its own outermost write", async () => {
+    let fromHook!: Promise<unknown>
+    const first = kdb.write(async () => {
+      await kdb.kysely.insertInto("t").values({ name: "first" }).execute()
+      kdb.afterCommit(() => {
+        expect(kdb.inWrite()).toBe(false) // hooks run outside the write scope, after the lock is released
+        fromHook = kdb.write(async () => kdb.kysely.insertInto("t").values({ name: "from-hook" }).execute())
+      })
+    })
+    const queued = kdb.write(async () => {
+      await kdb.kysely.insertInto("t").values({ name: "fail-queued" }).execute()
+      throw new Error("boom")
+    })
+    await first
+    await expect(queued).rejects.toThrow("boom")
+    await fromHook
+    expect(names(kdb.raw)).toEqual(["first", "from-hook"])
+    expect(kdb.raw.inTransaction()).toBe(false)
+  })
+
+  test("sibling nested writes run one after another: a failing one rolls back alone", async () => {
+    const ran: string[] = []
+    const settled = await kdb.write(async () => {
+      const slow = (name: string, fail: boolean) =>
+        kdb.write(async () => {
+          await kdb.kysely.insertInto("t").values({ name }).execute()
+          kdb.afterCommit(() => ran.push(name))
+          await new Promise((r) => setTimeout(r, 5))
+          if (fail) throw new Error(`fail ${name}`)
+          return name
+        })
+      return Promise.allSettled([slow("p", true), slow("q", false)])
+    })
+    expect(settled.map((s) => s.status)).toEqual(["rejected", "fulfilled"])
+    expect((settled[0] as PromiseRejectedResult).reason.message).toBe("fail p")
+    expect(names(kdb.raw)).toEqual(["q"])
+    expect(ran).toEqual(["q"])
+  })
+
+  test("a nested write left running after its parent ended takes the lock as an outermost write", async () => {
+    let leaked!: Promise<unknown>
+    await kdb.write(async () => {
+      leaked = new Promise((r) => setTimeout(r, 5)).then(() =>
+        kdb.write(async () => kdb.kysely.insertInto("t").values({ name: "late" }).execute()),
+      )
+    })
+    await leaked
+    expect(names(kdb.raw)).toEqual(["late"])
+    expect(kdb.raw.inTransaction()).toBe(false)
+  })
+
   test("afterCommit outside a transaction throws", () => {
     expect(() => kdb.afterCommit(() => {})).toThrow("afterCommit needs an open transaction")
   })

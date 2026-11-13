@@ -165,6 +165,50 @@ describe("OperationRegistry: writes", () => {
     ])
   })
 
+  test("parallel nested writes: the failing one rolls back alone; events and provenance only for survivors", async () => {
+    const fail: WriteOp = { ...add, run: async (i) => (await add.run(i), await new Promise((r) => setTimeout(r, 5)), Promise.reject(new Error("boom"))) }
+    const api = expose({
+      fail,
+      both: {
+        ...add,
+        run: async (i) => {
+          const s = await Promise.allSettled([api.write.fail!({ title: "p" }), api.write.add!({ title: "q" })])
+          expect(s.map((x) => x.status)).toEqual(["rejected", "fulfilled"])
+          return add.run(i)
+        },
+      },
+    })
+    const out = await inCtx(() => api.write.both!({ title: "outer" }), { type: "inbox", ref: "I-7" })
+    expect(titles()).toEqual(["q", "outer"])
+    expect(changed).toEqual([
+      { plugin: "fixture", op: "add", ref: "F-1" },
+      { plugin: "fixture", op: "both", ref: out.ref },
+    ])
+    expect((await provenance.createdFrom("inbox", "I-7")).map((p) => p.ref)).toEqual(["F-1", out.ref])
+  })
+
+  test("a record.changed handler that writes, while another write is queued, does not absorb it", async () => {
+    const api = expose({ fail: { ...add, run: async (i) => (await add.run(i), Promise.reject(new Error("boom"))) } })
+    let fromHandler: Promise<unknown> | undefined
+    events.on("record.changed", (p) => {
+      if (p.ref === "F-1") fromHandler = inCtx(() => api.write.add!({ title: "from-handler" }))
+    })
+    const first = inCtx(() => api.write.add!({ title: "first" }))
+    const queued = inCtx(() => api.write.fail!({ title: "fail-queued" }))
+    await first
+    await expect(queued).rejects.toThrow("boom")
+    await fromHandler
+    expect(titles()).toEqual(["first", "from-handler"])
+  })
+
+  test("an operation called outside an operation context fails before it runs", async () => {
+    let ran = false
+    const api = expose({ spy: { ...add, run: async (i) => ((ran = true), add.run(i)) } })
+    await expect(api.write.spy!({ title: "x" })).rejects.toThrow("no operation context")
+    await expect(api.read.count!({})).rejects.toThrow("no operation context")
+    expect(ran).toBe(false)
+  })
+
   test("a write whose output lacks ref fails, naming the operation, and rolls back", async () => {
     const api = expose({ noRef: { ...add, output: Type.Object({}), run: async (i) => (await add.run(i), {}) } })
     await expect(inCtx(() => api.write.noRef!({ title: "x" }))).rejects.toThrow(

@@ -20,6 +20,18 @@ export function kyselyOver(driver: Driver): Kysely<any> {
   return new Kysely<any>({ dialect })
 }
 
+type WriteScope = { open: boolean; queue: Promise<unknown> } // queue: this write's nested writes, in order
+
+function runHooks(hooks: Array<() => void>): void {
+  for (const hook of hooks) {
+    try {
+      hook()
+    } catch (e) {
+      console.error(`after-commit hook failed: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+}
+
 export class KernelDb {
   readonly raw: RawDb
   readonly kysely: Kysely<any> // unscoped: kernel code only
@@ -29,7 +41,7 @@ export class KernelDb {
   private savepoints = 0
   private lock: Promise<unknown> = Promise.resolve()
   private closed = false
-  private readonly writing = new AsyncLocalStorage<{ open: boolean }>() // set by the outermost `write`
+  private readonly writing = new AsyncLocalStorage<WriteScope>() // the innermost open `write`
   private readonly commitHooks: Array<Array<() => void>> = [] // one frame per open transaction/savepoint
 
   constructor(raw: RawDb) {
@@ -40,34 +52,28 @@ export class KernelDb {
 
   async transaction<T>(fn: () => Promise<T>): Promise<T> {
     if (this.closed) throw new Error("database is closed")
-    if (this.depth === 0) return this.outer(fn)
-    return this.nested(fn)
+    if (this.depth > 0) return this.nested(fn)
+    const { result, hooks } = await this.outer(fn)
+    runHooks(hooks)
+    return result
   }
 
-  private async outer<T>(fn: () => Promise<T>): Promise<T> {
+  // Commits and hands back the after-commit hooks, for the caller to run once it is out of the transaction.
+  private async outer<T>(fn: () => Promise<T>): Promise<{ result: T; hooks: Array<() => void> }> {
     this.raw.exec("BEGIN IMMEDIATE")
     this.depth++
     this.commitHooks.push([])
-    let hooks: Array<() => void> = []
     try {
       const result = await fn()
       this.ensureOpen()
       this.raw.exec("COMMIT")
-      hooks = this.commitHooks[this.commitHooks.length - 1]!
-      return result
+      return { result, hooks: this.commitHooks[this.commitHooks.length - 1]! }
     } catch (e) {
       if (!this.closed && this.raw.inTransaction()) this.raw.exec("ROLLBACK")
       throw e
     } finally {
       this.commitHooks.pop()
       this.depth--
-      for (const hook of hooks) {
-        try {
-          hook()
-        } catch (e) {
-          console.error(`after-commit hook failed: ${e instanceof Error ? e.message : String(e)}`)
-        }
-      }
     }
   }
 
@@ -103,16 +109,34 @@ export class KernelDb {
     frame.push(fn)
   }
 
-  // A kernel write: the outermost call takes the write lock and opens the transaction; a call made inside
+  // A kernel write. The outermost call takes the write lock and opens the transaction. A call made inside
   // it (a write operation calling another plugin's write operation) reuses it as a savepoint, without the
   // lock, which is not re-entrant. "Inside" follows the async call chain, so concurrent outermost writes
-  // queue on the lock instead of being mistaken for nested ones.
+  // queue on the lock instead of being mistaken for nested ones. Sibling nested writes (`Promise.all` in a
+  // write) queue on their parent's scope, so their savepoints never interleave.
   write<T>(fn: () => Promise<T>): Promise<T> {
-    if (this.inWrite()) return this.transaction(fn)
-    return this.withWriteLock(() => {
-      const scope = { open: true } // closed when the write ends, so a leaked continuation takes the lock again
-      return this.writing.run(scope, () => this.transaction(fn)).finally(() => (scope.open = false))
+    const parent = this.writing.getStore()
+    if (!parent?.open || this.depth === 0) return this.outermost(fn)
+    const run = parent.queue.then(() => {
+      // The parent may have ended while this write waited (a leaked, un-awaited call): start afresh.
+      if (!parent.open || this.depth === 0) return this.outermost(fn)
+      const scope: WriteScope = { open: true, queue: Promise.resolve() }
+      return this.writing.run(scope, () => this.nested(fn)).finally(() => (scope.open = false))
     })
+    parent.queue = run.catch(() => {})
+    return run
+  }
+
+  // After-commit hooks run once the lock is released and outside the write scope, so a hook that writes
+  // (a `record.changed` handler) queues as a fresh outermost write.
+  private async outermost<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.closed) throw new Error("database is closed")
+    const { result, hooks } = await this.withWriteLock(() => {
+      const scope: WriteScope = { open: true, queue: Promise.resolve() } // closed when the write ends
+      return this.writing.run(scope, () => this.outer(fn)).finally(() => (scope.open = false))
+    })
+    this.writing.exit(() => runHooks(hooks))
+    return result
   }
 
   inWrite(): boolean {
