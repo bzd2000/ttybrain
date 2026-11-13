@@ -26,6 +26,7 @@ type Entry = { pluginId: string; name: string; def: ViewDef }
 export class ViewRegistry {
   private readonly defs = new Map<string, Entry>() // keyed "<plugin>.<view>"
   private readonly reads = new Map<string, Set<string>>()
+  private readonly hidden = new Map<string, Set<string>>() // reader → publishers whose version it does not accept
   private created = new Map<string, PublishedView>() // replaced, never mutated: readers may hold it
 
   publish(pluginId: string, name: string, def: ViewDef): void {
@@ -38,20 +39,26 @@ export class ViewRegistry {
   }
 
   // The plugins whose views `pluginId` reads (its `reads`): a missing view of theirs is ViewUnavailableError.
-  declareReads(pluginId: string, pluginIds: string[]): void {
+  // `unavailable` are those among them loaded at a version outside the reader's range: their views are hidden
+  // from this reader, so it gets ViewUnavailableError as if they were not loaded.
+  declareReads(pluginId: string, pluginIds: string[], unavailable: string[] = []): void {
     this.reads.set(pluginId, new Set(pluginIds))
+    if (unavailable.length > 0) this.hidden.set(pluginId, new Set(unavailable))
+    else this.hidden.delete(pluginId)
   }
 
   readsOf(pluginId: string): Set<string> {
     return this.reads.get(pluginId) ?? new Set()
   }
 
-  // Drops and recreates every published view in one transaction: all of them, or none on any error.
+  // Drops and recreates every published view in one transaction: all of them, or none on any error. Views left
+  // by plugins that are not published now (disabled, failed, uninstalled) are dropped.
   async createAll(kdb: KernelDb): Promise<void> {
     const built = new Map<string, PublishedView>()
     try {
       await kdb.withWriteLock(() =>
         kdb.transaction(async () => {
+          this.dropStale(kdb)
           for (const [key, entry] of this.defs) {
             try {
               built.set(key, this.create(kdb, key, entry))
@@ -67,15 +74,29 @@ export class ViewRegistry {
     this.created = built
   }
 
-  // The `views()` of a plugin's TableAccess. Every created view is readable; `reads` only changes the error.
-  forReader(_pluginId: string): Map<string, PublishedView> {
-    return this.created
+  // The `views()` of a plugin's TableAccess: every created view, minus those of publishers whose version is
+  // outside the reader's `reads` range. Otherwise `reads` only changes the error.
+  forReader(pluginId: string): Map<string, PublishedView> {
+    const hidden = this.hidden.get(pluginId)
+    if (!hidden) return this.created
+    return new Map([...this.created].filter(([key]) => !hidden.has(key.slice(0, key.indexOf(".")))))
   }
 
   remove(pluginId: string): void {
     for (const [key, e] of this.defs) if (e.pluginId === pluginId) this.defs.delete(key)
     this.created = new Map([...this.created].filter(([key]) => !key.startsWith(`${pluginId}.`)))
     this.reads.delete(pluginId)
+    this.hidden.delete(pluginId)
+  }
+
+  // `<id>__pub_*` names are reserved for the kernel (migrations reject `<id>__` objects), so any such view that
+  // is not a current definition's is a leftover.
+  private dropStale(kdb: KernelDb) {
+    const current = new Set([...this.defs.values()].map((e) => `${e.pluginId}__pub_${e.name}`))
+    for (const r of kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE type = 'view' AND instr(name, '__pub_') > 0").all([])) {
+      const name = String(r.name)
+      if (!current.has(name)) kdb.raw.prepare(`DROP VIEW ${quote(name)}`).run([])
+    }
   }
 
   private create(kdb: KernelDb, key: string, { pluginId, name, def }: Entry): PublishedView {

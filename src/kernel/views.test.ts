@@ -179,6 +179,25 @@ describe("published views", () => {
     await error(() => reader("projects").selectFrom("people.person").select("id").execute(), ViewUnavailableError)
   })
 
+  test("a reader's declared unavailable publishers are hidden from it only", async () => {
+    views.publish("people", "person", person)
+    views.declareReads("projects", ["people"], ["people"])
+    await views.createAll(kdb)
+    expect(views.forReader("projects").size).toBe(0)
+    expect([...views.forReader("inbox").keys()]).toEqual(["people.person"])
+    await error(() => reader("projects").selectFrom("people.person").select("id").execute(), ViewUnavailableError)
+    views.declareReads("projects", ["people"])
+    expect(await reader("projects").selectFrom("people.person").select("handle").orderBy("id").execute()).toEqual([{ handle: "anna" }, { handle: "peter" }])
+  })
+
+  test("createAll drops published views no longer defined", async () => {
+    views.publish("people", "person", person)
+    await views.createAll(kdb)
+    views.remove("people")
+    await views.createAll(kdb)
+    expect(viewNames()).toEqual([])
+  })
+
   test("an undeclared plugin's missing view stays an IsolationError", async () => {
     const e = await error(() => reader("inbox").selectFrom("people.person").select("id").execute(), IsolationError)
     expect(e).not.toBeInstanceOf(ViewUnavailableError)

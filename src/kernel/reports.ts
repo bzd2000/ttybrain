@@ -35,8 +35,8 @@ export class ReportRegistry {
     return [...this.reports.values()].map((r) => r.def)
   }
 
-  // Sections run one after another in `order`. `null` (not applicable) is skipped; a throwing section becomes
-  // an error note and the report goes on.
+  // Sections run one after another in `order`. `null` (not applicable) is skipped; a throwing section, or one
+  // whose result is not section-shaped (R17), becomes an error note and the report goes on.
   async run(reportId: string, params: unknown): Promise<ReportResult> {
     const report = this.reports.get(reportId)?.def
     if (!report) throw new NotFoundError(`no report "${reportId}"`, { suggestions: suggest(reportId, [...this.reports.keys()]) })
@@ -50,8 +50,9 @@ export class ReportRegistry {
     const sections: ReportSectionResult[] = []
     for (const s of mine) {
       try {
-        const result = await s.def.run(params)
-        if (result) sections.push(result)
+        const result: unknown = await s.def.run(params)
+        if (result === null || result === undefined) continue
+        sections.push(wellFormed(result) ? result : { title: s.def.id, columns: [], rows: [], empty: "", note: "error: malformed section result" })
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e)
         sections.push({ title: s.def.id, columns: [], rows: [], empty: "", note: `error: ${message}` })
@@ -64,6 +65,18 @@ export class ReportRegistry {
     for (const [id, r] of this.reports) if (r.plugin === pluginId) this.reports.delete(id)
     this.sections = this.sections.filter((s) => s.plugin !== pluginId)
   }
+}
+
+// The shape the renderers rely on: a string title, a column array and an array of row objects.
+function wellFormed(r: unknown): r is ReportSectionResult {
+  if (typeof r !== "object" || r === null) return false
+  const x = r as Record<string, unknown>
+  return (
+    typeof x.title === "string" &&
+    Array.isArray(x.columns) &&
+    Array.isArray(x.rows) &&
+    x.rows.every((row) => typeof row === "object" && row !== null)
+  )
 }
 
 const cell = (v: Cell | undefined): string => (v === null || v === undefined ? "" : String(v))

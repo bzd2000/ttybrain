@@ -1,0 +1,30 @@
+// A kernel on a temporary PM_HOME with a fixed clock (default 2026-11-13, a Friday) and PM_TEST=1.
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { fixedClock } from "../src/kernel/clock"
+import { bootKernel, type Kernel } from "../src/kernel/host"
+import type { PluginDef } from "../src/kernel/plugin"
+
+export type TestKernel = Kernel & { home: string; cleanup(): Promise<void> }
+
+export async function makeTestKernel(
+  opts: { plugins?: PluginDef[]; today?: string; env?: Record<string, string> } = {},
+): Promise<TestKernel> {
+  const home = mkdtempSync(join(tmpdir(), "pm-test-"))
+  const env = { PM_HOME: home, PM_TEST: "1", ...opts.env }
+  let kernel: Kernel
+  try {
+    kernel = await bootKernel({ env, plugins: opts.plugins ?? [], clock: fixedClock(opts.today ?? "2026-11-13") })
+  } catch (e) {
+    rmSync(home, { recursive: true, force: true })
+    throw e
+  }
+  return Object.assign(kernel, {
+    home,
+    async cleanup() {
+      await kernel.shutdown()
+      rmSync(home, { recursive: true, force: true })
+    },
+  })
+}

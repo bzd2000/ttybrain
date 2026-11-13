@@ -63,6 +63,18 @@ describe("ReportRegistry.run", () => {
     )
   })
 
+  test("a malformed section result becomes an error note and the report goes on (R17)", async () => {
+    const reports = new ReportRegistry()
+    reports.report(def)
+    const malformed = [{ title: 1, columns: [], rows: [] }, { title: "x", columns: "a", rows: [] }, { title: "x", columns: [], rows: {} }, "nope", { title: "x", columns: ["a"], rows: [null] }]
+    malformed.forEach((m, i) => reports.section("status", "projects", { id: `bad${i}`, order: i, run: async () => m as any }))
+    reports.section("status", "projects", { id: "risks", order: 10, run: async () => risks })
+    const r = await reports.run("status", { project: "CRM" })
+    const note = (id: string) => ({ title: id, columns: [], rows: [], empty: "", note: "error: malformed section result" })
+    expect(r.sections).toEqual([note("bad0"), note("bad1"), note("bad2"), note("bad3"), note("bad4"), risks])
+    expect(renderReport(r, "md")).toContain("## bad1\n\n_error: malformed section result_")
+  })
+
   test("sections registered before their report count (R3); sections of a report that never registers are ignored", async () => {
     const reports = new ReportRegistry()
     reports.section("status", "people", { id: "actions", order: 10, run: async () => actions })
