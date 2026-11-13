@@ -2,7 +2,7 @@
 export { default as Type } from "typebox"
 export type { Static, TSchema } from "typebox"
 export { NonBlank } from "./schemas"
-export { sql, type Kysely } from "kysely"
+export { sql, type ExpressionBuilder, type Kysely } from "kysely"
 
 export { definePlugin, type PluginContext, type PluginDef } from "./plugin"
 export type { CommandDef, FlagDef } from "./cli/commands"
