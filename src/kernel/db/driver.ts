@@ -3,6 +3,7 @@
 // The views a query may read through are derived from that query's own node tree, never from shared state.
 import type { CompiledQuery, DatabaseConnection, Driver, OperationNode, QueryResult, TableNode } from "kysely"
 import { IsolationError } from "../errors"
+import { isReservedName } from "../plugin-id"
 import type { TableChecker } from "./explain"
 import { SCHEMA_NODE_KINDS, schemaChangesOnlyInMigrations, walk, type TableAccess } from "./scope"
 import type { RawDb } from "./sqlite"
@@ -90,8 +91,9 @@ export class PmConnection extends RawConnection {
     const own = new Set([...this.access.ownTables()].map((t) => `${this.pluginId}_${t}`))
     const allowed = new Set([...own, ...viewsUsed(compiled.query, this.access)])
     for (const t of this.checker.tablesTouched(compiled.sql)) {
-      if (allowed.has(t)) continue
-      if (migrating && ddl && (t === "sqlite_schema" || t.startsWith(`${this.pluginId}_`))) continue
+      // Kernel and SQLite tables are never a plugin's, whatever its id (defence in depth for assertPluginId).
+      if (allowed.has(t) && !isReservedName(t)) continue
+      if (migrating && ddl && migrationMayTouch(this.pluginId, t)) continue
       if (t === "sqlite_schema") throw schemaChangesOnlyInMigrations()
       throw new IsolationError(`plugin "${this.pluginId}" may not use table "${t}"`)
     }
@@ -100,6 +102,14 @@ export class PmConnection extends RawConnection {
     if (ddl) this.onSchemaChange()
     return result
   }
+}
+
+// Schema statements in a migration may also touch tables the plugin is creating, and the schema tables:
+// sqlite_schema, and the temp schema's root page (db1:page1), which ALTER TABLE RENAME / DROP COLUMN read.
+// What a migration actually changes is checked afterwards by the MigrationRunner's schema diff.
+function migrationMayTouch(pluginId: string, t: string): boolean {
+  if (t === "sqlite_schema" || t === "db1:page1") return true
+  return t.toLowerCase().startsWith(`${pluginId}_`) && !isReservedName(t)
 }
 
 // A plugin's driver: the raw driver (transactions stay kernel-only) over that plugin's checked connection.

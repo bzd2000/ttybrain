@@ -8,12 +8,11 @@ import { systemClock, type Clock } from "./clock"
 import type { KernelDb } from "./db/kernel-db"
 import type { TableAccess } from "./db/scope"
 import { IsolationError } from "./errors"
+import { assertPluginId, isReservedName } from "./plugin-id"
 import type { Paths } from "./paths"
 
 export type Migration = { id: string; up: (db: Kysely<any>) => Promise<void> }
 
-// No `_`, so one plugin's `<id>_` namespace can never contain another's (ruling R8/R11).
-export const PLUGIN_ID = /^[a-z][a-z0-9-]*$/
 
 const KERNEL_TABLES = [
   `CREATE TABLE IF NOT EXISTS kernel_plugin_migration (
@@ -40,7 +39,7 @@ export function ownTablesOf(kdb: KernelDb, pluginId: string): Set<string> {
   const out = new Set<string>()
   for (const r of kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all([])) {
     const name = String(r.name)
-    if (name.toLowerCase().startsWith(prefix) && !name.toLowerCase().startsWith(`${pluginId}__`)) out.add(name.slice(prefix.length))
+    if (name.toLowerCase().startsWith(prefix) && !name.toLowerCase().startsWith(`${pluginId}__`) && !isReservedName(name)) out.add(name.slice(prefix.length))
   }
   return out
 }
@@ -104,7 +103,7 @@ export class MigrationRunner {
   }
 
   async run(pluginId: string, migrations: Migration[], external: boolean): Promise<void> {
-    if (!PLUGIN_ID.test(pluginId)) throw new IsolationError(`plugin id "${pluginId}" must match [a-z][a-z0-9-]*`)
+    assertPluginId(pluginId)
     const ids = new Set<string>()
     for (const m of migrations) {
       if (!m.id || ids.has(m.id)) throw new IsolationError(`plugin "${pluginId}": migration id "${m.id}" is empty or duplicated`)
@@ -176,7 +175,7 @@ export class MigrationRunner {
     beforeTemp: Map<string, SchemaObject>,
   ): string | undefined {
     const prefix = `${pluginId}_`
-    const own = (name: string) => name.toLowerCase().startsWith(prefix)
+    const own = (name: string) => name.toLowerCase().startsWith(prefix) && !isReservedName(name)
     const after = this.snapshot("sqlite_schema")
     const same = (a?: SchemaObject, b?: SchemaObject) => JSON.stringify(a) === JSON.stringify(b)
 

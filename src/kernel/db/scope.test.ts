@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { sql, type Kysely } from "kysely"
 import { IsolationError } from "../errors"
-import { KernelDb } from "./kernel-db"
+import { PmConnection, PmDriver } from "./driver"
+import { KernelDb, kyselyOver } from "./kernel-db"
 import type { TableAccess } from "./scope"
 import { openRaw } from "./sqlite"
 
@@ -297,5 +298,22 @@ describe("no leaking between queries", () => {
   test("a layer 1 failure on the view does not allow projects_project afterwards", async () => {
     await rejects(() => contracts.selectFrom("projects.project").select("internal_col").execute())
     await rejects(() => sql`SELECT * FROM projects_project`.execute(contracts))
+  })
+})
+
+describe("reserved plugin ids", () => {
+  test("pluginDb refuses kernel and sqlite", () => {
+    for (const id of ["kernel", "sqlite"]) expect(() => kdb.pluginDb(id, access())).toThrow(IsolationError)
+  })
+
+  test("layer 2 never treats kernel_* or sqlite_* as own, even for a connection named kernel", async () => {
+    migrating = true
+    const conn = new PmConnection(kdb.raw, "kernel", { ...access(), ownTables: () => new Set(["plugin_migration"]) }, kdb.tables, () => {})
+    const db = kyselyOver(new PmDriver(conn))
+    await rejects(() => sql`DROP TABLE kernel_plugin_migration`.execute(db))
+    await rejects(() => sql`SELECT * FROM kernel_plugin_migration`.execute(db))
+    expect(kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE name = 'kernel_plugin_migration'").all([])).toEqual([
+      { name: "kernel_plugin_migration" },
+    ])
   })
 })

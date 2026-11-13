@@ -168,6 +168,32 @@ describe("applying", () => {
     expect(rows("SELECT name FROM sqlite_schema WHERE name LIKE 'contracts_%'")).toEqual([])
   })
 
+  test("own tables can be renamed, and columns renamed and dropped", async () => {
+    await runner.run(
+      "contracts",
+      [
+        ...contracts,
+        {
+          id: "003",
+          up: async (db) => {
+            await db.schema.alterTable("contract").addColumn("extra", "text").execute()
+            await db.schema.alterTable("contract").renameColumn("title", "name").execute()
+            await db.schema.alterTable("contract").dropColumn("extra").execute()
+            await db.schema.alterTable("contract").renameTo("deal").execute()
+          },
+        },
+        raw("004", "ALTER TABLE contracts_party RENAME TO contracts_side"),
+      ],
+      false,
+    )
+    expect(applied().map((r) => r.id)).toEqual(["001", "002", "003", "004"])
+    expect(rows("SELECT name FROM sqlite_schema WHERE name LIKE 'contracts_%' ORDER BY name")).toEqual([
+      { name: "contracts_deal" },
+      { name: "contracts_side" },
+    ])
+    expect(rows("PRAGMA table_info(contracts_deal)").map((r) => r.name)).toEqual(["id", "name"])
+  })
+
   test("own triggers and views are allowed for built-in plugins", async () => {
     await runner.run(
       "contracts",
@@ -271,6 +297,27 @@ describe("schema checks", () => {
       expect(e.message).toContain(`plugin id "${id}"`)
     }
     expect(applied().filter((r) => r.plugin !== "projects")).toEqual([])
+  })
+
+  test("reserved plugin ids (kernel, sqlite) are rejected and cannot touch kernel tables", async () => {
+    for (const id of ["kernel", "sqlite"]) {
+      const e = await rejects(runner.run(id, [raw("001", "DROP TABLE kernel_change_set_op")], false))
+      expect(e.message).toContain(`plugin id "${id}" is reserved`)
+    }
+    const shortName: Migration = { id: "001", up: async (db) => void (await db.schema.dropTable("record_origin").execute()) }
+    await rejects(runner.run("kernel", [shortName], false))
+    expect(rows("SELECT name FROM sqlite_schema WHERE type = 'table' AND name LIKE 'kernel_%' ORDER BY name").length).toBe(4)
+    expect(applied().filter((r) => r.plugin !== "projects")).toEqual([])
+  })
+
+  test("renaming another plugin's table into the own namespace", async () => {
+    const e = await rejected(raw("002", "ALTER TABLE projects_project RENAME TO contracts_stolen"))
+    expect(e.message).toContain("projects_project")
+  })
+
+  test("renaming an own table to a foreign-looking name", async () => {
+    const e = await rejected(raw("002", "ALTER TABLE contracts_contract RENAME TO projects_fake"))
+    expect(e.message).toContain("projects_fake")
   })
 
   test("R11b: an own table whose short name starts with the plugin id and _", async () => {
