@@ -14,6 +14,17 @@ let dir: string
 let paths: Paths
 let kdb: KernelDb
 let runner: MigrationRunner
+const PRAGMAS = ["query_only", "ignore_check_constraints", "recursive_triggers", "trusted_schema"]
+const pragmas = (r: { prepare(s: string): { all(p: unknown[]): any[] } }) =>
+  Object.fromEntries(PRAGMAS.map((p) => [p, Object.values(r.prepare(`PRAGMA ${p}`).all([])[0])[0]]))
+const PRAGMA_ATTACKS = [
+  "PRAGMA query_only=1",
+  "PRAGMA ignore_check_constraints=1",
+  "PRAGMA recursive_triggers=1",
+  "PRAGMA trusted_schema=OFF",
+  "/* x */ PRAGMA query_only=1",
+  "-- x\n  pragma query_only = 1",
+]
 
 const clock = fixedClock("2026-11-13", "10:00:00")
 
@@ -512,5 +523,17 @@ describe("concurrent first boot", () => {
       { plugin: "contracts", id: "001", n: 1 },
       { plugin: "contracts", id: "002", n: 1 },
     ])
+  })
+})
+
+describe("pragmas in a migration", () => {
+  test("a PRAGMA as raw sql in a migration is rejected and has no effect", async () => {
+    const before = pragmas(kdb.raw)
+    for (const [i, q] of PRAGMA_ATTACKS.entries()) {
+      await rejects(runner.run("contracts", [contracts[0]!, raw(`p${i}`, q)], false))
+    }
+    expect(pragmas(kdb.raw)).toEqual(before)
+    expect(applied().map((r) => r.id)).toEqual(["001"])
+    kdb.raw.exec("INSERT INTO contracts_contract (title) VALUES ('still writable')")
   })
 })

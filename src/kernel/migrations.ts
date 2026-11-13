@@ -282,7 +282,7 @@ export class MigrationRunner {
   private checkReads(obj: SchemaObject, statement: string, own: (n: string) => boolean): string | undefined {
     let touched: string[]
     try {
-      touched = this.kdb.tables.tablesTouched(statement)
+      touched = this.kdb.tables.tablesTouched(statement, "dml") // kernel-built statements over plugin objects
     } catch (e) {
       return `${obj.type} "${obj.name}" could not be checked: ${(e as Error).message}`
     }

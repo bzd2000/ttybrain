@@ -2,6 +2,7 @@
 // `ctx.publish`, built with the owner's scoped db (so it reads only the owner's tables), and recreated by
 // the kernel at every startup, after migrations, as the SQLite view `<pluginId>__pub_<name>`.
 import type { CompiledQuery, Kysely } from "kysely"
+import { firstKeyword, isSingleStatement } from "./db/explain"
 import type { KernelDb } from "./db/kernel-db"
 import type { PublishedView, TableAccess } from "./db/scope"
 import { IsolationError, PmError, ValidationError } from "./errors"
@@ -21,37 +22,6 @@ const VIEW_NAME = /^[a-z][a-z0-9_]*$/
 const quote = (name: string) => `"${name.replace(/"/g, '""')}"`
 
 type Entry = { pluginId: string; name: string; def: ViewDef }
-
-// True if `sql` has no statement terminator outside string literals, quoted identifiers and comments, and no
-// unterminated literal or comment. Checked by the kernel itself, so Bun and Node behave the same whatever their
-// drivers do with the text after a first statement.
-export function isSingleStatement(sql: string): boolean {
-  let i = 0
-  while (i < sql.length) {
-    const c = sql[i]!
-    if (c === ";") return false
-    if (c === "-" && sql[i + 1] === "-") {
-      const end = sql.indexOf("\n", i)
-      if (end < 0) return true
-      i = end + 1
-    } else if (c === "/" && sql[i + 1] === "*") {
-      const end = sql.indexOf("*/", i + 2)
-      if (end < 0) return false
-      i = end + 2
-    } else if (c === "'" || c === '"' || c === "`" || c === "[") {
-      const close = c === "[" ? "]" : c
-      let j = i + 1
-      for (;;) {
-        j = sql.indexOf(close, j)
-        if (j < 0) return false
-        if (close !== "]" && sql[j + 1] === close) j += 2 // doubled quote is an escaped quote
-        else break
-      }
-      i = j + 1
-    } else i++
-  }
-  return true
-}
 
 export class ViewRegistry {
   private readonly defs = new Map<string, Entry>() // keyed "<plugin>.<view>"
@@ -122,12 +92,14 @@ export class ViewRegistry {
     }
     // Raw fragments and hand-made compile() results bypass layer 1, and this SQL runs on the kernel's connection:
     // it must be exactly one SELECT, and reads only the owner's tables (EXPLAIN executes nothing).
-    if (compiled.query?.kind !== "SelectQueryNode" || !isSingleStatement(compiled.sql)) {
+    // The node kind is self-reported by compile(), so the text itself is checked too.
+    const keyword = firstKeyword(compiled.sql)
+    if (compiled.query?.kind !== "SelectQueryNode" || !isSingleStatement(compiled.sql) || (keyword !== "SELECT" && keyword !== "VALUES")) {
       throw new ValidationError(`view "${key}": the query must be a single SELECT statement`)
     }
     const notOwn = (t: string) => !(t.startsWith(`${pluginId}_`) && own.has(t.slice(pluginId.length + 1)))
     const foreign = (t: string) => new IsolationError(`view "${key}" reads table "${t}", which plugin "${pluginId}" does not own`)
-    for (const t of kdb.tables.tablesTouched(compiled.sql)) if (notOwn(t)) throw foreign(t)
+    for (const t of kdb.tables.tablesTouched(compiled.sql, "view")) if (notOwn(t)) throw foreign(t)
 
     const physical = `${pluginId}__pub_${name}`
     kdb.raw.prepare(`DROP VIEW IF EXISTS ${quote(physical)}`).run([])
@@ -141,7 +113,7 @@ export class ViewRegistry {
     }
 
     // Raw `sql` fragments are invisible to layer 1, so the tables SQLite actually reads are checked too.
-    const baseTables = kdb.tables.tablesTouched(`SELECT * FROM ${quote(physical)}`).sort()
+    const baseTables = kdb.tables.tablesTouched(`SELECT * FROM ${quote(physical)}`, "view").sort()
     for (const t of baseTables) if (notOwn(t)) throw foreign(t)
     return { physical, columns: declared, baseTables }
   }
@@ -150,6 +122,7 @@ export class ViewRegistry {
 // Every createAll error names the failing view in `details`, so the host can isolate its plugin (R13).
 function failure(e: unknown, key: string, { pluginId, name }: Entry): PmError {
   const err = e instanceof PmError ? e : new ValidationError(`view "${key}": ${e instanceof Error ? e.message : String(e)}`)
-  err.details = { plugin: pluginId, view: name }
+  const prior = err.details && typeof err.details === "object" ? err.details : {}
+  err.details = { ...prior, plugin: pluginId, view: name }
   return err
 }

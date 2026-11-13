@@ -4,7 +4,7 @@
 import type { CompiledQuery, DatabaseConnection, Driver, OperationNode, QueryResult, TableNode } from "kysely"
 import { IsolationError } from "../errors"
 import { isReservedName } from "../plugin-id"
-import type { TableChecker } from "./explain"
+import { ALLOWED_KEYWORDS, firstKeyword, type TableChecker } from "./explain"
 import { assertMigrationHooks, SCHEMA_NODE_KINDS, schemaChangesOnlyInMigrations, walk, type TableAccess } from "./scope"
 import type { RawDb } from "./sqlite"
 
@@ -48,15 +48,8 @@ export class RawDriver implements Driver {
   async destroy(): Promise<void> {} // KernelDb.close closes the raw connection
 }
 
-const DML = new Set(["SELECT", "INSERT", "UPDATE", "DELETE", "WITH", "REPLACE", "VALUES"])
 const DDL = new Set(["CREATE", "ALTER", "DROP"])
 const TRANSACTION = new Set(["BEGIN", "COMMIT", "END", "ROLLBACK", "SAVEPOINT", "RELEASE"])
-
-// First keyword of the statement, past whitespace, comments and opening parentheses.
-function leadingKeyword(sql: string): string {
-  const s = sql.replace(/^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/|\()*/, "")
-  return (/^[A-Za-z]+/.exec(s)?.[0] ?? "").toUpperCase()
-}
 
 function viewsUsed(query: OperationNode, access: TableAccess): string[] {
   const byPhysical = new Map([...access.views().values()].map((v) => [v.physical, v]))
@@ -81,17 +74,17 @@ export class PmConnection extends RawConnection {
   }
 
   override async executeQuery<R>(compiled: CompiledQuery): Promise<QueryResult<R>> {
-    const keyword = leadingKeyword(compiled.sql)
+    const keyword = firstKeyword(compiled.sql)
     if (TRANSACTION.has(keyword)) throw kernelOwnsTransactions()
     const ddl = DDL.has(keyword) || SCHEMA_NODE_KINDS.has(compiled.query.kind)
-    if (!ddl && !DML.has(keyword)) throw new IsolationError(`plugin "${this.pluginId}" may not run ${keyword || "this"} statements`)
+    if (!ddl && !ALLOWED_KEYWORDS.dml.has(keyword)) throw new IsolationError(`plugin "${this.pluginId}" may not run ${keyword || "this"} statements`)
     assertMigrationHooks(this.access)
     const migrating = this.access.migrating()
     if (ddl && !migrating) throw schemaChangesOnlyInMigrations()
 
     const own = new Set([...this.access.ownTables()].map((t) => `${this.pluginId}_${t}`))
     const allowed = new Set([...own, ...viewsUsed(compiled.query, this.access)])
-    for (const t of this.checker.tablesTouched(compiled.sql)) {
+    for (const t of this.checker.tablesTouched(compiled.sql, migrating && ddl ? "migration" : "dml")) {
       // Kernel and SQLite tables are never a plugin's, whatever its id (defence in depth for assertPluginId).
       const owns = this.access.ownsPhysical?.(t) ?? true
       if (allowed.has(t) && !isReservedName(t) && owns) continue

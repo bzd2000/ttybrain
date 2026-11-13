@@ -5,9 +5,20 @@ import type { TableAccess } from "./db/scope"
 import { openRaw } from "./db/sqlite"
 import { IsolationError, PmError, ValidationError, ViewUnavailableError } from "./errors"
 import { ownTablesOf } from "./migrations"
-import { isSingleStatement, ViewRegistry, type ViewDef } from "./views"
+import { ViewRegistry, type ViewDef } from "./views"
 
 let kdb: KernelDb
+const PRAGMAS = ["query_only", "ignore_check_constraints", "recursive_triggers", "trusted_schema"]
+const pragmas = (r: { prepare(s: string): { all(p: unknown[]): any[] } }) =>
+  Object.fromEntries(PRAGMAS.map((p) => [p, Object.values(r.prepare(`PRAGMA ${p}`).all([])[0])[0]]))
+const PRAGMA_ATTACKS = [
+  "PRAGMA query_only=1",
+  "PRAGMA ignore_check_constraints=1",
+  "PRAGMA recursive_triggers=1",
+  "PRAGMA trusted_schema=OFF",
+  "/* x */ PRAGMA query_only=1",
+  "-- x\n  pragma query_only = 1",
+]
 let views: ViewRegistry
 
 // The people plugin's `person` view, as in the spec (§3.3.3), on a reduced table.
@@ -188,6 +199,11 @@ describe("a view is one checked SELECT statement", () => {
     query: () => ({ compile: () => ({ sql: sqlText, parameters: [], query: { kind } }) as any }),
   })
 
+  function untouched4() {
+    expect(kdb.raw.prepare("SELECT count(*) AS n FROM kernel_secret").all([])).toEqual([{ n: 1 }])
+    expect(viewNames()).toEqual([])
+  }
+
   beforeEach(() => {
     kdb.raw.exec("CREATE TABLE kernel_secret (a INTEGER); INSERT INTO kernel_secret VALUES (1)")
   })
@@ -233,6 +249,31 @@ describe("a view is one checked SELECT statement", () => {
     }
   })
 
+  test("a spoofed SelectQueryNode with a PRAGMA is rejected before anything is prepared", async () => {
+    const before = pragmas(kdb.raw)
+    for (const q of PRAGMA_ATTACKS) {
+      views.remove("people")
+      views.publish("people", "person", fake(q))
+      const e = await error(() => views.createAll(kdb), ValidationError)
+      expect(e.message).toBe('view "people.person": the query must be a single SELECT statement')
+    }
+    expect(pragmas(kdb.raw)).toEqual(before)
+    kdb.raw.exec("INSERT INTO projects_action (title) VALUES ('still writable')")
+    untouched4()
+  })
+
+  test("existing PmError details are kept, with plugin and view added", async () => {
+    views.publish("people", "person", {
+      version: 1,
+      columns: { id: "integer" },
+      query: () => {
+        throw new PmError("custom", "custom", 1, { details: { extra: 1 } })
+      },
+    })
+    const e = await error(() => views.createAll(kdb), PmError)
+    expect(e.details).toEqual({ extra: 1, plugin: "people", view: "person" })
+  })
+
   test("errors from createAll carry details { plugin, view }", async () => {
     views.publish("people", "person", person)
     views.publish("people", "broken", { version: 1, columns: { id: "integer" }, query: (db) => db.selectFrom("person").select("id").where("id", "=", 1) })
@@ -249,27 +290,5 @@ describe("a view is one checked SELECT statement", () => {
     const c = await error(() => views.createAll(kdb), ValidationError)
     expect(c.message).toBe('view "people.person": plugin bug')
     expect(c.details).toEqual({ plugin: "people", view: "person" })
-  })
-})
-
-describe("isSingleStatement", () => {
-  test.each([
-    ["SELECT 1 AS x", true],
-    ["SELECT ';' AS x", true],
-    ["SELECT 'it''s;' AS x", true],
-    ['SELECT 1 AS "a;b"', true],
-    ['SELECT 1 AS "a"";b"', true],
-    ["SELECT 1 AS `a;b`", true],
-    ["SELECT 1 AS [a;b]", true],
-    ["SELECT 1 /* ; */ AS x", true],
-    ["SELECT 1; SELECT 2", false],
-    ["SELECT 1;", false],
-    ["SELECT 1 -- it's\n; DROP TABLE t", false],
-    ["SELECT 1 -- ;", true],
-    ["SELECT 'unterminated", false],
-    ['SELECT "unterminated', false],
-    ["SELECT 1 /* unterminated", false],
-  ])("%p → %p", (q, ok) => {
-    expect(isSingleStatement(q)).toBe(ok)
   })
 })

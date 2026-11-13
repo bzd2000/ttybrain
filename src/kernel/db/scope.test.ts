@@ -7,6 +7,17 @@ import type { TableAccess } from "./scope"
 import { openRaw } from "./sqlite"
 
 let kdb: KernelDb
+const PRAGMAS = ["query_only", "ignore_check_constraints", "recursive_triggers", "trusted_schema"]
+const pragmas = (r: { prepare(s: string): { all(p: unknown[]): any[] } }) =>
+  Object.fromEntries(PRAGMAS.map((p) => [p, Object.values(r.prepare(`PRAGMA ${p}`).all([])[0])[0]]))
+const PRAGMA_ATTACKS = [
+  "PRAGMA query_only=1",
+  "PRAGMA ignore_check_constraints=1",
+  "PRAGMA recursive_triggers=1",
+  "PRAGMA trusted_schema=OFF",
+  "/* x */ PRAGMA query_only=1",
+  "-- x\n  pragma query_only = 1",
+]
 let contracts: Kysely<any>
 let migrating = false
 
@@ -342,5 +353,34 @@ describe("migration mode fails closed without its hooks", () => {
     await rejects(() => sql`CREATE TABLE contracts_y (id INTEGER)`.execute(db))
     await rejects(() => db.selectFrom("contract").selectAll().execute())
     expect(kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE name IN ('contracts_x', 'contracts_y')").all([])).toEqual([])
+  })
+})
+
+describe("pragmas never reach prepare", () => {
+  test("raw sql PRAGMA through a plugin's db is rejected, outside and inside migration mode", async () => {
+    const before = pragmas(kdb.raw)
+    for (const m of [false, true]) {
+      migrating = m
+      for (const q of PRAGMA_ATTACKS) await rejects(() => sql.raw(q).execute(contracts))
+    }
+    expect(pragmas(kdb.raw)).toEqual(before)
+  })
+
+  test("a plugin-bundled Kysely spoofing a schema node kind with a PRAGMA is rejected in migration mode", async () => {
+    migrating = true
+    const before = pragmas(kdb.raw)
+    const conn = new PmConnection(kdb.raw, "contracts", access(), kdb.tables, () => {})
+    for (const q of PRAGMA_ATTACKS) {
+      await rejects(() => conn.executeQuery({ sql: q, parameters: [], query: { kind: "CreateTableNode" } } as any))
+    }
+    expect(pragmas(kdb.raw)).toEqual(before)
+  })
+
+  test("legitimate DML and migration DDL still pass", async () => {
+    await sql`UPDATE contracts_contract SET value = value + 1 WHERE id = 1`.execute(contracts)
+    expect(await contracts.selectFrom("contract").select("value").where("id", "=", 1).executeTakeFirst()).toEqual({ value: 121 })
+    migrating = true
+    await sql`/* own */ CREATE TABLE contracts_extra (id INTEGER PRIMARY KEY)`.execute(contracts)
+    expect(kdb.raw.prepare("SELECT name FROM sqlite_schema WHERE name = 'contracts_extra'").all([])).toEqual([{ name: "contracts_extra" }])
   })
 })
