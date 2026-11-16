@@ -1,0 +1,276 @@
+// Layer 1 of data isolation: rewrite and check a plugin's Kysely query tree before it is compiled.
+// Short own-table names become `<pluginId>_<name>`, `<plugin>.<view>` becomes the view's physical name,
+// everything else is rejected. Column references are checked against the query's sources.
+import {
+  OperationNodeTransformer,
+  type CheckConstraintNode,
+  type CreateIndexNode,
+  type CreateViewNode,
+  type DeleteQueryNode,
+  type DropIndexNode,
+  type DropViewNode,
+  type ForeignKeyConstraintNode,
+  type IdentifierNode,
+  type InsertQueryNode,
+  type KyselyPlugin,
+  type OperationNode,
+  type PrimaryKeyConstraintNode,
+  type PluginTransformQueryArgs,
+  type PluginTransformResultArgs,
+  type QueryResult,
+  type RootOperationNode,
+  type SchemableIdentifierNode,
+  type TableNode,
+  type UniqueConstraintNode,
+  type UnknownRow,
+  type UpdateQueryNode,
+} from "kysely"
+import { IsolationError, ViewUnavailableError } from "../errors"
+
+export interface PublishedView {
+  physical: string
+  columns: string[]
+  baseTables: string[]
+}
+
+export interface TableAccess {
+  ownTables(): Set<string> // short names
+  views(): Map<string, PublishedView> // keyed "<plugin>.<view>"
+  reads?(): Set<string> // plugin ids declared in `reads`: a missing view of theirs is ViewUnavailableError
+  migrating(): boolean
+  ownerOf(name: string): string | undefined // kernel-wide: which plugin owns this short or physical table name
+  // Migration hooks, provided by the MigrationRunner. Required whenever migrating() is true (assertMigrationHooks):
+  ownsPhysical?(physical: string): boolean // false for an own-prefixed name that is really another owner's table
+  afterSchemaChange?(): void // after each schema statement; throws IsolationError if it broke the schema rules
+}
+
+// Migration mode without its checks would skip the per-statement schema rules, so it is refused (fail closed).
+// Called by pluginDb, by layer 1 and by layer 2, since migrating() may turn true after the db was handed out.
+export function assertMigrationHooks(access: TableAccess): void {
+  if (access.migrating() && (!access.ownsPhysical || !access.afterSchemaChange)) {
+    throw new IsolationError("migration mode requires the ownsPhysical and afterSchemaChange hooks")
+  }
+}
+
+export const SCHEMA_NODE_KINDS: ReadonlySet<string> = new Set([
+  "CreateTableNode",
+  "CreateIndexNode",
+  "CreateViewNode",
+  "AlterTableNode",
+  "DropTableNode",
+  "DropIndexNode",
+  "DropViewNode",
+])
+
+export const schemaChangesOnlyInMigrations = () => new IsolationError("schema changes are only allowed in migrations")
+
+// Generic walk over a node tree: every object-valued property is a child node or a list of them.
+export function walk(node: unknown, visit: (n: OperationNode) => void): void {
+  if (Array.isArray(node)) {
+    for (const n of node) walk(n, visit)
+    return
+  }
+  if (!node || typeof node !== "object") return
+  if (typeof (node as OperationNode).kind === "string") visit(node as OperationNode)
+  for (const v of Object.values(node)) if (v && typeof v === "object") walk(v, visit)
+}
+
+// Table aliases (`contract as c`, a derived table `(...) as sub`) and selection aliases (`count(*) as n`).
+function collectAliases(root: OperationNode): { tables: Set<string>; columns: Set<string> } {
+  const tables = new Set<string>()
+  const columns = new Set<string>()
+  walk(root, (n) => {
+    if (n.kind !== "AliasNode") return
+    const { node, alias } = n as unknown as { node: OperationNode; alias: OperationNode }
+    if (alias.kind !== "IdentifierNode") return
+    const name = (alias as IdentifierNode).name
+    if (node.kind === "TableNode" || node.kind === "SelectQueryNode") tables.add(name)
+    else columns.add(name)
+  })
+  return { tables, columns }
+}
+
+export class ScopeTransformer extends OperationNodeTransformer {
+  private readonly prefix: string
+  private readonly ddl: boolean
+
+  constructor(
+    private readonly pluginId: string,
+    private readonly access: TableAccess,
+    private readonly tableAliases: Set<string>,
+    root: OperationNode,
+    private readonly columnsOf: (physical: string) => Set<string>,
+  ) {
+    super()
+    this.prefix = `${pluginId}_`
+    this.ddl = SCHEMA_NODE_KINDS.has(root.kind)
+    assertMigrationHooks(access)
+    if (this.ddl && !access.migrating()) throw schemaChangesOnlyInMigrations()
+  }
+
+  // Idempotent: a builder used as an expression (`where("id", "in", db.selectFrom(...))`, `.expression(...)`,
+  // `createView(...).as(...)`) is already rewritten when it is embedded, and Kysely may copy its nodes on the way
+  // (createView's ImmediateValuePlugin), so names are recognised by meaning, not by node identity. A physical name
+  // is kept only if it is valid for THIS plugin; another plugin's tables are rejected wherever they come from.
+  protected override transformTable(node: TableNode): TableNode {
+    const schema = node.table.schema?.name
+    const name = node.table.identifier.name
+    if (!schema && this.tableAliases.has(name)) return node
+    if (schema) {
+      if (this.ddl) throw new IsolationError(`schema statements may not name ${schema}.${name}`)
+      return this.rename(node, this.view(schema, name).physical)
+    }
+    if (!this.ddl && this.access.ownTables().has(name)) return this.rename(node, this.prefix + name)
+    if (this.isOwnPhysical(name) || this.viewPhysical(name)) return node
+    // In a migration a plugin may name tables it is about to create; the prefix keeps them in its namespace.
+    if (this.ddl) return this.rename(node, this.prefix + name)
+    throw this.notOwned(name)
+  }
+
+  protected override transformInsertQuery(node: InsertQueryNode): InsertQueryNode {
+    this.rejectViewTarget(node.into)
+    return super.transformInsertQuery(node)
+  }
+
+  protected override transformUpdateQuery(node: UpdateQueryNode): UpdateQueryNode {
+    this.rejectViewTarget(node.table)
+    return super.transformUpdateQuery(node)
+  }
+
+  protected override transformDeleteQuery(node: DeleteQueryNode): DeleteQueryNode {
+    this.rejectViewTarget(node.from)
+    return super.transformDeleteQuery(node)
+  }
+
+  protected override transformCreateIndex(node: CreateIndexNode): CreateIndexNode {
+    return super.transformCreateIndex({ ...node, name: this.prefixed(node.name) })
+  }
+
+  protected override transformDropIndex(node: DropIndexNode): DropIndexNode {
+    return super.transformDropIndex({ ...node, name: this.prefixedSchemable(node.name) })
+  }
+
+  protected override transformCreateView(node: CreateViewNode): CreateViewNode {
+    return super.transformCreateView({ ...node, name: this.prefixedSchemable(node.name) })
+  }
+
+  protected override transformDropView(node: DropViewNode): DropViewNode {
+    return super.transformDropView({ ...node, name: this.prefixedSchemable(node.name) })
+  }
+
+  // Constraint names get the same prefix as tables and indexes.
+  protected override transformPrimaryKeyConstraint(node: PrimaryKeyConstraintNode): PrimaryKeyConstraintNode {
+    return super.transformPrimaryKeyConstraint(this.withPrefixedName(node))
+  }
+  protected override transformUniqueConstraint(node: UniqueConstraintNode): UniqueConstraintNode {
+    return super.transformUniqueConstraint(this.withPrefixedName(node))
+  }
+  protected override transformForeignKeyConstraint(node: ForeignKeyConstraintNode): ForeignKeyConstraintNode {
+    return super.transformForeignKeyConstraint(this.withPrefixedName(node))
+  }
+  protected override transformCheckConstraint(node: CheckConstraintNode): CheckConstraintNode {
+    return super.transformCheckConstraint(this.withPrefixedName(node))
+  }
+
+  private view(schema: string, name: string): PublishedView {
+    const key = `${schema}.${name}`
+    const v = this.access.views().get(key)
+    if (v) return v
+    if (this.access.reads?.().has(schema)) throw new ViewUnavailableError(key)
+    throw new IsolationError(`${key} is not a published view`)
+  }
+
+  private rejectViewTarget(target: OperationNode | undefined) {
+    walk(target, (n) => {
+      if (n.kind !== "TableNode") return
+      const t = (n as TableNode).table
+      const key = t.schema ? `${t.schema.name}.${t.identifier.name}` : this.viewPhysical(t.identifier.name)
+      if (key) throw new IsolationError(`${key} is a published view and is read-only`)
+    })
+  }
+
+  private isOwnPhysical(name: string): boolean {
+    if (!name.startsWith(this.prefix)) return false
+    if (this.access.ownTables().has(name.slice(this.prefix.length))) return true
+    return this.ddl && this.columnsOf(name).size > 0 // created earlier in this migration
+  }
+
+  // The `<plugin>.<view>` key of a view physical name this plugin may read, if it is one.
+  private viewPhysical(name: string): string | undefined {
+    for (const [key, v] of this.access.views()) if (v.physical === name) return key
+    return undefined
+  }
+
+  private notOwned(name: string): IsolationError {
+    const msg = `table "${name}" is not owned by plugin "${this.pluginId}"`
+    const owner = this.access.ownerOf(name)
+    if (!owner) return new IsolationError(msg)
+    const short = name.startsWith(`${owner}_`) ? name.slice(owner.length + 1) : name
+    return new IsolationError(`${msg}; read ${owner}.${short} if published, or use ${owner}.<operation>`)
+  }
+
+  private rename(node: TableNode, physical: string): TableNode {
+    return {
+      ...node,
+      table: { ...node.table, schema: undefined, identifier: { ...node.table.identifier, name: physical } },
+    }
+  }
+
+  private prefixed(id: IdentifierNode): IdentifierNode {
+    return { ...id, name: this.prefix + id.name }
+  }
+
+  private prefixedSchemable(id: SchemableIdentifierNode): SchemableIdentifierNode {
+    if (id.schema) throw new IsolationError(`schema statements may not name ${id.schema.name}.${id.identifier.name}`)
+    return { ...id, identifier: this.prefixed(id.identifier) }
+  }
+
+  private withPrefixedName<T extends { name?: IdentifierNode }>(node: T): T {
+    return node.name ? { ...node, name: this.prefixed(node.name) } : node
+  }
+}
+
+// Every ColumnNode must name a column of one of the query's (rewritten) sources, or a selection alias.
+// Bun's SQLite would otherwise read an unknown double-quoted name as a string literal (§3.3.3).
+function checkColumns(
+  root: OperationNode,
+  pluginId: string,
+  access: TableAccess,
+  aliases: { tables: Set<string>; columns: Set<string> },
+  columnsOf: (physical: string) => Set<string>,
+) {
+  const viewsByPhysical = new Map([...access.views().values()].map((v) => [v.physical, v]))
+  const known = new Set(aliases.columns)
+  const sources = new Set<string>()
+  walk(root, (n) => {
+    if (n.kind === "TableNode") sources.add((n as TableNode).table.identifier.name)
+  })
+  for (const s of sources) {
+    if (aliases.tables.has(s)) continue
+    const view = viewsByPhysical.get(s)
+    const cols = view ? view.columns : s.startsWith(`${pluginId}_`) ? columnsOf(s) : []
+    for (const c of cols) known.add(c)
+  }
+  walk(root, (n) => {
+    if (n.kind !== "ColumnNode") return
+    const name = (n as unknown as { column: IdentifierNode }).column.name
+    if (!known.has(name)) throw new IsolationError(`unknown column "${name}"`)
+  })
+}
+
+export function scopePlugin(pluginId: string, access: TableAccess, columnsOf: (physical: string) => Set<string>): KyselyPlugin {
+  return {
+    transformQuery({ node }: PluginTransformQueryArgs): RootOperationNode {
+      const aliases = collectAliases(node)
+      for (const a of aliases.tables) {
+        if (a.includes("__pub_")) throw new IsolationError(`alias "${a}" is reserved`)
+      }
+      const out = new ScopeTransformer(pluginId, access, aliases.tables, node, columnsOf).transformNode(node)
+      if (!SCHEMA_NODE_KINDS.has(out.kind)) checkColumns(out, pluginId, access, aliases, columnsOf)
+      return out
+    },
+    async transformResult({ result }: PluginTransformResultArgs): Promise<QueryResult<UnknownRow>> {
+      return result
+    },
+  }
+}

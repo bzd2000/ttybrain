@@ -1,0 +1,49 @@
+import { ValidationError } from "./errors"
+
+const DAY_MS = 86_400_000
+const HINT = "use YYYY-MM-DD, today, tomorrow, +3d, +2w or mon…sun"
+const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
+
+const pad = (n: number) => String(n).padStart(2, "0")
+
+function toMs(date: string): number {
+  const [y, m, d] = date.split("-").map(Number)
+  return Date.UTC(y!, m! - 1, d!)
+}
+
+function fromMs(ms: number): string {
+  const d = new Date(ms)
+  return `${String(d.getUTCFullYear()).padStart(4, "0")}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
+}
+
+export function isValidDate(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
+  return fromMs(toMs(s)) === s
+}
+
+export function addDays(date: string, n: number): string {
+  return fromMs(toMs(date) + n * DAY_MS)
+}
+
+function weekday(date: string): number {
+  return new Date(toMs(date)).getUTCDay()
+}
+
+export function weekEnd(today: string): string {
+  return addDays(today, (7 - weekday(today)) % 7)
+}
+
+export function parseDate(input: string, today: string): string {
+  const s = input.trim().toLowerCase()
+  if (isValidDate(s)) return s
+  if (s === "today") return today
+  if (s === "tomorrow") return addDays(today, 1)
+  const rel = /^\+(\d+)([dw])$/.exec(s)
+  if (rel) return addDays(today, Number(rel[1]) * (rel[2] === "w" ? 7 : 1))
+  const idx = DAYS.indexOf(s)
+  if (idx >= 0) {
+    const ahead = ((idx - weekday(today) + 6) % 7) + 1 // 1..7: next such day after today
+    return addDays(today, ahead)
+  }
+  throw new ValidationError(`invalid date "${input}"`, { field: "date", hint: HINT })
+}

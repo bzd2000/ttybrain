@@ -1,0 +1,54 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Stack
+
+A terminal UI built with [OpenTUI](https://opentui.com) (`@opentui/core`) and its Solid binding (`@opentui/solid`), running on **Bun** or **Node.js 26.4+**. Both runtimes must keep working. Bun is installed at `~/.bun/bin` and may not be on `PATH` in non-login shells. The system Node (`/usr/local/bin/node`) is 26.x.
+
+## Architecture (read first)
+
+pm is being rebuilt as a **plugin kernel** (`src/kernel/`) plus plugins (`src/plugins/<id>/logic|tui/`). **Read `docs/architecture.md` before changing kernel or plugin code.** It holds the data-isolation rules, the operation and view conventions, the CLI conventions and a red-flags list.
+- Design: `docs/superpowers/specs/2026-11-13-pm-design.md`
+- Per-plugin reference: `docs/superpowers/specs/2026-11-13-pm-plugins.md`
+- Plans: `docs/superpowers/plans/`
+
+Project agents:
+- `pm-developer` implements plan tasks.
+- `pm-reviewer` reviews changes against the architecture (read-only).
+
+## Commands
+
+- `bun start`: run the app (it needs a real TTY, so it can't be driven from a non-interactive shell; use tests instead)
+- `bun dev`: run with `--watch`
+- `bun test`: run all tests. Run a single test with `bun test ./src/App.test.tsx` (the `./` makes it a path) or `bun test -t "<name pattern>"`
+- `bun typecheck`: type-check (`bun check`)
+- `bun run pm <thing> <verb> …`: run the CLI (`bun src/bin/pm.ts`); `PM_HOME=<dir>` or `--db <file>` points it at a scratch database
+- `bash scripts/smoke-node.sh`: build for Node, run the self-checks and a CLI walk-through on Node 26 (needs only node/npm); the last line is `smoke ok`. Run it after touching SQLite, isolation, transactions, process handling or module loading
+- `bun src/kernel/isolation-selfcheck.ts`: the isolation self-check on Bun (`node dist-node/kernel/isolation-selfcheck.js` on Node)
+- `npm run start:node`: run on Node. It runs `build:node` (`scripts/build-node.mjs`, which compiles `src/` to `dist-node/` with Babel), then `node --experimental-ffi dist-node/index.js`
+
+## How it's wired
+
+- `src/kernel/` is the plugin kernel, `src/plugins/<id>/logic/` the built-in plugins (`people`, `projects`, `inbox`), `src/bin/pm.ts` the CLI entry point, `src/plugins/index.ts` the list of built-ins. See `docs/architecture.md` for the file-by-file layout and the rules.
+- Plugins import kernel things only from `src/kernel/api.ts` and use only `ctx.*`. Only `src/kernel/db/sqlite.ts` touches `bun:sqlite`/`node:sqlite`. Logic and kernel code never import `solid-js` or `@opentui/*`.
+- `bunfig.toml` preloads `@opentui/solid/preload` for both runs and tests. It compiles Solid JSX. Without it, `.tsx` files fail. `tsconfig.json` uses `"jsx": "preserve"` with `jsxImportSource: "@opentui/solid"`.
+- Node has no runtime JSX transform, so `scripts/build-node.mjs` compiles `src/` to `dist-node/` ahead of time with Babel (`babel-preset-solid`, `generate: "universal"`, `moduleName: "@opentui/solid"`). It rewrites `solid-js` → `solid-js/dist/solid.js` (Node's `node` export condition would otherwise load the non-reactive server build) and adds `.js` to relative imports. Keep relative imports in `src/` extensionless. Use only ESM. `Bun.*` outside `sqlite.ts`, `@opentui/three` and runtime plugins would break the Node path.
+- The starter UI (phase 2 replaces it): `src/index.tsx` calls `render()`; `src/App.tsx` owns app state and the global keys (`q`, `tab`); arrow keys go to whichever `select`/`scrollbox` has `focused={true}` (focus is a prop driven by the `focus` signal, not imperative `.focus()`); if you add an `input`/`textarea`, guard the global `q` handler; `src/sections.tsx` registers screens; `src/theme.ts` holds all colors. Quitting means `renderer.destroy()`.
+
+## OpenTUI/Solid gotchas
+
+- JSX elements are lowercase intrinsics and multi-word ones use snake_case: `box`, `text`, `select`, `scrollbox`, `input`, `tab_select`, `ascii_font`. Inline modifiers (`span`, `b`, `i`, `u`) only work inside `<text>`.
+- `<span>` typings don't accept `fg`. For differently colored pieces, use sibling `<text fg=…>` elements in a `flexDirection="row"` box.
+- Solid rules: components run once. Read signals as calls (`focus()`), don't destructure `props`, and use `<For>`/`<Show>` for reactive lists and conditionals.
+- Element prop types live in `node_modules/@opentui/solid/src/types/elements.d.ts`. Renderable option types are in `@opentui/core`. Docs are at https://opentui.com/docs.
+
+## Testing
+
+Kernel and plugin tests: `makeTestKernel({ plugins, today })` from `tests/helpers.ts` gives a temp `PM_HOME`, `PM_TEST=1` and a fixed clock (default `2026-11-13`, a Friday); call `kernel.cleanup()` afterwards. Drive commands with `runCli([...], kernel, io)` (`src/kernel/cli/dispatch.ts`) and assert on exact output and exit codes; never use the real clock. Run `bash scripts/smoke-node.sh` for anything runtime-sensitive.
+
+TUI tests use `testRender(() => <App />, { width, height })` from `@opentui/solid`. Drive input with `mockInput.pressArrow/pressTab/pressKey/typeText`. Call `await renderOnce()` before `captureCharFrame()`, which returns the screen as plain text. Always call `renderer.destroy()` in `finally`. Printing `captureCharFrame()` is the easiest way to see the layout without a TTY.
+
+## CI
+
+GitLab CI (`.gitlab-ci.yml`), stage `test`: job `test` (`oven/bun:1.4.4`, the version that writes `bun.lock`: `bun install --frozen-lockfile && bun typecheck && bun test`), job `node-smoke` (`node:26`: `npm ci && bash scripts/smoke-node.sh`) and GitLab's SAST template. Keep `bun.lock` and `package-lock.json` in sync with `package.json`.

@@ -11,3 +11,16 @@ sast:
   stage: test
 include:
 - template: Security/SAST.gitlab-ci.yml
+test:
+  stage: test
+  image: oven/bun:1.4.4
+  script:
+  - bun install --frozen-lockfile
+  - bun typecheck
+  - bun test
+node-smoke:
+  stage: test
+  image: node:26
+  script:
+  - npm ci
+  - bash scripts/smoke-node.sh

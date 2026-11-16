@@ -1,0 +1,650 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>pm Screen Designs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a single reading column of annotated screens; each mock is a fixed-width terminal in its own scroller. */
+:root {
+  --bg: #f5f6f9;
+  --surface: #ffffff;
+  --fg: #1d2130;
+  --muted: #5c6378;
+  --line: #dde0ea;
+  --accent: #3d5bd9;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0c0e13; --surface: #151821; --fg: #dfe3ef; --muted: #959cb4; --line: #262b38; --accent: #8aa6ff; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0c0e13; --surface: #151821; --fg: #dfe3ef; --muted: #959cb4; --line: #262b38; --accent: #8aa6ff; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.page { max-width: 1180px; margin: 0 auto; padding-block: 40px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 56px; }
+header.intro { display: flex; flex-direction: column; gap: 12px; max-width: 68ch; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0; font-weight: 600; text-wrap: balance; }
+h1 code { font-family: var(--font-mono); font-weight: 600; color: var(--accent); }
+h2 { font-size: 20px; margin: 0; font-weight: 600; text-wrap: balance; }
+p { margin: 0; }
+.lede { color: var(--muted); }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+nav.jump { display: flex; flex-wrap: wrap; gap: 8px; }
+nav.jump a { font-family: var(--font-mono); font-size: 13px; color: var(--fg); text-decoration: none; border: 1px solid var(--line); background: var(--surface); padding: 4px 10px; border-radius: 4px; }
+nav.jump a:hover, nav.jump a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+section.screen { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 24px; }
+.screen-head { display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+kbd { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface); color: var(--fg); }
+.scroller { overflow-x: auto; padding-bottom: 6px; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 28px; font-size: 14px; color: var(--muted); }
+.notes b { color: var(--fg); font-weight: 600; }
+.qs { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; max-width: 80ch; }
+.qs ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+
+/* ---------- terminal mock (always dark: it depicts the app's own theme from src/theme.ts) ---------- */
+.term {
+  --tb: #11131a; --tp: #181b24; --tbo: #2e3442; --tbf: #7aa2f7; --tt: #c0caf5; --tm: #737aa2; --ta: #7aa2f7; --tsel: #283457;
+  --red: #f7768e; --amb: #e0af68; --grn: #9ece6a; --cy: #7dcfff; --mag: #bb9af7;
+  width: 118ch; background: var(--tb); color: var(--tt); font: 13px/1.55 var(--font-mono);
+  border-radius: 10px; overflow: hidden; border: 1px solid #000; position: relative;
+  box-shadow: 0 12px 32px -18px rgba(10, 14, 30, .55); font-variant-numeric: tabular-nums;
+}
+.chrome { display: flex; gap: 6px; padding: 8px 12px; background: #0b0d12; }
+.chrome i { width: 10px; height: 10px; border-radius: 50%; background: #2a2f3c; display: block; }
+.bar { display: flex; justify-content: space-between; gap: 2ch; background: var(--tp); padding: 0 1ch; white-space: nowrap; }
+.bar.status { justify-content: flex-start; gap: 3ch; }
+.cols { display: flex; padding: 0 .5ch .6em; min-height: 34em; }
+.dd { background: var(--tsel); color: var(--ta); padding: 0 1ch; }
+.menu { position: absolute; top: calc(26px + 1.75em); left: 4ch; width: 26ch; background: var(--tb); box-shadow: 0 10px 24px -8px rgba(0, 0, 0, .8); border-radius: 6px; }
+.menu .panel { margin: 0; padding-top: .45em; background: var(--tb); }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; }
+.panel { border: 1px solid var(--tbo); border-radius: 6px; position: relative; padding: .8em 1ch .45em; margin: .75em .5ch 0; }
+.panel.f { border-color: var(--tbf); }
+.panel > .t { position: absolute; top: -.82em; left: 1ch; background: var(--tb); padding: 0 .5ch; color: var(--tm); line-height: 1.5; }
+.panel.f > .t { color: var(--ta); }
+.panel > .bt { position: absolute; bottom: -.82em; right: 1ch; background: var(--tb); padding: 0 .5ch; color: var(--tm); line-height: 1.5; }
+.grow { flex: 1; }
+.row { display: grid; grid-template-columns: var(--c, 1fr); column-gap: 2ch; white-space: nowrap; padding: 0 .5ch; }
+.row > * { overflow: hidden; text-overflow: ellipsis; }
+.row.h { color: var(--tm); }
+.row.sel { background: var(--tsel); }
+.nav .row { --c: 2ch 1fr auto; }
+.nav .row.sel { color: var(--ta); }
+.m { color: var(--tm); } .a { color: var(--ta); } .r { color: var(--red); } .y { color: var(--amb); } .g { color: var(--grn); } .c { color: var(--cy); } .p { color: var(--mag); }
+.b { font-weight: 600; }
+.tabs { display: flex; gap: 1ch; padding: .1em .5ch .3em; white-space: nowrap; }
+.tabs span { padding: 0 1ch; color: var(--tm); }
+.tabs span.on { background: var(--tsel); color: var(--ta); }
+.sp { height: .6em; }
+.kv { display: grid; grid-template-columns: 14ch 1fr; column-gap: 2ch; padding: 0 .5ch; }
+.kv > :first-child { color: var(--tm); }
+.wrapline { white-space: normal; padding: 0 .5ch; }
+.tag-p { color: var(--cy); } .tag-u { color: var(--mag); }
+.dim > .chrome ~ :not(.overlay) { filter: brightness(.45) saturate(.6); }
+.overlay { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); width: 76ch; background: var(--tb); filter: none; }
+.overlay .panel { margin: 0; background: var(--tb); box-shadow: 0 0 0 1ch var(--tb); }
+.input { border: 1px solid var(--tbf); border-radius: 4px; padding: .2em 1ch; margin: .2em .5ch; white-space: normal; }
+.caret { background: var(--tt); color: var(--tb); }
+.ac { margin: 0 .5ch; border: 1px solid var(--tbo); border-radius: 4px; width: 46ch; }
+
+
+
+
+</style>
+
+<div class="page">
+
+<header class="intro">
+  <span class="eyebrow">Design · section 3 of 4 · example data</span>
+  <h1>Screens for <code>pm</code></h1>
+  <p class="lede">Mockups of the terminal UI at roughly 118×36 characters. Every screen shares one frame: header with a screen switcher, full-width main area, and a status bar with the keys that work right now. The focused panel has a blue border. All names, projects and dates are invented examples; "today" is Thursday 12 Nov 2026.</p>
+  <nav class="jump" aria-label="Screens">
+    <a href="#switcher">Screen switcher</a><a href="#attention">1 Attention</a><a href="#projects">2 Projects</a><a href="#project">Project detail</a><a href="#context">Project context</a><a href="#people">3 People</a><a href="#actions">4 Actions</a><a href="#meeting">5 Meeting prep</a><a href="#inbox">6 Inbox</a><a href="#capture">Quick capture</a><a href="#copilot">Copilot session</a>
+  </nav>
+</header>
+
+<!-- ============ SCREEN SWITCHER ============ -->
+<section class="screen" id="switcher">
+  <div class="screen-head">
+    <span class="eyebrow">Frame · any screen</span>
+    <h2>Screen switcher</h2>
+    <p class="lede">The screen list on the left is gone, so every screen gets the full width. The current screen shows as a chip in the header and opens as a dropdown with the same counts the side list had. You rarely need to open it: <kbd>1</kbd>–<kbd>6</kbd> still jump straight to a screen from anywhere.</p>
+    <div class="keys"><span><kbd>g</kbd> open</span><span><kbd>↑</kbd><kbd>↓</kbd> or <kbd>j</kbd><kbd>k</kbd> move</span><span><kbd>1</kbd>–<kbd>6</kbd> jump</span><span><kbd>Enter</kbd> go</span><span><kbd>Esc</kbd> close</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">pm</span> <span class="m">·</span> <span class="dd">1 Attention ▴</span></span><span><span class="y">● 3 new in inbox</span>  <span class="m">Thu 12 Nov 2026</span></span></div>
+    <div class="cols" style="min-height: 13em">
+      <div class="main">
+        <div class="grid2">
+          <div class="panel"><span class="t">Overdue actions · 3</span>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">A-27</span><span>Send revised budget to Peter</span><span class="c">CRM</span><span class="r">-3d</span></div>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">A-19</span><span>Book vendor demo slot</span><span class="c">ERP</span><span class="r">-2d</span></div>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">A-31</span><span>Anna: review test strategy</span><span class="c">DWH</span><span class="r">-1d</span></div>
+            <div class="sp"></div><div class="sp"></div><div class="sp"></div><div class="sp"></div><div class="sp"></div><div class="sp"></div>
+          </div>
+          <div class="panel"><span class="t">Due this week · 5</span>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">A-33</span><span>Prepare SteerCo deck input</span><span class="c">CRM</span><span>Fri</span></div>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">D-8</span><span>Solution design v1 · Anna</span><span class="c">CRM</span><span>Fri</span></div>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">A-35</span><span>Confirm licence count</span><span class="c">IAM</span><span>Fri</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">↑↓</span> <span class="m">move</span></span><span><span class="a">1-6</span> <span class="m">jump</span></span><span><span class="a">enter</span> <span class="m">go</span></span><span><span class="a">esc</span> <span class="m">close</span></span></div>
+    <div class="menu nav"><div class="panel f">
+      <div class="row"><span class="m">1</span><span>Attention</span><span class="r">7</span></div>
+      <div class="row"><span class="m">2</span><span>Projects</span><span class="m">24</span></div>
+      <div class="row sel"><span>3</span><span>People</span><span class="m">31</span></div>
+      <div class="row"><span class="m">4</span><span>Actions</span><span class="m">46</span></div>
+      <div class="row"><span class="m">5</span><span>Meetings</span><span class="m">2</span></div>
+      <div class="row"><span class="m">6</span><span>Inbox</span><span class="y">3</span></div>
+    </div></div>
+  </div></div>
+</section>
+
+<!-- ============ 1 ATTENTION ============ -->
+<section class="screen" id="attention">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 1 · home</span>
+    <h2>Attention</h2>
+    <p class="lede">Opens on start. Everything that needs you today, across all projects, in one look. Each panel is a list you can step into; Enter jumps to the record.</p>
+    <div class="keys"><span><kbd>Tab</kbd> next panel</span><span><kbd>Enter</kbd> open</span><span><kbd>x</kbd> mark action done</span><span><kbd>i</kbd> capture</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">pm</span> <span class="m">·</span> <span class="dd">1 Attention ▾</span></span><span><span class="y">● 3 new in inbox</span>  <span class="m">Thu 12 Nov 2026</span></span></div>
+    <div class="cols">
+      
+      <div class="main">
+        <div class="grid2">
+          <div class="panel f"><span class="t">Overdue actions · 3</span>
+            <div class="row sel" style="--c: 5ch 1fr 7ch 7ch"><span class="m">A-27</span><span>Send revised budget to Peter</span><span class="c">CRM</span><span class="r">-3d</span></div>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">A-19</span><span>Book vendor demo slot</span><span class="c">ERP</span><span class="r">-2d</span></div>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">A-31</span><span>Anna: review test strategy</span><span class="c">DWH</span><span class="r">-1d</span></div>
+          </div>
+          <div class="panel"><span class="t">Due this week · 5</span>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">A-33</span><span>Prepare SteerCo deck input</span><span class="c">CRM</span><span>Fri</span></div>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">D-8</span><span>Solution design v1 · Anna</span><span class="c">CRM</span><span>Fri</span></div>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">A-35</span><span>Confirm licence count</span><span class="c">IAM</span><span>Fri</span></div>
+            <div class="row" style="--c: 5ch 1fr 7ch 7ch"><span class="m">A-36</span><span>1:1 follow-up: training plan</span><span class="m">—</span><span>Sun</span></div>
+            <div class="row m" style="--c: 1fr"><span>+1 more</span></div>
+          </div>
+          <div class="panel"><span class="t">Projects needing attention</span>
+            <div class="row" style="--c: 2ch 6ch 1fr 12ch"><span class="r">●</span><span class="c">ERP</span><span>Vendor B contract not signed</span><span class="m">upd 9d ago</span></div>
+            <div class="row" style="--c: 2ch 6ch 1fr 12ch"><span class="y">●</span><span class="c">CRM</span><span>Design slipping 2 weeks</span><span class="m">upd 2d ago</span></div>
+            <div class="row" style="--c: 2ch 6ch 1fr 12ch"><span class="y">●</span><span class="c">HRP</span><span>Key user availability</span><span class="m">upd 5d ago</span></div>
+            <div class="row" style="--c: 2ch 6ch 1fr 12ch"><span class="m">○</span><span class="c">IAM</span><span class="m">Health not updated</span><span class="y">31d ago</span></div>
+          </div>
+          <div class="panel"><span class="t">Late milestones · 2</span>
+            <div class="row" style="--c: 6ch 1fr 8ch"><span class="c">ERP</span><span>Vendor selected</span><span class="r">-6d</span></div>
+            <div class="row" style="--c: 6ch 1fr 8ch"><span class="c">DWH</span><span>Test environment ready</span><span class="r">-1d</span></div>
+            <div class="sp"></div>
+            <div class="row h" style="--c: 1fr"><span>Next 14 days</span></div>
+            <div class="row" style="--c: 6ch 1fr 8ch"><span class="c">CRM</span><span>Design approved</span><span>26 Nov</span></div>
+          </div>
+          <div class="panel"><span class="t">High risks &amp; issues · 3</span>
+            <div class="row" style="--c: 5ch 6ch 1fr 6ch"><span class="m">R-4</span><span class="c">ERP</span><span>Vendor B may miss go-live</span><span class="r">risk</span></div>
+            <div class="row" style="--c: 5ch 6ch 1fr 6ch"><span class="m">R-9</span><span class="c">CRM</span><span>Budget overrun ~12%</span><span class="r">issue</span></div>
+            <div class="row" style="--c: 5ch 6ch 1fr 6ch"><span class="m">R-11</span><span class="c">DWH</span><span>Source data quality</span><span class="r">risk</span></div>
+          </div>
+          <div class="panel"><span class="t">Stakeholders to contact</span>
+            <div class="row" style="--c: 17ch 1fr 10ch"><span class="p">Marie Dubois</span><span class="m">high/high · CRM, HRP</span><span class="y">41d</span></div>
+            <div class="row" style="--c: 17ch 1fr 10ch"><span class="p">Luc Vermeulen</span><span class="m">high/low · ERP</span><span class="y">35d</span></div>
+            <div class="row m" style="--c: 1fr"><span>last contact over 30 days, high influence first</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">tab</span> <span class="m">panel</span></span><span><span class="a">enter</span> <span class="m">open</span></span><span><span class="a">x</span> <span class="m">done</span></span><span><span class="a">i</span> <span class="m">capture</span></span><span><span class="a">g</span> <span class="m">or</span> <span class="a">1-6</span> <span class="m">screens</span></span><span><span class="a">?</span> <span class="m">help</span></span><span><span class="a">q</span> <span class="m">quit</span></span></div>
+  </div></div>
+</section>
+
+<!-- ============ 2 PROJECTS ============ -->
+<section class="screen" id="projects">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 2</span>
+    <h2>Projects</h2>
+    <p class="lede">Your portfolio in one table, sorted by health then next milestone. <kbd>/</kbd> filters by text, status or health.</p>
+    <div class="keys"><span><kbd>Enter</kbd> open</span><span><kbd>n</kbd> new project</span><span><kbd>h</kbd> update health</span><span><kbd>/</kbd> filter</span><span><kbd>a</kbd> show archived</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">pm</span> <span class="m">·</span> <span class="dd">2 Projects ▾</span></span><span><span class="y">● 3 new in inbox</span>  <span class="m">Thu 12 Nov 2026</span></span></div>
+    <div class="cols">
+      <div class="main">
+        <div class="panel f grow"><span class="t">Projects · 24 active</span><span class="bt">filter: status=active</span>
+          <div class="row h" style="--c: 2ch 5ch 1fr 21ch 7ch 6ch 6ch 7ch"><span></span><span>Code</span><span>Name</span><span>Next milestone</span><span>Due</span><span>Act.</span><span>Risk</span><span>Effort</span></div>
+          <div class="row" style="--c: 2ch 5ch 1fr 21ch 7ch 6ch 6ch 7ch"><span class="r">●</span><span class="c">ERP</span><span>ERP vendor selection</span><span>Vendor selected</span><span class="r">-6d</span><span>7</span><span class="r">3</span><span class="m">60pd</span></div>
+          <div class="row sel" style="--c: 2ch 5ch 1fr 21ch 7ch 6ch 6ch 7ch"><span class="y">●</span><span class="c">CRM</span><span>CRM replatforming</span><span>Design approved</span><span>26 Nov</span><span>9</span><span class="r">2</span><span class="m">220pd</span></div>
+          <div class="row" style="--c: 2ch 5ch 1fr 21ch 7ch 6ch 6ch 7ch"><span class="y">●</span><span class="c">HRP</span><span>HR self-service portal</span><span>Pilot start</span><span>8 Dec</span><span>4</span><span>1</span><span class="m">80pd</span></div>
+          <div class="row" style="--c: 2ch 5ch 1fr 21ch 7ch 6ch 6ch 7ch"><span class="g">●</span><span class="c">DWH</span><span>Data warehouse migration</span><span>Test env ready</span><span class="r">-1d</span><span>6</span><span>2</span><span class="m">310pd</span></div>
+          <div class="row" style="--c: 2ch 5ch 1fr 21ch 7ch 6ch 6ch 7ch"><span class="g">●</span><span class="c">IAM</span><span>Identity &amp; access rollout</span><span>Wave 2 live</span><span>15 Jan</span><span>3</span><span>0</span><span class="m">140pd</span></div>
+          <div class="row" style="--c: 2ch 5ch 1fr 21ch 7ch 6ch 6ch 7ch"><span class="g">●</span><span class="c">SEC</span><span>Security awareness 2027</span><span>Content signed off</span><span>20 Jan</span><span>2</span><span>0</span><span class="m">25pd</span></div>
+          <div class="row" style="--c: 2ch 5ch 1fr 21ch 7ch 6ch 6ch 7ch"><span class="g">●</span><span class="c">WMS</span><span>Warehouse scanners</span><span>Hardware delivered</span><span>3 Feb</span><span>1</span><span>1</span><span class="m">45pd</span></div>
+          <div class="row m" style="--c: 1fr"><span>  … 17 more</span></div>
+          <div class="sp"></div>
+          <div class="row h" style="--c: 1fr"><span>On hold · 2</span></div>
+          <div class="row" style="--c: 2ch 5ch 1fr 21ch 7ch 6ch 6ch 7ch"><span class="m">◌</span><span class="c">BI2</span><span class="m">Self-service BI phase 2</span><span class="m">—</span><span class="m">—</span><span class="m">0</span><span class="m">0</span><span class="m">90pd</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">↑↓</span> <span class="m">select</span></span><span><span class="a">enter</span> <span class="m">open</span></span><span><span class="a">n</span> <span class="m">new</span></span><span><span class="a">h</span> <span class="m">health</span></span><span><span class="a">/</span> <span class="m">filter</span></span><span><span class="a">i</span> <span class="m">capture</span></span><span><span class="a">?</span> <span class="m">help</span></span></div>
+  </div></div>
+</section>
+
+<!-- ============ PROJECT DETAIL ============ -->
+<section class="screen" id="project">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 2 · drill-down</span>
+    <h2>Project detail</h2>
+    <p class="lede">One project, eight tabs. Overview keeps the headline facts on the left and the short lists that change most on the right. Each tab is a full list with the same keys.</p>
+    <div class="keys"><span><kbd>←</kbd><kbd>→</kbd> tabs</span><span><kbd>n</kbd> new item in this tab</span><span><kbd>h</kbd> update health</span><span><kbd>Esc</kbd> back to list</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">pm</span> <span class="m">·</span> <span class="dd">2 Projects ▾</span> <span class="m">›</span> <span class="c">CRM</span> CRM replatforming</span><span><span class="y">● 3 new in inbox</span>  <span class="m">Thu 12 Nov 2026</span></span></div>
+    <div class="cols">
+      <div class="main">
+        <div class="sp"></div>
+        <div class="tabs"><span class="on">Overview</span><span>Milestones 5</span><span>Deliverables 6</span><span>Risks &amp; issues 4</span><span>Decisions 7</span><span>Actions 9</span><span>People 8</span><span>Context</span></div>
+        <div class="grid2" style="grid-template-columns: 1fr 1.25fr">
+          <div class="panel"><span class="t">Overview</span>
+            <div class="kv"><span>Health</span><span><span class="y">● amber</span> <span class="m">· 10 Nov</span></span></div>
+            <div class="wrapline m" style="padding-left: calc(16ch + .5ch)">Design slipping 2 weeks, waiting on integration specs from Sales Ops.</div>
+            <div class="sp"></div>
+            <div class="kv"><span>Status</span><span>active</span></div>
+            <div class="kv"><span>Dates</span><span>1 Sep 2026 → 30 Jun 2027</span></div>
+            <div class="kv"><span>Effort</span><span>220 person-days <span class="m">(incl. vendor)</span></span></div>
+            <div class="kv"><span>Sponsor</span><span class="p">Peter Janssens</span></div>
+            <div class="kv"><span>Team</span><span>Anna, Bob, Sofie, Karim</span></div>
+            <div class="sp"></div>
+            <div class="wrapline m">Replace the legacy CRM with a SaaS platform for Sales and Customer Service. Phase 1 covers accounts, contacts and opportunities.</div>
+          </div>
+          <div style="display:flex; flex-direction:column">
+            <div class="panel f"><span class="t">Milestones</span>
+              <div class="row" style="--c: 2ch 1fr 8ch"><span class="g">✓</span><span class="m">Solution outline approved</span><span class="m">14 Oct</span></div>
+              <div class="row sel" style="--c: 2ch 1fr 8ch"><span>○</span><span>Design approved</span><span>26 Nov</span></div>
+              <div class="row" style="--c: 2ch 1fr 8ch"><span>○</span><span>Build complete</span><span>31 Mar</span></div>
+            </div>
+            <div class="panel"><span class="t">Deliverables</span>
+              <div class="row" style="--c: 1fr 7ch 12ch 7ch"><span>Solution outline</span><span>Anna</span><span class="g">delivered</span><span class="m">10 Oct</span></div>
+              <div class="row" style="--c: 1fr 7ch 12ch 7ch"><span>Solution design</span><span>Anna</span><span class="c">in review</span><span>Fri</span></div>
+              <div class="row" style="--c: 1fr 7ch 12ch 7ch"><span>Integration specs</span><span>Bob</span><span class="y">in progress</span><span>20 Nov</span></div>
+            </div>
+            <div class="panel"><span class="t">Open risks &amp; issues</span>
+              <div class="row" style="--c: 5ch 1fr 6ch 6ch"><span class="m">R-9</span><span>Budget overrun ~12%</span><span class="r">high</span><span class="m">issue</span></div>
+              <div class="row" style="--c: 5ch 1fr 6ch 6ch"><span class="m">R-12</span><span>Data migration volume unknown</span><span class="y">med</span><span class="m">risk</span></div>
+            </div>
+            <div class="panel"><span class="t">Recent decisions</span>
+              <div class="row" style="--c: 7ch 1fr"><span class="m">28 Oct</span><span>Phase 1 excludes marketing automation</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">←→</span> <span class="m">tabs</span></span><span><span class="a">tab</span> <span class="m">panel</span></span><span><span class="a">n</span> <span class="m">new</span></span><span><span class="a">e</span> <span class="m">edit</span></span><span><span class="a">x</span> <span class="m">done</span></span><span><span class="a">h</span> <span class="m">health</span></span><span><span class="a">esc</span> <span class="m">back</span></span><span><span class="a">i</span> <span class="m">capture</span></span></div>
+  </div></div>
+</section>
+
+<!-- ============ PROJECT CONTEXT ============ -->
+<section class="screen" id="context">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 2 · project tab</span>
+    <h2>Project context</h2>
+    <p class="lede">The eighth tab: a long Markdown document per project with background, scope, architecture, contracts and links. It's rendered as formatted Markdown and scrolls. It's separate from the one-paragraph description on Overview, which stays short for lists and board packs. You'll fill it later through an MCP integration; for now the field exists and can be set from the CLI or your editor.</p>
+    <div class="keys"><span><kbd>↑</kbd><kbd>↓</kbd> scroll</span><span><kbd>e</kbd> edit in <code>$EDITOR</code></span><span><kbd>←</kbd><kbd>→</kbd> tabs</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">pm</span> <span class="m">·</span> <span class="dd">2 Projects ▾</span> <span class="m">›</span> <span class="c">CRM</span> CRM replatforming</span><span><span class="y">● 3 new in inbox</span>  <span class="m">Thu 12 Nov 2026</span></span></div>
+    <div class="cols" style="min-height: 24em">
+      <div class="main">
+        <div class="sp"></div>
+        <div class="tabs"><span>Overview</span><span>Milestones 5</span><span>Deliverables 6</span><span>Risks &amp; issues 4</span><span>Decisions 7</span><span>Actions 9</span><span>People 8</span><span class="on">Context</span></div>
+        <div class="panel f grow"><span class="t">Context · markdown</span><span class="bt">updated 6 Nov · via mcp · 38%</span>
+          <div class="wrapline a b"># Background</div>
+          <div class="wrapline">The legacy CRM (Siebel 8, on-prem) reaches end of support in Q3 2027. Sales and Customer Service run separate instances with duplicated accounts.</div>
+          <div class="sp"></div>
+          <div class="wrapline a b">## Scope phase 1</div>
+          <div class="wrapline"><span class="m">•</span> Accounts, contacts, opportunities</div>
+          <div class="wrapline"><span class="m">•</span> Migration of 4.2M contact records, deduplicated</div>
+          <div class="wrapline"><span class="m">•</span> <span class="b">Out of scope:</span> marketing automation (decision 28 Oct)</div>
+          <div class="sp"></div>
+          <div class="wrapline a b">## Integrations</div>
+          <div class="row h" style="--c: 16ch 12ch 1fr"><span>System</span><span>Direction</span><span>Notes</span></div>
+          <div class="row" style="--c: 16ch 12ch 1fr"><span>ERP (SAP)</span><span>both</span><span>customer master, orders</span></div>
+          <div class="row" style="--c: 16ch 12ch 1fr"><span>DWH</span><span>out</span><span>nightly extract</span></div>
+          <div class="sp"></div>
+          <div class="wrapline a b">## Links</div>
+          <div class="wrapline"><span class="c">Solution outline v1.2</span> <span class="m">· sharepoint/…/CRM/outline.docx</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">↑↓</span> <span class="m">scroll</span></span><span><span class="a">e</span> <span class="m">edit in $EDITOR</span></span><span><span class="a">←→</span> <span class="m">tabs</span></span><span><span class="a">esc</span> <span class="m">back</span></span><span><span class="a">i</span> <span class="m">capture</span></span></div>
+  </div></div>
+  <div class="notes">
+    <p><b>CLI:</b> <code>pm project context CRM</code> prints it, <code>pm project context CRM --set-file ctx.md</code> or <code>--stdin</code> replaces it. With <code>--json</code> it is part of <code>pm project show</code>.</p>
+    <p><b>Empty state:</b> "No context yet. Press e to write it, or let your MCP integration fill it in."</p>
+  </div>
+</section>
+
+<!-- ============ 3 PEOPLE ============ -->
+<section class="screen" id="people">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 3</span>
+    <h2>People</h2>
+    <p class="lede">One list of everyone, stakeholders first and then your team. Influence and interest are plain columns instead of a quadrant. Stakeholders sort by influence, then by longest time since your last contact, so the people you are neglecting rise to the top.</p>
+    <div class="keys"><span><kbd>o</kbd> change sort</span><span><kbd>/</kbd> filter</span><span><kbd>t</kbd> <kbd>s</kbd> <kbd>a</kbd> team / stakeholders / all</span><span><kbd>Enter</kbd> open person</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">pm</span> <span class="m">·</span> <span class="dd">3 People ▾</span> <span class="m">›</span> All</span><span><span class="y">● 3 new in inbox</span>  <span class="m">Thu 12 Nov 2026</span></span></div>
+    <div class="cols">
+      
+      <div class="main">
+        <div class="sp"></div>
+        <div class="tabs"><span class="on">All 31</span><span>Stakeholders 20</span><span>Team 11</span></div>
+        <div class="grid2" style="grid-template-columns: 1.7fr 1fr">
+          <div class="panel f"><span class="t">People · 31</span><span class="bt">sort: influence, then last contact</span>
+            <div class="row h" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span>Name</span><span>Role</span><span>Projects</span><span>Infl.</span><span>Int.</span><span>Last</span></div>
+            <div class="row a" style="--c: 1fr"><span>Stakeholders · 20</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span class="p">Marie Dubois</span><span>Head of Sales</span><span class="c">CRM HRP</span><span>high</span><span>high</span><span class="y">41d</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span class="p">Luc Vermeulen</span><span>Procurement lead</span><span class="c">ERP</span><span>high</span><span class="m">low</span><span class="y">35d</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span class="p">Ingrid Claes</span><span>CIO</span><span class="c">IAM SEC</span><span>high</span><span class="m">low</span><span>12d</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span class="p">Tom Maes</span><span>COO</span><span class="c">ERP DWH</span><span>high</span><span>high</span><span>9d</span></div>
+            <div class="row sel" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span class="p">Peter Janssens</span><span>CFO, Finance</span><span class="c">CRM ERP</span><span>high</span><span>high</span><span>2d</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span class="p">Nadia El Amrani</span><span>Legal counsel</span><span class="c">ERP</span><span class="m">low</span><span class="m">low</span><span class="m">60d</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span class="p">Jan De Smet</span><span>Sales manager</span><span class="c">CRM</span><span class="m">low</span><span>high</span><span class="m">20d</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span class="p">Sales key users</span><span>group · 6 people</span><span class="c">CRM</span><span class="m">low</span><span>high</span><span class="m">14d</span></div>
+            <div class="row m" style="--c: 1fr"><span>  … 12 more</span></div>
+            <div class="row a" style="--c: 1fr"><span>Team · 11</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span>Anna Peeters</span><span>Architect</span><span class="c">CRM DWH</span><span class="m">—</span><span class="m">—</span><span>1d</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span>Bob Willems</span><span>Integration lead</span><span class="c">CRM ERP</span><span class="m">—</span><span class="m">—</span><span>3d</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span>Karim Haddad</span><span>IAM engineer</span><span class="c">IAM CRM</span><span class="m">—</span><span class="m">—</span><span>6d</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span>Mathias Wouters</span><span>Developer</span><span class="c">DWH</span><span class="m">—</span><span class="m">—</span><span>4d</span></div>
+            <div class="row" style="--c: 16ch 1fr 9ch 5ch 5ch 5ch"><span>Sofie Lambert</span><span>Business analyst</span><span class="c">HRP CRM</span><span class="m">—</span><span class="m">—</span><span>1d</span></div>
+            <div class="row m" style="--c: 1fr"><span>  … 6 more</span></div>
+          </div>
+          <div class="panel"><span class="t">Peter Janssens</span>
+            <div class="kv" style="grid-template-columns: 10ch 1fr"><span>Role</span><span>CFO, Finance</span></div>
+            <div class="kv" style="grid-template-columns: 10ch 1fr"><span>Projects</span><span><span class="c">CRM</span> sponsor · <span class="c">ERP</span> steerco</span></div>
+            <div class="kv" style="grid-template-columns: 10ch 1fr"><span>Influence</span><span>high <span class="m">· interest</span> high</span></div>
+            <div class="kv" style="grid-template-columns: 10ch 1fr"><span>Email</span><span>peter.janssens@example.com</span></div>
+            <div class="sp"></div>
+            <div class="row h" style="--c: 1fr"><span>Open follow-ups</span></div>
+            <div class="row" style="--c: 5ch 1fr 5ch"><span class="m">A-27</span><span>Send revised budget</span><span class="r">-3d</span></div>
+            <div class="sp"></div>
+            <div class="row h" style="--c: 1fr"><span>Interactions</span></div>
+            <div class="row" style="--c: 7ch 1fr"><span class="m">10 Nov</span><span>Worried about CRM budget</span></div>
+            <div class="row" style="--c: 7ch 1fr"><span class="m">28 Oct</span><span>SteerCo: agreed phase 1 scope</span></div>
+            <div class="row" style="--c: 7ch 1fr"><span class="m">15 Oct</span><span>Coffee, ERP vendor shortlist</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">↑↓</span> <span class="m">select</span></span><span><span class="a">enter</span> <span class="m">open</span></span><span><span class="a">o</span> <span class="m">sort</span></span><span><span class="a">/</span> <span class="m">filter</span></span><span><span class="a">a</span> <span class="m">all</span></span><span><span class="a">n</span> <span class="m">note</span></span><span><span class="a">s</span> <span class="m">stakeholders</span></span><span><span class="a">t</span> <span class="m">team</span></span><span><span class="a">i</span> <span class="m">capture</span></span></div>
+  </div></div>
+  <div class="notes">
+    <p><b>Team member detail</b> uses the same right-hand panel with tabs instead: Projects &amp; roles · Actions · 1:1 notes · Goals.</p>
+    <p><b>Days since contact</b> come from the latest note on that person. Amber at 30+ days for high-influence stakeholders.</p>
+    <p><b>Influence and interest</b> are still recorded per stakeholder (high or low) and you can sort or filter on them, for example <code>/ infl:high</code>. The quadrant view is dropped.</p>
+  </div>
+</section>
+
+<!-- ============ 4 ACTIONS ============ -->
+<section class="screen" id="actions">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 4</span>
+    <h2>Actions</h2>
+    <p class="lede">Every action from every project, person and meeting. Grouped by due date. The filter line at the top shows what's applied, and an empty owner means you.</p>
+    <div class="keys"><span><kbd>/</kbd> filter (<code>owner:anna project:CRM</code>)</span><span><kbd>x</kbd> done</span><span><kbd>d</kbd> change due date</span><span><kbd>n</kbd> new</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">pm</span> <span class="m">·</span> <span class="dd">4 Actions ▾</span></span><span><span class="y">● 3 new in inbox</span>  <span class="m">Thu 12 Nov 2026</span></span></div>
+    <div class="cols">
+      
+      <div class="main">
+        <div class="panel f grow"><span class="t">Actions · 46 open</span><span class="bt">status:open</span>
+          <div class="row h" style="--c: 5ch 1fr 6ch 9ch 16ch 7ch"><span>ID</span><span>Action</span><span>Proj.</span><span>Owner</span><span>For / from</span><span>Due</span></div>
+          <div class="row r" style="--c: 1fr"><span>Overdue</span></div>
+          <div class="row sel" style="--c: 5ch 1fr 6ch 9ch 16ch 7ch"><span class="m">A-27</span><span>Send revised budget to Peter</span><span class="c">CRM</span><span class="m">me</span><span class="p">Peter Janssens</span><span class="r">9 Nov</span></div>
+          <div class="row" style="--c: 5ch 1fr 6ch 9ch 16ch 7ch"><span class="m">A-19</span><span>Book vendor demo slot</span><span class="c">ERP</span><span>Bob</span><span class="m">SteerCo 28 Oct</span><span class="r">10 Nov</span></div>
+          <div class="row" style="--c: 5ch 1fr 6ch 9ch 16ch 7ch"><span class="m">A-31</span><span>Review test strategy</span><span class="c">DWH</span><span>Anna</span><span class="m">—</span><span class="r">11 Nov</span></div>
+          <div class="row a" style="--c: 1fr"><span>This week</span></div>
+          <div class="row" style="--c: 5ch 1fr 6ch 9ch 16ch 7ch"><span class="m">A-33</span><span>Prepare SteerCo deck input</span><span class="c">CRM</span><span class="m">me</span><span class="m">SteerCo 4 Dec</span><span>Fri</span></div>
+          <div class="row" style="--c: 5ch 1fr 6ch 9ch 16ch 7ch"><span class="m">A-35</span><span>Confirm licence count</span><span class="c">IAM</span><span>Karim</span><span class="m">—</span><span>Fri</span></div>
+          <div class="row" style="--c: 5ch 1fr 6ch 9ch 16ch 7ch"><span class="m">A-36</span><span>Send training plan options</span><span class="m">—</span><span class="m">me</span><span class="m">1:1 Sofie</span><span>Sun</span></div>
+          <div class="row a" style="--c: 1fr"><span>Next week</span></div>
+          <div class="row" style="--c: 5ch 1fr 6ch 9ch 16ch 7ch"><span class="m">A-38</span><span>Align migration scope with DWH team</span><span class="c">CRM</span><span>Bob</span><span class="m">inbox I-14</span><span>Mon</span></div>
+          <div class="row" style="--c: 5ch 1fr 6ch 9ch 16ch 7ch"><span class="m">A-40</span><span>Invite Marie to design walkthrough</span><span class="c">CRM</span><span class="m">me</span><span class="p">Marie Dubois</span><span>Tue</span></div>
+          <div class="row" style="--c: 5ch 1fr 6ch 9ch 16ch 7ch"><span class="m">A-41</span><span>Pilot user list</span><span class="c">HRP</span><span>Sofie</span><span class="m">—</span><span>Wed</span></div>
+          <div class="row m" style="--c: 1fr"><span>Later · 34   No date · 3</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">↑↓</span> <span class="m">select</span></span><span><span class="a">x</span> <span class="m">done</span></span><span><span class="a">d</span> <span class="m">due</span></span><span><span class="a">e</span> <span class="m">edit</span></span><span><span class="a">/</span> <span class="m">filter</span></span><span><span class="a">n</span> <span class="m">new</span></span><span><span class="a">i</span> <span class="m">capture</span></span></div>
+  </div></div>
+</section>
+
+<!-- ============ 5 MEETING PREP ============ -->
+<section class="screen" id="meeting">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 5 · drill-down</span>
+    <h2>Meeting prep</h2>
+    <p class="lede">A board or steering meeting. The agenda is on the left. On the right, the Prep tab generates a status block for the selected project straight from the data: health, milestones, deliverables, open risks, overdue actions and decisions since the last meeting. Export writes the whole thing as Markdown.</p>
+    <div class="keys"><span><kbd>←</kbd><kbd>→</kbd> Agenda · Prep · Notes · Export</span><span><kbd>J</kbd><kbd>K</kbd> reorder agenda</span><span><kbd>a</kbd> add action</span><span><kbd>D</kbd> add decision</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">pm</span> <span class="m">·</span> <span class="dd">5 Meetings ▾</span> <span class="m">›</span> M-4 Steering committee Q4 <span class="m">· Thu 4 Dec · 8 attendees</span></span><span><span class="y">● 3 new in inbox</span>  <span class="m">Thu 12 Nov 2026</span></span></div>
+    <div class="cols">
+      
+      <div class="main">
+        <div class="sp"></div>
+        <div class="tabs"><span>Agenda</span><span class="on">Prep</span><span>Notes</span><span>Export</span></div>
+        <div class="grid2" style="grid-template-columns: 34ch 1fr">
+          <div class="panel"><span class="t">Agenda</span>
+            <div class="row" style="--c: 3ch 1fr 5ch"><span class="m">1.</span><span>Minutes &amp; open actions</span><span class="m"></span></div>
+            <div class="row sel" style="--c: 3ch 1fr 5ch"><span>2.</span><span>CRM status</span><span class="c">CRM</span></div>
+            <div class="row" style="--c: 3ch 1fr 5ch"><span class="m">3.</span><span>ERP vendor decision</span><span class="c">ERP</span></div>
+            <div class="row" style="--c: 3ch 1fr 5ch"><span class="m">4.</span><span>HR portal pilot go/no-go</span><span class="c">HRP</span></div>
+            <div class="row" style="--c: 3ch 1fr 5ch"><span class="m">5.</span><span>AOB</span><span></span></div>
+            <div class="sp"></div>
+            <div class="row h" style="--c: 1fr"><span>Attendees</span></div>
+            <div class="wrapline"><span class="p">Peter J.</span>, <span class="p">Marie D.</span>, <span class="p">Luc V.</span>, <span class="p">Tom M.</span>, Anna, Bob <span class="m">+2</span></div>
+          </div>
+          <div class="panel f"><span class="t">Prep · CRM replatforming</span><span class="bt">generated from data · since SteerCo 28 Oct</span>
+            <div class="kv"><span>Health</span><span><span class="y">● amber</span>  Design slipping 2 weeks, waiting on integration specs</span></div>
+            <div class="sp"></div>
+            <div class="row h" style="--c: 1fr"><span>Milestones</span></div>
+            <div class="row" style="--c: 2ch 1fr 16ch"><span class="g">✓</span><span>Solution outline approved</span><span class="m">14 Oct</span></div>
+            <div class="row" style="--c: 2ch 1fr 16ch"><span class="y">○</span><span>Design approved</span><span class="y">26 Nov → 10 Dec?</span></div>
+            <div class="row h" style="--c: 1fr"><span>Deliverables</span></div>
+            <div class="row" style="--c: 2ch 1fr 16ch"><span class="c">◐</span><span>Solution design · Anna</span><span>in review</span></div>
+            <div class="row h" style="--c: 1fr"><span>Risks &amp; issues</span></div>
+            <div class="row" style="--c: 2ch 1fr 16ch"><span class="r">▲</span><span>R-9 Budget overrun ~12%</span><span class="r">high · issue</span></div>
+            <div class="row h" style="--c: 1fr"><span>Decisions since last meeting</span></div>
+            <div class="row" style="--c: 2ch 1fr 16ch"><span class="m">·</span><span>Phase 1 excludes marketing automation</span><span class="m">28 Oct</span></div>
+            <div class="row h" style="--c: 1fr"><span>Overdue actions</span></div>
+            <div class="row" style="--c: 2ch 1fr 16ch"><span class="r">!</span><span>A-27 Send revised budget to Peter</span><span class="r">me · -3d</span></div>
+            <div class="sp"></div>
+            <div class="row h" style="--c: 1fr"><span>Ask for this meeting <span class="m">(your text)</span></span></div>
+            <div class="wrapline">Approve 2-week shift of design milestone and release of contingency budget.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">←→</span> <span class="m">tabs</span></span><span><span class="a">↑↓</span> <span class="m">agenda item</span></span><span><span class="a">J/K</span> <span class="m">reorder</span></span><span><span class="a">e</span> <span class="m">edit ask</span></span><span><span class="a">a</span> <span class="m">action</span></span><span><span class="a">D</span> <span class="m">decision</span></span><span><span class="a">i</span> <span class="m">capture</span></span></div>
+  </div></div>
+  <div class="notes">
+    <p><b>Notes tab:</b> a free-text area for during the meeting, plus <kbd>a</kbd>/<kbd>D</kbd> to log an action or decision on the spot, linked to this meeting and the selected agenda item's project.</p>
+    <p><b>Export tab:</b> a preview of the Markdown pack (agenda + one prep block per project), with <kbd>w</kbd> to write it to a file you choose. The same output comes from <code>pm report board M-4</code>.</p>
+    <p><b>"Ask for this meeting"</b> is new: one short field per agenda item for what you need from the board. It's often the point of the item, so it gets its own place in the pack.</p>
+  </div>
+</section>
+
+<!-- ============ 6 INBOX ============ -->
+<section class="screen" id="inbox">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 6</span>
+    <h2>Inbox</h2>
+    <p class="lede">New captures at the top, waiting for Copilot or for you. Processed items stay below with Copilot's summary and the records it created, so you can check its work and jump straight to them.</p>
+    <div class="keys"><span><kbd>Enter</kbd> open / jump to created record</span><span><kbd>p</kbd> process by hand</span><span><kbd>z</kbd> dismiss</span><span><kbd>u</kbd> reopen</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">pm</span> <span class="m">·</span> <span class="dd">6 Inbox ▾</span></span><span><span class="y">● 3 new in inbox</span>  <span class="m">Thu 12 Nov 2026</span></span></div>
+    <div class="cols">
+      
+      <div class="main">
+        <div class="panel f"><span class="t">New · 3</span>
+          <div class="row sel" style="--c: 5ch 12ch 1fr"><span class="m">I-17</span><span class="m">today 09:42</span><span>Peter worried about budget overrun on <span class="tag-p">#CRM</span>, wants an update before the board <span class="tag-u">@peter</span></span></div>
+          <div class="row" style="--c: 5ch 12ch 1fr"><span class="m">I-18</span><span class="m">today 10:15</span><span><span class="tag-u">@anna</span> finished the solution outline <span class="tag-p">#CRM</span>, Bob needs 3 more days on specs <span class="tag-u">@bob</span></span></div>
+          <div class="row" style="--c: 5ch 12ch 1fr"><span class="m">I-19</span><span class="m">today 11:03</span><span><span class="tag-p">#CMR</span> <span class="y">⚠ unknown project</span> ask Marie about key user dates</span></div>
+        </div>
+        <div class="panel grow"><span class="t">Processed · last 7 days</span>
+          <div class="row" style="--c: 5ch 12ch 1fr"><span class="m">I-16</span><span class="m">yesterday</span><span><span class="tag-p">#ERP</span> decision: go with vendor B, signed off by steering</span></div>
+          <div class="row" style="--c: 5ch 12ch 1fr"><span></span><span class="g">✓ copilot</span><span class="m">→ decision <span class="tt">DE-12</span> "Select vendor B" on ERP · health note added</span></div>
+          <div class="sp"></div>
+          <div class="row" style="--c: 5ch 12ch 1fr"><span class="m">I-15</span><span class="m">yesterday</span><span>1:1 <span class="tag-u">@sofie</span> wants project mgmt training next year, follow up with options</span></div>
+          <div class="row" style="--c: 5ch 12ch 1fr"><span></span><span class="g">✓ copilot</span><span class="m">→ 1:1 note on Sofie · goal "PM training 2027" · action A-36 (me, Sun)</span></div>
+          <div class="sp"></div>
+          <div class="row" style="--c: 5ch 12ch 1fr"><span class="m">I-14</span><span class="m">Mon 9 Nov</span><span><span class="tag-p">#CRM</span> <span class="tag-p">#DWH</span> migration overlap, Bob to align with DWH team</span></div>
+          <div class="row" style="--c: 5ch 12ch 1fr"><span></span><span class="g">✓ copilot</span><span class="m">→ action A-38 (Bob, Mon) · risk R-12 "Data migration volume unknown"</span></div>
+          <div class="sp"></div>
+          <div class="row" style="--c: 5ch 12ch 1fr"><span class="m">I-13</span><span class="m">Mon 9 Nov</span><span class="m">remember to buy coffee for the team</span></div>
+          <div class="row" style="--c: 5ch 12ch 1fr"><span></span><span class="m">✗ dismissed</span><span class="m">by you</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">↑↓</span> <span class="m">select</span></span><span><span class="a">enter</span> <span class="m">open</span></span><span><span class="a">p</span> <span class="m">process</span></span><span><span class="a">z</span> <span class="m">dismiss</span></span><span><span class="a">e</span> <span class="m">edit</span></span><span><span class="a">i</span> <span class="m">capture</span></span></div>
+  </div></div>
+  <div class="notes">
+    <p><b>Unknown tags</b> stay in the text and get flagged (<code>#CMR</code>). Copilot's guide tells it to ask you instead of guessing, and <kbd>e</kbd> lets you fix the tag yourself.</p>
+    <p><b>Processing by hand</b> (<kbd>p</kbd>) opens a small menu: turn into action / note / decision / risk, prefilled with the item's text and tags.</p>
+  </div>
+</section>
+
+<!-- ============ QUICK CAPTURE ============ -->
+<section class="screen" id="capture">
+  <div class="screen-head">
+    <span class="eyebrow">Overlay · any screen</span>
+    <h2>Quick capture</h2>
+    <p class="lede">Press <kbd>i</kbd> anywhere. Type, tag with <code>#</code> and <code>@</code>, press Enter, and you're back where you were. If you're inside a project or on a person, that tag is filled in for you.</p>
+    <div class="keys"><span><kbd>Tab</kbd> accept suggestion</span><span><kbd>Enter</kbd> save</span><span><kbd>Shift</kbd>+<kbd>Enter</kbd> new line</span><span><kbd>Esc</kbd> cancel</span></div>
+  </div>
+  <div class="scroller"><div class="term dim">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">pm</span> <span class="m">·</span> <span class="dd">2 Projects ▾</span> <span class="m">›</span> <span class="c">CRM</span> CRM replatforming</span><span><span class="y">● 3 new in inbox</span>  <span class="m">Thu 12 Nov 2026</span></span></div>
+    <div class="cols">
+      <div class="main">
+        <div class="sp"></div>
+        <div class="tabs"><span class="on">Overview</span><span>Milestones 5</span><span>Deliverables 6</span><span>Risks &amp; issues 4</span><span>Decisions 7</span><span>Actions 9</span><span>People 8</span><span>Context</span></div>
+        <div class="panel grow" style="min-height: 22em"><span class="t">Overview</span>
+          <div class="kv"><span>Health</span><span><span class="y">● amber</span> <span class="m">· 10 Nov</span></span></div>
+          <div class="kv"><span>Status</span><span>active</span></div>
+          <div class="kv"><span>Dates</span><span>1 Sep 2026 → 30 Jun 2027</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">enter</span> <span class="m">save</span></span><span><span class="a">tab</span> <span class="m">accept suggestion</span></span><span><span class="a">esc</span> <span class="m">cancel</span></span></div>
+    <div class="overlay"><div class="panel f"><span class="t">Capture to inbox</span><span class="bt">enter save · esc cancel</span>
+      <div class="input"><span class="tag-p">#CRM</span> Marie wants a design walkthrough for the sales leads before go/no-go, invite <span class="tag-u">@ma</span><span class="caret"> </span></div>
+      <div class="ac">
+        <div class="row sel" style="--c: 10ch 1fr"><span class="tag-u">@marie</span><span>Marie Dubois <span class="m">· Head of Sales</span></span></div>
+        <div class="row" style="--c: 10ch 1fr"><span class="tag-u">@mathias</span><span>Mathias Wouters <span class="m">· team</span></span></div>
+      </div>
+      <div class="sp"></div>
+      <div class="row m" style="--c: 1fr"><span><span class="tag-p">#CRM</span> added because you're on the CRM project</span></div>
+    </div></div>
+  </div></div>
+</section>
+
+<!-- ============ COPILOT SESSION ============ -->
+<section class="screen" id="copilot">
+  <div class="screen-head">
+    <span class="eyebrow">Side pane · any screen</span>
+    <h2>Inline Copilot session</h2>
+    <p class="lede">Press <kbd>c</kbd> on any screen and a GitHub Copilot CLI session opens in a pane on the right, next to what you were looking at. It is the real Copilot CLI running inside pm, started in your pm data folder and told which project or person you are on. While the pane has focus every key goes to Copilot; one key hands the keyboard back to pm. When Copilot changes data, the left side refreshes.</p>
+    <div class="keys"><span><kbd>c</kbd> open / focus Copilot</span><span><kbd>Ctrl</kbd>+<kbd>]</kbd> back to pm</span><span><kbd>Z</kbd> zoom pane to full width</span><span><kbd>C</kbd> hide pane (session keeps running)</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">pm</span> <span class="m">·</span> <span class="dd">2 Projects ▾</span> <span class="m">›</span> <span class="c">CRM</span> CRM replatforming</span><span><span class="g">● copilot</span>  <span class="y">● 3 new in inbox</span>  <span class="m">Thu 12 Nov 2026</span></span></div>
+    <div class="cols">
+      <div class="main">
+        <div class="sp"></div>
+        <div class="tabs"><span class="on">Overview</span><span>Milestones 5</span><span>Deliverables 6</span><span>… 4 more</span></div>
+        <div class="panel"><span class="t">Overview</span>
+          <div class="kv"><span>Health</span><span><span class="y">● amber</span> <span class="m">· 10 Nov</span></span></div>
+          <div class="kv"><span>Status</span><span>active</span></div>
+          <div class="kv"><span>Dates</span><span>1 Sep 2026 → 30 Jun 2027</span></div>
+          <div class="kv"><span>Sponsor</span><span class="p">Peter Janssens</span></div>
+          <div class="kv"><span>Team</span><span>Anna, Bob, Sofie, Karim</span></div>
+        </div>
+        <div class="panel"><span class="t">Milestones</span>
+          <div class="row" style="--c: 2ch 1fr 8ch"><span class="g">✓</span><span class="m">Solution outline approved</span><span class="m">14 Oct</span></div>
+          <div class="row" style="--c: 2ch 1fr 8ch"><span>○</span><span>Design approved</span><span>26 Nov</span></div>
+          <div class="row" style="--c: 2ch 1fr 8ch"><span>○</span><span>Build complete</span><span>31 Mar</span></div>
+        </div>
+        <div class="panel"><span class="t">Deliverables</span>
+          <div class="row" style="--c: 1fr 7ch 12ch 7ch"><span>Solution design</span><span>Anna</span><span class="c">in review</span><span>Fri</span></div>
+          <div class="row" style="--c: 1fr 7ch 12ch 7ch"><span>Integration specs</span><span>Bob</span><span class="y">in progress</span><span>20 Nov</span></div>
+        </div>
+        <div class="panel"><span class="t">Open risks &amp; issues</span>
+          <div class="row" style="--c: 5ch 1fr 6ch 6ch"><span class="m">R-9</span><span>Budget overrun ~12%</span><span class="r">high</span><span class="m">issue</span></div>
+          <div class="row" style="--c: 5ch 1fr 6ch 6ch"><span class="m">R-12</span><span>Data migration volume unknown</span><span class="y">med</span><span class="m">risk</span></div>
+        </div>
+      </div>
+      <div style="width: 56ch; flex: none; display: flex; flex-direction: column">
+        <div class="panel f grow"><span class="t">Copilot · context: project CRM</span><span class="bt">ctrl+] back to pm</span>
+          <div class="wrapline"><span class="a">❯</span> what is blocking the design milestone?</div>
+          <div class="sp"></div>
+          <div class="wrapline m"><span class="g">●</span> pm show CRM --json</div>
+          <div class="wrapline m"><span class="g">●</span> pm actions --project CRM --open</div>
+          <div class="sp"></div>
+          <div class="wrapline">Design approved (26 Nov) is at risk for two reasons:</div>
+          <div class="wrapline">1. Integration specs (Bob) are still in progress. They are due 20 Nov and Bob asked for 3 more days (inbox I-18).</div>
+          <div class="wrapline">2. Solution design (Anna) is in review, due Fri.</div>
+          <div class="sp"></div>
+          <div class="wrapline"><span class="a">❯</span> move the milestone to 10 Dec and add an action for me to tell Peter</div>
+          <div class="sp"></div>
+          <div class="wrapline m"><span class="y">●</span> pm milestone edit CRM "Design approved" --due 2026-12-10</div>
+          <div class="wrapline m"><span class="y">●</span> pm action add "Tell Peter design moves to 10 Dec" --project CRM --for peter</div>
+          <div class="sp"></div>
+          <div class="wrapline y">Allow these 2 commands?</div>
+          <div class="wrapline"><span class="a">y</span> yes  <span class="a">a</span> always for pm  <span class="a">n</span> no</div>
+          <div class="sp"></div>
+          <div class="input"><span class="caret"> </span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span class="g">keys go to Copilot</span><span><span class="a">ctrl+]</span> <span class="m">back to pm</span></span><span class="m">then</span><span><span class="a">c</span> <span class="m">focus Copilot</span></span><span><span class="a">Z</span> <span class="m">zoom</span></span><span><span class="a">C</span> <span class="m">hide</span></span></div>
+  </div></div>
+  <div class="notes">
+    <p><b>How it is built:</b> OpenTUI's core package has an embedded terminal component. It is only the emulator, so pm itself starts <code>copilot</code> in a pseudo-terminal, feeds its output into the component and sends your keystrokes back. What you see is Copilot's own interface; the transcript above is an approximation.</p>
+    <p><b>Context:</b> the session starts in the pm data folder, where Copilot's guide lives, and pm passes the current screen (here project CRM) as the opening context. Copilot works through the same <code>pm</code> commands as before, so nothing new to maintain.</p>
+    <p><b>One session:</b> hiding the pane does not stop Copilot. The green <span style="font-family: var(--font-mono)">● copilot</span> marker in the header shows a session is alive, and <kbd>c</kbd> brings it back with its history.</p>
+    <p><b>Alternative:</b> the GitHub Copilot SDK drives the same CLI engine programmatically, with streaming and custom tools. pm could then draw its own chat pane and offer its operations as tools instead of shell commands. Nicer integration, clearly more work, and the SDK is newer.</p>
+  </div>
+</section>
+
+<div class="qs">
+  <span class="eyebrow">For you to decide</span>
+  <h2>Open questions on these screens</h2>
+  <ol>
+    <li>Is <b>Attention</b> the right home screen, and are its seven panels the right ones?</li>
+    <li>Is <b>30 days</b> the right "no contact" threshold for stakeholders, or should it depend on their influence?</li>
+    <li>The meeting prep adds an <b>"Ask for this meeting"</b> field per agenda item. Keep it?</li>
+    <li>Copilot pane: embed the <b>real Copilot CLI</b> (as drawn), or build a pm-native chat on the Copilot SDK? And is <kbd>Ctrl</kbd>+<kbd>]</kbd> acceptable as the key that gives the keyboard back to pm?</li>
+    <li>Anything you'd expect to see on a screen that isn't there?</li>
+  </ol>
+</div>
+
+</div>
+
+</body></html>
