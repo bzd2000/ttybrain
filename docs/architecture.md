@@ -21,7 +21,7 @@ src/kernel/                 knows nothing about projects or people
   db/sqlite.ts              the ONLY runtime-specific code (bun:sqlite / node:sqlite behind RawDb)
   db/kernel-db.ts, driver.ts, scope.ts, explain.ts
                             the connection, kernel transactions/savepoints, layer 1 (scope.ts) and layer 2 (explain.ts)
-  migrations.ts, views.ts, operations.ts, records.ts, tags.ts, reports.ts, guide.ts, changesets.ts,
+  migrations.ts, views.ts, operations.ts, records.ts, tags.ts, reports.ts, guide.ts, fields.ts, changesets.ts,
   provenance.ts, events.ts, context.ts, clock.ts, config.ts, paths.ts, dates.ts, refs.ts, errors.ts
                             the registries and services
   cli/                      args.ts, commands.ts (registry), dispatch.ts (`runCli`), kernel-commands.ts, output.ts
@@ -49,7 +49,7 @@ Every feature is a plugin, built-ins included: `people`, `projects`, `meetings`,
 6. **Schema changes only in `ctx.migration(id, up)`.** The kernel runs each migration in its own transaction and checks the result: prefixes, no foreign objects, no triggers for external plugins.
 7. **Transactions belong to the kernel.** Every write operation runs in a kernel transaction, and nested calls use savepoints. Never start one in a plugin. **A nested write (`ctx.use(x).write.y(...)`) must be awaited** before the parent issues more statements; a statement guard fails a statement issued while a nested write is still pending, and an un-awaited nested write is drained into its parent (commits or rolls back with it). After-commit hooks (events such as `record.changed`) run after the outermost commit and **without an origin**. Reads share one connection, so a read can see another concurrent chain's uncommitted writes; this is accepted for a single-user tool.
 8. **Soft references.** A plugin may store another plugin's record id as a plain column, e.g. `owner_id`. It displays it by joining that plugin's published view, never its tables.
-9. **Registrations only during `activate`.** `migration`, `publish`, `expose`, `recordType`, `tagType`, `command`, `report`, `reportSection` and `guideSection` throw once boot is done (the host seals the contexts).
+9. **Registrations only during `activate`.** `migration`, `publish`, `expose`, `recordType`, `tagType`, `command`, `report`, `reportSection`, `guideSection` and `field` throw once boot is done (the host seals the contexts).
 
 ## Operations
 
@@ -67,6 +67,7 @@ ctx.expose({
 - `describe(input)` returns the one-line change description shown in change sets.
 - **Read operations are only for logic** (`projectStatus`, `sinceDate`, `staleStakeholders`, `getContext`). Plain lists and joins use views.
 - **Context comes from the kernel** (`currentContext()`: `today`, `now`, `origin`), never from `new Date()`. Use the injected clock everywhere, so tests can pin "today".
+- **Extra fields on another plugin's records:** `ctx.field(recordType, { name, label, type, values?, get, set })` names two of the plugin's own operations, `get` (read, `{ ref }` → `{ value }`) and `set` (write, `{ ref, value }` → `{ ref }`); boot fails the plugin when either is missing. The value lives in the plugin's own table. The TUI shows it in the record's Summary (`<RecordFields>`) and forms (`<Form recordType>`; the form's submit calls `extra.save(ref)` inside its act); its CLI side is phase 5 (R22).
 - `ctx.records` offers `resolve(ref)`, `label(ref)`, `refOf(type, id)` and `hasType(name)`; use `hasType` to validate a soft reference to an optional plugin's records only when that plugin is loaded.
 - **Every write emits `record.changed`.** With an origin (`--from-inbox I-n`), the kernel records provenance itself (not for a delete, and not when the ref is the origin itself). Don't add `inbox_item_id` columns. The CLI refuses an origin whose ref belongs to a registered record type but does not resolve (exit 2).
 

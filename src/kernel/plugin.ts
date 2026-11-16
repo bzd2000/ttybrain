@@ -5,6 +5,7 @@ import type { CommandDef } from "./cli/commands"
 import type { Clock } from "./clock"
 import type { Origin } from "./context"
 import type { Config } from "./config"
+import type { FieldDef } from "./fields"
 import type { PluginApi, ReadOp, WriteOp } from "./operations"
 import type { RecordTypeDef } from "./records"
 import type { ReportDef, ReportSectionDef } from "./reports"
@@ -56,6 +57,9 @@ export interface PluginContext {
   report(def: ReportDef): void
   reportSection(reportId: string, def: ReportSectionDef): void
   guideSection(def: { title: string; markdown: string; order?: number }): void
+  // An extra field on another plugin's records (`recordType`), stored in this plugin's own table and read and
+  // written through this plugin's own operations `def.get` (read) and `def.set` (write); boot checks both exist.
+  field(recordType: string, def: FieldDef): void
   readonly provenance: {
     createdFrom(type: string, ref: string): Promise<Array<{ recordType: string; recordId: number; ref: string }>>
     // The origin one record was created from (read-only), undefined when it has none.

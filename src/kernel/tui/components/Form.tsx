@@ -8,21 +8,29 @@
 // - A failed submit keeps the form open with its values: a ValidationError naming a field shows under that field
 //   as `✗ <message>`, any other error at the bottom. While a submit is in flight (`saving…`, busy retries
 //   included) further submits and Esc are ignored, so a cancel never races a save that still lands.
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
+// - With `recordType`, the fields other plugins registered for it (kernel.fields, the `field` extension point) follow
+//   the form's own, starting from the values of `recordRef` read through each owning plugin's `get` operation (a
+//   plugin's fieldEditor replaces the default editor). `submit(values, extra)` gets the own fields' values only;
+//   inside the same act as its own operation it calls `extra.save(ref)`, which runs each changed extra field's
+//   `set` operation, so the save is all-or-nothing. `extra.changed` tells an edit that writes nothing of its own.
+import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { runWithContext } from "../../context"
 import { parseDate } from "../../dates"
 import { ValidationError } from "../../errors"
 import { useQuery } from "../data"
 import { createEscChord, ESC_WINDOW_MS } from "../escChord"
 import { printable, useKeys, useScreenKeys } from "../keys"
-import { useApp } from "../scope"
+import { PluginScope, useApp } from "../scope"
 import { theme } from "../theme"
+import type { FieldDef } from "../../fields"
 import { Field, type FieldSpec, type Suggestion } from "./Field"
 
 export type { FieldSpec } from "./Field"
 
 export type FormValues = Record<string, string | null>
 export type SubmitResult = { ok: true; ref?: string } | { ok: false; error: unknown }
+// The extra fields of a record form (see the header): whether any changed, and their save, run inside the act.
+export type ExtraFields = { changed: boolean; save(ref: string): Promise<void> }
 
 export { ESC_WINDOW_MS }
 export const SUGGESTION_LIMIT = 8
@@ -32,8 +40,21 @@ export const SUGGESTION_LIMIT = 8
 const OP_PREFIX = /^[\w-]+\.[\w-]+: /
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-export function Form(props: { title: string; fields: FieldSpec[]; submit(values: FormValues): Promise<SubmitResult>; close(savedRef?: string): void }) {
-  const { kernel, track } = useApp()
+type Extra = { key: string; plugin: string; def: FieldDef }
+
+// An extra field's value as the form edits it, and back as its `set` operation takes it.
+const asText = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
+
+export function Form(props: {
+  title: string
+  fields: FieldSpec[]
+  // The record type whose extra fields (kernel.fields) follow the own ones, and the record they start from.
+  recordType?: string
+  recordRef?: string
+  submit(values: FormValues, extra: ExtraFields): Promise<SubmitResult>
+  close(savedRef?: string): void
+}) {
+  const { kernel, registry, track } = useApp()
   const keys = useKeys()
   const today = kernel.clock.today()
 
@@ -47,7 +68,40 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
   const [formError, setFormError] = createSignal<string | undefined>(undefined)
   const [saving, setSaving] = createSignal(false)
 
-  const current = () => props.fields[index()]
+  // --- the extra fields: keyed apart from the own ones (`<plugin>:<name>`), shown once their values are loaded ---
+  const extras: Extra[] = props.recordType === undefined ? [] : kernel.fields.for(props.recordType).map((f) => ({ key: `${f.plugin}:${f.def.name}`, ...f }))
+  const [extraInitial, setExtraInitial] = createSignal<Record<string, string | null> | undefined>(
+    extras.length === 0 || props.recordRef === undefined ? Object.fromEntries(extras.map((x) => [x.key, null])) : undefined,
+  )
+  if (extras.length > 0 && props.recordRef !== undefined) {
+    const ref = props.recordRef
+    const loaded = useQuery(async () =>
+      Object.fromEntries(
+        await Promise.all(
+          extras.map(async (x) => {
+            const get = kernel.ops.api(x.plugin)?.read[x.def.get]
+            if (!get) throw new Error(`field "${x.def.name}": no read operation "${x.def.get}"`)
+            return [x.key, asText((await get({ ref }))?.value)] as const
+          }),
+        ),
+      ),
+    )
+    // The first load only: a live reload must not overwrite what is being typed.
+    createEffect(() => {
+      const v = loaded.data()
+      if (v !== undefined && extraInitial() === undefined) {
+        setValues((all) => ({ ...all, ...v }))
+        setExtraInitial(v)
+      }
+    })
+  }
+  const extraSpecs = extras.map(
+    (x): FieldSpec => ({ name: x.key, label: x.def.label, kind: x.def.type, ...(x.def.values ? { values: x.def.values } : {}) }),
+  )
+  const fields = createMemo((): FieldSpec[] => (extraInitial() === undefined ? props.fields : [...props.fields, ...extraSpecs]))
+  const extraOf = (name: string) => extras.find((x) => x.key === name)
+
+  const current = () => fields()[index()]
   const valueOf = (name: string) => values()[name] ?? null
   const setValue = (name: string, v: string | null) => setValues((all) => ({ ...all, [name]: v }))
 
@@ -89,21 +143,46 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
   }
 
   // Empty text is null; a date that parses is sent as ISO, one that does not as typed (the plugin reports it).
-  const collect = (): FormValues => {
-    const out: FormValues = {}
-    for (const f of props.fields) {
-      const v = valueOf(f.name)
-      if (f.kind === "enum") out[f.name] = v
-      else if (v === null || v === "") out[f.name] = null
-      else if (f.kind === "date") {
-        try {
-          out[f.name] = parseDate(v, today)
-        } catch {
-          out[f.name] = v
-        }
-      } else out[f.name] = v
+  const collectOne = (f: FieldSpec): string | null => {
+    const v = valueOf(f.name)
+    if (f.kind === "enum") return v
+    if (v === null || v === "") return null
+    if (f.kind === "date") {
+      try {
+        return parseDate(v, today)
+      } catch {
+        return v
+      }
     }
-    return out
+    return v
+  }
+  const collect = (): FormValues => Object.fromEntries(props.fields.map((f) => [f.name, collectOne(f)]))
+
+  // The extra fields whose value differs from the one loaded, each saved through its plugin's `set` operation; a
+  // number field's text goes as a number (NaN when it is none, so the operation reports it). A ValidationError
+  // shows under the extra field.
+  const collectExtra = (): ExtraFields => {
+    const initial = extraInitial() ?? {}
+    const changed = extraInitial() === undefined ? [] : extraSpecs.filter((f) => (valueOf(f.name) === "" ? null : valueOf(f.name)) !== (initial[f.name] ?? null))
+    const values = changed.map((f) => {
+      const v = collectOne(f)
+      return { x: extraOf(f.name)!, value: v !== null && f.kind === "number" ? Number(v.trim()) : v }
+    })
+    return {
+      changed: values.length > 0,
+      async save(ref) {
+        for (const { x, value } of values) {
+          const set = kernel.ops.api(x.plugin)?.write[x.def.set]
+          if (!set) throw new Error(`field "${x.def.name}": no write operation "${x.def.set}"`)
+          try {
+            await set({ ref, value })
+          } catch (e) {
+            if (e instanceof ValidationError) throw new ValidationError(e.message, { field: x.key, ...(e.hint !== undefined ? { hint: e.hint } : {}) })
+            throw e
+          }
+        }
+      },
+    }
   }
 
   const submit = () => {
@@ -112,7 +191,7 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
     const run = async () => {
       let result: SubmitResult
       try {
-        result = await runWithContext(kernel.context(), () => props.submit(collect()))
+        result = await runWithContext(kernel.context(), () => props.submit(collect(), collectExtra()))
       } catch (e) {
         result = { ok: false, error: e }
       }
@@ -120,7 +199,7 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
       if (result.ok) return props.close(result.ref)
       const e = result.error
       const field = e instanceof ValidationError ? e.field : undefined
-      if (field !== undefined && props.fields.some((f) => f.name === field)) {
+      if (field !== undefined && fields().some((f) => f.name === field)) {
         setFieldErrors({ [field]: message(e).replace(OP_PREFIX, "") })
         setFormError(undefined)
       } else {
@@ -133,7 +212,7 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
 
   const move = (d: number) => {
     setSuggesting(false)
-    setIndex((i) => Math.min(props.fields.length - 1, Math.max(0, i + d)))
+    setIndex((i) => Math.min(fields().length - 1, Math.max(0, i + d)))
   }
   const cycle = (f: FieldSpec, d: number) => {
     const choices: Array<string | null> = f.required ? [...(f.values ?? [])] : [null, ...(f.values ?? [])]
@@ -180,7 +259,7 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
       else if (!accept()) move(1)
     } else if (key.name === "return") {
       key.preventDefault()
-      if (index() === props.fields.length - 1) submit()
+      if (index() === fields().length - 1) submit()
       else move(1)
     } else if ((key.name === "up" || key.name === "down") && suggestions().length > 0) {
       key.preventDefault()
@@ -194,7 +273,20 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
     }
   })
 
-  const labelWidth = Math.max(0, ...props.fields.map((f) => f.label.length + (f.required ? 1 : 0))) + 2
+  const labelWidth = () => Math.max(0, ...fields().map((f) => f.label.length + (f.required ? 1 : 0))) + 2
+
+  // A plugin's fieldEditor for an extra field, in that plugin's scope.
+  const customEditor = (f: FieldSpec, focused: () => boolean) => {
+    const x = extraOf(f.name)
+    const custom = x && props.recordType !== undefined ? registry.editorOf(props.recordType, x.def.name) : undefined
+    if (!custom) return undefined
+    const Editor = custom.editor
+    return (
+      <PluginScope kernel={kernel} plugin={custom.plugin} label={`${custom.plugin} editor`}>
+        <Editor value={valueOf(f.name)} onChange={(v) => setValue(f.name, v)} focused={focused()} />
+      </PluginScope>
+    )
+  }
 
   return (
     <box
@@ -207,28 +299,32 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
       paddingRight={1}
       title={props.title}
     >
-      <For each={props.fields}>
-        {(f, i) => (
-          <Field
-            spec={f}
-            value={valueOf(f.name)}
-            focused={keys.active() && index() === i()}
-            labelWidth={labelWidth}
-            preview={datePreview(f)?.text}
-            previewError={datePreview(f)?.error}
-            error={fieldErrors()[f.name]}
-            suggestions={index() === i() ? suggestions() : []}
-            picked={picked()}
-            onInput={(v) => {
-              if (v === (valueOf(f.name) ?? "")) return // the echo of a value set here (an accepted suggestion)
-              setValue(f.name, v)
-              if (f.kind === "record") {
-                setSuggesting(true)
-                setPicked(0)
-              }
-            }}
-          />
-        )}
+      <For each={fields()}>
+        {(f, i) => {
+          const editor = customEditor(f, () => keys.active() && index() === i())
+          return (
+            <Field
+              spec={f}
+              value={valueOf(f.name)}
+              focused={keys.active() && index() === i()}
+              editor={editor}
+              labelWidth={labelWidth()}
+              preview={datePreview(f)?.text}
+              previewError={datePreview(f)?.error}
+              error={fieldErrors()[f.name]}
+              suggestions={index() === i() ? suggestions() : []}
+              picked={picked()}
+              onInput={(v) => {
+                if (v === (valueOf(f.name) ?? "")) return // the echo of a value set here (an accepted suggestion)
+                setValue(f.name, v)
+                if (f.kind === "record") {
+                  setSuggesting(true)
+                  setPicked(0)
+                }
+              }}
+            />
+          )
+        }}
       </For>
       <Show when={saving()}>
         <text fg={theme.muted}>saving…</text>

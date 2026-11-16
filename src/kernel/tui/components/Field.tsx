@@ -2,9 +2,9 @@
 // suggestions. The editor is an <input>, except an enum field, which shows `‹ value ›` and cycles with ←→ (the
 // keys themselves are handled by <Form>), and a longtext field, which is a <textarea> that keeps newlines (an
 // <input> strips them): Ctrl+J adds a line, Enter and Tab still move on (<Form> claims them), its height follows
-// its lines up to LONGTEXT_MAX_LINES.
+// its lines up to LONGTEXT_MAX_LINES. An `editor` element replaces the default editor.
 import type { TextareaRenderable } from "@opentui/core"
-import { For, onMount, Show } from "solid-js"
+import { For, onMount, Show, type JSX } from "solid-js"
 import { theme } from "../theme"
 
 export type FieldKind = "text" | "longtext" | "date" | "number" | "enum" | "record"
@@ -63,6 +63,8 @@ export function Field(props: {
   suggestions: Suggestion[]
   picked: number
   onInput(value: string): void
+  // Replaces the default editor (a plugin's fieldEditor for an extra field).
+  editor?: JSX.Element
 }) {
   const label = () => `${props.focused ? "›" : " "} ${props.spec.label}${props.spec.required ? "*" : ""}`
   const indent = () => " ".repeat(props.labelWidth + 1)
@@ -72,26 +74,28 @@ export function Field(props: {
         <text fg={props.focused ? theme.accent : theme.muted} width={props.labelWidth}>
           {label()}
         </text>
-        <Show
-          when={props.spec.kind === "enum"}
-          fallback={
-            props.spec.kind === "longtext" ? (
-              <LongText value={props.value} focused={props.focused} onInput={(v) => props.onInput(v)} />
-            ) : (
-            <input
-              width={INPUT_WIDTH}
-              value={props.value ?? ""}
-              focused={props.focused}
-              backgroundColor={theme.selectedBg}
-              focusedBackgroundColor={theme.selectedBg}
-              textColor={theme.text}
-              focusedTextColor={theme.text}
-              onInput={(v: string) => props.onInput(v)}
-            />
-            )
-          }
-        >
-          <text fg={props.focused ? theme.accent : theme.text}>{`‹ ${props.value ?? "—"} ›`}</text>
+        <Show when={props.editor === undefined} fallback={props.editor}>
+          <Show
+            when={props.spec.kind === "enum"}
+            fallback={
+              props.spec.kind === "longtext" ? (
+                <LongText value={props.value} focused={props.focused} onInput={(v) => props.onInput(v)} />
+              ) : (
+              <input
+                width={INPUT_WIDTH}
+                value={props.value ?? ""}
+                focused={props.focused}
+                backgroundColor={theme.selectedBg}
+                focusedBackgroundColor={theme.selectedBg}
+                textColor={theme.text}
+                focusedTextColor={theme.text}
+                onInput={(v: string) => props.onInput(v)}
+              />
+              )
+            }
+          >
+            <text fg={props.focused ? theme.accent : theme.text}>{`‹ ${props.value ?? "—"} ›`}</text>
+          </Show>
         </Show>
         <Show when={props.preview}>
           <text fg={props.previewError ? theme.red : theme.muted}>{props.preview}</text>

@@ -1,8 +1,19 @@
 // The project's record forms: `project` (add, or edit with a recordRef) and `health` (a health update through
 // setHealth). Field names are the operations' input names, so a ValidationError shows under its field. Both take
 // `prefill` (by field name) and `origin` (provenance), which the inbox uses when it turns an item into a record.
+// The project form also shows the extra project fields of other plugins (<Form recordType>), saved in the same act.
 import { createEffect, Show, untrack, type JSX } from "solid-js"
-import { act, Form, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "../../../kernel/tui/api"
+import {
+  act,
+  Form,
+  useQuery,
+  useRuntime,
+  type ExtraFields,
+  type FieldSpec,
+  type FormValues,
+  type RecordFormProps,
+  type SubmitResult,
+} from "../../../kernel/tui/api"
 import { makeStore } from "../logic/records"
 import type { ProjectRecord } from "../logic/schema"
 
@@ -56,10 +67,11 @@ export function ProjectForm(props: RecordFormProps) {
           { name: "effortDays", label: "Effort days", kind: "number", initial: text(p?.effort_estimate_days) },
           { name: "effortNote", label: "Effort note", kind: "text", initial: p?.effort_note },
         ]
-        const add = (v: FormValues) =>
+        // The project's own operation first, then the changed extra fields, in one act.
+        const add = (v: FormValues, extra: ExtraFields) =>
           save(
-            () =>
-              write("addProject")(
+            async () => {
+              const out = (await write("addProject")(
                 defined({
                   code: v.code ?? "",
                   name: v.name ?? "",
@@ -70,21 +82,41 @@ export function ProjectForm(props: RecordFormProps) {
                   effortDays: number(v.effortDays) ?? undefined,
                   effortNote: v.effortNote ?? undefined,
                 }),
-              ),
+              )) as { ref: string }
+              await extra.save(out.ref)
+              return out
+            },
             props,
             "added",
           )
         // An edit sends only the fields that changed, so its change line names just those (as the CLI's does);
-        // with no change it closes without a write.
-        const edit = (project: ProjectRecord, v: FormValues): Promise<SubmitResult> => {
+        // with no change (extra fields included) it closes without a write.
+        const edit = (project: ProjectRecord, v: FormValues, extra: ExtraFields): Promise<SubmitResult> => {
           const changed = fields.filter((f) => (v[f.name] ?? null) !== (f.initial ?? null)).map((f) => f.name)
-          if (changed.length === 0) return Promise.resolve({ ok: true, ref: project.ref })
+          if (changed.length === 0 && !extra.changed) return Promise.resolve({ ok: true, ref: project.ref })
           const input: Record<string, unknown> = { project: project.ref }
           for (const name of changed) input[name] = name === "effortDays" ? number(v[name]) : name === "name" ? (v.name ?? "") : v[name]
-          return save(() => write("editProject")(input), props, "saved")
+          return save(
+            async () => {
+              const out = changed.length === 0 ? { ref: project.ref } : ((await write("editProject")(input)) as { ref: string })
+              await extra.save(out.ref)
+              return out
+            },
+            props,
+            "saved",
+          )
         }
-        const submit = (v: FormValues) => (p === null ? add(v) : edit(p, v))
-        return <Form title={p === null ? "New project" : `Edit ${p.code}`} fields={withPrefill(fields, props.prefill)} submit={submit} close={props.close} />
+        const submit = (v: FormValues, extra: ExtraFields) => (p === null ? add(v, extra) : edit(p, v, extra))
+        return (
+          <Form
+            title={p === null ? "New project" : `Edit ${p.code}`}
+            fields={withPrefill(fields, props.prefill)}
+            recordType="project"
+            {...(p === null ? {} : { recordRef: p.ref })}
+            submit={submit}
+            close={props.close}
+          />
+        )
       }}
     </WithProject>
   )

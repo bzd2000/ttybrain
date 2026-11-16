@@ -13,6 +13,7 @@ import type { TableAccess } from "./db/scope"
 import { openRaw } from "./db/sqlite"
 import { IsolationError, PmError } from "./errors"
 import { EventBus } from "./events"
+import { FieldRegistry } from "./fields"
 import { GuideRegistry } from "./guide"
 import { MigrationRunner, ownerOf, ownTablesOf, type Migration } from "./migrations"
 import { OperationRegistry } from "./operations"
@@ -47,6 +48,7 @@ export type Kernel = {
   tags: TagRegistry
   reports: ReportRegistry
   guide: GuideRegistry
+  fields: FieldRegistry
   changeSets: ChangeSetService
   commands: CommandRegistry
   events: EventBus
@@ -100,6 +102,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const tags = new TagRegistry(records)
   const reports = new ReportRegistry()
   const guide = new GuideRegistry()
+  const fields = new FieldRegistry()
   const commands = new CommandRegistry()
   const views = new ViewRegistry()
   const changeSets = new ChangeSetService({ db, ops, records, provenance })
@@ -169,6 +172,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     tags.remove(id)
     reports.remove(id)
     guide.remove(id)
+    fields.remove(id)
     views.remove(id)
     commands.remove(id)
     for (const t of byId.values()) {
@@ -247,6 +251,10 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         live()
         guide.section(id, def)
       },
+      field: (recordType, def) => {
+        live()
+        fields.register(id, recordType, def)
+      },
       provenance: {
         createdFrom: (type, ref) => provenance.createdFrom(type, ref),
         originOf: (type, id) => provenance.originOf(type, id),
@@ -277,6 +285,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     try {
       s.ctx = contextFor(s)
       await s.def.activate(s.ctx)
+      fields.check(s.def.id, ops)
       await runner.run(s.def.id, s.migrations, false)
       s.status = "ok"
     } catch (e) {
@@ -332,6 +341,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     tags,
     reports,
     guide,
+    fields,
     changeSets,
     commands,
     events,

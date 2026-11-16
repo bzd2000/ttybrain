@@ -1,7 +1,8 @@
 // The Projects screen (slot 2, spec §9): every project in one table, in groups.
 // - `Projects · <n> active` (the panel title, no group header; `· <n> shown` under a filter): red → amber → green → not set, then by next
 //   milestone due (none last), then by code; `On hold · n` and `Closed · n` by code; `Archived · n` only after `a`.
-// - Columns: a health dot, code, name, next milestone and its due date, open actions, open risks, effort.
+// - Columns: a health dot, code, name, next milestone and its due date, open actions, open risks, effort, then
+//   the columns other plugins registered for the list "projects".
 // - Keys: Enter opens the record, n new, e edit, h health update, / filter, a archived. The filter is free text
 //   on code or name plus `status:<s>` and `health:<h>`; Enter applies it, Esc clears it.
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
@@ -217,6 +218,7 @@ export function ProjectsScreen() {
             onOpen={(ref) => void nav.open(ref)}
             focused={keys.active()}
             empty={(q.data() ?? []).length === 0 ? EMPTY : NO_MATCH}
+            listId="projects"
           />
         </Show>
       </Panel>

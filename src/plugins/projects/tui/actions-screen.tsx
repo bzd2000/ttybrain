@@ -243,6 +243,7 @@ export function ActionsScreen() {
             onOpen={(ref) => void nav.open(ref)}
             focused={keys.active()}
             empty={all().length === 0 ? EMPTY : NO_MATCH}
+            listId="actions"
           />
         </Show>
       </Panel>

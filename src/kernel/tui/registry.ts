@@ -77,7 +77,13 @@ export class TuiRegistry {
   }
 
   editor(recordType: string, field: string): Component<FieldEditorProps> | undefined {
-    return this.editorList.find((e) => e.recordType === recordType && e.field === field)?.editor
+    return this.editorOf(recordType, field)?.editor
+  }
+
+  // The editor with the plugin that registered it (a form renders it in that plugin's scope).
+  editorOf(recordType: string, field: string): { plugin: string; editor: Component<FieldEditorProps> } | undefined {
+    const e = this.editorList.find((x) => x.recordType === recordType && x.field === field)
+    return e && { plugin: e.plugin, editor: e.editor }
   }
 
   globalActions(): Array<Registered<GlobalActionDef>> {

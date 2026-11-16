@@ -1,7 +1,8 @@
 // The project detail's Summary tab (spec §9, mockup "Project detail"): the headline facts on the left (health with
 // its comment, status, dates, effort, sponsor, team, description) and four short lists on the right (milestones,
 // deliverables, open risks and issues, recent decisions), three rows each. `h` opens the health form, `e` the
-// project form. Sponsor and team come from the involvements and the people.person view.
+// project form. Sponsor and team come from the involvements and the people.person view; the extra fields other
+// plugins registered for projects (<RecordFields>) follow the team.
 import { For, Show } from "solid-js"
 import {
   shortDate,
@@ -14,6 +15,7 @@ import {
   useRuntime,
   useScreenKeys,
   printable,
+  RecordFields,
   displayWidth,
   type Hint,
   type Tone,
@@ -153,6 +155,7 @@ export function ProjectSummary(props: { recordRef: string }) {
               </Fact>
               <Fact name="Sponsor">{d().sponsors.length === 0 ? "—" : d().sponsors.join(", ")}</Fact>
               <Fact name="Team">{d().team.length === 0 ? "—" : d().team.join(", ")}</Fact>
+              <RecordFields recordType="project" recordRef={props.recordRef} />
               <Show when={p().description}>
                 {(t: () => string) => (
                   <>
