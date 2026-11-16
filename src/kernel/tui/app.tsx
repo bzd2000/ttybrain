@@ -1,7 +1,8 @@
 // <TuiApp>: the frame (header, main area, status bar), the router that renders the current screen, the overlay
-// stack (switcher, help, global actions) and the global key dispatch. Everything inside comes from the registry.
+// stack (overlay.tsx: switcher, help, global actions and useOverlay's overlays) and the global key dispatch.
+// Everything inside comes from the registry.
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { createSignal, For, onCleanup, Show, type Component, type JSX } from "solid-js"
+import { For, onCleanup, Show, type Component, type JSX } from "solid-js"
 import { runWithContext } from "../context"
 import type { Kernel } from "../host"
 import { Help } from "./components/Help"
@@ -14,6 +15,7 @@ import { Header, StatusBar } from "./frame"
 import { createGlobalKeyHandler, FRAME_HINTS, KeysContext, KeysStore, LayerContext, SCREEN_LAYER, useGlobalKeys } from "./keys"
 import { clearMessages, currentMessage } from "./messages"
 import { createNav, NavContext, OVERVIEW_ID, type Nav } from "./nav"
+import { createOverlay, createOverlayStack, OverlayContext } from "./overlay"
 import { createLiveRefresh } from "./refresh"
 import { OVERVIEW_SLOT, type TuiRegistry } from "./registry"
 import { AppContext, PluginScope } from "./scope"
@@ -32,7 +34,6 @@ export type TuiHandle = {
   idle(): Promise<void>
 }
 
-type Overlay = { id: string; kind: string; render: () => JSX.Element }
 type Screen = SwitcherEntry & { component: Component<{}>; plugin?: string }
 
 // `refreshMs`: how often live refresh checks PRAGMA data_version (spec §10: about every second).
@@ -58,15 +59,12 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
   onCleanup(bindDataSession(session))
 
   const nav = createNav(kernel, registry, track)
-  const [overlays, setOverlays] = createSignal<Overlay[]>([])
-  const keys = new KeysStore(() => overlays().at(-1)?.id ?? SCREEN_LAYER)
-  let overlayCount = 0
-  const openOverlay = (kind: string, render: (close: () => void) => JSX.Element) => {
-    if (overlays().some((o) => o.kind === kind)) return
-    const id = `overlay-${++overlayCount}`
-    const close = () => setOverlays((list) => list.filter((o) => o.id !== id))
-    setOverlays((list) => [...list, { id, kind, render: () => render(close) }])
-  }
+  const stack = createOverlayStack()
+  const keys = new KeysStore(() => stack.top() ?? SCREEN_LAYER)
+  const openOverlay = (kind: string, render: (close: () => void) => JSX.Element) => void stack.push(render, kind)
+  const overlay = createOverlay(stack, kernel, registry)
+  nav.setFormOpener((recordType, formId, formProps) => overlay.openForm(recordType, formId, formProps))
+  onCleanup(() => nav.setFormOpener(undefined))
 
   const screens: Screen[] = [{ id: OVERVIEW_ID, title: "Overview", slot: OVERVIEW_SLOT, component: OverviewScreen }, ...registry.screens()]
   const screenOf = (id: string) => screens.find((s) => s.id === id)
@@ -128,30 +126,32 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
       <DataContext.Provider value={session}>
         <NavContext.Provider value={nav}>
           <KeysContext.Provider value={keys}>
-            <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.bg}>
-              <Header chip={`${current().slot} ${current().title} ▾`} crumbs={nav.crumbs()} badges={registry.badges()} date={longDate(kernel.clock.today())} />
-              <box flexGrow={1} flexDirection="column" overflow="hidden">
-                <Show when={!tooSmall()} fallback={<text>{`Terminal too small (need ${MIN_WIDTH}×${MIN_HEIGHT})`}</text>}>
-                  <LayerContext.Provider value={SCREEN_LAYER}>
-                    <Show when={route().kind === "screen" ? current() : undefined} keyed fallback={<OpenRecord nav={nav} />}>
-                      {(s: Screen) => (
-                        <PluginScope kernel={kernel} plugin={s.plugin} label={s.title}>
-                          <s.component />
-                        </PluginScope>
-                      )}
-                    </Show>
-                  </LayerContext.Provider>
-                </Show>
+            <OverlayContext.Provider value={overlay}>
+              <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.bg}>
+                <Header chip={`${current().slot} ${current().title} ▾`} crumbs={nav.crumbs()} badges={registry.badges()} date={longDate(kernel.clock.today())} />
+                <box flexGrow={1} flexDirection="column" overflow="hidden">
+                  <Show when={!tooSmall()} fallback={<text>{`Terminal too small (need ${MIN_WIDTH}×${MIN_HEIGHT})`}</text>}>
+                    <LayerContext.Provider value={SCREEN_LAYER}>
+                      <Show when={route().kind === "screen" ? current() : undefined} keyed fallback={<OpenRecord nav={nav} />}>
+                        {(s: Screen) => (
+                          <PluginScope kernel={kernel} plugin={s.plugin} label={s.title}>
+                            <s.component />
+                          </PluginScope>
+                        )}
+                      </Show>
+                    </LayerContext.Provider>
+                  </Show>
+                </box>
+                <StatusBar hints={hints()} message={currentMessage()} />
+                <For each={stack.list()}>
+                  {(o) => (
+                    <box position="absolute" top={2} left={0} width="100%" alignItems="center" zIndex={10}>
+                      <LayerContext.Provider value={o.id}>{o.render()}</LayerContext.Provider>
+                    </box>
+                  )}
+                </For>
               </box>
-              <StatusBar hints={hints()} message={currentMessage()} />
-              <For each={overlays()}>
-                {(o) => (
-                  <box position="absolute" top={2} left={0} width="100%" alignItems="center" zIndex={10}>
-                    <LayerContext.Provider value={o.id}>{o.render()}</LayerContext.Provider>
-                  </box>
-                )}
-              </For>
-            </box>
+            </OverlayContext.Provider>
           </KeysContext.Provider>
         </NavContext.Provider>
       </DataContext.Provider>

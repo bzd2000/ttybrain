@@ -14,10 +14,10 @@ export type Nav = {
   stack(): Route[]
   // Switches to a top-level screen: the stack becomes Overview (and the screen, unless it is the Overview).
   go(screenId: string, params?: Record<string, string>): void
-  // Opens a record: in the current screen when its type has tabs, else in its type's first form (once Task 7's
-  // overlay sets the form opener), else shows `<ref>: <label>` in the status bar.
+  // Opens a record: in the current screen when its type has tabs, else in its type's first form (through the form
+  // opener the app installs: useOverlay().openForm), else shows `<ref>: <label>` in the status bar.
   open(ref: string, tab?: string): Promise<void>
-  // HOOK (Task 7): useOverlay().openForm installs itself here; until then nav.open never opens a form.
+  // <TuiApp> installs useOverlay().openForm here; without an opener nav.open never opens a form.
   setFormOpener(open: FormOpener | undefined): void
   // Pops the top route; false when already at the Overview.
   back(): boolean

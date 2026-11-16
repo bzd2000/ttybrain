@@ -19,12 +19,16 @@ export type {
   TuiDef,
 } from "./types"
 export { useNav, type Nav } from "./nav"
+// Overlays above the screen: open(c), openForm(recordType, formId?, props?) and confirm(text).
+export { useOverlay, type Overlay } from "./overlay"
 // Take keys with useScreenKeys, not OpenTUI's raw useKeyboard: it ignores keys while an overlay sits above the
 // component, so overlays get keys first. Claim a key with key.preventDefault() so the global keys skip it.
 export { useKeys, useScreenKeys, type Hint, type Keys } from "./keys"
 // Loads and writes: useQuery reloads live and keeps the last data; act runs a write with busy retry and messages.
 export { act, useQuery, useRecord, useRuntime, type ActResult, type Query, type RecordInfo } from "./data"
 // Building blocks.
+export { Field, type FieldKind, type FieldSpec } from "./components/Field"
+export { Form, type FormValues, type SubmitResult } from "./components/Form"
 export { KeyHints } from "./components/KeyHints"
 export { Menu, type MenuItem } from "./components/Menu"
 export { Panel } from "./components/Panel"
