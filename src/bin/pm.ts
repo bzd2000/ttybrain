@@ -1,5 +1,6 @@
-// The `pm` entry point. With no arguments it prints the help (the TUI comes in phase 2); otherwise it boots the
-// kernel with the built-in plugins, runs the CLI, shuts the kernel down and exits with the command's code.
+// The `pm` entry point. It boots the kernel with the built-in plugins. With no arguments and a terminal on
+// stdout it opens the TUI (loaded with a dynamic import, so the CLI path never loads the UI); with no arguments
+// otherwise it prints the help; else it runs the CLI. Then it shuts the kernel down and exits with the code.
 // `--db` is read before boot. Stdin is read only when a command asks for it.
 import { realpathSync } from "node:fs"
 import { fileURLToPath } from "node:url"
@@ -10,8 +11,6 @@ import { bootKernel } from "../kernel/host"
 import { installShutdownHandlers } from "../kernel/shutdown"
 import { builtinPlugins } from "../plugins"
 
-export const PHASE2_NOTE = 'The terminal UI arrives in phase 2; run "bun start" for the preview.'
-
 export async function main(argv: string[], env: Record<string, string | undefined>, io: CliIo): Promise<number> {
   const { global } = leading(argv)
   let kernel
@@ -20,11 +19,24 @@ export async function main(argv: string[], env: Record<string, string | undefine
   } catch (e) {
     return printError(e, global.json, io)
   }
-  const uninstall = installShutdownHandlers(kernel)
+  // On SIGHUP/SIGTERM the TUI's renderer is destroyed (restoring the terminal) before the database is closed.
+  let stopTui: () => Promise<void> = async () => {}
+  const uninstall = installShutdownHandlers(kernel, { before: () => stopTui() })
   try {
-    const code = await runCli(argv, kernel, io)
-    if (argv.length === 0) io.out(`\n${PHASE2_NOTE}\n`)
-    return code
+    if (argv.length === 0 && process.stdout.isTTY) {
+      const { runTui } = await import("../kernel/tui/run")
+      const { builtinTuiParts } = await import("../plugins/tui")
+      await runTui(kernel, builtinTuiParts, {
+        onRenderer: (renderer) => {
+          stopTui = async () => {
+            if (!renderer.isDestroyed) renderer.destroy()
+            await renderer.closed
+          }
+        },
+      })
+      return 0
+    }
+    return await runCli(argv, kernel, io)
   } finally {
     uninstall()
     await kernel.shutdown()

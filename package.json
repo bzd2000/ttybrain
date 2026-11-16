@@ -1,15 +1,15 @@
 {
   "name": "opentui-app",
-  "module": "src/index.tsx",
+  "module": "src/bin/pm.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun --watch src/index.tsx",
-    "start": "bun src/index.tsx",
+    "dev": "bun --watch src/bin/pm.ts",
+    "start": "bun src/bin/pm.ts",
     "test": "bun test",
     "typecheck": "bun check",
     "build:node": "node scripts/build-node.mjs",
-    "start:node": "npm run build:node && node --experimental-ffi dist-node/index.js",
+    "start:node": "npm run build:node && node --experimental-ffi dist-node/bin/pm.js",
     "pm": "bun src/bin/pm.ts"
   },
   "devDependencies": {

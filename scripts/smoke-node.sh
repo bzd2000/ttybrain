@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds for Node and exercises the kernel and the CLI on Node 26. Needs only node: no bun, no --experimental-ffi.
+# Builds for Node and exercises the kernel, the CLI and a TUI frame on Node 26. Needs only node (no bun); the
+# TUI self-check runs with --experimental-ffi, the rest without.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -19,6 +20,9 @@ expect_in savepoints "savepoints ok" "$out"
 
 out="$(node dist-node/kernel/isolation-selfcheck.js)"; echo "$out"
 expect_in isolation "isolation ok" "$out"
+
+out="$(node --experimental-ffi dist-node/kernel/tui/selfcheck.js 2>&1)" || fail "tui self-check: $out"; echo "$out"
+expect_in tui "tui ok" "$out"
 
 pm() { node dist-node/bin/pm.js "$@"; }
 

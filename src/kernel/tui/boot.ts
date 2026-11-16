@@ -8,22 +8,22 @@ import type { TuiContext, TuiDef } from "./types"
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-// `builtin` parts may claim screen slots 2–6; others are numbered from 7 (default: not built-in).
-export function bootTui(kernel: Kernel, parts: TuiDef[], opts: { builtin?: boolean } = {}): TuiRegistry {
-  const builtin = opts.builtin ?? false
+// `parts` are booted with `opts.builtin` (built-in parts may claim screen slots 2–6; others are numbered from 7),
+// then `opts.external` with builtin false, all into one registry.
+export function bootTui(kernel: Kernel, parts: TuiDef[], opts: { builtin?: boolean; external?: TuiDef[] } = {}): TuiRegistry {
   const registry = new TuiRegistry()
   const activated = new Set<string>()
-  for (const part of parts) {
+  const boot = (part: TuiDef, builtin: boolean) => {
     const id = part.plugin
     const runtime = kernel.runtime(id)
     if (!runtime) {
       registry.recordError(id, `tui part for "${id}": plugin is not loaded`)
-      continue
+      return
     }
     // One part per plugin, so removing a failed part's registrations by plugin id never touches another part.
     if (activated.has(id)) {
       registry.recordError(id, `tui part for "${id}": a part for this plugin is already loaded`)
-      continue
+      return
     }
     activated.add(id)
     let failed = false
@@ -49,6 +49,8 @@ export function bootTui(kernel: Kernel, parts: TuiDef[], opts: { builtin?: boole
       registry.recordError(id, `${id}: ${message(e)}`)
     }
   }
+  for (const part of parts) boot(part, opts.builtin ?? false)
+  for (const part of opts.external ?? []) boot(part, false)
   registry.seal()
   return registry
 }

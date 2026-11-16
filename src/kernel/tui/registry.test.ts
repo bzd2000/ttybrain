@@ -102,6 +102,18 @@ describe("bootTui", () => {
     expect(reg.errors()).toEqual([])
   })
 
+  test("external parts boot after the built-in ones into the same registry, without slots", () => {
+    const reg = bootTui(k, [part("projects", (ui) => ui.screen(screen("projects", 2)))], {
+      builtin: true,
+      external: [part("people", (ui) => ui.screen(screen("people", 3))), part("projects", () => {})],
+    })
+    expect(reg.screens().map((s) => [s.id, s.slot])).toEqual([
+      ["projects", 2],
+      ["people", 7],
+    ])
+    expect(reg.errors()).toEqual([{ plugin: "projects", error: 'tui part for "projects": a part for this plugin is already loaded' }])
+  })
+
   test("slot 1 is reserved for the Overview screen", () => {
     const reg = bootTui(k, [part("projects", (ui) => ui.screen(screen("projects", 1)))], { builtin: true })
     expect(reg.screens()).toEqual([])
