@@ -5,7 +5,9 @@ import { createSignal } from "solid-js"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
 import { definePlugin, type PluginDef } from "../api"
+import { onCleanup, onMount } from "solid-js"
 import { Menu } from "./components/Menu"
+import { displayWidth } from "./format"
 import { Table, type TableRow } from "./components/Table"
 import { useKeys, useScreenKeys } from "./keys"
 import { currentMessage } from "./messages"
@@ -41,11 +43,11 @@ const thingPlugin: PluginDef = definePlugin({
   },
 })
 
-function MainTab(props: { ref: string }) {
-  return <text>{`main of ${props.ref}`}</text>
+function MainTab(props: { recordRef: string }) {
+  return <text>{`main of ${props.recordRef}`}</text>
 }
-function NotesTab(props: { ref: string }) {
-  return <text>{`notes of ${props.ref}`}</text>
+function NotesTab(props: { recordRef: string }) {
+  return <text>{`notes of ${props.recordRef}`}</text>
 }
 function FixtureOverlay(props: { close(): void }) {
   useKeys()
@@ -74,6 +76,9 @@ const thingPart: TuiDef = defineTui({
     ui.statusBadge({ id: "none", order: 2, text: async () => null })
   },
 })
+
+const screenPart = (component: () => any): TuiDef =>
+  defineTui({ plugin: "thing", activate: (ui) => ui.screen({ id: "t", title: "Table", slot: 2, component }) })
 
 let kernel: TestKernel | undefined
 let tui: RenderedTui | undefined
@@ -149,6 +154,88 @@ describe("TUI blocks", () => {
     expect(frame).not.toContain("名前名前名")
   })
 
+  test("Table truncates a grow column with … at 80x24", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    const long = "名".repeat(60)
+    function TableScreen() {
+      return (
+        <Table
+          columns={[
+            { id: "ref", title: "Ref", width: 5 },
+            { id: "name", title: "Name", width: "grow" },
+          ]}
+          rows={[{ ref: "T-1", cells: { ref: "T-1", name: long } }]}
+          focused
+        />
+      )
+    }
+    tui = await renderTui(kernel, { width: 80, height: 24, parts: [screenPart(TableScreen)] })
+    tui.input.pressKey("2")
+    const frame = await tui.frame()
+    const line = lineWith(frame, "T-1").trimEnd()
+    expect(line.endsWith("名…")).toBe(true)
+    expect(line).not.toContain("...")
+    for (const l of frame.split("\n")) expect(displayWidth(l)).toBeLessThanOrEqual(80)
+  })
+
+  test("Table scrolls to keep the selected row in view", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    const rows = Array.from({ length: 40 }, (_, i) => ({ ref: `T-${i + 1}`, cells: { ref: `T-${i + 1}`, title: `title ${i + 1}` } }))
+    function TableScreen() {
+      return (
+        <Table
+          columns={[
+            { id: "ref", title: "Ref", width: 5 },
+            { id: "title", title: "Title", width: "grow" },
+          ]}
+          rows={rows}
+          focused
+        />
+      )
+    }
+    tui = await renderTui(kernel, { width: 80, height: 24, parts: [screenPart(TableScreen)] })
+    tui.input.pressKey("2")
+    expect(await tui.frame()).toContain("› T-1 ")
+    for (let i = 0; i < 29; i++) tui.input.pressKey("j")
+    let frame = await tui.frame()
+    expect(frame).toContain("› T-30 ")
+    expect(lineWith(frame, "Ref")).toContain("Title")
+    for (let i = 0; i < 29; i++) tui.input.pressKey("k")
+    frame = await tui.frame()
+    expect(frame).toContain("› T-1 ")
+    expect(frame).not.toContain("T-30")
+  })
+
+  test("Table leaves keys to a focused text field", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    const opened: string[] = []
+    function FilterScreen() {
+      const keys = useKeys()
+      onMount(() => keys.textFocus(true))
+      onCleanup(() => keys.textFocus(false))
+      return (
+        <box flexDirection="column">
+          <input width={20} focused={keys.active()} />
+          <Table
+            columns={[{ id: "ref", title: "Ref", width: 5 }]}
+            rows={["A-1", "A-2", "A-3"].map((ref) => ({ ref, cells: { ref } }))}
+            onOpen={(ref) => opened.push(ref)}
+            focused
+          />
+        </box>
+      )
+    }
+    tui = await renderTui(kernel, { parts: [screenPart(FilterScreen)] })
+    tui.input.pressKey("2")
+    expect(lineWith(await tui.frame(), "A-1")).toContain("› A-1")
+    await tui.input.typeText("jk")
+    tui.input.pressEnter()
+    const frame = await tui.frame()
+    expect(frame).toContain("jk")
+    expect(lineWith(frame, "A-1")).toContain("› A-1")
+    expect(opened).toEqual([])
+  })
+
   test("Table renders group headers and a plugin's list columns", async () => {
     kernel = await makeTestKernel({ plugins: [thingPlugin] })
     function TableScreen() {
@@ -210,6 +297,9 @@ describe("TUI blocks", () => {
     expect(frame).toContain("Main 3")
     expect(frame).toContain("Notes")
     expect(frame).toContain("main of T-1")
+    const status = frame.trimEnd().split("\n").at(-1)!
+    expect(status).toContain("←→ tabs")
+    expect(status).toContain("Esc back")
 
     tui.input.pressArrow("right")
     frame = await tui.frame()

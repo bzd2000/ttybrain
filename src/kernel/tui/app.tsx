@@ -1,7 +1,7 @@
 // <TuiApp>: the frame (header, main area, status bar), the router that renders the current screen, the overlay
 // stack (switcher, help, global actions) and the global key dispatch. Everything inside comes from the registry.
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { createComponent, createSignal, For, onCleanup, Show, type Component, type JSX } from "solid-js"
+import { createSignal, For, onCleanup, Show, type Component, type JSX } from "solid-js"
 import { runWithContext } from "../context"
 import type { Kernel } from "../host"
 import { Help } from "./components/Help"
@@ -165,5 +165,5 @@ function OpenRecord(props: { nav: Nav }) {
     const r = props.nav.route()
     return r.kind === "record" ? r : undefined
   }
-  return <Show when={record()} keyed>{(r: Extract<Route, { kind: "record" }>) => createComponent(RecordView, { ref: r.ref, ...(r.tab !== undefined ? { tab: r.tab } : {}) })}</Show>
+  return <Show when={record()} keyed>{(r: Extract<Route, { kind: "record" }>) => <RecordView recordRef={r.ref} tab={r.tab} />}</Show>
 }

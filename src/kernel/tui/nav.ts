@@ -27,7 +27,7 @@ export type Nav = {
 }
 
 // Opens `recordType`'s form `formId` (undefined: its first) with `props`.
-export type FormOpener = (recordType: string, formId: string | undefined, props: { ref: string }) => void
+export type FormOpener = (recordType: string, formId: string | undefined, props: { recordRef: string }) => void
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -58,7 +58,7 @@ export function createNav(kernel: Kernel, registry: TuiRegistry, track: <T>(p: P
             return
           }
           const form = registry.forms(found.type)[0]
-          if (form && formOpener) return formOpener(found.type, form.id, { ref })
+          if (form && formOpener) return formOpener(found.type, form.id, { recordRef: ref })
           notify(`${ref}: ${await kernel.records.label(ref)}`)
         }).catch((e: unknown) => notify(message(e), "error")),
       )

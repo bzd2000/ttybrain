@@ -61,10 +61,16 @@ export class KeysStore {
     return this.claims[0]().some((c) => c.layer === top)
   }
 
-  // The most recently registered hints of the top layer.
+  // The hints registered on the top layer, in registration order (a screen's before its blocks'); a key
+  // registered twice shows once, with its first label.
   hints(): Hint[] {
     const top = this.top()
-    return this.entries[0]().findLast((e) => e.layer === top)?.list ?? []
+    const out: Hint[] = []
+    for (const e of this.entries[0]()) {
+      if (e.layer !== top) continue
+      for (const h of e.list) if (!out.some((o) => o.key === h.key)) out.push(h)
+    }
+    return out
   }
 
   setTextFocus(token: object, layer: string, on: boolean): void {
@@ -97,6 +103,8 @@ export type Keys = {
   hints(list: Hint[]): () => void
   // True while no overlay sits above this component: gate `focused` props on it (useScreenKeys gates handlers).
   active(): boolean
+  // True while a text field on the top layer holds text focus: blocks (Table, Tabs) leave every key to it.
+  typing(): boolean
 }
 
 export function useKeys(): Keys {
@@ -109,6 +117,7 @@ export function useKeys(): Keys {
     textFocus: (on) => store.setTextFocus(token, layer, on),
     hints: (list) => store.addHints(token, layer, list),
     active: () => store.top() === layer,
+    typing: () => store.textFocused(),
   }
 }
 

@@ -8,7 +8,7 @@ export type TabItem = { id: string; title: string; count?: number | null }
 export function Tabs(props: { tabs: TabItem[]; active: string; onChange(id: string): void; focused?: boolean }) {
   const keys = useKeys()
   useScreenKeys((key) => {
-    if (props.focused === false || (key.name !== "left" && key.name !== "right")) return
+    if (props.focused === false || keys.typing() || (key.name !== "left" && key.name !== "right")) return
     const i = props.tabs.findIndex((t) => t.id === props.active)
     const next = props.tabs[Math.min(props.tabs.length - 1, Math.max(0, i + (key.name === "left" ? -1 : 1)))]
     key.preventDefault()

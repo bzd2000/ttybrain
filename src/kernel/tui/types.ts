@@ -10,11 +10,19 @@ export type Route =
   | { kind: "screen"; screen: string; params?: Record<string, string> }
   | { kind: "record"; screen: string; ref: string; tab?: string }
 export type ScreenDef = { id: string; title: string; slot?: number; component: Component<{}>; count?: () => Promise<number> }
-export type RecordTabDef = { id: string; title: string; order: number; count?: (ref: string) => Promise<number | null>; component: Component<{ ref: string }> }
+// Components that take a record's display ref get it as `recordRef`, never `ref`: Solid's JSX treats a `ref`
+// attribute as an element ref and would not pass the string.
+export type RecordTabDef = {
+  id: string
+  title: string
+  order: number
+  count?: (recordRef: string) => Promise<number | null>
+  component: Component<{ recordRef: string }>
+}
 export type OverviewRow = { ref: string; cells: Cell[] }
 export type OverviewPanelDef = { id: string; title: string; priority: number; empty: string; footer?: string; load(): Promise<OverviewRow[]> }
 export type ListColumnDef = { id: string; title: string; width: number; value(ref: string): Promise<string | null> }
-export type RecordFormProps = { ref?: string; prefill?: Record<string, string>; origin?: Origin; close(savedRef?: string): void }
+export type RecordFormProps = { recordRef?: string; prefill?: Record<string, string>; origin?: Origin; close(savedRef?: string): void }
 export type RecordFormDef = { id: string; label: string; component: Component<RecordFormProps> }
 export type GlobalActionDef = { id: string; key: string; label: string; overlay: Component<{ close(): void }> }
 export type StatusBadgeDef = { id: string; order: number; text(): Promise<string | null> }
