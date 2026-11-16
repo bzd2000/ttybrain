@@ -10,6 +10,7 @@ import { KINDS } from "../logic/items"
 import { ProjectContext } from "./project-context"
 import { ProjectPeople } from "./project-people"
 import { ProjectSummary } from "./project-summary"
+import { registerPanels } from "./panels"
 import { ProjectsScreen } from "./projects-screen"
 
 export const projectsTui = defineTui({
@@ -42,6 +43,7 @@ export const projectsTui = defineTui({
         return Number(row.n)
       },
     })
+    registerPanels(ui)
     ui.recordForm("project", { id: "project", label: "Project", component: ProjectForm })
     ui.recordForm("project", { id: "health", label: "Health update", component: HealthForm })
     ui.recordForm("project", { id: "involvement", label: "Involvement", component: InvolvementForm })

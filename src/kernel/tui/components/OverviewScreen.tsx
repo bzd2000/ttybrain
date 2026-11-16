@@ -66,10 +66,13 @@ function OverviewPanel(props: { def: PanelEntry; focused: boolean }) {
     all()
       .slice(0, MAX_ROWS)
       .map((r: OverviewRow) => ({ ref: r.ref, cells: Object.fromEntries(r.cells.map((c, i) => [`c${i}`, c])) }))
+  // The column with the widest text (the last of equals) takes the leftover width; the others fit their rows.
   const columns = (): TableColumn[] => {
     const n = Math.max(0, ...all().map((r) => r.cells.length))
+    const natural = Array.from({ length: n }, (_, i) => fitWidth(shown(), `c${i}`, "", Infinity))
+    const grow = natural.reduce((best, w, i) => (w >= (natural[best] ?? 0) ? i : best), 0)
     return Array.from({ length: n }, (_, i) =>
-      i === n - 1 ? { id: `c${i}`, title: "", width: "grow" as const } : { id: `c${i}`, title: "", width: fitWidth(shown(), `c${i}`, "", MAX_COLUMN) },
+      i === grow ? { id: `c${i}`, title: "", width: "grow" as const } : { id: `c${i}`, title: "", width: Math.min(natural[i]!, MAX_COLUMN) },
     )
   }
   const more = () => all().length - MAX_ROWS
