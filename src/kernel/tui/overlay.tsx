@@ -2,7 +2,10 @@
 // own overlays (switcher, help, global actions) and useOverlay() (open, openForm, confirm) all push here.
 import { createContext, createSignal, useContext, type JSX } from "solid-js"
 import type { Kernel } from "../host"
+import type { PluginRuntime } from "../plugin"
 import { Confirm } from "./components/Confirm"
+import { ErrorBoundary } from "./components/ErrorBoundary"
+import { RuntimeProvider, useOptionalRuntime } from "./data"
 import { notify } from "./messages"
 import type { TuiRegistry } from "./registry"
 import { PluginScope } from "./scope"
@@ -36,27 +39,48 @@ export function createOverlayStack(): OverlayStack {
 }
 
 export type Overlay = {
-  // Opens `c` above everything; the returned function closes it.
+  // Opens `c` above everything, in the scope of the plugin whose component called useOverlay() (its runtime for
+  // useRuntime(), an error boundary that Esc closes); the returned function closes it.
   open(c: () => JSX.Element): () => void
   // Opens `recordType`'s registered form `formId` (undefined: its first) with `props`, in its plugin's scope.
-  openForm(recordType: string, formId?: string, props?: Omit<RecordFormProps, "close">): void
+  // Resolves with the ref the form passed to `close(savedRef)`: undefined on cancel, or when there is no form.
+  openForm(recordType: string, formId?: string, props?: Omit<RecordFormProps, "close">): Promise<string | undefined>
   // Asks `<text>  y yes · n no`; resolves true on `y` only (false on `n` or Esc).
   confirm(text: string): Promise<boolean>
 }
 
-export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: TuiRegistry): Overlay {
+// The app's overlay service; useOverlay() binds `open` to the caller's plugin runtime.
+export type OverlayService = Omit<Overlay, "open"> & { open(c: () => JSX.Element, runtime: PluginRuntime | undefined): () => void }
+
+export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: TuiRegistry): OverlayService {
   return {
-    open: (c) => stack.push(() => c()),
+    open: (c, runtime) =>
+      stack.push((close) => (
+        <ErrorBoundary label={runtime?.id ?? "overlay"} close={close}>
+          <RuntimeProvider runtime={runtime}>{c()}</RuntimeProvider>
+        </ErrorBoundary>
+      )),
     openForm(recordType, formId, props = {}) {
       const forms = registry.forms(recordType)
       const def = formId === undefined ? forms[0] : forms.find((f) => f.id === formId)
-      if (!def) return notify(formId === undefined ? `no form for ${recordType}` : `no form "${formId}" for ${recordType}`, "error")
+      if (!def) {
+        notify(formId === undefined ? `no form for ${recordType}` : `no form "${formId}" for ${recordType}`, "error")
+        return Promise.resolve(undefined)
+      }
       const Component = def.component
-      stack.push((close) => (
-        <PluginScope kernel={kernel} plugin={def.plugin} label={def.label} close={close}>
-          <Component {...props} close={() => close()} />
-        </PluginScope>
-      ))
+      return new Promise<string | undefined>((resolve) => {
+        stack.push((close) => {
+          const done = (savedRef?: string) => {
+            close()
+            resolve(savedRef)
+          }
+          return (
+            <PluginScope kernel={kernel} plugin={def.plugin} label={def.label} close={() => done()}>
+              <Component {...props} close={done} />
+            </PluginScope>
+          )
+        })
+      })
     },
     confirm(text) {
       return new Promise<boolean>((resolve) => {
@@ -74,10 +98,11 @@ export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: Tui
   }
 }
 
-export const OverlayContext = createContext<Overlay>()
+export const OverlayContext = createContext<OverlayService>()
 
 export function useOverlay(): Overlay {
-  const o = useContext(OverlayContext)
-  if (!o) throw new Error("useOverlay() must be called inside <TuiApp>")
-  return o
+  const service = useContext(OverlayContext)
+  if (!service) throw new Error("useOverlay() must be called inside <TuiApp>")
+  const runtime = useOptionalRuntime()
+  return { ...service, open: (c) => service.open(c, runtime) }
 }

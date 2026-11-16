@@ -60,6 +60,11 @@ export function RuntimeProvider(props: { runtime: PluginRuntime | undefined; chi
   })
 }
 
+// The runtime of the plugin whose component is rendering, or undefined in the kernel's own components.
+export function useOptionalRuntime(): PluginRuntime | undefined {
+  return useContext(RuntimeContext)
+}
+
 export function useRuntime(): PluginRuntime {
   const rt = useContext(RuntimeContext)
   if (!rt) throw new Error("useRuntime() must be called inside a plugin's registered component")

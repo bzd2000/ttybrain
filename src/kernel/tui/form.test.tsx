@@ -9,7 +9,7 @@ import { fixedClock } from "../clock"
 import { runWithContext } from "../context"
 import { bootKernel, type Kernel } from "../host"
 import { Form } from "./components/Form"
-import { act, useRuntime } from "./data"
+import { act, useQuery, useRuntime } from "./data"
 import { useOverlay, type Overlay } from "./overlay"
 import { defineTui, type RecordFormProps, type TuiDef } from "./types"
 
@@ -277,6 +277,81 @@ describe("forms", () => {
     },
     15_000,
   )
+
+  test(
+    "Esc while a busy save retries does not cancel",
+    async () => {
+      const t = await open()
+      const b = await bootKernel({ env: { PM_HOME: kernel.home, PM_TEST: "1" }, plugins: [todoPlugin], clock: fixedClock("2026-11-13") })
+      others.push(b)
+      const saved = overlay!.openForm("thing")
+      await t.frame()
+      await t.input.typeText("Not cancelled")
+      b.db.raw.exec("BEGIN IMMEDIATE")
+      t.input.pressKey("s", { ctrl: true })
+      let seen = false
+      for (let i = 0; i < 100 && !seen; i++) {
+        await sleep(50)
+        seen = statusLine(await t.peek()).includes("database busy, retrying")
+      }
+      expect(seen).toBe(true)
+      t.input.pressEscape()
+      await sleep(1100) // past the Esc window: a cancel would have closed the form by now
+      const during = await t.peek()
+      expect(during).toContain("New thing")
+      expect(during).toContain("saving…")
+      // Each attempt blocks for busy_timeout (3 s), so the lock is released by hand once the Esc window has passed.
+      b.db.raw.exec("ROLLBACK")
+      expect(await saved).toBe("TH-1")
+      const frame = await t.frame()
+      expect(frame).not.toContain("New thing")
+      expect(await things()).toEqual([{ title: "Not cancelled", due: null }])
+    },
+    15_000,
+  )
+
+  test("openForm resolves with the saved ref, undefined on cancel", async () => {
+    const t = await open()
+    const saved = overlay!.openForm("thing")
+    await t.frame()
+    await t.input.typeText("Saved")
+    t.input.pressKey("s", { ctrl: true })
+    expect(await saved).toBe("TH-1")
+    const cancelled = overlay!.openForm("thing")
+    await t.frame()
+    t.input.pressEscape()
+    expect(await cancelled).toBeUndefined()
+    expect(await overlay!.openForm("thing", "missing")).toBeUndefined()
+    expect(statusLine(await t.frame())).toContain('no form "missing" for thing')
+  })
+
+  test("an overlay opened from a plugin screen runs in that plugin's scope", async () => {
+    const t = await open()
+    await runWithContext(kernel.context(), () => kernel.runtime("todo")!.self().write.addThing!({ title: "Existing" }))
+    function Inner() {
+      const rt = useRuntime()
+      const q = useQuery(() => rt.data.selectFrom("thing").select("title").execute())
+      return <text>{`overlay rows: ${(q.data() ?? []).map((r: { title: string }) => r.title).join(",")}`}</text>
+    }
+    const close = overlay!.open(() => <Inner />)
+    expect(await t.frame()).toContain("overlay rows: Existing")
+    close()
+    expect(await t.frame()).not.toContain("overlay rows")
+  })
+
+  test("a throwing overlay shows its error in place and Esc closes it", async () => {
+    const t = await open()
+    function Broken(): any {
+      throw new Error("boom")
+    }
+    overlay!.open(() => <Broken />)
+    expect(await t.frame()).toContain("⚠ todo: boom")
+    t.input.pressEscape()
+    await sleep(30)
+    const frame = await t.frame()
+    expect(frame).not.toContain("⚠ todo: boom")
+    expect(frame).toContain("todo screen")
+  })
 
   test("confirm resolves on y only", async () => {
     const t = await open()

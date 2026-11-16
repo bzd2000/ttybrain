@@ -6,7 +6,8 @@
 //   accepts); date fields preview the parsed ISO date (`→ 2026-11-15`) or `invalid date`, with the CLI's parsing.
 // - While the form is open it holds text focus, so single-letter global keys type into the field.
 // - A failed submit keeps the form open with its values: a ValidationError naming a field shows under that field
-//   as `✗ <message>`, any other error at the bottom. A submit in flight ignores further submits.
+//   as `✗ <message>`, any other error at the bottom. While a submit is in flight (`saving…`, busy retries
+//   included) further submits and Esc are ignored, so a cancel never races a save that still lands.
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { runWithContext } from "../../context"
 import { parseDate } from "../../dates"
@@ -43,7 +44,7 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
   const [index, setIndex] = createSignal(0)
   const [fieldErrors, setFieldErrors] = createSignal<Record<string, string>>({})
   const [formError, setFormError] = createSignal<string | undefined>(undefined)
-  let saving = false
+  const [saving, setSaving] = createSignal(false)
 
   const current = () => props.fields[index()]
   const valueOf = (name: string) => values()[name] ?? null
@@ -105,8 +106,8 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
   }
 
   const submit = () => {
-    if (saving) return
-    saving = true
+    if (saving()) return
+    setSaving(true)
     const run = async () => {
       let result: SubmitResult
       try {
@@ -114,7 +115,7 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
       } catch (e) {
         result = { ok: false, error: e }
       }
-      saving = false
+      setSaving(false)
       if (result.ok) return props.close(result.ref)
       const e = result.error
       const field = e instanceof ValidationError ? e.field : undefined
@@ -172,6 +173,7 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
     const f = current()
     if (key.name === "escape") {
       key.preventDefault()
+      if (saving()) return // the save goes on (busy retry included); cancelling now would still create the record
       escTimer = setTimeout(cancel, ESC_WINDOW_MS)
       ;(escTimer as { unref?: () => void }).unref?.()
     } else if (key.name === "s" && (key.ctrl || key.meta || key.option)) {
@@ -233,6 +235,9 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
           />
         )}
       </For>
+      <Show when={saving()}>
+        <text fg={theme.muted}>saving…</text>
+      </Show>
       <Show when={formError()}>
         <text fg={theme.red}>{`✗ ${formError()}`}</text>
       </Show>

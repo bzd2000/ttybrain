@@ -63,7 +63,7 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
   const keys = new KeysStore(() => stack.top() ?? SCREEN_LAYER)
   const openOverlay = (kind: string, render: (close: () => void) => JSX.Element) => void stack.push(render, kind)
   const overlay = createOverlay(stack, kernel, registry)
-  nav.setFormOpener((recordType, formId, formProps) => overlay.openForm(recordType, formId, formProps))
+  nav.setFormOpener((recordType, formId, formProps) => void overlay.openForm(recordType, formId, formProps))
   onCleanup(() => nav.setFormOpener(undefined))
 
   const screens: Screen[] = [{ id: OVERVIEW_ID, title: "Overview", slot: OVERVIEW_SLOT, component: OverviewScreen }, ...registry.screens()]
