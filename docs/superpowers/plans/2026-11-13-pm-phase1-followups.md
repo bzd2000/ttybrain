@@ -4,8 +4,8 @@ Deferred findings from the phase 1 task reviews and the final review, plus the c
 
 ## Before phase 2 (TUI)
 
-- Every invocation, even `pm help`, takes the write lock twice and recreates all views (ruling R20). Read-only commands then fail with exit 3 while another writer holds the lock, and the TUI's `data_version` live refresh would reload after every CLI read. Check the schema first and only open a transaction when something changed.
-- `ctx.emit` inside a write fires before commit; defer it to after-commit before plugins emit typed events.
+- Every invocation, even `pm help`, takes the write lock twice and recreates all views (ruling R20). Read-only commands then fail with exit 3 while another writer holds the lock, and the TUI's `data_version` live refresh would reload after every CLI read. Check the schema first and only open a transaction when something changed. — done in phase 2 Task 1
+- `ctx.emit` inside a write fires before commit; defer it to after-commit before plugins emit typed events. — done in phase 2 Task 1
 - Plugin-specific events are not emitted yet (R18); only `record.changed` is.
 
 ## Before phase 5 (external plugins)

@@ -202,6 +202,11 @@ export class KernelDb {
     return outcome.value
   }
 
+  // `PRAGMA data_version`: changes when another connection commits to the database file.
+  dataVersion(): number {
+    return Number(Object.values(this.raw.prepare("PRAGMA data_version").all([])[0] ?? {})[0])
+  }
+
   inWrite(): boolean {
     return this.writing.getStore()?.open === true
   }

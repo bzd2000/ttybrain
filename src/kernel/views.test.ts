@@ -104,7 +104,7 @@ describe("published views", () => {
     ])
   })
 
-  test("createAll recreates the views each time and is idempotent", async () => {
+  test("createAll is idempotent", async () => {
     views.publish("people", "person", person)
     await views.createAll(kdb)
     await views.createAll(kdb)

@@ -247,7 +247,11 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         s.off.push(off)
         return off
       },
-      emit: (event, payload) => events.emit(event, payload),
+      // Inside a write, listeners hear the event only once it commits (and never if it rolls back).
+      emit: (event, payload) => {
+        if (db.inWrite()) db.afterCommit(() => events.emit(event, payload))
+        else events.emit(event, payload)
+      },
     }
   }
 
