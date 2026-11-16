@@ -1,16 +1,16 @@
 // Keys: the global key dispatch, the text-focus guard and the key hints shown in the status bar.
 //
 // Dispatch order for one key press:
-//   1. an open overlay (its own `useKeyboard` handler; the screen below sees `active() === false`);
+//   1. an open overlay (its own `useScreenKeys` handler; the screen below is gated off by `useScreenKeys`);
 //   2. a focused text field: while the top layer holds `textFocus(true)`, single-letter global keys are off;
-//   3. the focused screen's own `useKeyboard` handlers (screen-local keys are not reserved);
+//   3. the focused screen's own `useScreenKeys` handlers (screen-local keys are not reserved);
 //   4. global actions (plugins' `globalAction` keys);
 //   5. global keys (`q`, `?`, `g`, `1`–`9`, `Esc`).
 // OpenTUI calls every `useKeyboard` handler before the focused renderable (an <input>), so the kernel's
 // dispatcher registers at the renderable level and therefore runs after all of them. A local handler claims a
 // key with `key.preventDefault()`; the dispatcher then leaves it alone (and so does a focused input).
 import type { KeyEvent } from "@opentui/core"
-import { useRenderer } from "@opentui/solid"
+import { useKeyboard, useRenderer } from "@opentui/solid"
 import { createContext, createSignal, onCleanup, onMount, useContext, type Accessor } from "solid-js"
 
 export type Hint = { key: string; label: string }
@@ -95,7 +95,7 @@ export type Keys = {
   textFocus(on: boolean): void
   // Shows `list` in the status bar while registered; returns the function that removes it.
   hints(list: Hint[]): () => void
-  // True while no overlay sits above this component: gate `useKeyboard` handlers and `focused` props on it.
+  // True while no overlay sits above this component: gate `focused` props on it (useScreenKeys gates handlers).
   active(): boolean
 }
 
@@ -110,6 +110,16 @@ export function useKeys(): Keys {
     hints: (list) => store.addHints(token, layer, list),
     active: () => store.top() === layer,
   }
+}
+
+// The way screens, blocks and overlays take keys: OpenTUI's useKeyboard, but `handler` runs only while the
+// component's layer is on top. OpenTUI calls listeners in registration order, so without this gate a screen's
+// handler (registered earlier) would also see the keys meant for an overlay opened above it.
+export function useScreenKeys(handler: (key: KeyEvent) => void): void {
+  const keys = useKeys()
+  useKeyboard((key) => {
+    if (keys.active()) handler(key)
+  })
 }
 
 // The character a key press types, if it is a plain printable key (no Ctrl/Alt/Meta).

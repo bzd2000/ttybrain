@@ -19,6 +19,8 @@ export type {
   TuiDef,
 } from "./types"
 export { useNav, type Nav } from "./nav"
-export { useKeys, type Hint, type Keys } from "./keys"
+// Take keys with useScreenKeys, not OpenTUI's raw useKeyboard: it ignores keys while an overlay sits above the
+// component, so overlays get keys first. Claim a key with key.preventDefault() so the global keys skip it.
+export { useKeys, useScreenKeys, type Hint, type Keys } from "./keys"
 export { notify } from "./messages"
 export { theme, toneColor } from "./theme"

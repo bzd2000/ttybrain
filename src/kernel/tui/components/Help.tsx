@@ -1,8 +1,7 @@
 // Help (`?`): the global keys, the keys of what has focus now, and the plugin problems (tui parts that failed
 // or were skipped, and logic plugins that failed to load). Esc or `?` closes it; it claims every key while open.
-import { useKeyboard } from "@opentui/solid"
 import { For, onMount, Show } from "solid-js"
-import { GLOBAL_KEYS, printable, useKeys, type Hint } from "../keys"
+import { GLOBAL_KEYS, printable, useKeys, useScreenKeys, type Hint } from "../keys"
 import { theme } from "../theme"
 
 const KEY_WIDTH = 10
@@ -28,8 +27,7 @@ export function Help(props: { hints: Hint[]; problems: string[]; close(): void }
   const keys = useKeys()
   const half = Math.ceil(GLOBAL_KEYS.length / 2)
   onMount(() => keys.hints([{ key: "Esc", label: "close" }]))
-  useKeyboard((key) => {
-    if (!keys.active()) return
+  useScreenKeys((key) => {
     key.preventDefault()
     if (key.name === "escape" || printable(key) === "?") props.close()
   })

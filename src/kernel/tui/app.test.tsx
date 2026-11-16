@@ -1,11 +1,11 @@
 import { createTestRenderer } from "@opentui/core/testing"
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { onCleanup, onMount } from "solid-js"
+import { createSignal, onCleanup, onMount } from "solid-js"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
 import { builtinPlugins } from "../../plugins"
 import { builtinTuiParts } from "../../plugins/tui"
-import { useKeys } from "./keys"
+import { useKeys, useScreenKeys } from "./keys"
 import { runTui } from "./run"
 import { defineTui, type TuiDef } from "./types"
 
@@ -108,6 +108,33 @@ describe("TUI shell", () => {
     expect(frame).not.toContain("Plugin problems")
     expect(frame).not.toContain("1 Overview")
     expect(tui.renderer.isDestroyed).toBe(false)
+  })
+
+  test("an open overlay takes keys before the screen below it", async () => {
+    function CountingScreen() {
+      const [n, setN] = createSignal(0)
+      useScreenKeys((key) => {
+        if (key.name === "j") {
+          key.preventDefault()
+          setN((x) => x + 1)
+        }
+      })
+      return <text>{`j presses: ${n()}`}</text>
+    }
+    tui = await renderTui(kernel, { parts: [...builtinTuiParts, testPart(CountingScreen)] })
+    tui.input.pressKey("2")
+    tui.input.pressKey("j")
+    expect(await tui.frame()).toContain("j presses: 1")
+    tui.input.pressKey("g")
+    expect(await tui.frame()).toContain("› 2 Test")
+    tui.input.pressKey("k")
+    tui.input.pressKey("k")
+    await tui.settle()
+    tui.input.pressKey("j")
+    const frame = await tui.frame()
+    expect(frame).toContain("› 2 Test")
+    expect(frame).not.toContain("› 1 Overview")
+    expect(frame).toContain("j presses: 1")
   })
 
   test("q quits", async () => {

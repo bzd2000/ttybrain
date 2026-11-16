@@ -1,8 +1,7 @@
 // The screen switcher (`g`): every screen as `<slot> <title>`, with its count when the screen defines one.
 // ↑↓/jk move, Enter goes there, 1–9 jump, Esc closes. It is modal: it claims every key while open.
-import { useKeyboard } from "@opentui/solid"
 import { createSignal, For, onMount, Show } from "solid-js"
-import { printable, useKeys } from "../keys"
+import { printable, useKeys, useScreenKeys } from "../keys"
 import { theme } from "../theme"
 
 export type SwitcherEntry = { id: string; slot: number; title: string; count?: () => Promise<number> }
@@ -38,8 +37,7 @@ export function Switcher(props: {
     props.select(id)
   }
 
-  useKeyboard((key) => {
-    if (!keys.active()) return
+  useScreenKeys((key) => {
     key.preventDefault()
     const ch = printable(key)
     if (key.name === "escape") props.close()
@@ -59,7 +57,7 @@ export function Switcher(props: {
       <For each={props.screens}>
         {(s, i) => (
           <box flexDirection="row" justifyContent="space-between" backgroundColor={i() === index() ? theme.selectedBg : theme.panel}>
-            <text fg={i() === index() ? theme.accent : theme.text}>{`${s.slot} ${s.title}`}</text>
+            <text fg={i() === index() ? theme.accent : theme.text}>{`${i() === index() ? "›" : " "} ${s.slot} ${s.title}`}</text>
             <Show when={counts()[s.id] !== undefined}>
               <text fg={theme.muted}>{String(counts()[s.id])}</text>
             </Show>
