@@ -4,7 +4,7 @@
 // The project form also shows the extra project fields of other plugins (<Form recordType>); the kernel saves them
 // in the same act as the project's own operation.
 import { createEffect, Show, untrack, type JSX } from "solid-js"
-import { act, Form, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "../../../kernel/tui/api"
+import { act, Form, numberValue, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "../../../kernel/tui/api"
 import { makeStore } from "../logic/records"
 import type { ProjectRecord } from "../logic/schema"
 
@@ -15,8 +15,6 @@ type Write = (input: Record<string, unknown>) => Promise<unknown>
 
 // The input without the keys whose value is undefined (left out, so the operation keeps its default).
 const defined = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))
-// A number field: empty is none; text that is no number goes through as NaN, so the operation reports the field.
-const number = (v: string | null | undefined) => (v === null || v === undefined ? null : Number(v.trim()))
 const text = (v: string | number | null | undefined) => (v === null || v === undefined ? null : String(v))
 
 function withPrefill(fields: FieldSpec[], prefill: Record<string, string> | undefined): FieldSpec[] {
@@ -69,7 +67,7 @@ export function ProjectForm(props: RecordFormProps) {
                   description: v.description ?? undefined,
                   startDate: v.startDate ?? undefined,
                   endDate: v.endDate ?? undefined,
-                  effortDays: number(v.effortDays) ?? undefined,
+                  effortDays: numberValue(v.effortDays) ?? undefined,
                   effortNote: v.effortNote ?? undefined,
                 }),
               ),
@@ -82,7 +80,7 @@ export function ProjectForm(props: RecordFormProps) {
           const changed = fields.filter((f) => (v[f.name] ?? null) !== (f.initial ?? null)).map((f) => f.name)
           if (changed.length === 0) return Promise.resolve({ ok: true, ref: project.ref })
           const input: Record<string, unknown> = { project: project.ref }
-          for (const name of changed) input[name] = name === "effortDays" ? number(v[name]) : name === "name" ? (v.name ?? "") : v[name]
+          for (const name of changed) input[name] = name === "effortDays" ? numberValue(v[name]) : name === "name" ? (v.name ?? "") : v[name]
           return save(() => write("editProject")(input), props, "saved")
         }
         const submit = (v: FormValues) => (p === null ? add(v) : edit(p, v))

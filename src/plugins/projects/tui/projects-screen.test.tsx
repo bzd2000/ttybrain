@@ -176,6 +176,25 @@ describe("Projects screen", () => {
     expect(lines(frame)[indexOf(frame, "Code") + 1]).toContain('✗ invalid project code "x"')
   })
 
+  test("a number field takes decimals only: 0x10 is an error, not effort 16", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    const t = await open()
+    t.input.pressKey("n")
+    await t.frame()
+    await t.input.typeText("HEX")
+    t.input.pressTab()
+    await t.input.typeText("Hex effort")
+    for (let i = 0; i < 5; i++) t.input.pressTab()
+    await t.frame()
+    await t.input.typeText("0x10")
+    t.input.pressKey("s", { ctrl: true })
+    const frame = await t.frame()
+    expect(frame).toContain("New project")
+    expect(lines(frame)[indexOf(frame, "Effort days") + 1]).toContain("✗")
+    const row = await inCtx(() => kernel!.runtime("projects")!.data.selectFrom("project").select("effort_estimate_days").where("code", "=", "HEX").executeTakeFirst())
+    expect(row).toBeUndefined()
+  })
+
   test("e edits the selected project", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await seed()

@@ -46,6 +46,13 @@ type Extra = { key: string; plugin: string; def: FieldDef }
 const asText = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
 const DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/
 
+// A number field's value for an operation: empty is null; a decimal is its number; anything else (`0x10`,
+// `1_000`, `Infinity`) is NaN, so the operation's validation reports the field instead of saving a surprise.
+export function numberValue(v: string | null | undefined): number | null {
+  if (v === null || v === undefined || v.trim() === "") return null
+  return DECIMAL.test(v.trim()) ? Number(v.trim()) : Number.NaN
+}
+
 export function Form(props: {
   title: string
   fields: FieldSpec[]
@@ -169,7 +176,7 @@ export function Form(props: {
     const changed = extraInitial() === undefined ? [] : extraSpecs.filter((f) => collectOne(f) !== (initial[f.name] ?? null))
     const values = changed.map((f) => {
       const v = collectOne(f)
-      return { x: extraOf(f.name)!, value: v !== null && f.kind === "number" ? (DECIMAL.test(v) ? Number(v) : Number.NaN) : v }
+      return { x: extraOf(f.name)!, value: f.kind === "number" ? numberValue(v) : v }
     })
     return {
       changed: values.length > 0,
