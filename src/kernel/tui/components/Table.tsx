@@ -2,8 +2,9 @@
 // follows the ref across reloads; when that ref is gone it stays at the same index, clamped. Columns are
 // truncated by display width with `…`: fixed ones to their width, "grow" ones to the width left over (measured).
 // The rows scroll so the selected one stays in view. `groups` renders `Title · n` headers above each group's
-// rows. With `listId`, the columns other plugins registered for that list (registry `columns(listId)`) are
-// appended and filled through their `value(ref)`. While a text field holds text focus, the Table takes no keys.
+// rows (a group without a title has no header: a screen's main group under its panel title). With `listId`, the columns other plugins registered for that list (registry `columns(listId)`) are
+// appended and filled through their `value(ref)`. While a text field holds text focus, the Table takes no keys,
+// nor keys a handler before it (its screen's) already claimed with preventDefault().
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { useQuery } from "../data"
 import { displayWidth, truncate } from "../format"
@@ -14,7 +15,7 @@ import type { Cell, Tone } from "../types"
 
 export type TableRow = { ref: string; cells: Record<string, string | Cell> }
 export type TableColumn = { id: string; title: string; width: number | "grow"; tone?: (row: TableRow) => Tone }
-export type TableGroup = { title: string; rows: TableRow[] }
+export type TableGroup = { title?: string; rows: TableRow[] }
 
 export type TableProps = {
   columns: TableColumn[]
@@ -53,7 +54,10 @@ export function Table(props: TableProps) {
   const flat = createMemo(() => props.groups?.flatMap((g) => g.rows) ?? props.rows ?? [])
   const lines = createMemo((): Line[] =>
     props.groups
-      ? props.groups.flatMap((g): Line[] => [{ kind: "group", title: g.title, n: g.rows.length }, ...g.rows.map((row) => ({ kind: "row" as const, row }))])
+      ? props.groups.flatMap((g): Line[] => {
+          const rows = g.rows.map((row): Line => ({ kind: "row", row }))
+          return g.title === undefined ? rows : [{ kind: "group", title: g.title, n: g.rows.length }, ...rows]
+        })
       : flat().map((row) => ({ kind: "row", row })),
   )
   const focused = () => props.focused !== false && keys.active()
@@ -139,7 +143,8 @@ export function Table(props: TableProps) {
 
   // --- keys and hints ---
   useScreenKeys((key) => {
-    if (props.focused === false || keys.typing()) return
+    // A key an earlier handler claimed (the screen around the table) is not the table's.
+    if (props.focused === false || keys.typing() || key.defaultPrevented) return
     const ch = printable(key)
     if (key.name === "up" || ch === "k") move(-1)
     else if (key.name === "down" || ch === "j") move(1)

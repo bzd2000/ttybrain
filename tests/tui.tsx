@@ -1,7 +1,7 @@
 // renderTui: the TUI test helper. Boots `parts` (default: the built-in tui parts) as built-ins and `external`
 // after them, renders <TuiApp> with OpenTUI's test renderer, and gives the test the frame, the mock input and
 // the navigation store. Always call destroy() in `finally`.
-import type { CliRenderer } from "@opentui/core"
+import type { CapturedFrame, CliRenderer } from "@opentui/core"
 import type { MockInput } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import type { Kernel } from "../src/kernel/host"
@@ -13,6 +13,8 @@ import { builtinTuiParts } from "../src/plugins/tui"
 
 export type RenderedTui = {
   frame(): Promise<string>
+  // The frame with colours (each line's spans with fg/bg), after settling like frame().
+  spans(): Promise<CapturedFrame>
   input: MockInput
   settle(): Promise<void>
   // The frame now, without waiting for in-flight loads (to look at a screen while a load or an act runs).
@@ -43,6 +45,10 @@ export async function renderTui(
     async frame() {
       await settle()
       return setup.captureCharFrame()
+    },
+    async spans() {
+      await settle()
+      return setup.captureSpans()
     },
     async peek() {
       await setup.renderOnce()

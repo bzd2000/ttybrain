@@ -60,7 +60,7 @@ const statusLine = (frame: string) => frame.trimEnd().split("\n").at(-1)!
 
 describe("TUI data", () => {
   test("reloads after a write from another connection", async () => {
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, screenPart(ActionsList)], refreshMs: 50 })
+    tui = await renderTui(kernel, { parts: [screenPart(ActionsList)], refreshMs: 50 })
     tui.input.pressKey("2")
     expect(await tui.frame()).not.toContain("row From B")
     const b = await second()
@@ -71,7 +71,7 @@ describe("TUI data", () => {
 
   test("reloads after own write via record.changed", async () => {
     // A minute-long interval: only record.changed can trigger this reload.
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, screenPart(ActionsList)], refreshMs: 60_000 })
+    tui = await renderTui(kernel, { parts: [screenPart(ActionsList)], refreshMs: 60_000 })
     tui.input.pressKey("2")
     expect(await tui.frame()).not.toContain("row Mine")
     const res = await act(() => kernel.runtime("projects")!.self().write.addAction!({ title: "Mine" }), { ok: (r: any) => `added ${r.ref}` })
@@ -95,7 +95,7 @@ describe("TUI data", () => {
       reload = q.reload
       return <text>{`${(q.data() ?? ["empty"]).join(",")} ${q.loading() ? "loading" : "idle"}`}</text>
     }
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, screenPart(Gated)] })
+    tui = await renderTui(kernel, { parts: [screenPart(Gated)] })
     tui.input.pressKey("2")
     expect(await tui.frame()).toContain("v1 idle")
     reload()
@@ -119,7 +119,7 @@ describe("TUI data", () => {
       reload = q.reload
       return <text>{`${(q.data() ?? []).join(",")} error=${q.error() instanceof Error ? (q.error() as Error).message : "none"}`}</text>
     }
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, screenPart(Failing)] })
+    tui = await renderTui(kernel, { parts: [screenPart(Failing)] })
     tui.input.pressKey("2")
     expect(await tui.frame()).toContain("first row error=none")
     reload()
@@ -135,7 +135,7 @@ describe("TUI data", () => {
   test(
     "busy then success",
     async () => {
-      tui = await renderTui(kernel, { parts: [...builtinTuiParts, screenPart(ActionsList)] })
+      tui = await renderTui(kernel, { parts: [screenPart(ActionsList)] })
       const b = await second()
       b.db.raw.exec("BEGIN IMMEDIATE")
       setTimeout(() => b.db.raw.exec("ROLLBACK"), 1500)
@@ -158,7 +158,7 @@ describe("TUI data", () => {
     function Throwing(): any {
       throw new Error("boom")
     }
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, screenPart(Throwing)] })
+    tui = await renderTui(kernel, { parts: [screenPart(Throwing)] })
     tui.input.pressKey("2")
     const frame = await tui.frame()
     expect(frame.split("\n")[0]).toContain("pm · 2 Test ▾")
@@ -173,7 +173,7 @@ describe("TUI data", () => {
       return <text>{`overlay rows: ${(q.data() ?? []).map((r: { title: string }) => r.title).join(",")}`}</text>
     }
     const part = defineTui({ plugin: "projects", activate: (ui) => ui.globalAction({ id: "peek", key: "z", label: "Peek", overlay: Overlay }) })
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, part] })
+    tui = await renderTui(kernel, { parts: [part] })
     tui.input.pressKey("z")
     expect(await tui.frame()).toContain("overlay rows: Seen in overlay")
   })
@@ -183,7 +183,7 @@ describe("TUI data", () => {
       throw new Error("boom")
     }
     const part = defineTui({ plugin: "projects", activate: (ui) => ui.globalAction({ id: "broken", key: "z", label: "Broken", overlay: Broken }) })
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, part, screenPart(() => <text>test screen</text>, "inbox")] })
+    tui = await renderTui(kernel, { parts: [part, screenPart(() => <text>test screen</text>, "inbox")] })
     tui.input.pressKey("z")
     expect(await tui.frame()).toContain("⚠ Broken: boom")
     tui.input.pressEscape()

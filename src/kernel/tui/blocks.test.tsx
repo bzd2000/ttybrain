@@ -7,6 +7,7 @@ import { renderTui, type RenderedTui } from "../../../tests/tui"
 import { definePlugin, type PluginDef } from "../api"
 import { onCleanup, onMount } from "solid-js"
 import { Menu } from "./components/Menu"
+import { Panel } from "./components/Panel"
 import { displayWidth } from "./format"
 import { Table, type TableRow } from "./components/Table"
 import { useKeys, useScreenKeys } from "./keys"
@@ -268,6 +269,72 @@ describe("TUI blocks", () => {
     expect(lineWith(frame, "Ref")).toContain("Size")
     expect(lineWith(frame, "T-1")).toContain("› T-1   big 1")
     expect(lineWith(frame, "T-3")).toContain("T-3   big 3")
+  })
+
+  test("Table group without a title has no header line", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    function TableScreen() {
+      return (
+        <Table
+          columns={[{ id: "ref", title: "Ref", width: 5 }]}
+          groups={[
+            { rows: [{ ref: "T-1", cells: { ref: "T-1" } }] },
+            { title: "Done", rows: [{ ref: "T-3", cells: { ref: "T-3" } }] },
+          ]}
+          focused
+        />
+      )
+    }
+    tui = await renderTui(kernel, { parts: [screenPart(TableScreen)] })
+    tui.input.pressKey("2")
+    const frame = await tui.frame()
+    const at = (s: string) => frame.split("\n").findIndex((l) => l.includes(s))
+    expect(at("T-1")).toBe(at("Ref") + 1)
+    expect(at("Done · 1")).toBe(at("T-1") + 1)
+    expect(frame).not.toContain("undefined")
+  })
+
+  test("Table leaves a key its screen claimed", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    const opened: string[] = []
+    let claimed = 0
+    function ClaimScreen() {
+      useScreenKeys((key) => {
+        if (key.name !== "return") return
+        claimed++
+        key.preventDefault()
+      })
+      return <Table columns={[{ id: "ref", title: "Ref", width: 5 }]} rows={[{ ref: "A-1", cells: { ref: "A-1" } }]} onOpen={(ref) => opened.push(ref)} focused />
+    }
+    tui = await renderTui(kernel, { parts: [screenPart(ClaimScreen)] })
+    tui.input.pressKey("2")
+    await tui.frame()
+    tui.input.pressEnter()
+    await tui.frame()
+    expect(claimed).toBe(1)
+    expect(opened).toEqual([])
+  })
+
+  test("Panel with grow bounds its Table, which scrolls", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    const rows = Array.from({ length: 40 }, (_, i) => ({ ref: `T-${i + 1}`, cells: { ref: `T-${i + 1}` } }))
+    function PanelScreen() {
+      return (
+        <Panel title="Things" grow focused>
+          <Table columns={[{ id: "ref", title: "Ref", width: 5 }]} rows={rows} focused />
+        </Panel>
+      )
+    }
+    tui = await renderTui(kernel, { width: 80, height: 24, parts: [screenPart(PanelScreen)] })
+    tui.input.pressKey("2")
+    let frame = await tui.frame()
+    // The panel's bottom border shows above the status bar: the panel did not grow past the screen.
+    const all = frame.trimEnd().split("\n")
+    expect(all.at(-2)).toMatch(/^└─+┘\s*$/)
+    for (let i = 0; i < 39; i++) tui.input.pressKey("j")
+    frame = await tui.frame()
+    expect(frame).toContain("› T-40 ")
+    expect(frame).not.toContain("T-1 ")
   })
 
   test("Overview shows panels in priority order with counts and +more", async () => {

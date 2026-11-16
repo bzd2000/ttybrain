@@ -7,6 +7,7 @@ import {
   suggest,
   ValidationError,
   type PluginContext,
+  type PluginRuntime,
 } from "../../../kernel/api"
 import type { ProjectRecord } from "./schema"
 import { projectQuery } from "./views"
@@ -16,7 +17,8 @@ const str = (v: unknown): string | null => (v === null || v === undefined ? null
 export type Store = ReturnType<typeof makeStore>
 export type PersonRef = { id: number; ref: string; handle: string; name: string; archived: boolean }
 
-export function makeStore(ctx: PluginContext) {
+// Takes a runtime (the read/write side of a context), so the logic part and the TUI part share one store.
+export function makeStore(ctx: PluginRuntime) {
   const db = ctx.data
 
   // The published columns plus the unpublished ones a record carries.

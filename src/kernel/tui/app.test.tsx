@@ -51,7 +51,7 @@ describe("TUI shell", () => {
   })
 
   test("number keys switch screens", async () => {
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, testPart()] })
+    tui = await renderTui(kernel, { parts: [testPart()] })
     tui.input.pressKey("2")
     let frame = await tui.frame()
     expect(firstLine(frame)).toContain("pm · 2 Test ▾")
@@ -64,7 +64,7 @@ describe("TUI shell", () => {
   })
 
   test("g opens switcher", async () => {
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, testPart()] })
+    tui = await renderTui(kernel, { parts: [testPart()] })
     tui.input.pressKey("g")
     const frame = await tui.frame()
     expect(frame).toContain("1 Overview")
@@ -78,7 +78,7 @@ describe("TUI shell", () => {
   })
 
   test("Esc goes back", async () => {
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, testPart()] })
+    tui = await renderTui(kernel, { parts: [testPart()] })
     tui.input.pressKey("2")
     expect(firstLine(await tui.frame())).toContain("pm · 2 Test ▾")
     tui.input.pressEscape()
@@ -90,7 +90,7 @@ describe("TUI shell", () => {
 
   test("? lists plugin problems", async () => {
     const ghost = defineTui({ plugin: "ghost", activate: () => {} })
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, ghost] })
+    tui = await renderTui(kernel, { parts: [ghost] })
     tui.input.pressKey("?")
     const frame = await tui.frame()
     expect(frame).toContain("Plugin problems")
@@ -98,7 +98,7 @@ describe("TUI shell", () => {
   })
 
   test("text field disables single-letter keys", async () => {
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, testPart(InputScreen)] })
+    tui = await renderTui(kernel, { parts: [testPart(InputScreen)] })
     tui.input.pressKey("2")
     expect(await tui.frame()).toContain("test screen")
     await tui.input.typeText("q2g?")
@@ -121,7 +121,7 @@ describe("TUI shell", () => {
       })
       return <text>{`j presses: ${n()}`}</text>
     }
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, testPart(CountingScreen)] })
+    tui = await renderTui(kernel, { parts: [testPart(CountingScreen)] })
     tui.input.pressKey("2")
     tui.input.pressKey("j")
     expect(await tui.frame()).toContain("j presses: 1")
@@ -155,7 +155,7 @@ describe("TUI shell", () => {
   })
 
   test("too small message", async () => {
-    tui = await renderTui(kernel, { parts: [...builtinTuiParts, testPart()], width: 50, height: 12 })
+    tui = await renderTui(kernel, { parts: [testPart()], width: 50, height: 12 })
     const frame = await tui.frame()
     expect(frame).toContain("Terminal too small (need 60×15)")
     expect(frame).not.toContain("No panels")
