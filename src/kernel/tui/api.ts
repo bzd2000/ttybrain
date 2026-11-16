@@ -34,7 +34,7 @@ export { printable, useKeys, useScreenKeys, type Hint, type Keys } from "./keys"
 export { act, useQuery, useRecord, useRuntime, type ActResult, type Query, type RecordInfo } from "./data"
 // Building blocks.
 export { Field, type FieldKind, type FieldSpec } from "./components/Field"
-export { Form, type ExtraFields, type FormValues, type SubmitResult } from "./components/Form"
+export { Form, type FormValues, type SubmitResult } from "./components/Form"
 export { KeyHints } from "./components/KeyHints"
 export { Menu, type MenuItem } from "./components/Menu"
 export { Panel } from "./components/Panel"

@@ -5,6 +5,9 @@
 //   while a reload is in flight or after it failed.
 // - act(fn): runs a write inside ONE outermost write transaction (the operations it calls become savepoints, so a
 //   save of several operations is all-or-nothing and a busy retry reruns the whole attempt), retries on BusyError, and turns the result into a status-bar message.
+//   An act called while a <Form> submits (withFormExtras) also saves that form's changed extra fields, inside the
+//   same write, after `fn`, for the ref `fn` returned: the first such act claims them.
+import { AsyncLocalStorage } from "node:async_hooks"
 import { createComponent, createContext, createEffect, createSignal, on, onCleanup, useContext, type Accessor, type JSX } from "solid-js"
 import { runWithContext, type Origin } from "../context"
 import { BusyError } from "../errors"
@@ -112,6 +115,27 @@ export function useQuery<T>(load: () => Promise<T>, opts: { key?: () => unknown 
   return { data, error, loading, reload: () => setManual((n) => n + 1) }
 }
 
+// --- a form's extra fields, saved by the act its submit runs ---
+
+// The changed extra fields of the form whose submit is running; `claimed` once an act took them.
+export type PendingExtras = { changed: boolean; claimed: boolean; save(ref: string): Promise<void> }
+export const NO_REF_FOR_EXTRAS = "extra fields not saved: the save returned no record ref"
+
+// Scoped to the submit's async chain: an act anywhere else (another form, a key handler) never sees them, and a
+// cancelled form leaves nothing behind.
+const formExtras = new AsyncLocalStorage<PendingExtras>()
+
+export function withFormExtras<T>(extras: PendingExtras, fn: () => Promise<T>): Promise<T> {
+  return formExtras.run(extras, fn)
+}
+
+function claimExtras(): PendingExtras | undefined {
+  const extras = formExtras.getStore()
+  if (!extras || extras.claimed || !extras.changed) return undefined
+  extras.claimed = true
+  return extras
+}
+
 // --- act ---
 
 export type ActResult<T> = { ok: true; value: T } | { ok: false; error: unknown }
@@ -119,10 +143,20 @@ export type ActResult<T> = { ok: true; value: T } | { ok: false; error: unknown 
 export function act<T>(fn: () => Promise<T>, opts: { origin?: Origin; ok?: (r: T) => string } = {}): Promise<ActResult<T>> {
   const session = bound
   if (!session) throw new Error("act() needs a mounted <TuiApp>")
+  const extras = claimExtras()
+  const run = extras
+    ? async () => {
+        const value = await fn()
+        const ref = (value as { ref?: unknown } | null | undefined)?.ref
+        if (typeof ref !== "string") throw new Error(NO_REF_FOR_EXTRAS)
+        await extras.save(ref)
+        return value
+      }
+    : fn
   const attempt = async (): Promise<ActResult<T>> => {
     for (let n = 1; ; n++) {
       try {
-        const value = await runWithContext(session.kernel.context(opts.origin), () => session.kernel.db.write(fn))
+        const value = await runWithContext(session.kernel.context(opts.origin), () => session.kernel.db.write(run))
         if (opts.ok) notify(opts.ok(value), "info")
         return { ok: true, value }
       } catch (e) {

@@ -10,14 +10,16 @@
 //   included) further submits and Esc are ignored, so a cancel never races a save that still lands.
 // - With `recordType`, the fields other plugins registered for it (kernel.fields, the `field` extension point) follow
 //   the form's own, starting from the values of `recordRef` read through each owning plugin's `get` operation (a
-//   plugin's fieldEditor replaces the default editor). `submit(values, extra)` gets the own fields' values only;
-//   inside the same act as its own operation it calls `extra.save(ref)`, which runs each changed extra field's
-//   `set` operation, so the save is all-or-nothing. `extra.changed` tells an edit that writes nothing of its own.
+//   plugin's fieldEditor replaces the default editor). `submit(values)` gets the own fields' values only; the
+//   kernel saves the changed extra fields itself: the act the submit runs saves them in the same write, after the
+//   plugin's own operation, for the ref it returned (all-or-nothing). A submit that wrote nothing (an edit with no
+//   change of its own) has them saved in an act of their own for its result's ref; without a ref the form stays
+//   open with an error.
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
 import { runWithContext } from "../../context"
 import { parseDate } from "../../dates"
 import { ValidationError } from "../../errors"
-import { useQuery } from "../data"
+import { act, NO_REF_FOR_EXTRAS, useQuery, withFormExtras, type PendingExtras } from "../data"
 import { createEscChord, ESC_WINDOW_MS } from "../escChord"
 import { printable, useKeys, useScreenKeys } from "../keys"
 import { PluginScope, useApp } from "../scope"
@@ -29,8 +31,6 @@ export type { FieldSpec } from "./Field"
 
 export type FormValues = Record<string, string | null>
 export type SubmitResult = { ok: true; ref?: string } | { ok: false; error: unknown }
-// The extra fields of a record form (see the header): whether any changed, and their save, run inside the act.
-export type ExtraFields = { changed: boolean; save(ref: string): Promise<void> }
 
 export { ESC_WINDOW_MS }
 export const SUGGESTION_LIMIT = 8
@@ -44,6 +44,7 @@ type Extra = { key: string; plugin: string; def: FieldDef }
 
 // An extra field's value as the form edits it, and back as its `set` operation takes it.
 const asText = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
+const DECIMAL = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/
 
 export function Form(props: {
   title: string
@@ -51,7 +52,7 @@ export function Form(props: {
   // The record type whose extra fields (kernel.fields) follow the own ones, and the record they start from.
   recordType?: string
   recordRef?: string
-  submit(values: FormValues, extra: ExtraFields): Promise<SubmitResult>
+  submit(values: FormValues): Promise<SubmitResult>
   close(savedRef?: string): void
 }) {
   const { kernel, registry, track } = useApp()
@@ -143,9 +144,11 @@ export function Form(props: {
   }
 
   // Empty text is null; a date that parses is sent as ISO, one that does not as typed (the plugin reports it).
+  // A number field is trimmed first, so blank clears it.
   const collectOne = (f: FieldSpec): string | null => {
-    const v = valueOf(f.name)
-    if (f.kind === "enum") return v
+    const raw = valueOf(f.name)
+    if (f.kind === "enum") return raw
+    const v = f.kind === "number" && raw !== null ? raw.trim() : raw
     if (v === null || v === "") return null
     if (f.kind === "date") {
       try {
@@ -159,17 +162,18 @@ export function Form(props: {
   const collect = (): FormValues => Object.fromEntries(props.fields.map((f) => [f.name, collectOne(f)]))
 
   // The extra fields whose value differs from the one loaded, each saved through its plugin's `set` operation; a
-  // number field's text goes as a number (NaN when it is none, so the operation reports it). A ValidationError
-  // shows under the extra field.
-  const collectExtra = (): ExtraFields => {
+  // number field's text goes as a number when it is a plain decimal (NaN otherwise, `0x10` included, so the
+  // operation reports it). A ValidationError shows under the extra field.
+  const collectExtra = (): PendingExtras => {
     const initial = extraInitial() ?? {}
-    const changed = extraInitial() === undefined ? [] : extraSpecs.filter((f) => (valueOf(f.name) === "" ? null : valueOf(f.name)) !== (initial[f.name] ?? null))
+    const changed = extraInitial() === undefined ? [] : extraSpecs.filter((f) => collectOne(f) !== (initial[f.name] ?? null))
     const values = changed.map((f) => {
       const v = collectOne(f)
-      return { x: extraOf(f.name)!, value: v !== null && f.kind === "number" ? Number(v.trim()) : v }
+      return { x: extraOf(f.name)!, value: v !== null && f.kind === "number" ? (DECIMAL.test(v) ? Number(v) : Number.NaN) : v }
     })
     return {
       changed: values.length > 0,
+      claimed: false,
       async save(ref) {
         for (const { x, value } of values) {
           const set = kernel.ops.api(x.plugin)?.write[x.def.set]
@@ -190,8 +194,18 @@ export function Form(props: {
     setSaving(true)
     const run = async () => {
       let result: SubmitResult
+      const extras = collectExtra()
       try {
-        result = await runWithContext(kernel.context(), () => props.submit(collect(), collectExtra()))
+        result = await runWithContext(kernel.context(), () => withFormExtras(extras, () => props.submit(collect())))
+        // The submit wrote nothing (no act took the extra fields): save them on their own for its ref.
+        if (result.ok && extras.changed && !extras.claimed) {
+          const ref = result.ref
+          if (ref === undefined) result = { ok: false, error: new Error(NO_REF_FOR_EXTRAS) }
+          else {
+            const saved = await withFormExtras(extras, () => act(async () => ({ ref }), { ok: () => `saved ${ref}` }))
+            if (!saved.ok) result = saved
+          }
+        }
       } catch (e) {
         result = { ok: false, error: e }
       }

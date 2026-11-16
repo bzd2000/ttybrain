@@ -8,7 +8,7 @@ import { renderTui, type RenderedTui } from "../../../tests/tui"
 import { builtinPlugins } from "../../plugins/index"
 import { builtinTuiParts } from "../../plugins/tui"
 import { runWithContext } from "../context"
-import { defineTui, type FieldEditorProps, type TuiDef } from "./api"
+import { act, defineTui, Form, type FieldEditorProps, type TuiDef } from "./api"
 
 let kernel: TestKernel | undefined
 let tui: RenderedTui | undefined
@@ -42,6 +42,36 @@ async function projects(t: RenderedTui): Promise<string> {
   t.input.pressKey("2")
   return t.frame()
 }
+
+const projectName = async () =>
+  (await inCtx(() => kernel!.runtime("projects")!.data.selectFrom("projects.project").select(["name"]).where("code", "=", "CRM").execute()))[0]?.name
+
+// A record form that knows nothing of extra fields: it passes recordType and runs only its own operation in an act
+// (renaming CRM through projects' editProject). `b` opens it.
+const renameTui = defineTui({
+  plugin: "budget",
+  activate(ui) {
+    budgetTui.activate(ui)
+    ui.globalAction({
+      id: "rename",
+      key: "b",
+      label: "rename CRM",
+      overlay: (props) => (
+        <Form
+          title="Rename CRM"
+          fields={[{ name: "name", label: "Name", kind: "text", initial: "Customer platform" }]}
+          recordType="project"
+          recordRef="#CRM"
+          submit={async (v) => {
+            const r = await act(() => ui.use("projects")!.write.editProject!({ project: "#CRM", name: v.name ?? "" }))
+            return r.ok ? { ok: true, ref: (r.value as { ref: string }).ref } : r
+          }}
+          close={() => props.close()}
+        />
+      ),
+    })
+  },
+})
 
 async function until(t: RenderedTui, ok: (frame: string) => boolean): Promise<string> {
   let frame = await t.frame()
@@ -162,5 +192,71 @@ describe("listColumn and field extension points", () => {
     t.input.pressKey("s", { ctrl: true })
     await until(t, (f) => !f.includes("Edit CRM"))
     expect(await getBudget("#CRM")).toBe(20000)
+  })
+
+  test("a form that only runs its own operation still saves its extra fields, in the same act", async () => {
+    const t = await boot([renameTui])
+    await projects(t)
+    t.input.pressKey("b")
+    await until(t, (f) => f.includes("Rename CRM") && budgetLine(f).includes("12000"))
+    await t.input.typeText(" 2")
+    t.input.pressTab()
+    for (let i = 0; i < 5; i++) t.input.pressBackspace()
+    await t.input.typeText("900")
+    t.input.pressKey("s", { ctrl: true })
+    await until(t, (f) => !f.includes("Rename CRM"))
+    expect(await getBudget("#CRM")).toBe(900)
+    expect(await projectName()).toBe("Customer platform 2")
+  })
+
+  test("a cancelled form leaves no extra fields for a later act", async () => {
+    const t = await boot([renameTui])
+    await projects(t)
+    t.input.pressKey("b")
+    await until(t, (f) => f.includes("Rename CRM") && budgetLine(f).includes("12000"))
+    t.input.pressTab()
+    await t.input.typeText("5")
+    t.input.pressEscape()
+    await new Promise((r) => setTimeout(r, 30))
+    t.input.pressKey("x") // confirms the cancel
+    await until(t, (f) => !f.includes("Rename CRM"))
+    // A later act outside any form, and a project form saved without a budget change.
+    const r = await act(() => ops("projects").write.setHealth!({ project: "CRM", health: "green" }))
+    expect(r.ok).toBe(true)
+    t.input.pressKey("e")
+    await until(t, (f) => f.includes("Edit CRM") && budgetLine(f).includes("12000"))
+    await t.input.typeText(" 3")
+    t.input.pressKey("s", { ctrl: true })
+    await until(t, (f) => !f.includes("Edit CRM"))
+    expect(await projectName()).toBe("Customer platform 3")
+    expect(await getBudget("#CRM")).toBe(12000)
+  })
+
+  test("a blank number clears the extra field", async () => {
+    const t = await boot()
+    await projects(t)
+    t.input.pressKey("e")
+    await until(t, (f) => f.includes("Edit CRM") && budgetLine(f).includes("12000"))
+    for (let i = 0; i < 7; i++) t.input.pressTab()
+    for (let i = 0; i < 5; i++) t.input.pressBackspace()
+    await t.input.typeText("  ")
+    t.input.pressKey("s", { ctrl: true })
+    await until(t, (f) => !f.includes("Edit CRM"))
+    expect(await getBudget("#CRM")).toBeNull()
+  })
+
+  test("a non-decimal number is refused under the field", async () => {
+    const t = await boot()
+    await projects(t)
+    t.input.pressKey("e")
+    await until(t, (f) => f.includes("Edit CRM") && budgetLine(f).includes("12000"))
+    for (let i = 0; i < 7; i++) t.input.pressTab()
+    for (let i = 0; i < 5; i++) t.input.pressBackspace()
+    await t.input.typeText("0x10")
+    t.input.pressKey("s", { ctrl: true })
+    const frame = await until(t, (f) => f.includes("✗"))
+    expect(frame).toContain("Edit CRM")
+    expect(lineWith(frame, "✗")).toContain("value must be number")
+    expect(await getBudget("#CRM")).toBe(12000)
   })
 })
