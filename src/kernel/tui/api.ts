@@ -32,7 +32,8 @@ export { editExternal, useEditExternal } from "./external"
 // the global keys skip it. printable(key) is the character a plain key press types (undefined with Ctrl/Alt/Meta).
 export { printable, useKeys, useScreenKeys, type Hint, type Keys, type ScreenKeysOptions } from "./keys"
 // Loads and writes: useQuery reloads live and keeps the last data; act runs a write with busy retry and messages.
-export { act, useQuery, useRecord, useRuntime, type ActResult, type Query, type RecordInfo } from "./data"
+// useToday() is the clock's today as an accessor that follows a day change (read it in memos and JSX).
+export { act, useQuery, useRecord, useRuntime, useToday, type ActResult, type Query, type RecordInfo } from "./data"
 // Building blocks.
 export { Field, type FieldKind, type FieldSpec } from "./components/Field"
 export { Form, type FormValues, type SubmitResult } from "./components/Form"

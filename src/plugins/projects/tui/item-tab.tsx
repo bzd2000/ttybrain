@@ -14,6 +14,7 @@ import {
   useQuery,
   useRuntime,
   useScreenKeys,
+  useToday,
   type Cell,
   type Hint,
   type TableColumn,
@@ -141,7 +142,7 @@ export function ItemTab(props: { recordRef: string; config: ItemKind }) {
   const items = makeItems(rt, store)
   const overlay = useOverlay()
   const keys = useKeys()
-  const today = rt.clock.today()
+  const today = useToday()
   const hints: Hint[] = [
     { key: "n", label: "add" },
     { key: "e", label: "edit" },
@@ -157,7 +158,7 @@ export function ItemTab(props: { recordRef: string; config: ItemKind }) {
     },
     { key: () => props.recordRef },
   )
-  const rows = createMemo((): TableRow[] => (q.data() ?? []).map((r) => ({ ref: r.ref, cells: cfg.cells(r, today) })))
+  const rows = createMemo((): TableRow[] => (q.data() ?? []).map((r) => ({ ref: r.ref, cells: cfg.cells(r, today()) })))
   const [current, setCurrent] = createSignal<string | undefined>()
   const [want, setWant] = createSignal<string | undefined>()
   // The selected record, only while it is shown (a reload may have removed it).
@@ -172,7 +173,7 @@ export function ItemTab(props: { recordRef: string; config: ItemKind }) {
     if (saved !== undefined) setWant(saved)
   }
   const complete = async (r: Rec) => {
-    const x = cfg.complete?.(r, today)
+    const x = cfg.complete?.(r, today())
     if (x === undefined) return
     await act(() => (rt.self().write[x.op]! as (i: Record<string, unknown>) => Promise<unknown>)(x.input))
   }

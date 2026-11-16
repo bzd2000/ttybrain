@@ -19,6 +19,7 @@ import {
   useQuery,
   useRuntime,
   useScreenKeys,
+  useToday,
   type Hint,
   type TableColumn,
   type TableGroup,
@@ -91,7 +92,7 @@ export function ProjectsScreen() {
   const nav = useNav()
   const overlay = useOverlay()
   const keys = useKeys()
-  const today = rt.clock.today()
+  const today = useToday()
 
   // One query: the record query carries the health, next milestone and open counts per project.
   const q = useQuery(async () => (await store.recordQuery().execute()).map(store.toProject))
@@ -113,8 +114,8 @@ export function ProjectsScreen() {
     const list = shown()
     const live = list.filter((p) => !p.archived)
     const of = (status: string) => live.filter((p) => p.status === status).sort(byCode)
-    const out: TableGroup[] = [{ rows: of("active").sort(byHealth).map((p) => row(p, today)) }]
-    const add = (title: string, ps: ProjectRecord[]) => ps.length > 0 && out.push({ title, rows: ps.map((p) => row(p, today)) })
+    const out: TableGroup[] = [{ rows: of("active").sort(byHealth).map((p) => row(p, today())) }]
+    const add = (title: string, ps: ProjectRecord[]) => ps.length > 0 && out.push({ title, rows: ps.map((p) => row(p, today())) })
     add("On hold", of("on_hold"))
     add("Closed", of("closed"))
     if (archived()) add("Archived", list.filter((p) => p.archived).sort(byCode))

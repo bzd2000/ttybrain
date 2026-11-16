@@ -23,6 +23,8 @@ export type DataSession = {
   kernel: Kernel
   // The live-refresh version (refresh.ts): queries rerun when it changes.
   version: Accessor<number>
+  // The clock's today, updated by live refresh when the day changes.
+  today: Accessor<string>
   // Registers a promise with the app so tests can wait until nothing is in flight.
   track<T>(p: Promise<T>): Promise<T>
 }
@@ -73,6 +75,14 @@ export function useRuntime(): PluginRuntime {
   const rt = useContext(RuntimeContext)
   if (!rt) throw new Error("useRuntime() must be called inside a plugin's registered component")
   return rt
+}
+
+// --- today ---
+
+// The clock's today as an accessor: it changes when the day does (live refresh checks it every tick), so a
+// component that reads it in a memo or JSX follows a TUI left open overnight. Loads read rt.clock.today().
+export function useToday(): Accessor<string> {
+  return useSession().today
 }
 
 // --- useQuery ---

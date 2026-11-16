@@ -62,7 +62,7 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
 
   const refresh = createLiveRefresh(kernel, props.refreshMs ?? 1000)
   onCleanup(() => refresh.stop())
-  const session = { kernel, version: refresh.version, track }
+  const session = { kernel, version: refresh.version, today: refresh.today, track }
   onCleanup(bindDataSession(session))
 
   const nav = createNav(kernel, registry, track)
@@ -135,7 +135,7 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
           <KeysContext.Provider value={keys}>
             <OverlayContext.Provider value={overlay}>
               <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.bg}>
-                <Header chip={`${current().slot} ${current().title} ▾`} crumbs={nav.crumbs()} badges={registry.badges()} date={longDate(kernel.clock.today())} />
+                <Header chip={`${current().slot} ${current().title} ▾`} crumbs={nav.crumbs()} badges={registry.badges()} date={longDate(refresh.today())} />
                 <box flexGrow={1} flexDirection="column" overflow="hidden">
                   <Show when={!tooSmall()} fallback={<text>{`Terminal too small (need ${MIN_WIDTH}×${MIN_HEIGHT})`}</text>}>
                     <LayerContext.Provider value={SCREEN_LAYER}>

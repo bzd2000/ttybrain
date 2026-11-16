@@ -14,6 +14,7 @@ import {
   useQuery,
   useRuntime,
   useScreenKeys,
+  useToday,
   printable,
   RecordFields,
   displayWidth,
@@ -83,7 +84,7 @@ export function ProjectSummary(props: { recordRef: string }) {
   const items = makeItems(rt, store)
   const overlay = useOverlay()
   const keys = useKeys()
-  const today = rt.clock.today()
+  const today = useToday()
   keys.hints(HINTS)
 
   const q = useQuery(
@@ -119,7 +120,7 @@ export function ProjectSummary(props: { recordRef: string }) {
     return all.slice(start, start + ROWS).map((m) => [
       { text: m.done_date === null ? "○" : "✓", width: 1, tone: m.done_date === null ? undefined : "green" },
       { text: m.title, width: "grow" },
-      { text: shortDate(m.due_date), width: 6, tone: m.done_date === null && m.due_date < today ? "red" : "muted" },
+      { text: shortDate(m.due_date), width: 6, tone: m.done_date === null && m.due_date < today() ? "red" : "muted" },
     ])
   }
 
@@ -139,7 +140,7 @@ export function ProjectSummary(props: { recordRef: string }) {
           <box flexDirection="row" flexGrow={1} gap={2} paddingTop={1} overflow="hidden">
             <box flexDirection="column" flexGrow={1} flexBasis={0} flexShrink={1}>
               <Fact name="Health" tone={p().health ?? "muted"}>
-                {p().health === null ? "not set" : `● ${p().health} · ${shortDate(p().health_date ?? today)}`}
+                {p().health === null ? "not set" : `● ${p().health} · ${shortDate(p().health_date ?? today())}`}
               </Fact>
               <Show when={p().health_comment}>{(c: () => string) => <text fg={theme.text}>{c()}</text>}</Show>
               <text> </text>
@@ -172,7 +173,7 @@ export function ProjectSummary(props: { recordRef: string }) {
                   { text: x.title, width: "grow" },
                   { text: x.owner === null ? "" : x.owner.replace(/^@/, ""), width: 7, tone: "muted" },
                   { text: label(x.status), width: 11, tone: "muted" },
-                  { text: x.due_date === null ? "—" : shortDate(x.due_date), width: 6, tone: x.due_date !== null && x.due_date < today ? "red" : "muted" },
+                  { text: x.due_date === null ? "—" : shortDate(x.due_date), width: 6, tone: x.due_date !== null && x.due_date < today() ? "red" : "muted" },
                 ])}
               />
               <ShortList

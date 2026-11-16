@@ -20,6 +20,7 @@ import {
   useQuery,
   useRuntime,
   useScreenKeys,
+  useToday,
   type Hint,
   type TableColumn,
   type TableGroup,
@@ -76,9 +77,9 @@ export function ActionsScreen() {
   const nav = useNav()
   const overlay = useOverlay()
   const keys = useKeys()
-  const today = rt.clock.today()
-  const thisWeekEnd = weekEnd(today)
-  const nextWeekEnd = addDays(thisWeekEnd, 7)
+  const today = useToday()
+  const thisWeekEnd = () => weekEnd(today())
+  const nextWeekEnd = () => addDays(thisWeekEnd(), 7)
 
   // One query: every action with the people's names, the meeting titles (when the meetings plugin is there) and
   // the inbox origins of those without a for person, the origins in a single batch.
@@ -135,7 +136,7 @@ export function ActionsScreen() {
       project: r.rec.project?.replace(/^#/, "") ?? "",
       owner: r.ownerName ?? "me",
       from: r.forFrom,
-      due: overdue ? { text: r.rec.due_date === null ? "—" : shortDate(r.rec.due_date), tone: "red" } : dueLabel(r.rec.due_date, today),
+      due: overdue ? { text: r.rec.due_date === null ? "—" : shortDate(r.rec.due_date), tone: "red" } : dueLabel(r.rec.due_date, today()),
     },
   })
   const groups = createMemo((): TableGroup[] => {
@@ -143,7 +144,7 @@ export function ActionsScreen() {
     if (parsed().status !== "open") return [{ title: "Actions", rows: [...list].sort((a, b) => b.rec.id - a.rec.id).map((r) => row(r, false)) }]
     const bucket = (r: Row) => {
       const d = r.rec.due_date
-      return d === null ? 4 : d < today ? 0 : d <= thisWeekEnd ? 1 : d <= nextWeekEnd ? 2 : 3
+      return d === null ? 4 : d < today() ? 0 : d <= thisWeekEnd() ? 1 : d <= nextWeekEnd() ? 2 : 3
     }
     const titles = ["Overdue", "This week", "Next week", "Later", "No date"]
     return titles
@@ -174,7 +175,7 @@ export function ActionsScreen() {
     const saved = await overlay.openForm("action", formId, recordRef === undefined ? {} : { recordRef })
     if (saved !== undefined && recordRef === undefined) setWant(saved)
   }
-  const complete = (ref: string) => act(() => rt.self().write.completeAction!({ ref, date: today }))
+  const complete = (ref: string) => act(() => rt.self().write.completeAction!({ ref, date: today() }))
 
   // --- the filter line ---
   createEffect(() => {

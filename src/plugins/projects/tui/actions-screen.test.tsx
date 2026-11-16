@@ -86,6 +86,25 @@ describe("actions screen", () => {
     expect(lineWith(frame, "Reply to vendor")).toContain("›") // the first row is selected
   })
 
+  test("a new day reaches a long-running TUI: header date and groups update without a remount", async () => {
+    let day = "2026-11-13"
+    kernel = await makeTestKernel({ plugins: builtinPlugins, clock: { today: () => day, now: () => `${day}T09:00:00` } })
+    await seed()
+    tui = await renderTui(kernel, { width: 120, height: 32, refreshMs: 30 })
+    tui.input.pressKey("4")
+    let frame = await tui.frame()
+    expect(frame).toContain("Fri 13 Nov 2026")
+    expect(frame).toContain("Overdue · 1")
+    day = "2026-11-16" // Monday
+    frame = await untilThat(tui, (f) => f.includes("Mon 16 Nov 2026") && f.includes("Overdue · 3"))
+    expect(frame).toContain("Mon 16 Nov 2026")
+    expect(frame).toContain("Overdue · 3")
+    expect(frame).toContain("This week · 1")
+    expect(frame).not.toContain("Next week")
+    expect(frame).toContain("Later · 1")
+    expect(lineWith(frame, "Draft scope")).toContain("today")
+  })
+
   test("filter owner:anna", async () => {
     const t = await open()
     t.input.pressKey("/")
