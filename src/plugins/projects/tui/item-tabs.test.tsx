@@ -103,16 +103,45 @@ describe("milestones tab", () => {
   })
 
   test("e edits and sends only the changed field", async () => {
-    const t = await open(1, async () => void (await write().addMilestone!({ project: "CRM", title: "Kickoff", due: "2026-11-20" })))
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await seed(async () => void (await write().addMilestone!({ project: "CRM", title: "Kickoff", due: "2026-11-20" })))
+    const ops = kernel.ops as any
+    const call = ops.call.bind(ops)
+    const edits: unknown[] = []
+    ops.call = (plugin: string, name: string, kind: string, input: unknown) => {
+      if (name === "editMilestone") edits.push(input)
+      return call(plugin, name, kind, input)
+    }
+    tui = await renderTui(kernel, { width: 120, height: 32 })
+    tui.input.pressKey("2")
+    await tui.frame()
+    await tui.nav.open("#CRM")
+    await tui.frame()
+    tui.input.pressArrow("right")
+    const t = tui
+    await t.frame()
     await until(t, "Kickoff")
     t.input.pressKey("e")
     expect(await t.frame()).toContain("Edit MS-1")
     await type(t, " x")
     t.input.pressKey("s", { ctrl: true })
     await until(t, "Kickoff x")
-    expect(await rows("milestone", ["title", "due_date"])).toEqual([{ title: "Kickoff x", due_date: "2026-11-20" }])
-    const log = await inCtx(async () => (await kernel!.runtime("projects")!.data.selectFrom("milestone").select("updated_at").execute()).length)
-    expect(log).toBe(1)
+    expect(edits).toEqual([{ ref: "MS-1", title: "Kickoff x" }])
+  })
+
+  test("milestone add with an invalid Done date leaves no milestone behind", async () => {
+    const t = await open(1)
+    t.input.pressKey("n")
+    await t.frame()
+    await type(t, "Gate")
+    t.input.pressTab()
+    await type(t, "2026-11-26")
+    t.input.pressTab()
+    await type(t, "garbage")
+    t.input.pressKey("s", { ctrl: true })
+    const frame = await until(t, "✗")
+    expect(frame).toContain("New milestone")
+    expect(await rows("milestone", ["id"])).toEqual([])
   })
 })
 
@@ -125,6 +154,38 @@ describe("deliverables tab", () => {
     frame = await until(t, "delivered")
     expect(lineWith(frame, "Spec")).toContain("delivered")
     expect((await rows<any>("deliverable", ["status", "delivered_date"]))[0]).toEqual({ status: "delivered", delivered_date: "2026-11-13" })
+  })
+
+  test("a failing second operation leaves the first save undone", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await seed(async () => void (await write().addDeliverable!({ project: "CRM", title: "Spec" })))
+    const ops = kernel.ops as any
+    const call = ops.call.bind(ops)
+    ops.call = (plugin: string, name: string, kind: string, input: unknown) =>
+      name === "setDeliverableStatus" ? Promise.reject(new Error("status refused")) : call(plugin, name, kind, input)
+    tui = await renderTui(kernel, { width: 120, height: 32 })
+    tui.input.pressKey("2")
+    await tui.frame()
+    await tui.nav.open("#CRM")
+    await tui.frame()
+    tui.input.pressArrow("right")
+    await tui.frame()
+    tui.input.pressArrow("right")
+    const t = tui
+    await t.frame()
+    await until(t, "Spec")
+    t.input.pressKey("e")
+    await t.frame()
+    await type(t, " 2")
+    t.input.pressTab()
+    t.input.pressTab()
+    t.input.pressTab()
+    t.input.pressArrow("right")
+    await t.frame()
+    t.input.pressKey("s", { ctrl: true })
+    const frame = await until(t, "status refused")
+    expect(frame).toContain("status refused")
+    expect(await rows("deliverable", ["title", "status"])).toEqual([{ title: "Spec", status: "not_started" }])
   })
 
   test("validation error from op shows under field", async () => {

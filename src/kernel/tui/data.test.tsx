@@ -202,4 +202,32 @@ describe("TUI data", () => {
     expect(statusLine(await tui.frame())).toContain("title")
     expect(await actionCount()).toBe(0)
   })
+
+  test("act with two write ops where the second throws leaves no trace of the first", async () => {
+    tui = await renderTui(kernel, { parts: builtinTuiParts })
+    const w = kernel.runtime("projects")!.self().write as Record<string, (i: any) => Promise<any>>
+    const res = await act(async () => {
+      await w.addAction!({ title: "First" })
+      return w.addAction!({ title: "  " })
+    })
+    expect(res.ok).toBe(false)
+    expect(await actionCount()).toBe(0)
+  })
+
+  test("act with two write ops commits both once, and live refresh still fires", async () => {
+    tui = await renderTui(kernel, { parts: [screenPart(ActionsList)], refreshMs: 60_000 })
+    tui.input.pressKey("2")
+    await tui.frame()
+    const w = kernel.runtime("projects")!.self().write as Record<string, (i: any) => Promise<any>>
+    const res = await act(async () => {
+      await w.addAction!({ title: "One" })
+      return w.addAction!({ title: "Two" })
+    })
+    expect(res.ok).toBe(true)
+    await sleep(20)
+    const frame = await tui.frame()
+    expect(frame).toContain("row One")
+    expect(frame).toContain("row Two")
+    expect(await actionCount()).toBe(2)
+  })
 })

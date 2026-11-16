@@ -3,7 +3,8 @@
 // - useRuntime(): the runtime of the plugin whose component is rendering (set by <PluginScope> in app.tsx).
 // - useQuery(load): loads, reloads on every live-refresh bump and when `key()` changes, keeps the last data
 //   while a reload is in flight or after it failed.
-// - act(fn): runs a write, retries on BusyError, and turns the result into a status-bar message.
+// - act(fn): runs a write inside ONE outermost write transaction (the operations it calls become savepoints, so a
+//   save of several operations is all-or-nothing and a busy retry reruns the whole attempt), retries on BusyError, and turns the result into a status-bar message.
 import { createComponent, createContext, createEffect, createSignal, on, onCleanup, useContext, type Accessor, type JSX } from "solid-js"
 import { runWithContext, type Origin } from "../context"
 import { BusyError } from "../errors"
@@ -121,7 +122,7 @@ export function act<T>(fn: () => Promise<T>, opts: { origin?: Origin; ok?: (r: T
   const attempt = async (): Promise<ActResult<T>> => {
     for (let n = 1; ; n++) {
       try {
-        const value = await runWithContext(session.kernel.context(opts.origin), fn)
+        const value = await runWithContext(session.kernel.context(opts.origin), () => session.kernel.db.write(fn))
         if (opts.ok) notify(opts.ok(value), "info")
         return { ok: true, value }
       } catch (e) {
