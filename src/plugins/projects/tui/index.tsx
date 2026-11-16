@@ -1,5 +1,7 @@
 // The projects plugin's tui part: the Projects screen (slot 2) and the project's record forms (project, health).
 import { defineTui } from "../../../kernel/tui/api"
+import { ActionsScreen } from "./actions-screen"
+import { DueForm } from "./due-form"
 import { HealthForm, InvolvementForm, ProjectForm } from "./forms"
 import { makeStore } from "../logic/records"
 import { FORM_LABELS, ITEM_FORMS } from "./item-forms"
@@ -29,11 +31,24 @@ export const projectsTui = defineTui({
         return Number(row.n)
       },
     })
+    ui.screen({
+      id: "actions",
+      title: "Actions",
+      slot: 4,
+      component: ActionsScreen,
+      // The open actions.
+      count: async () => {
+        const row = await ui.data.selectFrom("action").select((eb) => eb.fn.countAll().as("n")).where("status", "=", "open").executeTakeFirstOrThrow()
+        return Number(row.n)
+      },
+    })
     ui.recordForm("project", { id: "project", label: "Project", component: ProjectForm })
     ui.recordForm("project", { id: "health", label: "Health update", component: HealthForm })
     ui.recordForm("project", { id: "involvement", label: "Involvement", component: InvolvementForm })
 
     for (const kind of KINDS) ui.recordForm(kind, { id: kind, label: FORM_LABELS[kind], component: ITEM_FORMS[kind] })
+
+    ui.recordForm("action", { id: "due", label: "Due date", component: DueForm }) // after the full form: Enter opens that one
 
     // The project's record tabs; the item tabs (orders 20-60) sit between Summary and People.
     ui.recordTab("project", { id: "summary", title: "Summary", order: 10, component: ProjectSummary })

@@ -247,7 +247,11 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         live()
         guide.section(id, def)
       },
-      provenance: { createdFrom: (type, ref) => provenance.createdFrom(type, ref) },
+      provenance: {
+        createdFrom: (type, ref) => provenance.createdFrom(type, ref),
+        originOf: (type, id) => provenance.originOf(type, id),
+        originsOf: (type, ids) => provenance.originsOf(type, ids),
+      },
       on: (event, fn) => {
         live()
         const off = events.on(event, fn)

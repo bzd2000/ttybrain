@@ -3,6 +3,7 @@
 import type { Kysely } from "kysely"
 import type { CommandDef } from "./cli/commands"
 import type { Clock } from "./clock"
+import type { Origin } from "./context"
 import type { Config } from "./config"
 import type { PluginApi, ReadOp, WriteOp } from "./operations"
 import type { RecordTypeDef } from "./records"
@@ -57,6 +58,10 @@ export interface PluginContext {
   guideSection(def: { title: string; markdown: string; order?: number }): void
   readonly provenance: {
     createdFrom(type: string, ref: string): Promise<Array<{ recordType: string; recordId: number; ref: string }>>
+    // The origin one record was created from (read-only), undefined when it has none.
+    originOf(recordType: string, recordId: number): Promise<Origin | undefined>
+    // The origins of many records of one type in one query: record id -> origin (records without one are absent).
+    originsOf(recordType: string, ids: number[]): Promise<Map<number, Origin>>
   }
   on(event: string, fn: (payload: any) => void): () => void
   emit(event: string, payload: unknown): void

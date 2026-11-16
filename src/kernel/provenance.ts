@@ -48,6 +48,31 @@ export class ProvenanceStore {
       .execute()
   }
 
+  // The origin a record was created from (the earliest recorded one), or undefined.
+  async originOf(recordType: string, recordId: number): Promise<Origin | undefined> {
+    return (await this.originsOf(recordType, [recordId])).get(recordId)
+  }
+
+  // The origins of many records of one type in ONE query (no N+1): record id -> its earliest origin; records
+  // with none are absent from the map.
+  async originsOf(recordType: string, ids: number[]): Promise<Map<number, Origin>> {
+    const out = new Map<number, Origin>()
+    if (ids.length === 0) return out
+    const rows = await this.kdb.kysely
+      .selectFrom("kernel_record_origin")
+      .select(["record_id", "origin_type", "origin_ref"])
+      .where("record_type", "=", recordType)
+      .where("record_id", "in", ids)
+      .orderBy("created_at")
+      .orderBy("rowid" as any)
+      .execute()
+    for (const r of rows) {
+      const id = Number(r.record_id)
+      if (!out.has(id)) out.set(id, { type: String(r.origin_type) as Origin["type"], ref: String(r.origin_ref) })
+    }
+    return out
+  }
+
   async createdFrom(originType: string, originRef: string): Promise<Array<{ recordType: string; recordId: number; ref: string }>> {
     const rows = await this.kdb.kysely
       .selectFrom("kernel_record_origin")
