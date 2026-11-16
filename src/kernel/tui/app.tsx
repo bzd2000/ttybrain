@@ -34,6 +34,9 @@ export type TuiHandle = {
   idle(): Promise<void>
 }
 
+// The frame hints that stay in the status bar when the others do not fit.
+const PINNED_HINTS = ["?", "q"]
+
 type Screen = SwitcherEntry & { component: Component<{}>; plugin?: string }
 
 // `refreshMs`: how often live refresh checks PRAGMA data_version (spec §10: about every second).
@@ -142,7 +145,7 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
                     </LayerContext.Provider>
                   </Show>
                 </box>
-                <StatusBar hints={hints()} message={currentMessage()} />
+                <StatusBar hints={hints()} message={currentMessage()} width={dims().width} pinned={PINNED_HINTS} />
                 <For each={stack.list()}>
                   {(o) => (
                     <box position="absolute" top={2} left={0} width="100%" alignItems="center" zIndex={10}>

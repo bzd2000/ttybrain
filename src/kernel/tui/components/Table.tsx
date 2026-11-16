@@ -23,7 +23,8 @@ export type TableProps = {
   // Rendered instead of `rows` when given.
   groups?: TableGroup[]
   selectedRef?: string
-  onSelect?(ref: string): void
+  // The selected row's ref; undefined while the table has no rows.
+  onSelect?(ref: string | undefined): void
   onOpen?(ref: string): void
   focused?: boolean
   // Shown when there are no rows.
@@ -111,8 +112,8 @@ export function Table(props: TableProps) {
   })
   createEffect(
     on(selected, (ref) => {
-      if (ref === undefined) return
-      if (ref !== chosen()) setChosen(ref)
+      // No rows: nothing is selected (the remembered ref comes back with its row).
+      if (ref !== undefined && ref !== chosen()) setChosen(ref)
       props.onSelect?.(ref)
     }),
   )

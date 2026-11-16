@@ -294,6 +294,25 @@ describe("TUI blocks", () => {
     expect(frame).not.toContain("undefined")
   })
 
+  test("Table reports no selection when its rows are gone", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    const [rows, setRows] = createSignal<TableRow[]>([{ ref: "A-1", cells: { ref: "A-1" } }])
+    const seen: Array<string | undefined> = []
+    function TableScreen() {
+      return <Table columns={[{ id: "ref", title: "Ref", width: 5 }]} rows={rows()} onSelect={(r) => seen.push(r)} focused />
+    }
+    tui = await renderTui(kernel, { parts: [screenPart(TableScreen)] })
+    tui.input.pressKey("2")
+    await tui.frame()
+    expect(seen.at(-1)).toBe("A-1")
+    setRows([])
+    await tui.frame()
+    expect(seen.at(-1)).toBeUndefined()
+    setRows([{ ref: "A-0", cells: { ref: "A-0" } }, { ref: "A-1", cells: { ref: "A-1" } }])
+    await tui.frame()
+    expect(seen.at(-1)).toBe("A-1") // the remembered ref comes back with its row
+  })
+
   test("Table leaves a key its screen claimed", async () => {
     kernel = await makeTestKernel({ plugins: [thingPlugin] })
     const opened: string[] = []

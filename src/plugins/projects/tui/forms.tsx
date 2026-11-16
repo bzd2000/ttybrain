@@ -56,41 +56,34 @@ export function ProjectForm(props: RecordFormProps) {
           { name: "effortDays", label: "Effort days", kind: "number", initial: text(p?.effort_estimate_days) },
           { name: "effortNote", label: "Effort note", kind: "text", initial: p?.effort_note },
         ]
-        const shared = (v: FormValues) => ({ name: v.name ?? "", status: v.status ?? undefined })
-        const submit = (v: FormValues) =>
-          p === null
-            ? save(
-                () =>
-                  write("addProject")(
-                    defined({
-                      ...shared(v),
-                      code: v.code ?? "",
-                      description: v.description ?? undefined,
-                      startDate: v.startDate ?? undefined,
-                      endDate: v.endDate ?? undefined,
-                      effortDays: number(v.effortDays) ?? undefined,
-                      effortNote: v.effortNote ?? undefined,
-                    }),
-                  ),
-                props,
-                "added",
-              )
-            : save(
-                () =>
-                  write("editProject")(
-                    defined({
-                      ...shared(v),
-                      project: p.ref,
-                      description: v.description,
-                      startDate: v.startDate,
-                      endDate: v.endDate,
-                      effortDays: number(v.effortDays),
-                      effortNote: v.effortNote,
-                    }),
-                  ),
-                props,
-                "saved",
-              )
+        const add = (v: FormValues) =>
+          save(
+            () =>
+              write("addProject")(
+                defined({
+                  code: v.code ?? "",
+                  name: v.name ?? "",
+                  status: v.status ?? undefined,
+                  description: v.description ?? undefined,
+                  startDate: v.startDate ?? undefined,
+                  endDate: v.endDate ?? undefined,
+                  effortDays: number(v.effortDays) ?? undefined,
+                  effortNote: v.effortNote ?? undefined,
+                }),
+              ),
+            props,
+            "added",
+          )
+        // An edit sends only the fields that changed, so its change line names just those (as the CLI's does);
+        // with no change it closes without a write.
+        const edit = (project: ProjectRecord, v: FormValues): Promise<SubmitResult> => {
+          const changed = fields.filter((f) => (v[f.name] ?? null) !== (f.initial ?? null)).map((f) => f.name)
+          if (changed.length === 0) return Promise.resolve({ ok: true, ref: project.ref })
+          const input: Record<string, unknown> = { project: project.ref }
+          for (const name of changed) input[name] = name === "effortDays" ? number(v[name]) : name === "name" ? (v.name ?? "") : v[name]
+          return save(() => write("editProject")(input), props, "saved")
+        }
+        const submit = (v: FormValues) => (p === null ? add(v) : edit(p, v))
         return <Form title={p === null ? "New project" : `Edit ${p.code}`} fields={withPrefill(fields, props.prefill)} submit={submit} close={props.close} />
       }}
     </WithProject>

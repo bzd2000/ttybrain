@@ -1,5 +1,5 @@
 // The Projects screen (slot 2, spec §9): every project in one table, in groups.
-// - `Projects · <n> active` (the panel title, no group header): red → amber → green → not set, then by next
+// - `Projects · <n> active` (the panel title, no group header; `· <n> shown` under a filter): red → amber → green → not set, then by next
 //   milestone due (none last), then by code; `On hold · n` and `Closed · n` by code; `Archived · n` only after `a`.
 // - Columns: a health dot, code, name, next milestone and its due date, open actions, open risks, effort.
 // - Keys: Enter opens the record, n new, e edit, h health update, / filter, a archived. The filter is free text
@@ -98,7 +98,8 @@ export function ProjectsScreen() {
   const [filter, setFilter] = createSignal("")
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal("")
-  // `current`: the row the table has selected; `want`: a row to select once it is loaded (a new project).
+  // `current`: the row the table has selected (undefined while it shows none); `want`: a row to select once it
+  // is loaded (a new project), dropped as soon as the table has selected it.
   const [current, setCurrent] = createSignal<string | undefined>()
   const [want, setWant] = createSignal<string | undefined>()
 
@@ -115,8 +116,18 @@ export function ProjectsScreen() {
     return out
   })
   const activeCount = () => groups()[0]!.rows.length
-  const title = () => `Projects · ${activeCount()} active${archived() ? " · archived shown" : ""}`
+  // Under a filter the count is what the filter leaves (the switcher's count stays the unfiltered one).
+  const title = () => `Projects · ${activeCount()} ${filter() === "" ? "active" : "shown"}${archived() ? " · archived shown" : ""}`
   const loaded = (ref: string | undefined) => ref !== undefined && groups().some((g) => g.rows.some((r) => r.ref === ref))
+  // The selected row, only while it is shown (a filter or a reload may have removed it).
+  const selected = () => {
+    const ref = current()
+    return loaded(ref) ? ref : undefined
+  }
+  const select = (ref: string | undefined) => {
+    setCurrent(ref)
+    if (ref !== undefined && ref === want()) setWant(undefined)
+  }
 
   const columns = (): TableColumn[] => [
     { id: "health", title: " ", width: 1 },
@@ -163,7 +174,7 @@ export function ProjectsScreen() {
     }
     if (keys.typing()) return
     const ch = printable(key)
-    const ref = current()
+    const ref = selected()
     if (ch === "n") void openForm("project")
     else if (ch === "e" && ref !== undefined) void openForm("project", ref)
     else if (ch === "h" && ref !== undefined) void openForm("health", ref)
@@ -196,7 +207,7 @@ export function ProjectsScreen() {
             columns={columns()}
             groups={groups()}
             selectedRef={loaded(want()) ? want() : undefined}
-            onSelect={setCurrent}
+            onSelect={select}
             onOpen={(ref) => void nav.open(ref)}
             focused={keys.active()}
             empty={(q.data() ?? []).length === 0 ? EMPTY : NO_MATCH}

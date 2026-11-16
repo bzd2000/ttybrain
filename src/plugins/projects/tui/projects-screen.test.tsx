@@ -6,7 +6,6 @@ import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
 import { displayWidth, theme } from "../../../kernel/tui/api"
-import { clearMessages } from "../../../kernel/tui/messages"
 import { builtinPlugins } from "../../index"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -65,6 +64,8 @@ const health = async (code: string) =>
     return row?.health ?? null
   })
 
+const HINTS = ["Enter open", "n new", "e edit", "h health", "/ filter", "a archived", "g screens", "? help", "q quit"]
+
 describe("Projects screen", () => {
   test("sorted by health then next milestone", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
@@ -85,8 +86,7 @@ describe("Projects screen", () => {
     expect(indexOf(frame, " BI2 ")).toBeGreaterThan(onHold)
     expect(frame).not.toContain("OLD")
     expect(frame).not.toContain("Archived")
-    clearMessages() // a message left by another test file would hide the hints
-    expect(lines((await t.frame()).trimEnd()).at(-1)).toContain("Enter open  n new  e edit  h health  / filter  a archived")
+    expect(lines(frame.trimEnd()).at(-1)).toContain("Enter open  n new  e edit  h health  / filter  a archived")
   })
 
   test("a shows archived", async () => {
@@ -211,6 +211,92 @@ describe("Projects screen", () => {
     const row = spans.lines.find((l) => l.spans.map((s) => s.text).join("").includes(" CRM "))!
     const dot = row.spans.find((s) => s.text.includes("●"))!
     expect(rgbToHex(dot.fg).toLowerCase()).toBe(theme.red)
+  })
+
+  test("e and h do nothing while the filter shows no rows", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(() => write().addProject!({ code: "ERP", name: "Enterprise resources" }))
+    const t = await open()
+    t.input.pressKey("/")
+    await t.input.typeText("zzz")
+    t.input.pressEnter()
+    expect(await t.frame()).toContain("No projects match the filter.")
+    t.input.pressKey("e")
+    let frame = await t.frame()
+    expect(frame).not.toContain("Edit ERP")
+    t.input.pressKey("h")
+    frame = await t.frame()
+    expect(frame).not.toContain("Health update")
+    expect(frame).toContain("No projects match the filter.")
+  })
+
+  test("e and h do nothing once a reload removed every row", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(() => write().addProject!({ code: "ERP", name: "Enterprise resources" }))
+    const t = await open()
+    await inCtx(() => write().archiveProject!({ project: "ERP" }))
+    await sleep(120) // live refresh
+    expect(await t.frame()).not.toContain(" ERP ")
+    t.input.pressKey("e")
+    t.input.pressKey("h")
+    const frame = await t.frame()
+    expect(frame).not.toContain("Edit ERP")
+    expect(frame).not.toContain("Health update")
+  })
+
+  test("an edit of the name sends only the name", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await seed()
+    const ops = kernel.ops as any
+    const call = ops.call.bind(ops)
+    const edits: unknown[] = []
+    ops.call = (plugin: string, name: string, kind: string, input: unknown) => {
+      if (name === "editProject") edits.push(input)
+      return call(plugin, name, kind, input)
+    }
+    const t = await open()
+    t.input.pressKey("e") // ERP
+    await t.frame()
+    await t.input.typeText(" 2")
+    t.input.pressKey("s", { ctrl: true })
+    expect(lineWith(await t.frame(), " ERP ")).toContain("Enterprise resources 2")
+    expect(edits).toEqual([{ project: "#ERP", name: "Enterprise resources 2" }])
+    expect(await inCtx(() => kernel!.ops.describe("projects", "editProject", edits[0]))).toBe("~ ERP name")
+  })
+
+  test("a new project's selection is not taken back later", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await seed()
+    const t = await open()
+    t.input.pressKey("n")
+    await t.frame()
+    await t.input.typeText("NEW")
+    t.input.pressTab()
+    await t.input.typeText("New thing")
+    t.input.pressKey("s", { ctrl: true })
+    expect(lineWith(await t.frame(), " NEW ")).toContain("›")
+    t.input.pressKey("k")
+    let frame = await t.frame()
+    expect(lineWith(frame, " NEW ")).not.toContain("›")
+    t.input.pressKey("/")
+    await t.input.typeText("health:red") // hides NEW
+    t.input.pressEnter()
+    await t.frame()
+    await escape(t)
+    frame = await t.frame()
+    expect(lineWith(frame, "›")).toContain(" ERP ") // the row the filter left stays selected
+    expect(lineWith(frame, " NEW ")).not.toContain("›")
+  })
+
+  test("the status bar shows only whole hints at 80x24", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await seed()
+    const t = await open({ width: 80, height: 24 })
+    const status = lines((await t.frame()).trimEnd()).at(-1)!.trim()
+    const shown = status.split(/\s{2,}/)
+    expect(shown.length).toBeGreaterThan(2)
+    for (const h of shown) expect(HINTS).toContain(h)
+    expect(shown.slice(-2)).toEqual(["? help", "q quit"])
   })
 
   test("empty projects", async () => {

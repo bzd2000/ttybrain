@@ -5,6 +5,7 @@ import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
 import { builtinPlugins } from "../../plugins"
 import { builtinTuiParts } from "../../plugins/tui"
+import { fitHints } from "./frame"
 import { useKeys, useScreenKeys } from "./keys"
 import { runTui } from "./run"
 import { defineTui, type TuiDef } from "./types"
@@ -38,6 +39,24 @@ afterEach(async () => {
   tui?.destroy()
   tui = undefined
   await kernel.cleanup()
+})
+
+describe("status bar", () => {
+  test("fitHints keeps whole hints and the pinned ones", () => {
+    const hints = [
+      { key: "Enter", label: "open" },
+      { key: "n", label: "new" },
+      { key: "e", label: "edit" },
+      { key: "?", label: "help" },
+      { key: "q", label: "quit" },
+    ]
+    // Unpinned: padding 1 + "Enter open" 10 + 2 + "n new" 5 + 2 + "e edit" 6 = 26; "? help" would need 8 more.
+    expect(fitHints(hints, 27).map((h) => h.key)).toEqual(["Enter", "n", "e"])
+    // Pinned: 1 + "Enter open" 10 + 2 + "? help" 6 + 2 + "q quit" 6 = 27; "n new" needs 7 more.
+    expect(fitHints(hints, 27, ["?", "q"]).map((h) => h.key)).toEqual(["Enter", "?", "q"])
+    expect(fitHints(hints, 34, ["?", "q"]).map((h) => h.key)).toEqual(["Enter", "n", "?", "q"])
+    expect(fitHints(hints, 200, ["?", "q"])).toEqual(hints)
+  })
 })
 
 const firstLine = (frame: string) => frame.split("\n")[0]!
