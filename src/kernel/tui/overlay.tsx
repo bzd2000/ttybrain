@@ -4,6 +4,7 @@ import { createContext, createSignal, useContext, type JSX } from "solid-js"
 import type { Kernel } from "../host"
 import type { PluginRuntime } from "../plugin"
 import { Confirm } from "./components/Confirm"
+import { Editor, type EditorOptions } from "./components/Editor"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { RuntimeProvider, useOptionalRuntime } from "./data"
 import { notify } from "./messages"
@@ -47,6 +48,9 @@ export type Overlay = {
   openForm(recordType: string, formId?: string, props?: Omit<RecordFormProps, "close">): Promise<string | undefined>
   // Asks `<text>  y yes · n no`; resolves true on `y` only (false on `n` or Esc).
   confirm(text: string): Promise<boolean>
+  // A full-screen text editor. Ctrl+S (or Esc s) calls `save` and closes on ok, or shows the error and stays open;
+  // Esc d discards. Edits stay in the editor until saved.
+  openEditor(opts: EditorOptions): void
 }
 
 // The app's overlay service; useOverlay() binds `open` to the caller's plugin runtime.
@@ -81,6 +85,13 @@ export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: Tui
           )
         })
       })
+    },
+    openEditor(opts) {
+      stack.push((close) => (
+        <ErrorBoundary label="editor" close={close}>
+          <Editor {...opts} close={close} />
+        </ErrorBoundary>
+      ))
     },
     confirm(text) {
       return new Promise<boolean>((resolve) => {

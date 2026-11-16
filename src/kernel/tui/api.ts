@@ -21,6 +21,9 @@ export type {
 export { useNav, type Nav } from "./nav"
 // Overlays above the screen: open(c), openForm(recordType, formId?, props?) and confirm(text).
 export { useOverlay, type Overlay } from "./overlay"
+export type { EditorOptions } from "./components/Editor"
+// $VISUAL/$EDITOR handoff (local mode); returns the new text, or null when unchanged, failed or in a container.
+export { editExternal, useEditExternal } from "./external"
 // Take keys with useScreenKeys, not OpenTUI's raw useKeyboard: it ignores keys while an overlay sits above the
 // component, so overlays get keys first. Claim a key with key.preventDefault() so the global keys skip it.
 export { useKeys, useScreenKeys, type Hint, type Keys } from "./keys"

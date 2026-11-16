@@ -13,6 +13,7 @@ import { runWithContext } from "../../context"
 import { parseDate } from "../../dates"
 import { ValidationError } from "../../errors"
 import { useQuery } from "../data"
+import { createEscChord, ESC_WINDOW_MS } from "../escChord"
 import { printable, useKeys, useScreenKeys } from "../keys"
 import { useApp } from "../scope"
 import { theme } from "../theme"
@@ -23,7 +24,7 @@ export type { FieldSpec } from "./Field"
 export type FormValues = Record<string, string | null>
 export type SubmitResult = { ok: true; ref?: string } | { ok: false; error: unknown }
 
-export const ESC_WINDOW_MS = 1000
+export { ESC_WINDOW_MS }
 export const SUGGESTION_LIMIT = 8
 
 // The kernel prefixes an operation's input errors with the operation (`todo.addThing: title must not be blank`);
@@ -141,14 +142,9 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
     setValue(f.name, choices[(at + d + choices.length) % choices.length]!)
   }
 
-  let escTimer: ReturnType<typeof setTimeout> | undefined
-  const clearEsc = () => {
-    if (escTimer !== undefined) clearTimeout(escTimer)
-    escTimer = undefined
-  }
-  onCleanup(clearEsc)
+  const esc = createEscChord(() => props.close())
   const cancel = () => {
-    clearEsc()
+    esc.clear()
     props.close()
   }
 
@@ -162,10 +158,10 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
   })
 
   useScreenKeys((key) => {
-    if (escTimer !== undefined) {
+    if (esc.pending()) {
       // The key after Esc: `s` saves, anything else confirms the cancel.
       key.preventDefault()
-      clearEsc()
+      esc.clear()
       if (printable(key) === "s") submit()
       else cancel()
       return
@@ -174,8 +170,7 @@ export function Form(props: { title: string; fields: FieldSpec[]; submit(values:
     if (key.name === "escape") {
       key.preventDefault()
       if (saving()) return // the save goes on (busy retry included); cancelling now would still create the record
-      escTimer = setTimeout(cancel, ESC_WINDOW_MS)
-      ;(escTimer as { unref?: () => void }).unref?.()
+      esc.arm()
     } else if (key.name === "s" && (key.ctrl || key.meta || key.option)) {
       key.preventDefault()
       submit()
