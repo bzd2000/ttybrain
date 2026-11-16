@@ -101,13 +101,15 @@ describe("project detail", () => {
   test("tab titles carry counts", async () => {
     const t = await open()
     const frame = await t.frame()
+    expect(frame).toContain("Milestones 1")
+    expect(frame).toContain("Risks & issues 1")
     expect(frame).toContain("People 2")
     expect(lineWith(frame, "Summary")).toContain("Context")
   })
 
   test("→ goes through tabs to Context", async () => {
     const t = await open()
-    let frame = await right(t)
+    let frame = await right(t, 6)
     expect(frame).toContain("Team/Stakeholder")
     frame = await right(t)
     expect(frame).toContain("Context · markdown")
@@ -115,14 +117,14 @@ describe("project detail", () => {
 
   test("empty context", async () => {
     const t = await open()
-    const frame = await right(t, 2)
+    const frame = await right(t, 7)
     expect(frame).toContain("No context yet. Press e to write it, or let your MCP integration fill it in.")
   })
 
   test("context renders markdown", async () => {
     const t = await open()
     await inCtx(() => write().setContext!({ project: "CRM", markdown: "# Background\nLegacy CRM" }))
-    await right(t, 2)
+    await right(t, 7)
     // <markdown> lays out its blocks a moment after the first frame.
     let frame = await t.frame()
     for (let i = 0; i < 40 && !frame.includes("Legacy CRM"); i++) {
@@ -139,7 +141,7 @@ describe("project detail", () => {
   test("e edits context", async () => {
     const t = await open()
     await inCtx(() => write().setContext!({ project: "CRM", markdown: "# A" }))
-    await right(t, 2)
+    await right(t, 7)
     t.input.pressKey("e")
     await t.frame()
     t.input.pressKey("END")
@@ -152,7 +154,7 @@ describe("project detail", () => {
   test("E without an external editor (container mode) leaves the context unchanged", async () => {
     const t = await open()
     await inCtx(() => write().setContext!({ project: "CRM", markdown: "# A" }))
-    await right(t, 2)
+    await right(t, 7)
     process.env.PM_MODE = "container"
     try {
       t.input.pressKey("E")
@@ -176,7 +178,7 @@ describe("project detail", () => {
 
   test("people tab adds and removes involvement", async () => {
     const t = await open()
-    let frame = await right(t)
+    let frame = await right(t, 6)
     expect(lineWith(frame, "Anna")).toContain("architect")
     expect(lineWith(frame, "Anna")).toContain("Team")
     expect(lineWith(frame, "Peter")).toContain("Stakeholder")
@@ -212,7 +214,7 @@ describe("project detail", () => {
 
   test("Del confirmation names the selected person and role", async () => {
     const t = await open()
-    await right(t)
+    await right(t, 6)
     // Rows are sorted by name: Anna, Peter.
     t.input.pressKey("DELETE")
     expect(await t.frame()).toContain("Remove @anna as architect from CRM?")

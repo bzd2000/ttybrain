@@ -2,6 +2,9 @@
 import { defineTui } from "../../../kernel/tui/api"
 import { HealthForm, InvolvementForm, ProjectForm } from "./forms"
 import { makeStore } from "../logic/records"
+import { FORM_LABELS, ITEM_FORMS } from "./item-forms"
+import { ITEM_KINDS, ItemTab } from "./item-tab"
+import { KINDS } from "../logic/items"
 import { ProjectContext } from "./project-context"
 import { ProjectPeople } from "./project-people"
 import { ProjectSummary } from "./project-summary"
@@ -30,8 +33,30 @@ export const projectsTui = defineTui({
     ui.recordForm("project", { id: "health", label: "Health update", component: HealthForm })
     ui.recordForm("project", { id: "involvement", label: "Involvement", component: InvolvementForm })
 
+    for (const kind of KINDS) ui.recordForm(kind, { id: kind, label: FORM_LABELS[kind], component: ITEM_FORMS[kind] })
+
     // The project's record tabs; the item tabs (orders 20-60) sit between Summary and People.
     ui.recordTab("project", { id: "summary", title: "Summary", order: 10, component: ProjectSummary })
+    // The item tabs; each count is the project's open items (decisions: all).
+    const itemTab = (id: string, order: number, open: (id: number) => Promise<number>) => {
+      const config = ITEM_KINDS[id]!
+      ui.recordTab("project", {
+        id,
+        title: config.title,
+        order,
+        count: async (recordRef) => {
+          const pid = await makeStore(ui).projectId(recordRef)
+          return pid === null ? null : open(pid)
+        },
+        component: (p) => <ItemTab recordRef={p.recordRef} config={config} />,
+      })
+    }
+    const n = async (q: any) => Number((await q.select((eb: any) => eb.fn.countAll().as("n")).executeTakeFirstOrThrow()).n)
+    itemTab("milestones", 20, (pid) => n(ui.data.selectFrom("milestone").where("project_id", "=", pid).where("done_date", "is", null)))
+    itemTab("deliverables", 30, (pid) => n(ui.data.selectFrom("deliverable").where("project_id", "=", pid).where("status", "<>", "delivered")))
+    itemTab("risks", 40, (pid) => n(ui.data.selectFrom("risk").where("project_id", "=", pid).where("status", "=", "open")))
+    itemTab("decisions", 50, (pid) => n(ui.data.selectFrom("decision").where("project_id", "=", pid)))
+    itemTab("actions", 60, (pid) => n(ui.data.selectFrom("action").where("project_id", "=", pid).where("status", "=", "open")))
     ui.recordTab("project", {
       id: "people",
       title: "People",
