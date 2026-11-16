@@ -2,7 +2,9 @@
 // follows the ref across reloads; when that ref is gone it stays at the same index, clamped. Columns are
 // truncated by display width with `…`: fixed ones to their width, "grow" ones to the width left over (measured).
 // The rows scroll so the selected one stays in view. `groups` renders `Title · n` headers above each group's
-// rows (a group without a title has no header: a screen's main group under its panel title). With `listId`, the columns other plugins registered for that list (registry `columns(listId)`) are
+// rows (a group without a title has no header: a screen's main group under its panel title; `count: false` leaves
+// out the ` · n`). A row's `detail` is a second line under it, aligned with its second column and not selectable
+// (a processed inbox item's outcome). With `listId`, the columns other plugins registered for that list (registry `columns(listId)`) are
 // appended and filled through their `value(ref)`. While a text field holds text focus, the Table takes no keys,
 // nor keys a handler before it (its screen's) already claimed with preventDefault().
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
@@ -13,9 +15,9 @@ import { useApp } from "../scope"
 import { theme, toneColor } from "../theme"
 import type { Cell, Tone } from "../types"
 
-export type TableRow = { ref: string; cells: Record<string, string | Cell> }
+export type TableRow = { ref: string; cells: Record<string, string | Cell>; detail?: Cell }
 export type TableColumn = { id: string; title: string; width: number | "grow"; tone?: (row: TableRow) => Tone }
-export type TableGroup = { title?: string; rows: TableRow[] }
+export type TableGroup = { title?: string; count?: boolean; rows: TableRow[] }
 
 export type TableProps = {
   columns: TableColumn[]
@@ -40,7 +42,9 @@ const GAP = 1
 // A grow column's width before the table has been measured.
 const UNMEASURED_GROW = 20
 
-type Line = { kind: "group"; title: string; n: number } | { kind: "row"; row: TableRow }
+type Line = { kind: "group"; title: string } | { kind: "row"; row: TableRow } | { kind: "detail"; cell: Cell }
+
+const rowLines = (row: TableRow): Line[] => (row.detail ? [{ kind: "row", row }, { kind: "detail", cell: row.detail }] : [{ kind: "row", row }])
 
 function cellOf(row: TableRow, col: TableColumn): Cell {
   const v = row.cells[col.id]
@@ -56,10 +60,10 @@ export function Table(props: TableProps) {
   const lines = createMemo((): Line[] =>
     props.groups
       ? props.groups.flatMap((g): Line[] => {
-          const rows = g.rows.map((row): Line => ({ kind: "row", row }))
-          return g.title === undefined ? rows : [{ kind: "group", title: g.title, n: g.rows.length }, ...rows]
+          const rows = g.rows.flatMap(rowLines)
+          return g.title === undefined ? rows : [{ kind: "group", title: g.count === false ? g.title : `${g.title} · ${g.rows.length}` }, ...rows]
         })
-      : flat().map((row) => ({ kind: "row", row })),
+      : flat().flatMap(rowLines),
   )
   const focused = () => props.focused !== false && keys.active()
 
@@ -124,7 +128,7 @@ export function Table(props: TableProps) {
     setChosen(list[Math.min(list.length - 1, Math.max(0, i + d))]!.ref)
   }
 
-  // --- scrolling: the first line shown keeps the selected row (and its group header, when it fits) in view ---
+  // --- scrolling: the first line shown keeps the selected row (its group header and detail line, when they fit) in view ---
   let lastOffset = 0
   const offset = createMemo(() => {
     const all = lines()
@@ -133,8 +137,9 @@ export function Table(props: TableProps) {
     let off = Math.min(lastOffset, Math.max(0, all.length - 1))
     if (h > 0 && sel >= 0) {
       const top = sel > 0 && all[sel - 1]!.kind === "group" ? sel - 1 : sel
+      const bottom = all[sel + 1]?.kind === "detail" && h > 1 ? sel + 1 : sel
       if (top < off) off = top
-      if (sel >= off + h) off = sel - h + 1
+      if (bottom >= off + h) off = bottom - h + 1
       off = Math.max(0, Math.min(off, all.length - h))
     }
     lastOffset = off
@@ -183,6 +188,19 @@ export function Table(props: TableProps) {
     )
   }
 
+  // Indented past the marker and the first column, cut to what is left of the measured width.
+  const Detail = (dp: { cell: Cell }) => {
+    const indent = () => MARKER_WIDTH + GAP + (columns().length > 1 ? widthOf(columns()[0]!) + GAP : 0)
+    const room = () => (width() === 0 ? UNMEASURED_GROW : Math.max(1, width() - indent()))
+    return (
+      <box flexDirection="row" height={1} flexShrink={0} paddingLeft={indent()}>
+        <text fg={toneColor(dp.cell.tone)} wrapMode="none">
+          {truncate(dp.cell.text, room())}
+        </text>
+      </box>
+    )
+  }
+
   return (
     <box
       flexDirection="column"
@@ -216,7 +234,11 @@ export function Table(props: TableProps) {
           <For each={visible()}>
             {(line) =>
               line.kind === "group" ? (
-                <text fg={theme.muted} height={1} flexShrink={0}>{`${line.title} · ${line.n}`}</text>
+                <text fg={theme.muted} height={1} flexShrink={0}>
+                  {line.title}
+                </text>
+              ) : line.kind === "detail" ? (
+                <Detail cell={line.cell} />
               ) : (
                 <Row row={line.row} />
               )

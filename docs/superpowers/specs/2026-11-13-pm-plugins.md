@@ -286,7 +286,8 @@ Inbox doesn't know projects or people. When an item is saved, it asks the kernel
 | `capture` | `text`, `context?` (current record, pre-filled as a tag) | `+ inbox I-20 "…"` |
 | `editItem` | `ref`, `text` (re-resolves tags) | `~ I-19 #CMR → #CRM` |
 | `markProcessed` | `ref`, `summary`, `by` | `~ I-17 processed: "note on @peter, A-41"` |
-| `dismiss` / `reopen` | `ref` | `~ I-13 dismissed` |
+| `dismiss` | `ref`, `by?` (kept in `processed_by`) | `~ I-13 dismissed` |
+| `reopen` | `ref` | `~ I-13 reopened` |
 
 ### CLI
 

@@ -9,7 +9,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary"
 import { RuntimeProvider, useOptionalRuntime } from "./data"
 import { notify } from "./messages"
 import type { TuiRegistry } from "./registry"
-import { PluginScope } from "./scope"
+import { PluginScope, useApp } from "./scope"
 import type { RecordFormProps } from "./types"
 
 export type OverlayEntry = { id: string; kind: string | undefined; render: () => JSX.Element }
@@ -116,4 +116,12 @@ export function useOverlay(): Overlay {
   if (!service) throw new Error("useOverlay() must be called inside <TuiApp>")
   const runtime = useOptionalRuntime()
   return { ...service, open: (c) => service.open(c, runtime) }
+}
+
+// The record forms registered for `recordType` (any plugin's), in registration order: what a component can offer
+// to open with openForm (the inbox's "process by hand" menu) without knowing the plugin that owns the type.
+export function useRecordForms(recordType: string): Array<{ id: string; label: string; plugin: string }> {
+  return useApp()
+    .registry.forms(recordType)
+    .map((f) => ({ id: f.id, label: f.label, plugin: f.plugin }))
 }

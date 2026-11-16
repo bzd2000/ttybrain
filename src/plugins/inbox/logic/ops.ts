@@ -9,6 +9,8 @@ const Capture = Type.Object({ text: NonBlank(), context: Type.Optional(Type.Stri
 const Edit = Type.Object({ ref: Ref, text: NonBlank() })
 const Mark = Type.Object({ ref: Ref, summary: NonBlank(), by: ProcessedBy })
 const ItemRef = Type.Object({ ref: Ref })
+// `by` (optional): who dismissed it, kept in processed_by (the TUI passes "you").
+const Dismiss = Type.Object({ ref: Ref, by: Type.Optional(ProcessedBy) })
 const Labelled = Type.Object({ ref: Type.String(), label: Type.String() })
 const ItemDetail = Type.Object({
   ref: Type.String(),
@@ -103,12 +105,12 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         },
       },
       dismiss: {
-        input: ItemRef,
+        input: Dismiss,
         output: ItemRecord,
-        describe: async (i: { ref: string }) => `~ ${await refOf(i.ref)} dismissed`,
-        run: async (i: { ref: string }) => {
+        describe: async (i: Static<typeof Dismiss>) => `~ ${await refOf(i.ref)} dismissed`,
+        run: async (i: Static<typeof Dismiss>) => {
           const it = await store.item(i.ref)
-          await db.updateTable("item").set({ status: "dismissed", processed_at: now() }).where("id", "=", it.id).execute()
+          await db.updateTable("item").set({ status: "dismissed", processed_at: now(), processed_by: i.by ?? null }).where("id", "=", it.id).execute()
           return store.item(String(it.id))
         },
       },

@@ -1,6 +1,7 @@
 // The record forms of the five item kinds (milestone, deliverable, risk, decision, action), add and edit, from one
 // factory configured per kind. Field names are the operations' input names, so a ValidationError lands under its
-// field. With `prefill.project` the project is set and its field left out. An edit sends only the changed fields.
+// field. With `prefill.project` the project is set and its field left out; a new record's other fields start from
+// `prefill` by name. `origin` goes to act(), so the kernel records provenance. An edit sends only the changed fields.
 import { createEffect, Show, untrack } from "solid-js"
 import { act, Form, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "../../../kernel/tui/api"
 import { makeItems, type Kind } from "../logic/items"
@@ -129,7 +130,9 @@ function itemForm(spec: KindForm) {
         {(r) => {
           const project = props.prefill?.project
           // A kind that carries its project (everything but the action's optional one) takes it from the prefill.
-          const fields = spec.fields(r, today, project !== undefined)
+          // A new record starts from the prefill (the inbox's "process by hand" passes the item's text as title).
+          const prefill = r === null ? (props.prefill ?? {}) : {}
+          const fields = spec.fields(r, today, project !== undefined).map((f) => (prefill[f.name] === undefined ? f : { ...f, initial: prefill[f.name] }))
           const noun = spec.label.toLowerCase()
           const save = async (run: () => Promise<any>, verb: string): Promise<SubmitResult> => {
             const res = await act(run, { origin: props.origin, ok: (out) => `${verb} ${(out as { ref: string }).ref}` })

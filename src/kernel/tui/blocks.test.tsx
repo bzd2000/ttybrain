@@ -10,6 +10,7 @@ import { Menu } from "./components/Menu"
 import { Panel } from "./components/Panel"
 import { displayWidth } from "./format"
 import { Table, type TableRow } from "./components/Table"
+import { useRecordForms } from "./overlay"
 import { useKeys, useScreenKeys } from "./keys"
 import { currentMessage } from "./messages"
 import { defineTui, type TuiDef } from "./types"
@@ -292,6 +293,73 @@ describe("TUI blocks", () => {
     expect(at("T-1")).toBe(at("Ref") + 1)
     expect(at("Done · 1")).toBe(at("T-1") + 1)
     expect(frame).not.toContain("undefined")
+  })
+
+  test("Table row detail line sits under its row and is not selectable", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    function TableScreen() {
+      return (
+        <Table
+          columns={[
+            { id: "ref", title: "Ref", width: 5 },
+            { id: "title", title: "Title", width: "grow" },
+          ]}
+          groups={[
+            { title: "Open", rows: [{ ref: "T-1", cells: { ref: "T-1", title: "one" } }] },
+            {
+              title: "Done lately",
+              count: false,
+              rows: [
+                { ref: "T-2", cells: { ref: "T-2", title: "two" }, detail: { text: "✓ done by you", tone: "green" } },
+                { ref: "T-3", cells: { ref: "T-3", title: "three" } },
+              ],
+            },
+          ]}
+          header={false}
+          focused
+        />
+      )
+    }
+    tui = await renderTui(kernel, { parts: [screenPart(TableScreen)] })
+    tui.input.pressKey("2")
+    let frame = await tui.frame()
+    const at = (s: string) => frame.split("\n").findIndex((l) => l.includes(s))
+    expect(frame).toContain("Open · 1")
+    expect(lineWith(frame, "Done lately")).not.toContain("·")
+    expect(at("✓ done by you")).toBe(at("T-2") + 1)
+    expect(at("T-3")).toBe(at("T-2") + 2)
+    // aligned with the second column: marker, gap, the 5-wide ref column, gap
+    expect(lineWith(frame, "✓ done by you").indexOf("✓")).toBe(lineWith(frame, "two").indexOf("two"))
+    tui.input.pressKey("j")
+    frame = await tui.frame()
+    expect(lineWith(frame, "T-2")).toContain("› T-2")
+    tui.input.pressKey("j")
+    frame = await tui.frame()
+    expect(lineWith(frame, "T-3")).toContain("› T-3")
+    expect(lineWith(frame, "✓ done by you")).not.toContain("›")
+  })
+
+  test("useRecordForms lists a record type's registered forms", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    function NoForm() {
+      return <text>form</text>
+    }
+    function FormsScreen() {
+      const forms = useRecordForms("thing")
+      const none = useRecordForms("gadget")
+      return <text>{`${forms.map((f) => `${f.id}=${f.label}@${f.plugin}`).join(", ")} | ${none.length}`}</text>
+    }
+    const part = defineTui({
+      plugin: "thing",
+      activate: (ui) => {
+        ui.screen({ id: "t", title: "Forms", slot: 2, component: FormsScreen })
+        ui.recordForm("thing", { id: "thing", label: "Thing", component: NoForm })
+        ui.recordForm("thing", { id: "quick", label: "Quick thing", component: NoForm })
+      },
+    })
+    tui = await renderTui(kernel, { parts: [part] })
+    tui.input.pressKey("2")
+    expect(await tui.frame()).toContain("thing=Thing@thing, quick=Quick thing@thing | 0")
   })
 
   test("Table reports no selection when its rows are gone", async () => {

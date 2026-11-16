@@ -21,6 +21,8 @@ export type {
 export { useNav, type Nav } from "./nav"
 // Overlays above the screen: open(c), openForm(recordType, formId?, props?) and confirm(text).
 export { useOverlay, type Overlay } from "./overlay"
+// The record forms registered for a record type: Array<{ id, label, plugin }> (for a menu of forms to open).
+export { useRecordForms } from "./overlay"
 export type { EditorOptions } from "./components/Editor"
 // $VISUAL/$EDITOR handoff (local mode); returns the new text, or null when unchanged, failed or in a container.
 export { editExternal, useEditExternal } from "./external"
@@ -39,7 +41,7 @@ export { Panel } from "./components/Panel"
 export { RecordView } from "./components/RecordView"
 export { Table, type TableColumn, type TableGroup, type TableProps, type TableRow } from "./components/Table"
 export { Tabs, type TabItem } from "./components/Tabs"
-export { daysBetween } from "../dates"
+export { addDays, daysBetween } from "../dates"
 export { displayWidth, dueLabel, longDate, shortDate, truncate } from "./format"
 export { ErrorBoundary } from "./components/ErrorBoundary"
 export { notify } from "./messages"
