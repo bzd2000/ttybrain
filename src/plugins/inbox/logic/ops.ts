@@ -9,8 +9,8 @@ const Capture = Type.Object({ text: NonBlank(), context: Type.Optional(Type.Stri
 const Edit = Type.Object({ ref: Ref, text: NonBlank() })
 const Mark = Type.Object({ ref: Ref, summary: NonBlank(), by: ProcessedBy })
 const ItemRef = Type.Object({ ref: Ref })
-// `by` (optional): who dismissed it, kept in processed_by (the TUI passes "you", the CLI "cli"); without it the
-// recorded one stays.
+// `by` (optional): who dismissed it, kept in processed_by (the TUI passes "you", the CLI "cli"); without it
+// processed_by is null (keeping an earlier value would attribute the dismissal to whoever processed the item).
 const Dismiss = Type.Object({ ref: Ref, by: Type.Optional(ProcessedBy) })
 const Labelled = Type.Object({ ref: Type.String(), label: Type.String() })
 const ItemDetail = Type.Object({
@@ -111,8 +111,8 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         describe: async (i: Static<typeof Dismiss>) => `~ ${await refOf(i.ref)} dismissed`,
         run: async (i: Static<typeof Dismiss>) => {
           const it = await store.item(i.ref)
-          // Without `by`, whoever is recorded stays (a processed item dismissed later keeps its attribution).
-          await db.updateTable("item").set({ status: "dismissed", processed_at: now(), processed_by: i.by ?? it.processed_by }).where("id", "=", it.id).execute()
+          // Without `by`, nobody is recorded as having dismissed it.
+          await db.updateTable("item").set({ status: "dismissed", processed_at: now(), processed_by: i.by ?? null }).where("id", "=", it.id).execute()
           return store.item(String(it.id))
         },
       },
