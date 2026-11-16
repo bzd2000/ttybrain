@@ -50,7 +50,7 @@ export type Overlay = {
   // Asks `<text>  y yes · n no`; resolves true on `y` only (false on `n` or Esc).
   confirm(text: string): Promise<boolean>
   // A full-screen text editor. Ctrl+S (or Esc s) calls `save` and closes on ok, or shows the error and stays open;
-  // Esc d discards. Edits stay in the editor until saved.
+  // Esc d (Alt+D) discards, asking first when the text changed. Edits stay in the editor until saved.
   openEditor(opts: EditorOptions): void
 }
 
@@ -65,7 +65,7 @@ export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: Tui
   const notInWrite = (name: string) => {
     if (kernel.db.inWrite()) throw new Error(waitsForUser(name))
   }
-  return {
+  const service: OverlayService = {
     open: (c, runtime) =>
       stack.push((close) => (
         <ErrorBoundary label={runtime?.id ?? "overlay"} close={close}>
@@ -99,7 +99,7 @@ export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: Tui
       notInWrite("openEditor")
       stack.push((close) => (
         <ErrorBoundary label="editor" close={close}>
-          <Editor {...opts} close={close} />
+          <Editor {...opts} close={close} confirm={(text) => service.confirm(text)} />
         </ErrorBoundary>
       ))
     },
@@ -118,6 +118,7 @@ export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: Tui
       })
     },
   }
+  return service
 }
 
 export const OverlayContext = createContext<OverlayService>()

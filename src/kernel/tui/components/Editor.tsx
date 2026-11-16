@@ -1,5 +1,6 @@
 // <Editor>: the full-screen long-text overlay (useOverlay().openEditor). Edits stay in the overlay until saved.
-// Ctrl+S (Alt+S), or Esc then `s`, saves; Esc then `d` (Alt+D) discards; Esc then anything else, or no key within
+// Ctrl+S (Alt+S), or Esc then `s`, saves; Esc then `d` (Alt+D) discards, after `confirm("Discard changes?")` when
+// the text differs from `initial`; Esc then anything else, or no key within
 // ESC_WINDOW_MS, goes back to editing (never discards). A failed save shows its error and keeps the text; while
 // a save is in flight further saves and Esc are ignored. Holds text focus while open.
 import type { TextareaRenderable } from "@opentui/core"
@@ -17,7 +18,10 @@ export type EditorOptions = {
   save(text: string): Promise<{ ok: true } | { ok: false; error: unknown }>
 }
 
-export function Editor(props: EditorOptions & { close(): void }) {
+export const DISCARD_QUESTION = "Discard changes?"
+
+// `confirm` is the overlay service's (passed in by overlay.tsx, which imports this file).
+export function Editor(props: EditorOptions & { close(): void; confirm(text: string): Promise<boolean> }) {
   const { kernel, track } = useApp()
   const keys = useKeys()
   const dims = useTerminalDimensions()
@@ -59,13 +63,19 @@ export function Editor(props: EditorOptions & { close(): void }) {
     void track(run())
   }
 
+  const discard = () => {
+    if (saving()) return
+    if ((area?.plainText ?? props.initial) === props.initial) return props.close()
+    void props.confirm(DISCARD_QUESTION).then((yes) => yes && props.close())
+  }
+
   useScreenKeys((key) => {
     if (esc.pending()) {
       key.preventDefault()
       disarm()
       const ch = printable(key)
       if (ch === "s") save()
-      else if (ch === "d" && !saving()) props.close()
+      else if (ch === "d") discard()
       return
     }
     if (key.name === "escape") {
@@ -79,7 +89,7 @@ export function Editor(props: EditorOptions & { close(): void }) {
     } else if (key.name === "d" && (key.meta || key.option) && !key.ctrl) {
       // A fast Esc d arrives as one Alt+D key press.
       key.preventDefault()
-      if (!saving()) props.close()
+      discard()
     }
   }, { whileTyping: true })
 
