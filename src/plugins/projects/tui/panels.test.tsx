@@ -137,6 +137,14 @@ describe("overview panels", () => {
     expect(frame.indexOf("call the vendor")).toBeLessThan(frame.indexOf("book the room"))
   })
 
+  test("inbox panel flattens a multi-line item to one line with ↵", async () => {
+    const t = await open(async () => {
+      await write("inbox").capture!({ text: "call the vendor\nask about the SLA" })
+    })
+    const frame = await shot(t)
+    expect(lineWith(frame, "I-1")).toContain("call the vendor ↵ ask about the SLA")
+  })
+
   test("at 80x24 with full panels every panel title is visible, and Tab only focuses a visible panel", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await inCtx(async () => {

@@ -2,7 +2,7 @@
 // (slot 6), the item's edit form and the Overview's Inbox panel.
 import { defineTui, truncate } from "../../../kernel/tui/api"
 import { CaptureOverlay } from "./capture"
-import { InboxScreen, ItemForm } from "./inbox-screen"
+import { InboxScreen, ItemForm, oneLine } from "./inbox-screen"
 
 const CLIP = 60
 
@@ -34,7 +34,7 @@ export const inboxTui = defineTui({
         const rows = await ui.data.selectFrom("item").select(["id", "text"]).where("status", "=", "new").orderBy("id").execute()
         return rows.map((r) => {
           const ref = `I-${r.id}`
-          return { ref, cells: [{ text: ref, tone: "muted" as const }, { text: truncate(String(r.text), CLIP) }] }
+          return { ref, cells: [{ text: ref, tone: "muted" as const }, { text: truncate(oneLine(String(r.text)), CLIP) }] }
         })
       },
     })

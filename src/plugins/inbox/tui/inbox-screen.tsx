@@ -53,9 +53,12 @@ export function capturedLabel(at: string, today: string): string {
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
+// A multi-line item on one line: each line break shows as ` ↵ ` (the Inbox screen and the Overview panel).
+export const oneLine = (text: string) => text.replace(/\s*\n\s*/g, " ↵ ")
+
 // One line, each unresolved tag followed by `⚠`.
 function shownText(text: string, unresolved: string[]): string {
-  let out = text.replace(/\s*\n\s*/g, " ↵ ")
+  let out = oneLine(text)
   for (const tag of unresolved) out = out.replace(new RegExp(`${escape(tag)}(?![A-Za-z0-9-])`, "g"), `${tag} ⚠`)
   return out
 }
