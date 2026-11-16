@@ -246,6 +246,24 @@ describe("forms", () => {
     expect(await things()).toEqual([])
   })
 
+  test("Esc then Ctrl+S or Alt+S saves instead of cancelling", async () => {
+    const t = await open()
+    for (const mod of [{ ctrl: true }, { meta: true }]) {
+      overlay!.openForm("thing")
+      expect(await t.frame()).toContain("New thing")
+      await t.input.typeText(mod.ctrl ? "Via esc ctrl-s" : "Via esc alt-s")
+      t.input.pressEscape()
+      await sleep(30) // a separate Esc, not an Alt prefix
+      t.input.pressKey("s", mod)
+      await t.settle()
+      expect(await t.frame()).not.toContain("New thing")
+    }
+    expect(await things()).toEqual([
+      { title: "Via esc ctrl-s", due: null },
+      { title: "Via esc alt-s", due: null },
+    ])
+  })
+
   test("Esc then s submits", async () => {
     const t = await open()
     overlay!.openForm("thing")

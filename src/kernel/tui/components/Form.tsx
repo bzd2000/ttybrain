@@ -252,10 +252,10 @@ export function Form(props: {
 
   useScreenKeys((key) => {
     if (esc.pending()) {
-      // The key after Esc: `s` saves, anything else confirms the cancel.
+      // The key after Esc: `s` (or Ctrl+S / Alt+S, still meaning save) saves, anything else confirms the cancel.
       key.preventDefault()
       esc.clear()
-      if (printable(key) === "s") submit()
+      if (printable(key) === "s" || (key.name === "s" && (key.ctrl || key.meta || key.option))) submit()
       else cancel()
       return
     }
