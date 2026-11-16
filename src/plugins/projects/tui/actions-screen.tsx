@@ -5,9 +5,9 @@
 //   title, else `inbox I-n` when the action was created from the inbox, else —), due.
 // - Keys: x completes, d sets the due date, e edits, n adds, Enter opens the form, / filters (Enter applies, Esc clears).
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
-import { addDays, weekEnd } from "../../../kernel/api"
 import {
   act,
+  addDays,
   dueLabel,
   Panel,
   printable,
@@ -21,6 +21,7 @@ import {
   useRuntime,
   useScreenKeys,
   useToday,
+  weekEnd,
   type Hint,
   type TableColumn,
   type TableGroup,

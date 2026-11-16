@@ -75,4 +75,28 @@ describe("logic/UI split", () => {
     const offenders = [...logic, ...kernel].flatMap((f) => specifiers(f).filter((s) => isUi(f, s)).map((s) => `${rel(f)} → ${s}`))
     expect(offenders).toEqual([])
   })
+
+  test("a plugin's tui/ part imports the kernel only through src/kernel/tui/api.ts and no other plugin's files", () => {
+    const pluginsDir = join(src, "plugins")
+    const api = join(tuiDir, "api.ts")
+    const offenders: string[] = []
+    let files = 0
+    for (const plugin of readdirSync(pluginsDir)) {
+      const dir = join(pluginsDir, plugin, "tui")
+      if (!existsSync(dir)) continue
+      const own = join(pluginsDir, plugin) + sep
+      for (const f of walk(dir).filter((x) => !/\.test\.tsx?$/.test(x))) {
+        files++
+        for (const spec of specifiers(f)) {
+          if (!spec.startsWith(".")) continue
+          const target = resolveRelative(f, spec) ?? resolve(dirname(f), spec)
+          if (target === api) continue
+          if (target.startsWith(own) && !target.startsWith(join(src, "kernel"))) continue
+          offenders.push(`${rel(f)} → ${spec}`)
+        }
+      }
+    }
+    expect(files).toBeGreaterThan(0)
+    expect(offenders).toEqual([])
+  })
 })
