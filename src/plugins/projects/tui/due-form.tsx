@@ -1,7 +1,7 @@
-// The Actions screen's `d` form: one date field calling editAction({ due }). Saving an unchanged date writes nothing;
-// an empty date clears the due date.
+// The Actions screen's `d` form: one date field calling editAction({ due }). The input starts empty (so `+1w` works)
+// and the current due date is shown in the label; submitting empty or an unchanged date writes nothing (`e` clears a date).
 import { createEffect, Show, untrack } from "solid-js"
-import { act, Form, useQuery, useRuntime, type RecordFormProps, type SubmitResult } from "../../../kernel/tui/api"
+import { act, Form, longDate, useQuery, useRuntime, type RecordFormProps, type SubmitResult } from "../../../kernel/tui/api"
 import { makeItems } from "../logic/items"
 import { makeStore } from "../logic/records"
 
@@ -18,11 +18,11 @@ export function DueForm(props: RecordFormProps) {
         const a = q.data()!
         const submit = async (v: { due?: string | null }): Promise<SubmitResult> => {
           const due = v.due ?? null
-          if (due === a.due_date) return { ok: true, ref: a.ref }
+          if (v.due == null || due === a.due_date) return { ok: true, ref: a.ref }
           const res = await act(() => rt.self().write.editAction!({ ref: a.ref, due }), { origin: props.origin, ok: () => `saved ${a.ref}` })
           return res.ok ? { ok: true, ref: a.ref } : res
         }
-        return <Form title={`Due date of ${a.ref}`} fields={[{ name: "due", label: "Due", kind: "date", initial: a.due_date }]} submit={submit} close={props.close} />
+        return <Form title={`Due date of ${a.ref}`} fields={[{ name: "due", label: `Due (now: ${a.due_date === null ? "none" : longDate(a.due_date)})`, kind: "date" }]} submit={submit} close={props.close} />
       })}
     </Show>
   )

@@ -140,6 +140,28 @@ describe("actions screen", () => {
     expect((await rows<any>(["due_date"]))[5].due_date).toBe("2026-11-20")
   })
 
+  test("d on a dated action starts empty: +1w moves it to Next week; empty Enter writes nothing", async () => {
+    const t = await open()
+    t.input.pressArrow("down") // A-2, due 2026-11-13 (This week)
+    t.input.pressArrow("down") // A-3, due 2026-11-15
+    expect(lineWith(await t.frame(), "›")).toContain("Review plan")
+    t.input.pressKey("d")
+    const form = await t.frame()
+    expect(form).toContain("now: Sun 15 Nov 2026")
+    expect(form).not.toContain("2026-11-15")
+    t.input.pressEnter() // empty: closes without a write
+    await untilThat(t, (f) => !f.includes("now: Sun"))
+    expect((await rows<any>(["due_date"]))[2].due_date).toBe("2026-11-15")
+    t.input.pressKey("d")
+    await t.frame()
+    await type(t, "+1w")
+    expect(await t.frame()).toContain("→ 2026-11-20")
+    t.input.pressEnter()
+    const frame = await untilThat(t, (f) => f.includes("Next week · 2"))
+    expect(frame).toContain("This week · 1")
+    expect((await rows<any>(["due_date"]))[2].due_date).toBe("2026-11-20")
+  })
+
   test("e edits only the changed fields, n adds", async () => {
     const t = await open()
     t.input.pressKey("e")
