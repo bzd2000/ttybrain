@@ -23,6 +23,14 @@ const FIRST_FREE_SLOT = 7
 
 type Owned<T> = { plugin: string } & T
 
+// What the getters return: the def plus the plugin that registered it, so the app can render each component in
+// its plugin's scope (PluginScope: error boundary + runtime).
+export type Registered<T> = T & { plugin: string }
+
+function registered<T>(o: Owned<{ def: T }>): Registered<T> {
+  return { ...o.def, plugin: o.plugin }
+}
+
 export class TuiRegistry {
   private sealed = false
   private readonly screenList: Array<Owned<{ def: ScreenDef; slot?: number }>> = []
@@ -38,47 +46,46 @@ export class TuiRegistry {
   // --- getters ---
 
   // Built-in screens by their slot, then the others numbered 7, 8, … in registration order.
-  // Each carries the plugin that registered it (the app gives its component that plugin's runtime).
-  screens(): Array<ScreenDef & { slot: number; plugin: string }> {
+  screens(): Array<Registered<ScreenDef> & { slot: number }> {
     const fixed = this.screenList.filter((s) => s.slot !== undefined).sort((a, b) => a.slot! - b.slot!)
     const numbered = this.screenList.filter((s) => s.slot === undefined)
     return [
-      ...fixed.map((s) => ({ ...s.def, slot: s.slot!, plugin: s.plugin })),
-      ...numbered.map((s, i) => ({ ...s.def, slot: FIRST_FREE_SLOT + i, plugin: s.plugin })),
+      ...fixed.map((s) => ({ ...registered(s), slot: s.slot! })),
+      ...numbered.map((s, i) => ({ ...registered(s), slot: FIRST_FREE_SLOT + i })),
     ]
   }
 
-  screenBySlot(n: number): (ScreenDef & { slot: number; plugin: string }) | undefined {
+  screenBySlot(n: number): (Registered<ScreenDef> & { slot: number }) | undefined {
     return this.screens().find((s) => s.slot === n)
   }
 
-  tabsFor(recordType: string): RecordTabDef[] {
-    return this.tabList.filter((t) => t.recordType === recordType).map((t) => t.def).sort((a, b) => a.order - b.order)
+  tabsFor(recordType: string): Array<Registered<RecordTabDef>> {
+    return this.tabList.filter((t) => t.recordType === recordType).map(registered).sort((a, b) => a.order - b.order)
   }
 
   // By priority; ties keep registration order (Array.prototype.sort is stable).
-  panels(): OverviewPanelDef[] {
-    return this.panelList.map((p) => p.def).sort((a, b) => a.priority - b.priority)
+  panels(): Array<Registered<OverviewPanelDef>> {
+    return this.panelList.map(registered).sort((a, b) => a.priority - b.priority)
   }
 
-  columns(list: string): ListColumnDef[] {
-    return this.columnList.filter((c) => c.list === list).map((c) => c.def)
+  columns(list: string): Array<Registered<ListColumnDef>> {
+    return this.columnList.filter((c) => c.list === list).map(registered)
   }
 
-  forms(recordType: string): RecordFormDef[] {
-    return this.formList.filter((f) => f.recordType === recordType).map((f) => f.def)
+  forms(recordType: string): Array<Registered<RecordFormDef>> {
+    return this.formList.filter((f) => f.recordType === recordType).map(registered)
   }
 
   editor(recordType: string, field: string): Component<FieldEditorProps> | undefined {
     return this.editorList.find((e) => e.recordType === recordType && e.field === field)?.editor
   }
 
-  globalActions(): GlobalActionDef[] {
-    return this.actionList.map((a) => a.def)
+  globalActions(): Array<Registered<GlobalActionDef>> {
+    return this.actionList.map(registered)
   }
 
-  badges(): StatusBadgeDef[] {
-    return this.badgeList.map((b) => b.def).sort((a, b) => a.order - b.order)
+  badges(): Array<Registered<StatusBadgeDef>> {
+    return this.badgeList.map(registered).sort((a, b) => a.order - b.order)
   }
 
   errors(): Array<{ plugin: string; error: string }> {

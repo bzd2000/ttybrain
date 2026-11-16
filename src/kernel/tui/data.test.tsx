@@ -165,6 +165,36 @@ describe("TUI data", () => {
     expect(frame).toContain("⚠ Test: boom")
   })
 
+  test("a global-action overlay runs in its plugin's scope", async () => {
+    await addAction(kernel, "Seen in overlay")
+    function Overlay(props: { close(): void }) {
+      const rt = useRuntime()
+      const q = useQuery(() => rt.data.selectFrom("action").select("title").execute())
+      return <text>{`overlay rows: ${(q.data() ?? []).map((r: { title: string }) => r.title).join(",")}`}</text>
+    }
+    const part = defineTui({ plugin: "projects", activate: (ui) => ui.globalAction({ id: "peek", key: "z", label: "Peek", overlay: Overlay }) })
+    tui = await renderTui(kernel, { parts: [...builtinTuiParts, part] })
+    tui.input.pressKey("z")
+    expect(await tui.frame()).toContain("overlay rows: Seen in overlay")
+  })
+
+  test("a throwing overlay shows its error in place and Esc closes it", async () => {
+    function Broken(): any {
+      throw new Error("boom")
+    }
+    const part = defineTui({ plugin: "projects", activate: (ui) => ui.globalAction({ id: "broken", key: "z", label: "Broken", overlay: Broken }) })
+    tui = await renderTui(kernel, { parts: [...builtinTuiParts, part, screenPart(() => <text>test screen</text>, "inbox")] })
+    tui.input.pressKey("z")
+    expect(await tui.frame()).toContain("⚠ Broken: boom")
+    tui.input.pressEscape()
+    await sleep(30) // a lone ESC is flushed by the input parser's timeout
+    expect(await tui.frame()).not.toContain("⚠ Broken: boom")
+    tui.input.pressKey("2")
+    const frame = await tui.frame()
+    expect(frame.split("\n")[0]).toContain("pm · 2 Test ▾")
+    expect(frame).toContain("test screen")
+  })
+
   test("act outside a write reports the error and returns it", async () => {
     tui = await renderTui(kernel, { parts: builtinTuiParts })
     const res = await act(() => kernel.runtime("projects")!.self().write.addAction!({ title: "  " }))

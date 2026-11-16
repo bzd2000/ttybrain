@@ -105,7 +105,11 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
         const def = registry.globalActions().find((a) => a.key === ch)
         if (!def) return false
         const Overlay = def.overlay
-        openOverlay(`action:${def.id}`, (close) => <Overlay close={close} />)
+        openOverlay(`action:${def.id}`, (close) => (
+          <PluginScope kernel={kernel} plugin={def.plugin} label={def.label} close={close}>
+            <Overlay close={close} />
+          </PluginScope>
+        ))
         return true
       },
       quit: () => renderer.destroy(),
@@ -169,11 +173,12 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
   )
 }
 
-// Every registered component renders inside one: an error boundary labelled with its title, and its plugin's
-// runtime for useRuntime() (none for the kernel's own Overview).
-export function PluginScope(props: { kernel: Kernel; plugin: string | undefined; label: string; children: JSX.Element }) {
+// Every registered component (screen, overlay; tabs, panels, forms as they arrive) renders inside one: an error
+// boundary labelled with its title, and its plugin's runtime for useRuntime() (none for the kernel's Overview).
+// Overlays pass `close`, so Esc still closes one that failed.
+export function PluginScope(props: { kernel: Kernel; plugin: string | undefined; label: string; close?: () => void; children: JSX.Element }) {
   return (
-    <ErrorBoundary label={props.label}>
+    <ErrorBoundary label={props.label} close={props.close}>
       <RuntimeProvider runtime={props.plugin === undefined ? undefined : props.kernel.runtime(props.plugin)}>{props.children}</RuntimeProvider>
     </ErrorBoundary>
   )
