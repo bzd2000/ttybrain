@@ -169,17 +169,21 @@ describe("inbox", () => {
     expect((await cli("inbox", "show", "I-99")).code).not.toBe(0)
   })
 
-  test("dismiss records who dismissed it, reopen clears it", async () => {
+  test("dismiss records who dismissed it (cli from the CLI), keeps it without by; reopen clears it", async () => {
     await ok("inbox", "add", "one")
     await ok("inbox", "add", "two")
     const w = k.runtime("inbox")!.self().write as Record<string, (i: any) => Promise<any>>
     const out = await runWithContext(k.context(), () => w.dismiss!({ ref: "I-1", by: "you" }))
     expect([out.status, out.processed_by, out.processed_at]).toEqual(["dismissed", "you", "2026-11-13T09:00:00"])
     await ok("inbox", "dismiss", "I-2")
-    expect((await ok("inbox", "show", "I-2", "--json")).json.status).toBe("dismissed")
     await ok("inbox", "reopen", "I-1")
-    const all = await ok("inbox", "list", "--all", "--json")
-    expect(all.json.map((i: any) => `${i.ref} ${i.status} ${i.processed_by}`)).toEqual(["I-1 new null", "I-2 dismissed null"])
+    let all = await ok("inbox", "list", "--all", "--json")
+    expect(all.json.map((i: any) => `${i.ref} ${i.status} ${i.processed_by}`)).toEqual(["I-1 new null", "I-2 dismissed cli"])
+    // without `by`, a processed item dismissed later keeps who processed it
+    await ok("inbox", "done", "I-1", "--summary", "handled", "--by", "assistant")
+    await runWithContext(k.context(), () => w.dismiss!({ ref: "I-1" }))
+    all = await ok("inbox", "list", "--all", "--json")
+    expect(all.json.map((i: any) => `${i.ref} ${i.status} ${i.processed_by}`)).toEqual(["I-1 dismissed assistant", "I-2 dismissed cli"])
   })
 
   test("view inbox.item", async () => {

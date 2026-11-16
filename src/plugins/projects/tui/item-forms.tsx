@@ -1,6 +1,7 @@
 // The record forms of the five item kinds (milestone, deliverable, risk, decision, action), add and edit, from one
 // factory configured per kind. Field names are the operations' input names, so a ValidationError lands under its
-// field. With `prefill.project` the project is set and its field left out; a new record's other fields start from
+// field. With `prefill.project` the project is set and its field left out (without it a new record has a Project
+// field, required except for a decision); a new record's other fields start from
 // `prefill` by name. `origin` goes to act(), so the kernel records provenance. An edit sends only the changed fields.
 import { createEffect, Show, untrack } from "solid-js"
 import { act, Form, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "../../../kernel/tui/api"
@@ -132,7 +133,13 @@ function itemForm(spec: KindForm) {
           // A kind that carries its project (everything but the action's optional one) takes it from the prefill.
           // A new record starts from the prefill (the inbox's "process by hand" passes the item's text as title).
           const prefill = r === null ? (props.prefill ?? {}) : {}
-          const fields = spec.fields(r, today, project !== undefined).map((f) => (prefill[f.name] === undefined ? f : { ...f, initial: prefill[f.name] }))
+          const own = spec.fields(r, today, project !== undefined)
+          // A new record without a prefilled project asks for one (the action's form has its own field).
+          if (r === null && project === undefined && !own.some((f) => f.name === "project")) {
+            const at = own.findIndex((f) => f.name === "title") + 1
+            own.splice(at, 0, { name: "project", label: "Project", kind: "record", recordType: "project", required: spec.kind !== "decision" })
+          }
+          const fields = own.map((f) => (prefill[f.name] === undefined ? f : { ...f, initial: prefill[f.name] }))
           const noun = spec.label.toLowerCase()
           const save = async (run: () => Promise<any>, verb: string): Promise<SubmitResult> => {
             const res = await act(run, { origin: props.origin, ok: (out) => `${verb} ${(out as { ref: string }).ref}` })

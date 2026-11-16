@@ -99,6 +99,23 @@ function AssignForm(props: RecordFormProps) {
   )
 }
 
+function NotesForm(props: RecordFormProps) {
+  return (
+    <Form
+      title="Notes"
+      fields={[
+        { name: "notes", label: "Notes", kind: "longtext", initial: "line one\nline two" },
+        { name: "title", label: "Title", kind: "text" },
+      ]}
+      submit={async (v) => {
+        submitted.push(v)
+        return { ok: true }
+      }}
+      close={props.close}
+    />
+  )
+}
+
 let overlay: Overlay | undefined
 function Home() {
   overlay = useOverlay()
@@ -111,6 +128,7 @@ const todoPart: TuiDef = defineTui({
     ui.screen({ id: "todo", title: "Todo", slot: 2, component: Home })
     ui.recordForm("thing", { id: "thing", label: "Thing", component: ThingForm })
     ui.recordForm("thing", { id: "assign", label: "Assign", component: AssignForm })
+    ui.recordForm("thing", { id: "notes", label: "Notes", component: NotesForm })
   },
 })
 
@@ -156,6 +174,24 @@ describe("forms", () => {
     expect(await things()).toEqual([{ title: "Write spec", due: "2026-11-15" }])
     expect(after).not.toContain("New thing")
     expect(statusLine(after)).toContain("added TH-1")
+  })
+
+  test("longtext keeps newlines through an edit and submit; Ctrl+J adds a line", async () => {
+    const t = await open()
+    void overlay!.openForm("thing", "notes")
+    let frame = await t.frame()
+    expect(frame).toContain("line one")
+    expect(frame).toContain("line two")
+    await t.input.typeText(" end")
+    t.input.pressKey("j", { ctrl: true })
+    await t.input.typeText("three")
+    frame = await t.frame()
+    expect(frame).toContain("three")
+    t.input.pressTab()
+    await t.input.typeText("T")
+    t.input.pressKey("s", { ctrl: true })
+    await t.frame()
+    expect(submitted).toEqual([{ notes: "line one\nline two end\nthree", title: "T" }])
   })
 
   test("date field shows invalid date", async () => {

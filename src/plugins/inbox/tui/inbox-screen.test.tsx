@@ -3,7 +3,9 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
+import { rgbToHex } from "@opentui/core"
 import { runWithContext, type Origin } from "../../../kernel/context"
+import { theme } from "../../../kernel/tui/theme"
 import { builtinPlugins } from "../../index"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -91,8 +93,7 @@ describe("inbox screen", () => {
     const spans = await t.spans()
     const row = spans.lines.find((l) => l.spans.map((s) => s.text).join("").includes("#CMR ⚠"))!
     const cell = row.spans.find((s) => s.text.includes("#CMR"))!
-    const ok = row.spans.find((s) => s.text.includes("I-1"))!
-    expect(cell.fg).not.toEqual(ok.fg)
+    expect(rgbToHex(cell.fg).toLowerCase()).toBe(theme.amber)
   })
 
   test("p → Action creates action with provenance and marks processed", async () => {
@@ -143,6 +144,38 @@ describe("inbox screen", () => {
     expect(frame).not.toContain("✗ dismissed")
     it = await item("I-1")
     expect([it.status, it.processed_by]).toEqual(["new", null])
+  })
+
+  test("p → Risk on an untagged item asks for the project", async () => {
+    const t = await open(async () => void (await inCtx(() => write("inbox").capture!({ text: "vendor may be late" }))))
+    t.input.pressKey("p")
+    await until(t, (f) => f.includes("Risk / issue"))
+    t.input.pressKey("r")
+    let frame = await until(t, (f) => f.includes("New risk / issue"))
+    expect(frame).toMatch(/Project\*/)
+    t.input.pressTab() // type → title
+    t.input.pressTab() // title → project
+    await t.input.typeText("CR")
+    await until(t, (f) => f.includes("#CRM CRM replatforming"))
+    t.input.pressTab() // accept the suggestion
+    await t.frame()
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, (f) => f.includes("→ R-1") && !f.includes("New risk"))
+    const risk = await inCtx(async () => (await (kernel!.runtime("projects")!.data as any).selectFrom("risk").select(["title", "project_id"]).executeTakeFirst()) as any)
+    expect(risk).toEqual({ title: "vendor may be late", project_id: 1 })
+    const it = await item("I-1")
+    expect([it.status, it.summary]).toEqual(["processed", "Risk / issue R-1"])
+  })
+
+  test("e keeps the newlines of a multi-line item", async () => {
+    const t = await open(async () => void (await inCtx(() => write("inbox").capture!({ text: "line one\nline two" }))))
+    t.input.pressKey("e")
+    await until(t, (f) => f.includes("Edit I-1"))
+    await t.input.typeText("X")
+    await t.frame()
+    t.input.pressKey("s", { ctrl: true })
+    await until(t, (f) => !f.includes("Edit I-1"))
+    expect((await item("I-1")).text).toBe("line one\nline twoX")
   })
 
   test("e edits the text and re-resolves its tags", async () => {
