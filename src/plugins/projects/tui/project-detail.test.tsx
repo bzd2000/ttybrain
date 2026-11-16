@@ -107,6 +107,39 @@ describe("project detail", () => {
     expect(lineWith(frame, "Summary")).toContain("Context")
   })
 
+  test("at 80 columns the tabs drop zero counts, then window around the active tab with ‹ › instead of cutting words", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await seed()
+    await inCtx(() => write().addAction!({ title: "Call", project: "CRM" }))
+    tui = await renderTui(kernel, { width: 80, height: 24 })
+    tui.input.pressKey("2")
+    await tui.frame()
+    await tui.nav.open("#CRM")
+    const tabLine = async () => (await tui!.frame()).split("\n")[2]!
+    const words = ["Summary", "Milestones", "Deliverables", "Risks & issues", "Decisions", "Actions", "People", "Context"]
+    const check = (line: string) => {
+      // every word on the tab line is a whole tab title or count, or a marker
+      for (const piece of line.replace(/[‹›]/g, " ").trim().split(/\s{2,}/)) {
+        expect(words.some((w) => piece === w || new RegExp(`^${w.replace(/[&]/g, "\\$&")} \\d+$`).test(piece))).toBe(true)
+      }
+    }
+    let line = await tabLine()
+    expect(line).toContain("Summary")
+    expect(line).not.toContain(" 0") // zero counts are dropped first
+    expect(line).toContain("›") // more tabs to the right
+    check(line)
+    tui.input.pressArrow("right")
+    line = (await tui.frame()).split("\n")[2]!
+    expect(line).toContain("Milestones 1")
+    check(line)
+    for (let i = 0; i < 6; i++) tui.input.pressArrow("right")
+    line = (await tui.frame()).split("\n")[2]!
+    expect(line).toContain("Context")
+    expect(line).toContain("‹")
+    expect(line).not.toMatch(/›\s*$/)
+    check(line)
+  })
+
   test("→ goes through tabs to Context", async () => {
     const t = await open()
     let frame = await right(t, 6)
