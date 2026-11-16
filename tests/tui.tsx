@@ -15,6 +15,8 @@ export type RenderedTui = {
   frame(): Promise<string>
   input: MockInput
   settle(): Promise<void>
+  // The frame now, without waiting for in-flight loads (to look at a screen while a load or an act runs).
+  peek(): Promise<string>
   nav: Nav
   renderer: CliRenderer
   destroy(): void
@@ -22,11 +24,12 @@ export type RenderedTui = {
 
 export async function renderTui(
   kernel: Kernel,
-  opts: { width?: number; height?: number; parts?: TuiDef[]; external?: TuiDef[] } = {},
+  // refreshMs: the live-refresh interval (default 50 here, 1000 in the app).
+  opts: { width?: number; height?: number; parts?: TuiDef[]; external?: TuiDef[]; refreshMs?: number } = {},
 ): Promise<RenderedTui> {
   const registry = bootTui(kernel, opts.parts ?? builtinTuiParts, { builtin: true, external: opts.external ?? [] })
   let handle: TuiHandle | undefined
-  const setup = await testRender(() => <TuiApp kernel={kernel} registry={registry} expose={(h) => (handle = h)} />, {
+  const setup = await testRender(() => <TuiApp kernel={kernel} registry={registry} refreshMs={opts.refreshMs ?? 50} expose={(h) => (handle = h)} />, {
     width: opts.width ?? 100,
     height: opts.height ?? 30,
   })
@@ -39,6 +42,10 @@ export async function renderTui(
   return {
     async frame() {
       await settle()
+      return setup.captureCharFrame()
+    },
+    async peek() {
+      await setup.renderOnce()
       return setup.captureCharFrame()
     },
     input: setup.mockInput,

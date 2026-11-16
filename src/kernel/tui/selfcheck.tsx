@@ -1,5 +1,6 @@
 // The TUI self-check: renders <TuiApp> on the current runtime with OpenTUI's test renderer and checks the frame,
-// and checks that a second boot on the same database writes nothing (read-only boot, also on node:sqlite).
+// and checks that a second boot on the same database writes nothing (read-only boot, also on node:sqlite), that a
+// useQuery screen reloads after another connection's commit (data_version) and that an error boundary holds.
 // Run: `bun src/kernel/tui/selfcheck.tsx` or, after the Node build,
 // `node --experimental-ffi dist-node/kernel/tui/selfcheck.js`. Prints `tui ok` on success.
 import { testRender } from "@opentui/solid"
@@ -10,8 +11,9 @@ import { fileURLToPath } from "node:url"
 import { definePlugin, type PluginDef } from "../api"
 import { fixedClock } from "../clock"
 import { bootKernel } from "../host"
-import { TuiApp } from "./app"
+import { TuiApp, type TuiHandle } from "./app"
 import { bootTui } from "./boot"
+import { useQuery, useRuntime } from "./data"
 import { defineTui } from "./types"
 
 // A fixture plugin with a migration and a published view, so the second boot has something it could rewrite.
@@ -32,9 +34,22 @@ const fixture: PluginDef = definePlugin({
   },
 })
 
+function FixtureScreen() {
+  const rt = useRuntime()
+  const q = useQuery(() => rt.data.selectFrom("thing").select("title").execute())
+  return <text>{`fixture screen: ${q.data()?.length ?? "-"} things`}</text>
+}
+
+function Broken(): any {
+  throw new Error("boom")
+}
+
 const fixtureTui = defineTui({
   plugin: "fixture",
-  activate: (ui) => ui.screen({ id: "fixture", title: "Fixture", slot: 2, component: () => <text>fixture screen</text> }),
+  activate: (ui) => {
+    ui.screen({ id: "fixture", title: "Fixture", slot: 2, component: FixtureScreen })
+    ui.screen({ id: "broken", title: "Broken", slot: 3, component: Broken })
+  },
 })
 
 function check(cond: boolean, what: string): void {
@@ -55,16 +70,38 @@ export async function runTuiSelfCheck(): Promise<void> {
       check(after === before, `a second boot on the same database wrote to it (data_version ${before} → ${after})`)
 
       const registry = bootTui(kernel, [fixtureTui], { builtin: true })
-      const setup = await testRender(() => <TuiApp kernel={kernel} registry={registry} />, { width: 80, height: 24 })
+      let handle: TuiHandle | undefined
+      const setup = await testRender(() => <TuiApp kernel={kernel} registry={registry} refreshMs={20} expose={(h) => (handle = h)} />, {
+        width: 80,
+        height: 24,
+      })
+      const settled = async () => {
+        await handle!.idle()
+        await setup.renderOnce()
+        return setup.captureCharFrame()
+      }
       try {
         await setup.renderOnce()
         let header = setup.captureCharFrame().split("\n")[0] ?? ""
         check(header.includes("pm · 1 Overview") && header.includes("Fri 13 Nov 2026"), `unexpected header: "${header}"`)
         setup.mockInput.pressKey("2")
-        await setup.renderOnce()
-        const frame = setup.captureCharFrame()
+        let frame = await settled()
         header = frame.split("\n")[0] ?? ""
-        check(header.includes("pm · 2 Fixture") && frame.includes("fixture screen"), `key 2 did not open the Fixture screen: "${header}"`)
+        check(header.includes("pm · 2 Fixture") && frame.includes("fixture screen: 0 things"), `key 2 did not open the Fixture screen: "${header}"`)
+
+        // Another connection commits: live refresh sees data_version change and the query reloads.
+        const other = await bootKernel({ env, plugins: [fixture], clock })
+        other.db.raw.exec("INSERT INTO fixture_thing (title) VALUES ('x')")
+        await other.shutdown()
+        for (let i = 0; i < 50 && !frame.includes("fixture screen: 1 things"); i++) {
+          await new Promise((r) => setTimeout(r, 20))
+          frame = await settled()
+        }
+        check(frame.includes("fixture screen: 1 things"), "the screen did not reload after another connection's write")
+
+        setup.mockInput.pressKey("3")
+        frame = await settled()
+        check(frame.includes("⚠ Broken: boom") && (frame.split("\n")[0] ?? "").includes("pm · 3 Broken"), "the error boundary did not contain a throwing screen")
       } finally {
         setup.renderer.destroy()
       }

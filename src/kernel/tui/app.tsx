@@ -1,17 +1,20 @@
 // <TuiApp>: the frame (header, main area, status bar), the router that renders the current screen, the overlay
 // stack (switcher, help, global actions) and the global key dispatch. Everything inside comes from the registry.
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { createContext, createSignal, For, onCleanup, Show, useContext, type Component, type JSX } from "solid-js"
+import { createContext, createSignal, For, onCleanup, Show, useContext, type Accessor, type Component, type JSX } from "solid-js"
 import { runWithContext } from "../context"
 import type { Kernel } from "../host"
+import { ErrorBoundary } from "./components/ErrorBoundary"
 import { Help } from "./components/Help"
 import { OverviewScreen } from "./components/OverviewScreen"
 import { Switcher, type SwitcherEntry } from "./components/Switcher"
+import { bindDataSession, DataContext, RuntimeProvider } from "./data"
 import { longDate } from "./format"
 import { Header, StatusBar } from "./frame"
 import { createGlobalKeyHandler, FRAME_HINTS, KeysContext, KeysStore, LayerContext, SCREEN_LAYER, useGlobalKeys } from "./keys"
 import { clearMessages, currentMessage } from "./messages"
 import { createNav, NavContext, OVERVIEW_ID, type Nav } from "./nav"
+import { createLiveRefresh } from "./refresh"
 import { OVERVIEW_SLOT, type TuiRegistry } from "./registry"
 import { theme } from "./theme"
 
@@ -31,6 +34,8 @@ export type TuiAppContext = {
   registry: TuiRegistry
   // Registers a load with the app, so tests can wait for it (renderTui's settle()).
   track<T>(p: Promise<T>): Promise<T>
+  // The live-refresh version (refresh.ts): bumps when the data changed.
+  version: Accessor<number>
 }
 
 const AppContext = createContext<TuiAppContext>()
@@ -42,9 +47,10 @@ export function useApp(): TuiAppContext {
 }
 
 type Overlay = { id: string; kind: string; render: () => JSX.Element }
-type Screen = SwitcherEntry & { component: Component<{}> }
+type Screen = SwitcherEntry & { component: Component<{}>; plugin?: string }
 
-export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; expose?: (handle: TuiHandle) => void }) {
+// `refreshMs`: how often live refresh checks PRAGMA data_version (spec §10: about every second).
+export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs?: number; expose?: (handle: TuiHandle) => void }) {
   const { kernel, registry } = props
   const renderer = useRenderer()
   const dims = useTerminalDimensions()
@@ -59,6 +65,11 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; expose?: 
   const idle = async () => {
     while (inflight.size > 0) await Promise.allSettled([...inflight])
   }
+
+  const refresh = createLiveRefresh(kernel, props.refreshMs ?? 1000)
+  onCleanup(() => refresh.stop())
+  const session = { kernel, version: refresh.version, track }
+  onCleanup(bindDataSession(session))
 
   const nav = createNav(kernel, registry, track)
   const [overlays, setOverlays] = createSignal<Overlay[]>([])
@@ -123,32 +134,48 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; expose?: 
   props.expose?.({ nav, idle })
 
   return (
-    <AppContext.Provider value={{ kernel, registry, track }}>
-      <NavContext.Provider value={nav}>
-        <KeysContext.Provider value={keys}>
-          <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.bg}>
-            <Header chip={`${current().slot} ${current().title} ▾`} crumbs={nav.crumbs()} badges={[]} date={longDate(kernel.clock.today())} />
-            <box flexGrow={1} flexDirection="column" overflow="hidden">
-              <Show when={!tooSmall()} fallback={<text>{`Terminal too small (need ${MIN_WIDTH}×${MIN_HEIGHT})`}</text>}>
-                <LayerContext.Provider value={SCREEN_LAYER}>
-                  <Show when={route().kind === "screen" ? current() : undefined} keyed fallback={<RecordPlaceholder nav={nav} />}>
-                    {(s: Screen) => <s.component />}
-                  </Show>
-                </LayerContext.Provider>
-              </Show>
+    <AppContext.Provider value={{ kernel, registry, track, version: refresh.version }}>
+      <DataContext.Provider value={session}>
+        <NavContext.Provider value={nav}>
+          <KeysContext.Provider value={keys}>
+            <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.bg}>
+              <Header chip={`${current().slot} ${current().title} ▾`} crumbs={nav.crumbs()} badges={[]} date={longDate(kernel.clock.today())} />
+              <box flexGrow={1} flexDirection="column" overflow="hidden">
+                <Show when={!tooSmall()} fallback={<text>{`Terminal too small (need ${MIN_WIDTH}×${MIN_HEIGHT})`}</text>}>
+                  <LayerContext.Provider value={SCREEN_LAYER}>
+                    <Show when={route().kind === "screen" ? current() : undefined} keyed fallback={<RecordPlaceholder nav={nav} />}>
+                      {(s: Screen) => (
+                        <PluginScope kernel={kernel} plugin={s.plugin} label={s.title}>
+                          <s.component />
+                        </PluginScope>
+                      )}
+                    </Show>
+                  </LayerContext.Provider>
+                </Show>
+              </box>
+              <StatusBar hints={hints()} message={currentMessage()} />
+              <For each={overlays()}>
+                {(o) => (
+                  <box position="absolute" top={2} left={0} width="100%" alignItems="center" zIndex={10}>
+                    <LayerContext.Provider value={o.id}>{o.render()}</LayerContext.Provider>
+                  </box>
+                )}
+              </For>
             </box>
-            <StatusBar hints={hints()} message={currentMessage()} />
-            <For each={overlays()}>
-              {(o) => (
-                <box position="absolute" top={2} left={0} width="100%" alignItems="center" zIndex={10}>
-                  <LayerContext.Provider value={o.id}>{o.render()}</LayerContext.Provider>
-                </box>
-              )}
-            </For>
-          </box>
-        </KeysContext.Provider>
-      </NavContext.Provider>
+          </KeysContext.Provider>
+        </NavContext.Provider>
+      </DataContext.Provider>
     </AppContext.Provider>
+  )
+}
+
+// Every registered component renders inside one: an error boundary labelled with its title, and its plugin's
+// runtime for useRuntime() (none for the kernel's own Overview).
+export function PluginScope(props: { kernel: Kernel; plugin: string | undefined; label: string; children: JSX.Element }) {
+  return (
+    <ErrorBoundary label={props.label}>
+      <RuntimeProvider runtime={props.plugin === undefined ? undefined : props.kernel.runtime(props.plugin)}>{props.children}</RuntimeProvider>
+    </ErrorBoundary>
   )
 }
 

@@ -38,13 +38,17 @@ export class TuiRegistry {
   // --- getters ---
 
   // Built-in screens by their slot, then the others numbered 7, 8, … in registration order.
-  screens(): Array<ScreenDef & { slot: number }> {
+  // Each carries the plugin that registered it (the app gives its component that plugin's runtime).
+  screens(): Array<ScreenDef & { slot: number; plugin: string }> {
     const fixed = this.screenList.filter((s) => s.slot !== undefined).sort((a, b) => a.slot! - b.slot!)
     const numbered = this.screenList.filter((s) => s.slot === undefined)
-    return [...fixed.map((s) => ({ ...s.def, slot: s.slot! })), ...numbered.map((s, i) => ({ ...s.def, slot: FIRST_FREE_SLOT + i }))]
+    return [
+      ...fixed.map((s) => ({ ...s.def, slot: s.slot!, plugin: s.plugin })),
+      ...numbered.map((s, i) => ({ ...s.def, slot: FIRST_FREE_SLOT + i, plugin: s.plugin })),
+    ]
   }
 
-  screenBySlot(n: number): (ScreenDef & { slot: number }) | undefined {
+  screenBySlot(n: number): (ScreenDef & { slot: number; plugin: string }) | undefined {
     return this.screens().find((s) => s.slot === n)
   }
 
