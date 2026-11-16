@@ -1,9 +1,11 @@
-// The Overview screen (slot 1): the plugins' panels in a two-column grid, in priority order (left column: even
-// indexes, right column: odd). Each panel loads through useQuery in its plugin's scope, shows its row count in
-// the title, at most MAX_ROWS rows plus `+N more`, or its `empty` text. Tab moves focus to the next panel,
-// ↑↓ move within it and Enter opens the selected row's ref.
-import { createSignal, For, Show } from "solid-js"
-import { useQuery } from "../data"
+// The Overview screen (slot 1): the plugins' panels in two columns balanced by height (overviewLayout.ts), Tab
+// moving through them in priority order. The screen loads every panel through useQuery, so it knows each one's
+// row count and can size them to fit the screen: each panel shows its count in the title, as many rows as fit
+// (at most MAX_ROWS) plus `+N more`, or its `empty` text. ↑↓ move within the focused panel and Enter opens the
+// selected row's ref.
+import { useTerminalDimensions } from "@opentui/solid"
+import { createMemo, createSignal, For, Show } from "solid-js"
+import { useQuery, type Query } from "../data"
 import { useKeys, useScreenKeys } from "../keys"
 import { useNav } from "../nav"
 import type { Registered } from "../registry"
@@ -11,31 +13,48 @@ import { PluginScope, useApp } from "../scope"
 import { theme } from "../theme"
 import type { OverviewPanelDef, OverviewRow } from "../types"
 import { KeyHints } from "./KeyHints"
+import { layoutOverview, type PanelPlace } from "./overviewLayout"
 import { Panel } from "./Panel"
 import { fitWidth, Table, type TableColumn, type TableRow } from "./Table"
 
-export const MAX_ROWS = 5
+export { MAX_ROWS } from "./overviewLayout"
 const MAX_COLUMN = 16
+// The frame's header and status bar.
+const FRAME_LINES = 2
 
 type PanelEntry = Registered<OverviewPanelDef>
 
 export function OverviewScreen() {
   const app = useApp()
   const keys = useKeys()
+  const dims = useTerminalDimensions()
   const panels = app.registry.panels()
+  const queries = panels.map((p) => useQuery(() => p.load()))
   const [focus, setFocus] = createSignal(0)
   useScreenKeys((key) => {
     if (key.name !== "tab" || key.shift || panels.length === 0) return
     key.preventDefault()
     setFocus((i) => (i + 1) % panels.length)
   })
-  const column = (parity: number) => panels.map((p, i) => ({ p, i })).filter(({ i }) => i % 2 === parity)
-  const Column = (props: { parity: number }) => (
-    <box flexDirection="column" flexGrow={1} flexBasis={0} gap={0}>
-      <For each={column(props.parity)}>
-        {({ p, i }) => (
-          <PluginScope kernel={app.kernel} plugin={p.plugin} label={p.title}>
-            <OverviewPanel def={p} focused={keys.active() && focus() === i} />
+  const places = createMemo(() =>
+    layoutOverview(
+      panels.map((p, i) => ({ rows: queries[i]!.data()?.length, empty: p.empty, footer: p.footer })),
+      dims().height - FRAME_LINES,
+      dims().width,
+    ),
+  )
+  // The panel indexes in a column, compared by value so a reload that keeps the layout remounts nothing.
+  const column = (c: 0 | 1) => createMemo(() => panels.map((_, i) => i).filter((i) => places()[i]?.column === c), undefined, {
+    equals: (a, b) => a.length === b.length && a.every((x, k) => x === b[k]),
+  })
+  const left = column(0)
+  const right = column(1)
+  const Column = (props: { indexes: number[] }) => (
+    <box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
+      <For each={props.indexes}>
+        {(i) => (
+          <PluginScope kernel={app.kernel} plugin={panels[i]!.plugin} label={panels[i]!.title}>
+            <OverviewPanel def={panels[i]!} query={queries[i]!} place={places()[i]!} focused={keys.active() && focus() === i} />
           </PluginScope>
         )}
       </For>
@@ -50,21 +69,20 @@ export function OverviewScreen() {
           { key: "Enter", label: "open" },
         ]}
       />
-      <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
-        <Column parity={0} />
-        <Column parity={1} />
+      <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1} flexGrow={1} minHeight={0} overflow="hidden">
+        <Column indexes={left()} />
+        <Column indexes={right()} />
       </box>
     </Show>
   )
 }
 
-function OverviewPanel(props: { def: PanelEntry; focused: boolean }) {
+function OverviewPanel(props: { def: PanelEntry; query: Query<OverviewRow[]>; place: PanelPlace; focused: boolean }) {
   const nav = useNav()
-  const q = useQuery(() => props.def.load())
-  const all = () => q.data() ?? []
+  const all = () => props.query.data() ?? []
   const shown = (): TableRow[] =>
     all()
-      .slice(0, MAX_ROWS)
+      .slice(0, props.place.rows)
       .map((r: OverviewRow) => ({ ref: r.ref, cells: Object.fromEntries(r.cells.map((c, i) => [`c${i}`, c])) }))
   // The column with the widest text (the last of equals) takes the leftover width; the others fit their rows.
   const columns = (): TableColumn[] => {
@@ -75,15 +93,17 @@ function OverviewPanel(props: { def: PanelEntry; focused: boolean }) {
       i === grow ? { id: `c${i}`, title: "", width: "grow" as const } : { id: `c${i}`, title: "", width: Math.min(natural[i]!, MAX_COLUMN) },
     )
   }
-  const more = () => all().length - MAX_ROWS
+  const more = () => all().length - props.place.rows
   return (
-    <Panel title={props.def.title} count={q.data()?.length} focused={props.focused} footer={props.def.footer}>
-      <Show when={q.data() !== undefined}>
-        <Table columns={columns()} rows={shown()} header={false} empty={props.def.empty} focused={props.focused} onOpen={(ref) => void nav.open(ref)} />
-        <Show when={more() > 0}>
-          <text fg={theme.muted}>{`+${more()} more`}</text>
+    <box height={props.place.height} flexShrink={0} flexDirection="column" overflow="hidden">
+      <Panel title={props.def.title} count={props.query.data()?.length} focused={props.focused} footer={props.def.footer} grow>
+        <Show when={props.query.data() !== undefined}>
+          <Table columns={columns()} rows={shown()} header={false} empty={props.def.empty} focused={props.focused} onOpen={(ref) => void nav.open(ref)} />
+          <Show when={more() > 0}>
+            <text fg={theme.muted} flexShrink={0}>{`+${more()} more`}</text>
+          </Show>
         </Show>
-      </Show>
-    </Panel>
+      </Panel>
+    </box>
   )
 }

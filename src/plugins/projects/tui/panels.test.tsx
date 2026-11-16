@@ -137,6 +137,43 @@ describe("overview panels", () => {
     expect(frame.indexOf("call the vendor")).toBeLessThan(frame.indexOf("book the room"))
   })
 
+  test("at 80x24 with full panels every panel title is visible, and Tab only focuses a visible panel", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      const w = write()
+      for (const c of ["AAA", "BBB", "CCC", "DDD", "EEE", "FFF"]) await w.addProject!({ code: c, name: c })
+      for (let i = 0; i < 6; i++) await w.addAction!({ title: `Overdue ${i}`, due: "2026-11-10", project: "AAA" })
+      for (let i = 0; i < 6; i++) await w.addRisk!({ project: "AAA", type: "risk", title: `Risk ${i}`, severity: "high" })
+      for (let i = 0; i < 6; i++) await write("inbox").capture!({ text: `item ${i}` })
+    })
+    tui = await renderTui(kernel, { width: 80, height: 24 })
+    let frame = await shot(tui)
+    const titles = [
+      "Overdue actions · 6",
+      "Due this week · 0",
+      "Projects needing attention · 6",
+      "High risks & issues · 6",
+      "Late milestones · next 14 days · 0",
+      "Stakeholders to contact · 0",
+      "Inbox · 6",
+    ]
+    for (const t of titles) expect(frame).toContain(t)
+    // every panel's bottom border is on screen: the last line above the status bar closes both columns
+    const body = frame.trimEnd().split("\n").slice(0, -1)
+    expect(body.length).toBeLessThanOrEqual(23)
+    // a capped panel keeps the +N more line, with N counting what is hidden
+    expect(frame).toMatch(/\+\d more/)
+    // Tab through all panels: the focused (accent) panel is always one of the visible titles
+    for (let i = 1; i < titles.length; i++) {
+      tui.input.pressTab()
+      frame = await shot(tui)
+      for (const t of titles) expect(frame).toContain(t)
+    }
+    // the 6th Tab focuses Inbox (last in priority order): its first row is selected and on screen
+    expect(frame).toContain("› ")
+    expect(lineWith(frame, "›")).toContain("item 0")
+  })
+
   test("Enter on overdue row opens the action form", async () => {
     const t = await open(async () => {
       await write().addAction!({ title: "Send revised budget", due: "2026-11-10" })
