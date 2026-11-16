@@ -22,8 +22,10 @@ export function kyselyOver(driver: Driver): Kysely<any> {
 
 type Hooks = Array<() => void>
 // One per open `write`. `queue` chains the nested writes started inside it; `hooks` are its after-commit hooks.
-type WriteScope = { open: boolean; queue: Promise<unknown>; hooks: Hooks; parent?: WriteScope }
-const newScope = (parent?: WriteScope): WriteScope => ({ open: true, queue: Promise.resolve(), hooks: [], parent })
+// `op` marks a write operation's own scope (operations.ts): plugin data changes (R15) need one, open, on the chain.
+type WriteScope = { open: boolean; queue: Promise<unknown>; hooks: Hooks; parent?: WriteScope; op: boolean }
+export type WriteOptions = { op?: boolean }
+const newScope = (op: boolean, parent?: WriteScope): WriteScope => ({ open: true, queue: Promise.resolve(), hooks: [], parent, op })
 const LATE = "write started after its parent write ended; await nested writes"
 const NESTED_RUNNING = "a write ran a statement while one of its nested writes was running; await nested writes"
 const ENDED = "a statement ran after its write ended; await all work inside a write"
@@ -152,13 +154,16 @@ export class KernelDb {
   //   while a nested write it started is still running throws (see checkStatement) and fails the parent,
   //   which then rolls back with everything in it; nothing is lost silently.
   // - Known limit: a nested write that awaits a sibling started after it deadlocks (it queues behind itself).
-  write<T>(fn: () => Promise<T>): Promise<T> {
+  // - `op: true` only from the operation wrapper: a plain write (the TUI's act, a change set) is a transaction
+  //   only, so plugin DML directly inside it is still rejected (R15); its operations' own scopes allow it.
+  write<T>(fn: () => Promise<T>, opts: WriteOptions = {}): Promise<T> {
+    const op = opts.op === true
     const parent = this.writing.getStore()
-    if (!parent) return this.outermost(fn)
+    if (!parent) return this.outermost(fn, op)
     if (!parent.open) return Promise.reject(new Error(LATE))
     const run = parent.queue.then(async () => {
       if (!parent.open) throw new Error(LATE)
-      const scope = newScope(parent)
+      const scope = newScope(op, parent)
       const result = await this.writing.run(scope, () => this.nested(() => this.drained(scope, fn), scope))
       parent.hooks.push(...scope.hooks) // kept only if the parent commits
       return result
@@ -169,9 +174,9 @@ export class KernelDb {
 
   // After-commit hooks run once the lock is released and outside any write scope, so a hook that writes
   // (a `record.changed` handler) is a fresh outermost write.
-  private async outermost<T>(fn: () => Promise<T>): Promise<T> {
+  private async outermost<T>(fn: () => Promise<T>, op: boolean): Promise<T> {
     if (this.closed) throw new Error("database is closed")
-    const scope = newScope()
+    const scope = newScope(op)
     const result = await this.withWriteLock(async () => {
       this.openRoot = scope
       try {
@@ -211,6 +216,15 @@ export class KernelDb {
     return this.writing.getStore()?.open === true
   }
 
+  // Inside a write operation: an open write scope on the chain that a write operation opened (R15).
+  inOperation(): boolean {
+    for (let s = this.writing.getStore(); s; s = s.parent) {
+      if (!s.open) return false
+      if (s.op) return true
+    }
+    return false
+  }
+
   private ensureOpen() {
     if (this.closed) throw new Error("database was closed during the transaction")
   }
@@ -233,7 +247,7 @@ export class KernelDb {
       this.tables,
       () => this.invalidateSchema(),
       () => this.checkStatement(),
-      () => this.inWrite(),
+      () => this.inOperation(),
     )
     return kyselyOver(new PmDriver(connection)).withPlugin(scopePlugin(pluginId, access, (t) => this.columnsOf(t)))
   }

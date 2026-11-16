@@ -230,4 +230,19 @@ describe("TUI data", () => {
     expect(frame).toContain("row Two")
     expect(await actionCount()).toBe(2)
   })
+
+  test("act does not open R15: raw DML on rt.data inside act is rejected, and nothing is written", async () => {
+    tui = await renderTui(kernel, { parts: builtinTuiParts })
+    let changed = 0
+    kernel.events.on("record.changed", () => void changed++)
+    const rt = kernel.runtime("projects")!
+    const res = await act(() => rt.data.insertInto("action").values({ title: "sneaky", created_at: "2026-11-13T09:00:00", updated_at: "2026-11-13T09:00:00" }).execute())
+    expect(res.ok).toBe(false)
+    expect(res.ok ? "" : (res.error as Error).message).toBe("data changes must run inside a write operation")
+    expect(await actionCount()).toBe(0)
+    expect(changed).toBe(0)
+    // an operation inside act still writes
+    expect((await act(() => rt.self().write.addAction!({ title: "Proper" }))).ok).toBe(true)
+    expect(await actionCount()).toBe(1)
+  })
 })

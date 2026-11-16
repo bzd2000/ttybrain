@@ -75,7 +75,7 @@ export class PmConnection extends RawConnection {
     private readonly checker: TableChecker,
     private readonly onSchemaChange: () => void,
     private readonly statementGuard: () => void = () => {},
-    private readonly inWrite: () => boolean = () => false,
+    private readonly inOperation: () => boolean = () => false,
   ) {
     super(raw, statementGuard)
   }
@@ -101,9 +101,10 @@ export class PmConnection extends RawConnection {
       throw new IsolationError(`plugin "${this.pluginId}" may not use table "${t}"`)
     }
 
-    // R15: a data change outside a kernel write (a read op, a stray async chain) would land in whatever
-    // transaction or savepoint happens to be open on the shared connection. Migrations have their own.
-    if (DATA_CHANGE.has(keyword) && !migrating && !this.inWrite()) throw new IsolationError("data changes must run inside a write operation")
+    // R15: a data change outside a write operation (a read op, a stray async chain, a bare kernel write such as
+    // the TUI's act) would skip validation, describe, provenance and record.changed, or land in whatever
+    // transaction happens to be open on the shared connection. Migrations have their own.
+    if (DATA_CHANGE.has(keyword) && !migrating && !this.inOperation()) throw new IsolationError("data changes must run inside a write operation")
 
     const result = await super.executeQuery<R>(compiled)
     if (ddl) {

@@ -172,6 +172,10 @@ export async function runIsolationSelfCheck(): Promise<{ ok: boolean; results: S
       await rejects(() => probeDb.insertInto("note").values({ body: "x" }).execute(), "data changes must run inside a write operation")
       await rejects(() => sql`DELETE FROM probe_note`.execute(probeDb), "data changes must run inside a write operation")
     })
+    await check("plugin DML inside a bare kernel write that is not an operation (the TUI's act)", async () => {
+      await rejects(() => k.db.write(() => probeDb.insertInto("note").values({ body: "x" }).execute()), "data changes must run inside a write operation")
+      await rejects(() => asMe(() => k.db.write(() => sql`DELETE FROM probe_note`.execute(probeDb))), "data changes must run inside a write operation")
+    })
     await check("schema changes outside a migration", () =>
       rejects(() => probeDb.schema.createTable("x").addColumn("id", "integer").execute(), "schema changes are only allowed in migrations"),
     )
