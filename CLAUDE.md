@@ -19,14 +19,14 @@ Project agents:
 
 ## Commands
 
-- `bun start`: run the app (it needs a real TTY, so it can't be driven from a non-interactive shell; use tests instead)
+- `bun start`: run `pm`. With no arguments in a terminal it opens the TUI; it needs a real TTY, so it can't be driven from a non-interactive shell (use tests, or drive it through a pty with `script -qfc`)
 - `bun dev`: run with `--watch`
-- `bun test`: run all tests. Run a single test with `bun test ./src/App.test.tsx` (the `./` makes it a path) or `bun test -t "<name pattern>"`
+- `bun test`: run all tests. Run a single test with `bun test ./src/kernel/tui/app.test.tsx` (the `./` makes it a path) or `bun test -t "<name pattern>"`
 - `bun typecheck`: type-check (`bun check`)
 - `bun run pm <thing> <verb> …`: run the CLI (`bun src/bin/pm.ts`); `PM_HOME=<dir>` or `--db <file>` points it at a scratch database
-- `bash scripts/smoke-node.sh`: build for Node, run the self-checks and a CLI walk-through on Node 26 (needs only node/npm); the last line is `smoke ok`. Run it after touching SQLite, isolation, transactions, process handling or module loading
+- `bash scripts/smoke-node.sh`: build for Node, run the self-checks (including the TUI one, which prints `tui ok`) and a CLI walk-through on Node 26 (needs only node/npm); the last line is `smoke ok`. Run it after touching SQLite, isolation, transactions, process handling or module loading
 - `bun src/kernel/isolation-selfcheck.ts`: the isolation self-check on Bun (`node dist-node/kernel/isolation-selfcheck.js` on Node)
-- `npm run start:node`: run on Node. It runs `build:node` (`scripts/build-node.mjs`, which compiles `src/` to `dist-node/` with Babel), then `node --experimental-ffi dist-node/index.js`
+- `npm run start:node`: run on Node. It runs `build:node` (`scripts/build-node.mjs`, which compiles `src/` to `dist-node/` with Babel), then `node --experimental-ffi dist-node/bin/pm.js`
 
 ## How it's wired
 
@@ -34,7 +34,7 @@ Project agents:
 - Plugins import kernel things only from `src/kernel/api.ts` and use only `ctx.*`. Only `src/kernel/db/sqlite.ts` touches `bun:sqlite`/`node:sqlite`. Logic and kernel code never import `solid-js` or `@opentui/*`.
 - `bunfig.toml` preloads `@opentui/solid/preload` for both runs and tests. It compiles Solid JSX. Without it, `.tsx` files fail. `tsconfig.json` uses `"jsx": "preserve"` with `jsxImportSource: "@opentui/solid"`.
 - Node has no runtime JSX transform, so `scripts/build-node.mjs` compiles `src/` to `dist-node/` ahead of time with Babel (`babel-preset-solid`, `generate: "universal"`, `moduleName: "@opentui/solid"`). It rewrites `solid-js` → `solid-js/dist/solid.js` (Node's `node` export condition would otherwise load the non-reactive server build) and adds `.js` to relative imports. Keep relative imports in `src/` extensionless. Use only ESM. `Bun.*` outside `sqlite.ts`, `@opentui/three` and runtime plugins would break the Node path.
-- The starter UI (phase 2 replaces it): `src/index.tsx` calls `render()`; `src/App.tsx` owns app state and the global keys (`q`, `tab`); arrow keys go to whichever `select`/`scrollbox` has `focused={true}` (focus is a prop driven by the `focus` signal, not imperative `.focus()`); if you add an `input`/`textarea`, guard the global `q` handler; `src/sections.tsx` registers screens; `src/theme.ts` holds all colors. Quitting means `renderer.destroy()`.
+- The TUI: `src/bin/pm.ts` with no arguments and a TTY stdout lazily imports `runTui` (`src/kernel/tui/run.tsx`) and the built-in parts (`src/plugins/tui.ts`). `src/kernel/tui/` is the kernel part; each plugin's screens, tabs, panels and forms are in `src/plugins/<id>/tui/`, which import kernel things only from `src/kernel/tui/api.ts`. Take keys only with `useScreenKeys`, write only through `act(...)`, read with `useQuery`, and use the record prop `recordRef`, never `ref`. Quitting means `renderer.destroy()` (`runTui` does it). `docs/architecture.md` ("The TUI") has the rules.
 
 ## OpenTUI/Solid gotchas
 
@@ -47,7 +47,7 @@ Project agents:
 
 Kernel and plugin tests: `makeTestKernel({ plugins, today })` from `tests/helpers.ts` gives a temp `PM_HOME`, `PM_TEST=1` and a fixed clock (default `2026-11-13`, a Friday); call `kernel.cleanup()` afterwards. Drive commands with `runCli([...], kernel, io)` (`src/kernel/cli/dispatch.ts`) and assert on exact output and exit codes; never use the real clock. Run `bash scripts/smoke-node.sh` for anything runtime-sensitive.
 
-TUI tests use `testRender(() => <App />, { width, height })` from `@opentui/solid`. Drive input with `mockInput.pressArrow/pressTab/pressKey/typeText`. Call `await renderOnce()` before `captureCharFrame()`, which returns the screen as plain text. Always call `renderer.destroy()` in `finally`. Printing `captureCharFrame()` is the easiest way to see the layout without a TTY.
+TUI tests use `renderTui(kernel, { parts, external, width, height, refreshMs })` from `tests/tui.tsx`. It returns `{ frame(), peek(), input, settle(), nav, renderer, destroy() }`: drive keys with `input`, wait with `await settle()` (or better, on a frame condition, never a fixed sleep), assert on `frame()` text (the screen as plain text) and on the database, and call `destroy()` in `finally`. Seed data through write ops inside `runWithContext(kernel.context())`. Working patterns: `src/kernel/tui/blocks.test.tsx`, `form.test.tsx`, `src/plugins/projects/tui/projects-screen.test.tsx`. `bash scripts/smoke-node.sh` also runs the TUI self-check on Node (`tui ok`).
 
 ## CI
 

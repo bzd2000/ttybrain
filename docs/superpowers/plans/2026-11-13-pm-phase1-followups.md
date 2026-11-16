@@ -99,3 +99,85 @@ Deferred findings from the phase 1 task reviews and the final review, plus the c
 - Ruling R19: T15 makes setDeliverableStatus a no-op (returns current record, no timestamp change) when the status is unchanged, and closeRisk on an already-closed risk a ValidationError ("already closed") — projectStatus's "changed since" logic depends on status_changed_at — cost if wrong: small behaviour change.
 - Ruling R20: I4 deferred to phase 2 (must be fixed before the TUI's data_version live refresh) — phase 1 CLI-only use is correct, just slower/locking — cost if wrong: read-only commands fail with exit 3 while another writer holds the lock.
 - Ruling R21: final fix wave covers I1, I2, I3, M1 (delete JSON shape via I1 convention), M2 (reserve handle "me"), M5 (no provenance when ref == origin.ref; guide wording), M6 (mark non-emitted events phase 2+ in plugin reference), M7 (projects reads people) — M3/M4/M8/M9 deferred as minors — cost if wrong: small polish left for later.
+
+## Phase 2 (the TUI)
+
+Collected from the phase 2 execution ledger (`.superpowers/sdd/2026-11-16-pm-phase2-tui/progress.md`). Task numbers refer to `docs/superpowers/plans/2026-11-16-pm-phase2-tui.md`.
+
+### Open phase 2 items
+
+- **Task 3, the web-terminal spike, was not done.** It was blocked: the `ttyd` download was denied, so nothing was tried in a browser terminal (xterm.js). Only `scripts/spikes/keyprobe.tsx` exists, in commit `65be26e` on the unmerged worktree branch `worktree-agent-a76c0089f9f6be211`. Still unknown: which keys xterm.js really delivers (Shift+Enter, Ctrl+S, Ctrl+J, Esc chords, Alt keys), and whether the TUI renders correctly there. R25 (the Shift+Enter and Ctrl+S alternatives) was decided without this evidence.
+- **Terminal restore on quit was only checked through a pty script** (see the Task 16 walk-through in the report); in Task 8 `stdin.isRaw` stayed true after `renderer.destroy()` in a pty script. Check it in a real terminal.
+- **Ctrl+J as a line feed on a real legacy terminal** and the Esc chord timing on a slow link are unverified (manual check).
+- Task 8: **Alt+D in the editor discards edited text with no confirmation** (`Editor.tsx`): data loss on an emacs "delete word" keystroke. Recommended fix: confirm, or drop the binding.
+- Task 7: **a busy save blocks the event loop for SQLite's `busy_timeout` (3 s) per attempt**, so the TUI freezes while retrying. Consider a shorter `busy_timeout` for the TUI connection.
+- Plugin-specific events are still not emitted (R18); only `record.changed` is.
+
+### Rulings made during phase 2 (and what each costs if wrong)
+
+Plan rulings (R22 to R27, in the plan):
+- **R22.** `field` gets its data and TUI side in phase 2; its CLI side (`show --json`, `edit --<flag>`) is phase 5. Cost: a plugin's extra field is invisible to Copilot until phase 5. No built-in plugin uses fields.
+- **R23.** `overviewPanel` is data-driven (`load()` returns rows of cells with a ref), not a free component. Cost: no custom panel (a chart) until a `component` option is added, which is compatible.
+- **R24.** `recordForm(recordType, def)` is a TUI registration the spec does not name; it is how `n`/`e` and Inbox `p` open forms without inbox requiring `projects`. Cost: one more extension point to keep stable in `apiVersion` 1.
+- **R25.** Shift+Enter has `Ctrl+J`, and `Ctrl+S` has `Esc` `s`. Cost: may be insufficient in xterm.js (the Task 3 spike would have told).
+- **R26.** The People TUI part holds only the "Stakeholders to contact" panel; the People screen is phase 3. Cost: none.
+- **R27.** Closed (not archived) projects show in their own `Closed` group. Cost: the spec names only active, on-hold and archived.
+
+Pre-flight rulings:
+- **F1.** `suggest(partial, limit)` is on `PluginContext.tags` too, so `PluginRuntime` stays a pure `Pick`. Cost: logic code can call it (read-only, harmless).
+- **F2.** Screen-local keys (`h a d z u p E`) are not reserved. Dispatch: overlay, text field, focused screen's keys, global actions, global keys. Cost: an external plugin's global action could shadow a screen key in phase 5.
+- **F3.** `bootTui` takes `{ builtin?, external? }`; `renderTui(kernel, { parts, external })` boots `parts` as built-in and `external` as not. Cost: a small signature change.
+- **F4.** `provenance.originOf(recordType, ref)` (read-only) was added to the store and the `ctx.provenance` facade, so the Actions screen can show "For/from". Cost: one more kernel API in `apiVersion` 1.
+- **F5.** Task 13 adds both the people and inbox parts to `builtinTuiParts`; Task 14 only extends inbox. Cost: none.
+- `kernel.tuiErrors` was dropped; `registry.errors()` is the single source and Help reads it. Cost: add a getter later.
+- Task 3 ran in a separate worktree to be cherry-picked. Cost: none (it never finished).
+
+Execution rulings:
+- The record prop is `recordRef`, not `ref` (Solid compiles `ref=` into an element ref). Cost: a rename back.
+- `Table` keeps the selection visible (scrolling) though the brief did not name it. Cost: a little extra code.
+- Missing RecordView/Table status-bar hints are a spec gap (the bar shows the keys valid right now). Cost: none.
+- `openForm` returns `Promise<string | undefined>` (saved ref, or undefined on cancel); the plan said `void`. Cost: none, additive.
+- Esc during an in-flight save closes the form but the save completes: treated as Important (silently creates a record the user cancelled) and fixed. Cost: a small extra fix.
+- `act()` runs `fn` inside one outermost kernel write transaction, so multi-op saves are all-or-nothing and a busy retry is atomic. Cost: a long TUI action holds the write lock for its whole duration (hence: never await user interaction inside `act`).
+- Task 9 minors elevated into the fix loop (edit forms send only changed fields, re-selection, hints dropped whole, messages leaking between tests). Cost: one extra round.
+- The Actions `d` form starts empty with the current date as context; an empty submit writes nothing. Cost: a small UI change.
+- Inbox `p` finds forms through the read-only `useRecordForms()` hook instead of importing `projects` (R24). Cost: one more export.
+- Process-by-hand is a form save, then a separate `act` for `markProcessed`; if that fails the record stays, the item stays `new`, and an error notice shows. Cost: a rare orphan the user can re-process or dismiss.
+- The newline-stripping bug was fixed in the kernel `Field` `longtext` kind (affects every long-text field). Cost: a Field rewrite touching every form.
+- Every project-scoped item form shows a project field when not prefilled (risk, milestone, deliverable, like action). Cost: an extra field in the `p` flow.
+- CLI `inbox dismiss` records `by` as "cli"; an absent `by` keeps the existing value. Cost: none.
+- The kernel (Form plus `act`) saves a form's extra fields inside the plugin's own `act`; plugins no longer call `extra.save`. Cost: Form/act coupling through the session.
+
+### Deferred minors and concerns
+
+Kernel and runtime:
+- Global key dispatch uses OpenTUI's internal `_internalKeyInput.onInternal`; add a loud-failure test and pin OpenTUI. Renderables focused at the first render run before the dispatcher (Task 4).
+- `messages.ts` keeps module-level state shared across app instances; no tests for notice expiry or `installShutdownHandlers` before/error paths (Task 4).
+- `format.ts` `weekday` duplicates a private helper in `dates.ts` (Task 4).
+- `nav.go(unknownId)` pushes a route the header ignores; the `g` and `?` overlays open below 60x15 (Task 4).
+- An async `activate` in a tui part is not caught (`boot.ts`); relevant for phase 5. The logic/UI-split test's regex can match across lines (fail-safe). The `runtime().data` identity test compares runtime to runtime (Task 2).
+- Live refresh: a persistently failing query re-notifies on every change bump; `useQuery` with a changed `key` shows the old key's data while loading; the `key` option is untested; `act` keeps retrying after the app unmounts; a failed plugin gives a misleading `useRuntime()` message (Task 5).
+- Task 1: fast-path view checks are not in one read snapshot (`views.ts`); no test that `verifyAll` runs on the unchanged path; no test that `emit` outside a write is synchronous; read-only boot was to be asserted on Node (done by the Task 4 self-check).
+- The Node self-check does not exercise the Form-with-extras (AsyncLocalStorage) path (Task 15).
+- Extra fields: the extras save does not check the ref's record type (multi-act submits); unclaimed extras linger after a failed submit (mark claimed in `finally`); a `FieldDef` is stored and handed out mutable and empty name/label/get/set are not rejected; `fieldEditor` with key-driven input is untested and the Form may claim keys first; the "project form edits extra field" test does not prove `editProject` was skipped (Task 15).
+
+Building blocks:
+- Table: `Enter open` hint shows while typing; row cells are rebuilt per cell; the grow column is measured after the first layout (possible one-frame wobble); `displayWidth`'s wide-character table is partial (Tasks 6, 13).
+- Overview has no Shift+Tab and initial focus can land on an empty panel; the grow column is picked by the widest text per reload, so the stakeholders panel can flip (let panels name it); `+N more` overflow and stakeholder `never` are untested in real panels (Tasks 6, 13).
+- The selected RecordView tab is not written to `route.tab`; the header crumb and the RecordView breadcrumb both show `› T-1` (Task 6).
+- Form: autocomplete may accept a stale suggestion while the new search loads; `openForm` pushes without a kind, so `nav.open` twice stacks two forms; `confirm()` never resolves if its overlay is removed another way; Esc then Ctrl+S within 1 s may leave the cancel timer armed during the save; general Field pre-fill appends on typing (consider select-all on focus) (Tasks 7, 12).
+- Editor: no tests for the chord timeout, Alt+S/Alt+D or the saving guard; it overflows below about 8 rows; `suspend()` failure leaves the renderer un-resumed (`external.ts`) (Task 8).
+
+Projects:
+- The Projects screen's `want` stays set if the restored ref no longer exists; the panel title count follows the filter; tests clean up in `afterEach` rather than `finally` (Tasks 9, 10).
+- The project edit form sends `null` when a date/effort is cleared and it is unverified how `editProject` treats that (empty string vs undefined may count as a change); the project form's own `number()` accepts `0x10` (Tasks 9, 15).
+- `WithRecord` silently closes a form whose record fails to load; no tests for `e` without change or for risk/decision edits; an `any` count helper in `projects/tui/index.tsx` (Task 11).
+- `E` is tested only in container mode; the `e` edit test checks the DB, not the reloaded tab; a `sleep(1100)` waits out the Esc window; tab titles with counts were to assert `Milestones 1` and `Risks & issues 1` (Tasks 10, 11).
+- Actions: `originsOf` accepts any record type and its `IN (ids)` is unchunked; no test for two origins on one record ("earliest wins"); done/cancelled lists sort by id descending, not completion date; the meeting-title For/from path is untested until phase 4 (Task 12).
+
+Inbox:
+- Capture keys test types only `q 2 i` (not `n g ?` or other digits); person prefill and badge position untested; the whole text cell is amber for unresolved tags; `x#CMR` is also marked (not word-anchored) (Task 14).
+- Esc-s from inside a long-text textarea is untested (Task 14).
+- A health update made through `p` records project `#CRM` as "created from" I-n in provenance (for the final review) (Task 14).
+
+Fields: the RecordFields label column is not aligned with the Summary facts (the brief literally says `Budget  12000`) (Task 15).

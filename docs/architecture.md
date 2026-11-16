@@ -6,7 +6,7 @@ Read this before changing anything under `src/kernel/` or `src/plugins/`. It con
 
 pm is a personal, single-user tool for following up projects, team, stakeholders and meetings. It has:
 - a CLI, `pm <thing> <verb>`, also used by GitHub Copilot as an agent;
-- a terminal UI (OpenTUI + Solid, from phase 2);
+- a terminal UI (OpenTUI + Solid; `pm` with no arguments in a terminal opens it);
 - an inbox for quick capture.
 
 It runs on **Bun ≥ 1.3.14 and Node ≥ 26.4**, both always, locally or in a per-user container behind a web terminal. Data is one SQLite file under `PM_HOME`, default `~/.pm`.
@@ -29,7 +29,8 @@ src/kernel/                 knows nothing about projects or people
   isolation-selfcheck.ts    repeats the isolation cases on the current runtime (also run by the Node smoke test)
 src/bin/pm.ts               the `pm` entry point: boots the kernel with `src/plugins/index.ts` and runs the CLI
 src/plugins/<id>/logic/     index.ts (definePlugin), schema.ts, views.ts, ops*.ts, commands*.ts, records.ts, report.ts, guide.ts: NO UI imports
-src/plugins/<id>/tui/       screens, tabs, panels, overlays (phase 2+)
+src/kernel/tui/             the TUI kernel: frame, router, keys, overlays, data hooks, building blocks (see "The TUI")
+src/plugins/<id>/tui/       screens, record tabs, panels, forms, badges: each plugin's TUI part (`defineTui`)
 tests/helpers.ts            makeTestKernel; tests/fixtures/ fixture plugins
 ```
 
@@ -71,6 +72,40 @@ ctx.expose({
 - `ctx.records` offers `resolve(ref)`, `label(ref)`, `refOf(type, id)` and `hasType(name)`; use `hasType` to validate a soft reference to an optional plugin's records only when that plugin is loaded.
 - **Every write emits `record.changed`.** With an origin (`--from-inbox I-n`), the kernel records provenance itself (not for a delete, and not when the ref is the origin itself). Don't add `inbox_item_id` columns. The CLI refuses an origin whose ref belongs to a registered record type but does not resolve (exit 2).
 
+## The TUI (phase 2)
+
+The TUI is a kernel part plus one `tui/` part per plugin, with the same isolation idea as the data side: the kernel knows no domain, plugins fill it in through extension points.
+
+```
+src/kernel/tui/
+  api.ts                    the ONLY module a plugin's tui/ part imports from the kernel (defineTui, types, hooks, blocks, format, theme)
+  types.ts, registry.ts     TuiDef/TuiContext and the registry of all registrations; boot.ts: bootTui() activates each part in its plugin scope
+  run.tsx                   runTui(): creates the renderer, mounts <TuiApp>, restores the terminal on quit; selfcheck.tsx: the Node `tui ok` check
+  app.tsx, frame.tsx        <TuiApp> (router, overlay stack, global keys), header and status bar
+  keys.ts, escChord.ts      key dispatch layers, hints, text focus, the Esc chord; nav.ts: routes; overlay.tsx: overlays, openForm, confirm
+  data.ts, refresh.ts       useQuery, act, useRuntime, useRecord; live refresh (PRAGMA data_version)
+  scope.tsx, external.ts    PluginScope (which plugin a component belongs to); $VISUAL/$EDITOR handoff
+  components/               Table, Form, Field, Panel, Tabs, Menu, RecordView, RecordFields, OverviewScreen, Editor, Help, Switcher, KeyHints, ErrorBoundary
+  format.ts, theme.ts, messages.ts   display width/dates, colours and tones, status-bar notices
+src/plugins/tui.ts          builtinTuiParts: the list of built-in tui parts
+src/plugins/<id>/tui/       index.tsx = defineTui({ plugin, activate(ui) }) plus the plugin's screens, forms, panels
+tests/tui.tsx               renderTui(kernel, { parts, external, width, height, refreshMs }) -> { frame(), peek(), input, settle(), nav, renderer, destroy() }
+```
+
+A part registers in `activate(ui)` with: `ui.screen` (built-in screens use a fixed number key: `1` Overview, `2` Projects, `4` Actions, `6` Inbox; `3` People and `5` Meetings are for phases 3-4; other screens get `7`, `8`, … in registration order), `recordTab`, `overviewPanel`, `listColumn`, `recordForm`, `fieldEditor`, `globalAction`, `statusBadge`. Registrations may be made only during `activate`. A part that throws is isolated and listed in Help; the rest of the app runs.
+
+Rules:
+- **Imports.** A tui part imports kernel things only from `src/kernel/tui/api.ts`, and logic only from its own plugin's `logic/`, never another plugin's files. Logic and the rest of the kernel never import `solid-js` or `@opentui/*`. Only `src/kernel/tui/` and `src/plugins/*/tui/` may. Keep imports extensionless (the Node build adds `.js`).
+- **Reading.** `useQuery(load, { key })` runs `load` in an operation context (views, `rt.self().read`), reloads on live refresh, and keeps the last data while reloading. Get your plugin's runtime with `useRuntime()` (`data`, `self()`, `use(x)`, `records`, `tags`, `provenance`, `clock`, `config`). Reading is the only thing `rt.data` is for.
+- **Writing.** Only through `act(() => rt.self().write.op(...), { origin?, ok? })`; never DML on `rt.data`. `act` runs `fn` in ONE outermost kernel write transaction: ops inside become savepoints, so several ops in one `act` are all-or-nothing, and a busy retry (`BusyError`) redoes the whole thing. It therefore holds the write lock for as long as `fn` runs: **never await user interaction (`confirm`, `openForm`, an editor) inside `act`**; await it first, then `act`. The kernel also saves a form's extra fields (the `field` extension point) inside the same `act` as the form's own op.
+- **Time.** No `new Date()`/`Date.now()`; today is `rt.clock.today()`.
+- **Keys and focus.** Take keys only with `useScreenKeys(handler)`: it ignores keys while an overlay sits above the component, so overlays get them first. Claim a handled key with `key.preventDefault()`; screen keys run before a child Table's, and the global keys skip a claimed key. Dispatch order: overlay, text field, focused screen's keys, global actions, global keys. A text input calls `useKeys().textFocus(true)` while focused, which switches single-letter keys off; `useKeys().typing()` tells blocks a text field has focus. Pass `focused` props gated on `useKeys().active()`. Register status-bar hints with `useKeys().hints([...])` or `<KeyHints>`; the bar drops whole hints that do not fit. A plugin's `globalAction` key may not be one of `RESERVED_KEYS` in `registry.ts` (`j k n e x g q ? / c` and `1`-`9`) or already taken. Screen-local letters are not reserved, so an external plugin's global action could shadow one (revisit in phase 5). Shift+Enter has `Ctrl+J` as an alternative and Ctrl+S has `Esc` then `s` (many terminals cannot tell Shift+Enter from Enter).
+- **The `recordRef` prop rule.** A record reference prop is `recordRef`, never `ref`: Solid compiles a JSX `ref=` into an element-ref callback. This holds for `RecordTabDef.component`, `count?(recordRef)`, `RecordFormProps.recordRef` and `<RecordView recordRef>`. `Route` objects (plain data) keep a `ref` field.
+- **Live refresh.** `createLiveRefresh` polls `PRAGMA data_version` about every second and bumps a version that makes every `useQuery` reload, so changes from the CLI show up. After the app's own `act`, a refresh bump is scheduled too. `renderTui`'s `settle()` waits for in-flight loads and that scheduled bump; wait on a frame condition rather than sleeping.
+- **Acting on rows.** `Table` calls `onSelect(undefined)` when it has no rows; act on `e`, `x`, `Del` and the like only when the selected ref is among the rows currently shown. Selection is kept by ref across reloads. A Table scrolls only inside a height-bounded parent (a `<Panel grow>`). Edit forms send only the fields whose value changed, and close without writing when nothing changed.
+- **Forms.** `<Form title fields submit close>`; a field's `name` must equal the op input name, so a `ValidationError(field)` shows inline. `required` only marks `*`; the op validates. `submit(values)` returns `{ ok: true, ref? } | { ok: false, error }`, typically from `act`. `openForm(recordType, formId?, { recordRef?, prefill?, origin? })` resolves to the saved ref, or `undefined` on cancel.
+- **Tests.** Use `renderTui` and assert on frame text and on the database; seed through write ops inside `runWithContext(kernel.context())`; call `destroy()` in `finally`. `bash scripts/smoke-node.sh` runs the TUI self-check on Node.
+
 ## Who owns what
 
 | Plugin | Requires | Reads views of | Owns | Record types |
@@ -102,9 +137,9 @@ ctx.expose({
 
 - Only `src/kernel/db/sqlite.ts` may use runtime-specific APIs (`bun:sqlite` or `node:sqlite`, behind `globalThis.Bun`). Everything else is plain ESM and `node:*` modules that both runtimes support.
 - The Node build is `scripts/build-node.mjs` (Babel, `.js` extensions added). Keep relative imports **extensionless** in `src/`.
-- **Logic never imports `solid-js` or `@opentui/*`**, so the CLI runs on Node without `--experimental-ffi` (the `bin` shebang carries the flag for the future TUI only).
+- **Logic never imports `solid-js` or `@opentui/*`**, so the CLI runs on Node without `--experimental-ffi`. The TUI is imported lazily by `src/bin/pm.ts` only when there are no arguments and stdout is a TTY, and needs `--experimental-ffi` on Node (the `bin` shebang and `npm run start:node` carry it).
 - Run-as-script detection is runtime-neutral: compare `realpathSync(process.argv[1])` with `fileURLToPath(import.meta.url)`; never `import.meta.main`.
-- `bash scripts/smoke-node.sh` builds for Node and runs the savepoint and isolation self-checks plus a CLI walk-through; it needs only node/npm and ends with `smoke ok`. CI runs it in the `node-smoke` job, and `bun typecheck && bun test` in the `test` job.
+- `bash scripts/smoke-node.sh` builds for Node and runs the savepoint, isolation and TUI self-checks (the last prints `tui ok`) plus a CLI walk-through; it needs only node/npm and ends with `smoke ok`. CI runs it in the `node-smoke` job, and `bun typecheck && bun test` in the `test` job.
 
 ## Testing conventions
 
@@ -119,9 +154,15 @@ ctx.expose({
 - `kysely.transaction()`, `BEGIN` or `SAVEPOINT` in plugin code.
 - `new Date()` or `Date.now()` in plugin logic; use the context or clock instead.
 - A cross-plugin write that bypasses `ctx.use(...).write`, or a `requires` cycle.
-- An import of `solid-js` or `@opentui/*` from `logic/` or `src/kernel/` (other than the starter UI files).
+- An import of `solid-js` or `@opentui/*` from `logic/` or from `src/kernel/` outside `src/kernel/tui/`; a plugin `tui/` part importing anything from the kernel other than `src/kernel/tui/api.ts`, or another plugin's files.
 - `Bun.*` outside `sqlite.ts`; a relative import with an extension.
 - A new `inbox_item_id`-style column; use provenance instead.
 - A write operation whose output lacks `ref`, or that has no `describe`.
 - A command that prompts, prints non-JSON under `--json`, or exits with a code outside 0–3.
+- A TUI component that calls `ctx.data` for writes (DML), or any write that does not go through `act(() => rt.self().write.op(...))`.
+- `new Date()` or `Date.now()` in the TUI; today is `rt.clock.today()`.
+- A single-letter key handled without the text-focus guard (use `useScreenKeys`, which is off while a text field has focus), or raw `useKeyboard`.
+- A component prop named `ref` for a record reference (Solid compiles it into an element ref); use `recordRef`.
+- `await confirm(...)`, `await openForm(...)` or any other wait for the user inside an `act` callback.
+- A TUI test that sleeps a fixed time instead of waiting on a frame condition, or that forgets `destroy()` in `finally`.
 - A test that only checks "no error", or uses the real clock.
