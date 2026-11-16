@@ -411,6 +411,28 @@ describe("forms", () => {
     expect(await t.frame()).not.toContain("Delete TH-1?")
   })
 
+  test("confirm, openForm and openEditor refuse to wait for the user inside act (the write lock would stay held)", async () => {
+    const t = await open()
+    const waits: Array<[string, () => unknown]> = [
+      ["confirm", () => overlay!.confirm("Sure?")],
+      ["openForm", () => overlay!.openForm("thing")],
+      ["openEditor", () => overlay!.openEditor({ title: "Notes", initial: "", save: async () => ({ ok: true }) })],
+    ]
+    for (const [name, wait] of waits) {
+      const res = await act(async () => {
+        await wait()
+        return { ref: "TH-0" }
+      })
+      expect(res.ok).toBe(false)
+      expect(res.ok ? "" : (res.error as Error).message).toBe(`${name}() waits for the user: call it before act(), not inside it`)
+    }
+    const frame = await t.frame()
+    expect(frame).not.toContain("Sure?")
+    expect(frame).not.toContain("New thing")
+    // the lock was released: a write right after succeeds
+    expect((await act(() => kernel.runtime("todo")!.self().write.addThing!({ title: "After" }))).ok).toBe(true)
+  })
+
   test("nav.open on a type with forms but no tabs opens its first form with the ref", async () => {
     const t = await open()
     await runWithContext(kernel.context(), () => kernel.runtime("todo")!.self().write.addThing!({ title: "Existing" }))

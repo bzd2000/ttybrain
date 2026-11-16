@@ -43,6 +43,7 @@ export type Overlay = {
   // Opens `c` above everything, in the scope of the plugin whose component called useOverlay() (its runtime for
   // useRuntime(), an error boundary that Esc closes); the returned function closes it.
   open(c: () => JSX.Element): () => void
+  // openForm, confirm and openEditor throw when called inside act() (an open write): await them first, then act.
   // Opens `recordType`'s registered form `formId` (undefined: its first) with `props`, in its plugin's scope.
   // Resolves with the ref the form passed to `close(savedRef)`: undefined on cancel, or when there is no form.
   openForm(recordType: string, formId?: string, props?: Omit<RecordFormProps, "close">): Promise<string | undefined>
@@ -56,7 +57,14 @@ export type Overlay = {
 // The app's overlay service; useOverlay() binds `open` to the caller's plugin runtime.
 export type OverlayService = Omit<Overlay, "open"> & { open(c: () => JSX.Element, runtime: PluginRuntime | undefined): () => void }
 
+// Waiting for the user inside act() would keep the write transaction (BEGIN IMMEDIATE) open while the dialog
+// waits, so every CLI or Copilot write would fail as busy. Refuse it before anything opens.
+export const waitsForUser = (name: string) => `${name}() waits for the user: call it before act(), not inside it`
+
 export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: TuiRegistry): OverlayService {
+  const notInWrite = (name: string) => {
+    if (kernel.db.inWrite()) throw new Error(waitsForUser(name))
+  }
   return {
     open: (c, runtime) =>
       stack.push((close) => (
@@ -65,6 +73,7 @@ export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: Tui
         </ErrorBoundary>
       )),
     openForm(recordType, formId, props = {}) {
+      notInWrite("openForm")
       const forms = registry.forms(recordType)
       const def = formId === undefined ? forms[0] : forms.find((f) => f.id === formId)
       if (!def) {
@@ -87,6 +96,7 @@ export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: Tui
       })
     },
     openEditor(opts) {
+      notInWrite("openEditor")
       stack.push((close) => (
         <ErrorBoundary label="editor" close={close}>
           <Editor {...opts} close={close} />
@@ -94,6 +104,7 @@ export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: Tui
       ))
     },
     confirm(text) {
+      notInWrite("confirm")
       return new Promise<boolean>((resolve) => {
         stack.push((close) => (
           <Confirm
