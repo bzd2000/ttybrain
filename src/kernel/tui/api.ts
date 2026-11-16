@@ -1,5 +1,5 @@
 // What plugins' tui parts import from the kernel (the future `@pm/api/tui`): defineTui, the extension-point
-// types, the hooks and the theme. Building blocks join it as they arrive.
+// types, the hooks, the building blocks, the format helpers and the theme.
 export { defineTui } from "./types"
 export type {
   Cell,
@@ -23,7 +23,15 @@ export { useNav, type Nav } from "./nav"
 // component, so overlays get keys first. Claim a key with key.preventDefault() so the global keys skip it.
 export { useKeys, useScreenKeys, type Hint, type Keys } from "./keys"
 // Loads and writes: useQuery reloads live and keeps the last data; act runs a write with busy retry and messages.
-export { act, useQuery, useRuntime, type ActResult, type Query } from "./data"
+export { act, useQuery, useRecord, useRuntime, type ActResult, type Query, type RecordInfo } from "./data"
+// Building blocks.
+export { KeyHints } from "./components/KeyHints"
+export { Menu, type MenuItem } from "./components/Menu"
+export { Panel } from "./components/Panel"
+export { RecordView } from "./components/RecordView"
+export { Table, type TableColumn, type TableGroup, type TableProps, type TableRow } from "./components/Table"
+export { Tabs, type TabItem } from "./components/Tabs"
+export { displayWidth, dueLabel, longDate, shortDate, truncate } from "./format"
 export { ErrorBoundary } from "./components/ErrorBoundary"
 export { notify } from "./messages"
 export { theme, toneColor } from "./theme"

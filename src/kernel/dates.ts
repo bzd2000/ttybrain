@@ -25,8 +25,14 @@ export function addDays(date: string, n: number): string {
   return fromMs(toMs(date) + n * DAY_MS)
 }
 
-function weekday(date: string): number {
+// 0 = Sunday … 6 = Saturday.
+export function weekday(date: string): number {
   return new Date(toMs(date)).getUTCDay()
+}
+
+// Whole days from `from` to `to` (negative when `to` is earlier).
+export function daysBetween(from: string, to: string): number {
+  return Math.round((toMs(to) - toMs(from)) / DAY_MS)
 }
 
 export function weekEnd(today: string): string {

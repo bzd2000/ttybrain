@@ -132,3 +132,22 @@ export function act<T>(fn: () => Promise<T>, opts: { origin?: Origin; ok?: (r: T
   }
   return session.track(attempt())
 }
+
+// --- useRecord ---
+
+export type RecordInfo = { type(): string | undefined; id(): number | undefined; label(): string | undefined }
+
+// Resolves `ref()` through the kernel's record types (type, id, label) with useQuery, so it refreshes live. All
+// three are undefined while loading and for a ref that does not resolve.
+export function useRecord(ref: () => string): RecordInfo {
+  const { kernel } = useSession()
+  const q = useQuery(
+    async () => {
+      const found = await kernel.records.resolveAny(ref())
+      if (!found) return null
+      return { ...found, label: await kernel.records.label(ref()) }
+    },
+    { key: ref },
+  )
+  return { type: () => q.data()?.type, id: () => q.data()?.id, label: () => q.data()?.label }
+}
