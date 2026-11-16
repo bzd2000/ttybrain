@@ -124,7 +124,6 @@ export function ProjectSummary(props: { recordRef: string }) {
   }
 
   useScreenKeys((key) => {
-    if (keys.typing()) return
     const ch = printable(key)
     if (ch === "h") void overlay.openForm("project", "health", { recordRef: props.recordRef })
     else if (ch === "e") void overlay.openForm("project", "project", { recordRef: props.recordRef })

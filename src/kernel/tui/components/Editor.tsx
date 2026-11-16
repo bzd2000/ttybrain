@@ -81,7 +81,7 @@ export function Editor(props: EditorOptions & { close(): void }) {
       key.preventDefault()
       if (!saving()) props.close()
     }
-  })
+  }, { whileTyping: true })
 
   return (
     <box

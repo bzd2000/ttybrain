@@ -2,7 +2,8 @@
 //
 // Dispatch order for one key press:
 //   1. an open overlay (its own `useScreenKeys` handler; the screen below is gated off by `useScreenKeys`);
-//   2. a focused text field: while the top layer holds `textFocus(true)`, single-letter global keys are off;
+//   2. a focused text field: while the top layer holds `textFocus(true)`, single-letter global keys are off, and
+//      `useScreenKeys` handlers get no printable keys or Enter unless they pass `{ whileTyping: true }`;
 //   3. the focused screen's own `useScreenKeys` handlers (screen-local keys are not reserved);
 //   4. global actions (plugins' `globalAction` keys);
 //   5. global keys (`q`, `?`, `g`, `1`–`9`, `Esc`).
@@ -124,10 +125,18 @@ export function useKeys(): Keys {
 // The way screens, blocks and overlays take keys: OpenTUI's useKeyboard, but `handler` runs only while the
 // component's layer is on top. OpenTUI calls listeners in registration order, so without this gate a screen's
 // handler (registered earlier) would also see the keys meant for an overlay opened above it.
-export function useScreenKeys(handler: (key: KeyEvent) => void): void {
+// While a text field on the top layer has focus (`typing()`), printable keys and Enter are the field's: the
+// handler does not get them. A component that owns a text field (a form, an editor, a filter input) passes
+// `{ whileTyping: true }` to get them anyway. Other keys (arrows, Esc, Tab, Delete) always reach the handler;
+// a block that moves on arrows checks `typing()` itself.
+export type ScreenKeysOptions = { whileTyping?: boolean }
+
+export function useScreenKeys(handler: (key: KeyEvent) => void, opts: ScreenKeysOptions = {}): void {
   const keys = useKeys()
   useKeyboard((key) => {
-    if (keys.active()) handler(key)
+    if (!keys.active()) return
+    if (!opts.whileTyping && keys.typing() && (key.name === "return" || printable(key) !== undefined)) return
+    handler(key)
   })
 }
 

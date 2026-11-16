@@ -127,7 +127,7 @@ export function InboxScreen() {
   }
 
   useScreenKeys((key) => {
-    if (keys.typing() || key.defaultPrevented) return
+    if (key.defaultPrevented) return
     const e = current()
     if (!e) return
     const ch = printable(key)

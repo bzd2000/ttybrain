@@ -156,6 +156,34 @@ describe("TUI shell", () => {
     expect(frame).toContain("j presses: 1")
   })
 
+  test("while typing, useScreenKeys drops printable keys and Enter unless the handler opts in with whileTyping", async () => {
+    function TypingScreen() {
+      const keys = useKeys()
+      const [seen, setSeen] = createSignal<string[]>([])
+      const [owner, setOwner] = createSignal<string[]>([])
+      useScreenKeys((key) => setSeen((s) => [...s, key.name]))
+      useScreenKeys((key) => setOwner((s) => [...s, key.name]), { whileTyping: true })
+      onMount(() => keys.textFocus(true))
+      onCleanup(() => keys.textFocus(false))
+      return (
+        <box flexDirection="column">
+          <text>{`plain: ${seen().join(",")}`}</text>
+          <text>{`owner: ${owner().join(",")}`}</text>
+          <input width={20} focused={keys.active()} />
+        </box>
+      )
+    }
+    tui = await renderTui(kernel, { parts: [testPart(TypingScreen)] })
+    tui.input.pressKey("2")
+    await tui.frame()
+    tui.input.pressKey("x")
+    tui.input.pressEnter()
+    tui.input.pressArrow("down")
+    const frame = await tui.frame()
+    expect(frame).toContain("plain: down")
+    expect(frame).toContain("owner: x,return,down")
+  })
+
   test("q quits", async () => {
     const setup = await createTestRenderer({ width: 100, height: 30 })
     try {

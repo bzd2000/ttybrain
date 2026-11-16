@@ -120,7 +120,7 @@ export function CaptureOverlay(props: { close(): void }) {
       const d = name === "up" ? -1 : 1
       setPicked((p) => Math.min(suggestions().length - 1, Math.max(0, p + d)))
     }
-  })
+  }, { whileTyping: true })
 
   return (
     <box border borderColor={theme.accent} backgroundColor={theme.panel} flexDirection="column" width="80%" paddingLeft={1} paddingRight={1} title={CAPTURE_TITLE}>

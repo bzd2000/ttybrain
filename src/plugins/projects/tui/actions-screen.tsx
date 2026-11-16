@@ -214,7 +214,7 @@ export function ActionsScreen() {
     } else if (ch === "/") startFilter()
     else return
     key.preventDefault()
-  })
+  }, { whileTyping: true })
 
   return (
     <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1}>

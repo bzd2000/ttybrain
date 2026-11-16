@@ -27,9 +27,10 @@ export type { EditorOptions } from "./components/Editor"
 // $VISUAL/$EDITOR handoff (local mode); returns the new text, or null when unchanged, failed or in a container.
 export { editExternal, useEditExternal } from "./external"
 // Take keys with useScreenKeys, not OpenTUI's raw useKeyboard: it ignores keys while an overlay sits above the
-// component, so overlays get keys first. Claim a key with key.preventDefault() so the global keys skip it.
-// printable(key) is the character a plain key press types (undefined with Ctrl/Alt/Meta), for letter keys.
-export { printable, useKeys, useScreenKeys, type Hint, type Keys } from "./keys"
+// component, so overlays get keys first, and while a text field has focus it withholds printable keys and Enter
+// (a component that owns the text field passes { whileTyping: true }). Claim a key with key.preventDefault() so
+// the global keys skip it. printable(key) is the character a plain key press types (undefined with Ctrl/Alt/Meta).
+export { printable, useKeys, useScreenKeys, type Hint, type Keys, type ScreenKeysOptions } from "./keys"
 // Loads and writes: useQuery reloads live and keeps the last data; act runs a write with busy retry and messages.
 export { act, useQuery, useRecord, useRuntime, type ActResult, type Query, type RecordInfo } from "./data"
 // Building blocks.

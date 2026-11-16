@@ -285,7 +285,7 @@ export function Form(props: {
     } else if (f?.kind === "enum" && printable(key) !== undefined) {
       key.preventDefault() // nothing to type into
     }
-  })
+  }, { whileTyping: true })
 
   const labelWidth = () => Math.max(0, ...fields().map((f) => f.label.length + (f.required ? 1 : 0))) + 2
 
