@@ -149,8 +149,12 @@ export class TuiRegistry {
   addGlobalAction(plugin: string, def: GlobalActionDef): void {
     this.open()
     if ([...def.key].length !== 1) throw new ValidationError(`key "${def.key}" must be a single character`)
-    if (RESERVED_KEYS.has(def.key) || this.actionList.some((a) => a.def.key === def.key)) throw new ValidationError(`key "${def.key}" is already taken`)
     if (this.actionList.some((a) => a.def.id === def.id)) throw new ValidationError(`global action "${def.id}" is already registered`)
+    // Spec §3.4: a key conflict skips just this action, with a message; the rest of the part still loads.
+    if (RESERVED_KEYS.has(def.key) || this.actionList.some((a) => a.def.key === def.key)) {
+      this.recordError(plugin, `${plugin}: key "${def.key}" is already taken`)
+      return
+    }
     this.actionList.push({ plugin, def })
   }
 

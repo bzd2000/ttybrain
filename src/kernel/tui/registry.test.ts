@@ -120,17 +120,22 @@ describe("bootTui", () => {
     expect(reg.errors()).toEqual([{ plugin: "projects", error: "projects: slot 1 is reserved for the Overview screen" }])
   })
 
-  test("globalAction keys: single character, not a global key, not taken by an earlier action", () => {
+  test("globalAction keys: single character, not a global key, not taken by an earlier action (a taken key skips only that action)", () => {
     const reg = bootTui(
       k,
       [
         part("inbox", (ui) => ui.globalAction(action("capture", "i"))),
-        part("projects", (ui) => ui.globalAction(action("again", "i"))),
+        part("projects", (ui) => {
+          ui.globalAction(action("again", "i"))
+          ui.globalAction(action("other", "o"))
+          ui.overviewPanel({ id: "kept", title: "Kept", priority: 1, empty: "-", load: async () => [] })
+        }),
         part("people", (ui) => ui.globalAction(action("wide", "ab"))),
       ],
       { builtin: true },
     )
-    expect(reg.globalActions().map((a) => a.key)).toEqual(["i"])
+    expect(reg.globalActions().map((a) => a.key)).toEqual(["i", "o"])
+    expect(reg.panels().map((p) => p.id)).toEqual(["kept"])
     expect(reg.errors()).toEqual([
       { plugin: "projects", error: 'projects: key "i" is already taken' },
       { plugin: "people", error: 'people: key "ab" must be a single character' },
