@@ -1,6 +1,7 @@
 // Tags in free text: `#CRM`, `@anna`, `$contract-42`. The kernel parses them; plugins register a tag type per
 // prefix whose resolver turns the token into a record id (the inbox links an item to what its tags name).
 import { ValidationError } from "./errors"
+import type { RecordTypeRegistry } from "./records"
 
 export type TagTypeDef = { prefix: "#" | "@" | string; recordType: string; resolve(token: string): Promise<number | null> }
 export type ParsedTag = { prefix: string; token: string; raw: string }
@@ -16,6 +17,9 @@ export function parseTags(text: string): ParsedTag[] {
 
 export class TagRegistry {
   private readonly defs = new Map<string, { def: TagTypeDef; plugin?: string }>() // by prefix
+
+  // `records` lets `suggest` search the record type a prefix names; without it, `suggest` finds nothing.
+  constructor(private readonly records?: Pick<RecordTypeRegistry, "byName">) {}
 
   // `plugin` lets the host remove a failed plugin's tag types.
   register(def: TagTypeDef, plugin?: string): void {
@@ -40,6 +44,17 @@ export class TagRegistry {
       } else if (!unresolved.includes(tag.raw)) unresolved.push(tag.raw)
     }
     return { links, unresolved }
+  }
+
+  types(): Array<{ prefix: string; recordType: string }> {
+    return [...this.defs.values()].map(({ def }) => ({ prefix: def.prefix, recordType: def.recordType }))
+  }
+
+  // Completions for a tag being typed (`#cr`, `@ma`): the record type of that prefix searches the rest.
+  async suggest(partial: string, limit: number): Promise<Array<{ ref: string; label: string }>> {
+    const def = this.defs.get(partial.slice(0, 1))?.def
+    const type = def ? this.records?.byName(def.recordType) : undefined
+    return type ? type.search(partial.slice(1), limit) : []
   }
 
   remove(pluginId: string): void {

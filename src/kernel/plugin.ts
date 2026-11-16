@@ -46,7 +46,11 @@ export interface PluginContext {
     hasType(name: string): boolean
   }
   tagType(def: TagTypeDef): void
-  readonly tags: { resolve(text: string): ReturnType<TagRegistry["resolve"]> }
+  readonly tags: {
+    resolve(text: string): ReturnType<TagRegistry["resolve"]>
+    // Completions for a tag being typed (`#cr`, `@ma`); [] for an unknown prefix.
+    suggest(partial: string, limit: number): Promise<Array<{ ref: string; label: string }>>
+  }
   command(def: CommandDef): void
   report(def: ReportDef): void
   reportSection(reportId: string, def: ReportSectionDef): void
@@ -57,3 +61,6 @@ export interface PluginContext {
   on(event: string, fn: (payload: any) => void): () => void
   emit(event: string, payload: unknown): void
 }
+
+// The read/write side of a context, without registrations: what a plugin's TUI part gets (`kernel.runtime(id)`).
+export type PluginRuntime = Pick<PluginContext, "id" | "data" | "config" | "clock" | "use" | "self" | "records" | "tags" | "provenance">

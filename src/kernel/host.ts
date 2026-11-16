@@ -18,7 +18,7 @@ import { MigrationRunner, ownerOf, ownTablesOf, type Migration } from "./migrati
 import { OperationRegistry } from "./operations"
 import { resolvePaths, type Paths } from "./paths"
 import { assertPluginId } from "./plugin-id"
-import type { PluginContext, PluginDef } from "./plugin"
+import type { PluginContext, PluginDef, PluginRuntime } from "./plugin"
 import { ProvenanceStore } from "./provenance"
 import { RecordTypeRegistry } from "./records"
 import { ReportRegistry } from "./reports"
@@ -51,6 +51,8 @@ export type Kernel = {
   commands: CommandRegistry
   events: EventBus
   context(origin?: Origin): OpContext
+  // A loaded plugin's runtime (the same `data`, operations, records, tags as its context); undefined unless `ok`.
+  runtime(pluginId: string): PluginRuntime | undefined
   shutdown(): Promise<void>
 }
 
@@ -67,7 +69,12 @@ type Slot = {
   error?: string
   migrations: Migration[]
   off: Array<() => void> // event subscriptions
+  ctx?: PluginContext
+  runtime?: PluginRuntime
 }
+
+// The context keys a runtime carries: everything but the registrations (PluginRuntime).
+const RUNTIME_KEYS: Array<keyof PluginRuntime> = ["id", "data", "config", "clock", "use", "self", "records", "tags", "provenance"]
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -90,7 +97,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const records = new RecordTypeRegistry()
   const provenance = new ProvenanceStore(db, records)
   const ops = new OperationRegistry({ db, events, records, provenance, validateOutputs: opts.env.PM_TEST === "1" })
-  const tags = new TagRegistry()
+  const tags = new TagRegistry(records)
   const reports = new ReportRegistry()
   const guide = new GuideRegistry()
   const commands = new CommandRegistry()
@@ -223,7 +230,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         live()
         tags.register(def, id)
       },
-      tags: { resolve: (text) => tags.resolve(text) },
+      tags: { resolve: (text) => tags.resolve(text), suggest: (partial, limit) => tags.suggest(partial, limit) },
       command: (def) => {
         live()
         commands.register(id, def)
@@ -264,7 +271,8 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
       continue
     }
     try {
-      await s.def.activate(contextFor(s))
+      s.ctx = contextFor(s)
+      await s.def.activate(s.ctx)
       await runner.run(s.def.id, s.migrations, false)
       s.status = "ok"
     } catch (e) {
@@ -324,6 +332,15 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     commands,
     events,
     context: (origin) => ({ actor: "me", today: clock.today(), now: clock.now(), ...(origin ? { origin } : {}) }),
+    runtime: (pluginId) => {
+      const s = byId.get(pluginId)
+      if (s?.status !== "ok" || !s.ctx) return undefined
+      if (!s.runtime) {
+        const ctx = s.ctx
+        s.runtime = Object.fromEntries(RUNTIME_KEYS.map((key) => [key, ctx[key]])) as PluginRuntime
+      }
+      return s.runtime
+    },
     shutdown: () => db.close(),
   }
 }
