@@ -3,7 +3,8 @@
 // useQuery screen reloads after another connection's commit (data_version) and that an error boundary holds.
 // Run: `bun src/kernel/tui/selfcheck.tsx` or, after the Node build,
 // `node --experimental-ffi dist-node/kernel/tui/selfcheck.js`. Prints `tui ok` on success.
-import { testRender } from "@opentui/solid"
+import { SyntaxStyle } from "@opentui/core"
+import { testRender, useRenderer } from "@opentui/solid"
 import { mkdtempSync, realpathSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -51,6 +52,16 @@ const fixtureTui = defineTui({
     ui.screen({ id: "broken", title: "Broken", slot: 3, component: Broken })
   },
 })
+
+// <markdown> inside a scrollbox, as the project Context tab uses it.
+function MarkdownProbe() {
+  const style = SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } }, useRenderer().nativeScene)
+  return (
+    <scrollbox flexGrow={1}>
+      <markdown content={"# Background\nLegacy CRM"} syntaxStyle={style} />
+    </scrollbox>
+  )
+}
 
 function check(cond: boolean, what: string): void {
   if (!cond) throw new Error(what)
@@ -104,6 +115,19 @@ export async function runTuiSelfCheck(): Promise<void> {
         check(frame.includes("⚠ Broken: boom") && (frame.split("\n")[0] ?? "").includes("pm · 3 Broken"), "the error boundary did not contain a throwing screen")
       } finally {
         setup.renderer.destroy()
+      }
+
+      const md = await testRender(() => <MarkdownProbe />, { width: 40, height: 6 })
+      try {
+        let text = ""
+        for (let i = 0; i < 40 && !text.includes("Legacy CRM"); i++) {
+          await new Promise((r) => setTimeout(r, 25))
+          await md.renderOnce()
+          text = md.captureCharFrame()
+        }
+        check(text.includes("Background") && !text.includes("# Background") && text.includes("Legacy CRM"), `<markdown> did not render: "${text.trim()}"`)
+      } finally {
+        md.renderer.destroy()
       }
     } finally {
       await kernel.shutdown()

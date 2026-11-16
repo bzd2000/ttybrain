@@ -116,3 +116,26 @@ export function HealthForm(props: RecordFormProps) {
     </WithProject>
   )
 }
+
+// An involvement: a person and the role they have on the project (the project is fixed by `recordRef`).
+export function InvolvementForm(props: RecordFormProps) {
+  const rt = useRuntime()
+  return (
+    <WithProject recordRef={props.recordRef} close={props.close}>
+      {(p) => {
+        const fields: FieldSpec[] = [
+          ...(p === null ? [{ name: "project", label: "Project", kind: "record" as const, recordType: "project", required: true }] : []),
+          { name: "person", label: "Person", kind: "record", recordType: "person", required: true },
+          { name: "role", label: "Role", kind: "text", required: true },
+        ]
+        const submit = (v: FormValues) =>
+          save(
+            () => (rt.self().write.addInvolvement! as Write)({ project: p?.ref ?? v.project ?? "", person: v.person ?? "", role: v.role ?? "" }),
+            props,
+            "involvement added on",
+          )
+        return <Form title={p === null ? "Add involvement" : `Add involvement · ${p.code}`} fields={withPrefill(fields, props.prefill)} submit={submit} close={props.close} />
+      }}
+    </WithProject>
+  )
+}
