@@ -220,11 +220,18 @@ describe("project detail", () => {
 
   test("Esc returns to Projects with CRM still selected", async () => {
     const t = await open()
+    // AAA (red) sorts above CRM (amber): it would be row 0 if the selection had been reset.
+    await inCtx(() => write().addProject!({ code: "AAA", name: "Alpha" }))
+    await inCtx(() => write().setHealth!({ project: "AAA", health: "red" }))
     t.input.pressEscape()
-    await sleep(30)
-    const frame = await t.frame()
+    let frame = await until(t, "Projects · 2 active")
     expect(frame.split("\n")[0]).toContain("pm · 2 Projects")
-    expect(frame).toContain("Projects · 1 active")
+    expect(lineWith(frame, " AAA ")).not.toContain("›")
+    for (let i = 0; i < 40 && !lineWith(frame, " CRM ").includes("›"); i++) {
+      await sleep(25)
+      frame = await t.frame()
+    }
+    expect(lineWith(frame, " CRM ")).toContain("›")
     expect(lineWith(frame, " CRM ")).toContain("Design approved")
   })
 })

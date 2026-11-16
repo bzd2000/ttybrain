@@ -5,7 +5,8 @@
 import { createSignal, type Accessor } from "solid-js"
 import type { Kernel } from "../host"
 
-export type LiveRefresh = { version: Accessor<number>; stop(): void }
+// `pending()`: a bump after an own write is scheduled but has not happened yet (tests wait for it with idle()).
+export type LiveRefresh = { version: Accessor<number>; pending(): boolean; stop(): void }
 
 export function createLiveRefresh(kernel: Kernel, intervalMs = 1000): LiveRefresh {
   const [version, setVersion] = createSignal(0)
@@ -37,6 +38,7 @@ export function createLiveRefresh(kernel: Kernel, intervalMs = 1000): LiveRefres
 
   return {
     version,
+    pending: () => pending !== undefined,
     stop() {
       clearInterval(interval)
       if (pending !== undefined) clearTimeout(pending)

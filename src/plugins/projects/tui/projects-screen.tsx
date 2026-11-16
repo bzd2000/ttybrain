@@ -4,7 +4,7 @@
 // - Columns: a health dot, code, name, next milestone and its due date, open actions, open risks, effort.
 // - Keys: Enter opens the record, n new, e edit, h health update, / filter, a archived. The filter is free text
 //   on code or name plus `status:<s>` and `health:<h>`; Enter applies it, Esc clears it.
-import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import {
   displayWidth,
   dueLabel,
@@ -101,7 +101,11 @@ export function ProjectsScreen() {
   // `current`: the row the table has selected (undefined while it shows none); `want`: a row to select once it
   // is loaded (a new project), dropped as soon as the table has selected it.
   const [current, setCurrent] = createSignal<string | undefined>()
-  const [want, setWant] = createSignal<string | undefined>()
+  // The route's `selected` param brings the selection back after a record was open (Esc pops to this screen again).
+  const [want, setWant] = createSignal<string | undefined>(untrack(() => {
+    const r = nav.route()
+    return r.kind === "screen" ? r.params?.selected : undefined
+  }))
 
   const shown = createMemo(() => (q.data() ?? []).filter((p) => matches(p, filter())))
   const groups = createMemo((): TableGroup[] => {
@@ -127,6 +131,8 @@ export function ProjectsScreen() {
   const select = (ref: string | undefined) => {
     setCurrent(ref)
     if (ref !== undefined && ref === want()) setWant(undefined)
+    const here = nav.route()
+    if (ref !== undefined && here.kind === "screen" && here.params?.selected !== ref) nav.replaceParams({ ...here.params, selected: ref })
   }
 
   const columns = (): TableColumn[] => [

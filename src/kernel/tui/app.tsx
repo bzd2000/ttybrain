@@ -52,8 +52,12 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
     p.then(done, done)
     return p
   }
+  // Also waits for a scheduled refresh bump (after an own write): the reload it starts is tracked as well.
   const idle = async () => {
-    while (inflight.size > 0) await Promise.allSettled([...inflight])
+    while (inflight.size > 0 || refresh.pending()) {
+      if (inflight.size > 0) await Promise.allSettled([...inflight])
+      else await new Promise((r) => setTimeout(r, 0))
+    }
   }
 
   const refresh = createLiveRefresh(kernel, props.refreshMs ?? 1000)
