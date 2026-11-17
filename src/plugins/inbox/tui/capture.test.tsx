@@ -1,6 +1,8 @@
 // Quick capture (`i` on any screen) and the header badge, against the built-in plugins seeded through their
 // write operations.
 import { afterEach, describe, expect, test } from "bun:test"
+import { existsSync, readFileSync } from "node:fs"
+import { join } from "node:path"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
@@ -156,6 +158,66 @@ describe("quick capture", () => {
     const frame = await until(t, (f) => !f.includes("Capture to inbox"))
     expect(frame).not.toContain("Capture to inbox")
     expect(await items()).toEqual([])
+  })
+})
+
+const captureDraft = () => {
+  const file = join(kernel!.home, "drafts", `${encodeURIComponent("inbox:capture")}.json`)
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : undefined
+}
+const PROMPT = "Unsaved draft from 09:00 · r restore · x discard"
+
+describe("quick capture drafts", () => {
+  test("Esc keeps a draft; i offers it, r restores it, Ctrl+S captures and deletes it", async () => {
+    const t = await open()
+    await capture(t)
+    await type(t, "half a thought")
+    t.input.pressEscape()
+    await sleep(30)
+    t.input.pressKey("z")
+    let frame = await until(t, (f) => !f.includes("Capture to inbox"))
+    expect(frame.trimEnd().split("\n").at(-1)).toContain("draft kept")
+    expect(captureDraft()).toEqual({ key: "inbox:capture", savedAt: "2026-11-13T09:00:00", values: { text: "half a thought" } })
+
+    frame = await capture(t)
+    expect(frame).toContain(PROMPT)
+    await t.input.typeText("zz")
+    expect(await t.frame()).not.toContain("zz")
+    t.input.pressKey("r")
+    frame = await until(t, (f) => !f.includes(PROMPT))
+    expect(frame).toContain("half a thought")
+    await type(t, " done")
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, (f) => !f.includes("Capture to inbox"))
+    expect(frame).toContain("captured I-1")
+    expect((await items()).map((i) => i.text)).toEqual(["half a thought done"])
+    expect(captureDraft()).toBeUndefined()
+  })
+
+  test("x discards the draft; on a project the tag prefill follows", async () => {
+    const t = await open()
+    await capture(t)
+    await type(t, "drop me")
+    t.input.pressEscape()
+    await sleep(30)
+    t.input.pressKey("z")
+    await until(t, (f) => !f.includes("Capture to inbox"))
+    t.input.pressKey("2")
+    await t.frame()
+    await t.nav.open("#CRM")
+    await t.frame()
+    expect(await capture(t)).toContain(PROMPT)
+    t.input.pressKey("x")
+    const frame = await until(t, (f) => f.includes("added because"))
+    expect(frame).not.toContain(PROMPT)
+    expect(frame).not.toContain("drop me")
+    expect(captureDraft()).toBeUndefined()
+    // The prefilled tag alone is no draft.
+    t.input.pressEscape()
+    await sleep(30)
+    t.input.pressKey("z")
+    await until(t, (f) => !f.includes("Capture to inbox"))
+    expect(captureDraft()).toBeUndefined()
   })
 })
 

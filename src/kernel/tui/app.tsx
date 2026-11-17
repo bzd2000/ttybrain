@@ -2,6 +2,7 @@
 // stack (overlay.tsx: switcher, help, global actions and useOverlay's overlays) and the global key dispatch.
 // Everything inside comes from the registry.
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { join } from "node:path"
 import { For, onCleanup, Show, type Component, type JSX } from "solid-js"
 import { runWithContext } from "../context"
 import type { Kernel } from "../host"
@@ -10,10 +11,11 @@ import { OverviewScreen } from "./components/OverviewScreen"
 import { RecordView } from "./components/RecordView"
 import { Switcher, type SwitcherEntry } from "./components/Switcher"
 import { bindDataSession, DataContext } from "./data"
+import { createDraftStore } from "./drafts"
 import { longDate } from "./format"
 import { Header, StatusBar } from "./frame"
 import { createGlobalKeyHandler, FRAME_HINTS, KeysContext, KeysStore, LayerContext, SCREEN_LAYER, useGlobalKeys } from "./keys"
-import { clearMessages, currentMessage } from "./messages"
+import { clearMessages, currentMessage, notify } from "./messages"
 import { createNav, NavContext, OVERVIEW_ID, type Nav } from "./nav"
 import { createOverlay, createOverlayStack, OverlayContext } from "./overlay"
 import { createLiveRefresh } from "./refresh"
@@ -39,8 +41,9 @@ const PINNED_HINTS = ["?", "q"]
 
 type Screen = SwitcherEntry & { component: Component<{}>; plugin?: string }
 
-// `refreshMs`: how often live refresh checks PRAGMA data_version (spec §10: about every second).
-export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs?: number; expose?: (handle: TuiHandle) => void }) {
+// `refreshMs`: how often live refresh checks PRAGMA data_version (spec §10: about every second); `draftMs`: how
+// long after the last change a draft is written (drafts.ts, 1 s).
+export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs?: number; draftMs?: number; expose?: (handle: TuiHandle) => void }) {
   const { kernel, registry } = props
   const renderer = useRenderer()
   const dims = useTerminalDimensions()
@@ -64,6 +67,16 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
   onCleanup(() => refresh.stop())
   const session = { kernel, version: refresh.version, today: refresh.today, track }
   onCleanup(bindDataSession(session))
+
+  // Drafts live next to the database's home, not in it; old ones go when the TUI starts.
+  const drafts = createDraftStore({
+    dir: join(kernel.paths.home, "drafts"),
+    clock: kernel.clock,
+    ...(props.draftMs !== undefined ? { delayMs: props.draftMs } : {}),
+    onError: (e) => notify(`drafts: ${e instanceof Error ? e.message : String(e)}`, "error"),
+  })
+  drafts.prune()
+  onCleanup(() => drafts.flushAll())
 
   const nav = createNav(kernel, registry, track)
   const stack = createOverlayStack()
@@ -129,7 +142,7 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
   props.expose?.({ nav, idle })
 
   return (
-    <AppContext.Provider value={{ kernel, registry, track, version: refresh.version }}>
+    <AppContext.Provider value={{ kernel, registry, track, version: refresh.version, drafts }}>
       <DataContext.Provider value={session}>
         <NavContext.Provider value={nav}>
           <KeysContext.Provider value={keys}>

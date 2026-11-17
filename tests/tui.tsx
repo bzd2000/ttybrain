@@ -27,13 +27,14 @@ export type RenderedTui = {
 
 export async function renderTui(
   kernel: Kernel,
-  // refreshMs: the live-refresh interval (default 50 here, 1000 in the app).
-  opts: { width?: number; height?: number; parts?: TuiDef[]; external?: TuiDef[]; refreshMs?: number } = {},
+  // refreshMs: the live-refresh interval (default 50 here, 1000 in the app); draftMs: the draft debounce (default
+  // 1000, as in the app).
+  opts: { width?: number; height?: number; parts?: TuiDef[]; external?: TuiDef[]; refreshMs?: number; draftMs?: number } = {},
 ): Promise<RenderedTui> {
   clearMessages() // the message store is module-wide: start without another test's message
   const registry = bootTui(kernel, opts.parts ?? builtinTuiParts, { builtin: true, external: opts.external ?? [] })
   let handle: TuiHandle | undefined
-  const setup = await testRender(() => <TuiApp kernel={kernel} registry={registry} refreshMs={opts.refreshMs ?? 50} expose={(h) => (handle = h)} />, {
+  const setup = await testRender(() => <TuiApp kernel={kernel} registry={registry} refreshMs={opts.refreshMs ?? 50} draftMs={opts.draftMs} expose={(h) => (handle = h)} />, {
     width: opts.width ?? 100,
     height: opts.height ?? 30,
   })

@@ -3,20 +3,31 @@
 // the text differs from `initial`; Esc then anything else, or no key within
 // ESC_WINDOW_MS, goes back to editing (never discards). A failed save shows its error and keeps the text; while
 // a save is in flight further saves and Esc are ignored. Holds text focus while open.
+// With `draftKey` the unsaved text is kept as a draft (drafts.ts): written a moment after typing stops and at once
+// on Esc and quit, deleted by a save, kept by a discard (`draft kept`); reopened with a draft that differs from
+// `initial`, the editor first shows <DraftPrompt> (r restore · x discard · Esc close). Without it, no draft.
 import type { TextareaRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createSignal, onMount, Show } from "solid-js"
 import { runWithContext } from "../../context"
+import { DRAFT_KEPT, useDraftKey, type Draft } from "../drafts"
 import { createEscChord } from "../escChord"
 import { printable, useKeys, useScreenKeys } from "../keys"
+import { notify } from "../messages"
 import { useApp } from "../scope"
 import { theme } from "../theme"
+import { DraftPrompt } from "./DraftPrompt"
 
 export type EditorOptions = {
   title: string
   initial: string
   save(text: string): Promise<{ ok: true } | { ok: false; error: unknown }>
+  // Keeps the unsaved text as a draft under this key (unique within the calling plugin; the kernel prefixes the
+  // plugin id). Without it the editor keeps no draft.
+  draftKey?: string
 }
+
+type TextDraft = { text: string }
 
 export const DISCARD_QUESTION = "Discard changes?"
 
@@ -29,6 +40,27 @@ export function Editor(props: EditorOptions & { close(): void; confirm(text: str
   const [error, setError] = createSignal<string | undefined>(undefined)
   const [armed, setArmed] = createSignal(false)
   let area: TextareaRenderable | undefined
+
+  const draft = useDraftKey<TextDraft>(props.draftKey, () => ({ text: props.initial }))
+  const found = draft.saved && typeof draft.saved.values?.text === "string" ? draft.saved : undefined
+  const [offer, setOffer] = createSignal<Draft<TextDraft> | undefined>(found && found.values.text !== props.initial ? found : undefined)
+  if (draft.saved && !offer()) draft.discard()
+  const restore = () => {
+    const d = offer()
+    setOffer(undefined)
+    if (d) area?.setText(d.values.text)
+  }
+  const discardDraft = () => {
+    draft.discard()
+    setOffer(undefined)
+  }
+  const changed = () => {
+    if (!offer() && area) draft.schedule({ text: area.plainText })
+  }
+  const leave = () => {
+    if (draft.kept()) notify(DRAFT_KEPT)
+    props.close()
+  }
 
   const esc = createEscChord(() => setArmed(false))
   const disarm = () => {
@@ -57,7 +89,10 @@ export function Editor(props: EditorOptions & { close(): void; confirm(text: str
         result = { ok: false, error: e }
       }
       setSaving(false)
-      if (result.ok) return props.close()
+      if (result.ok) {
+        draft.discard()
+        return props.close()
+      }
       setError(result.error instanceof Error ? result.error.message : String(result.error))
     }
     void track(run())
@@ -65,11 +100,13 @@ export function Editor(props: EditorOptions & { close(): void; confirm(text: str
 
   const discard = () => {
     if (saving()) return
-    if ((area?.plainText ?? props.initial) === props.initial) return props.close()
-    void props.confirm(DISCARD_QUESTION).then((yes) => yes && props.close())
+    draft.flush()
+    if ((area?.plainText ?? props.initial) === props.initial) return leave()
+    void props.confirm(DISCARD_QUESTION).then((yes) => yes && leave())
   }
 
   useScreenKeys((key) => {
+    if (offer()) return // the draft prompt has the keys
     if (esc.pending()) {
       key.preventDefault()
       disarm()
@@ -81,6 +118,7 @@ export function Editor(props: EditorOptions & { close(): void; confirm(text: str
     if (key.name === "escape") {
       key.preventDefault()
       if (saving()) return
+      draft.flush()
       setArmed(true)
       esc.arm()
     } else if (key.name === "s" && (key.ctrl || key.meta || key.option)) {
@@ -105,10 +143,14 @@ export function Editor(props: EditorOptions & { close(): void; confirm(text: str
       paddingRight={1}
     >
       <text fg={theme.accent}>{`${props.title} · ctrl+s save · esc s save · esc d discard`}</text>
+      <Show when={offer()}>
+        {(d: () => Draft<TextDraft>) => <DraftPrompt savedAt={d().savedAt} restore={restore} discard={discardDraft} close={() => props.close()} />}
+      </Show>
       <textarea
         ref={(r: TextareaRenderable) => (area = r)}
         initialValue={props.initial}
-        focused={keys.active() && !armed()}
+        focused={keys.active() && !armed() && !offer()}
+        onContentChange={changed}
         flexGrow={1}
         backgroundColor={theme.panel}
         focusedBackgroundColor={theme.panel}

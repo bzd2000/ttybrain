@@ -1,6 +1,7 @@
 // The project detail's Context tab: the project's long Markdown document, rendered with <markdown> inside a
-// scrollbox. `↑↓` (and PgUp/PgDn) scroll, `e` edits in the built-in editor, `E` in $VISUAL/$EDITOR; both save with
-// setContext (an empty text clears it). The header shows when it was last updated and how far it is scrolled.
+// scrollbox. `↑↓` (and PgUp/PgDn) scroll, `e` edits in the built-in editor (keeping a draft per project), `E` in
+// $VISUAL/$EDITOR; both save with setContext (an empty text clears it). The header shows when it was last updated
+// and how far it is scrolled.
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { SyntaxStyle, type MarkdownRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
@@ -76,7 +77,8 @@ export function ProjectContext(props: { recordRef: string }) {
     const r = await act(() => rt.self().write.setContext!({ project: props.recordRef, markdown }) as Promise<unknown>)
     return r.ok ? { ok: true } : r
   }
-  const editBuiltin = () => overlay.openEditor({ title: "Context", initial: text(), save })
+  // One draft per project (the kernel keeps it as `projects:context:<ref>`).
+  const editBuiltin = () => overlay.openEditor({ title: "Context", initial: text(), save, draftKey: `context:${props.recordRef}` })
   const editOutside = async () => {
     const edited = await editExternal(text())
     if (edited !== null) await save(edited)

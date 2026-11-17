@@ -4,9 +4,26 @@
 // While the word at the cursor is a tag being typed (`#cr`, `@ma`), up to 5 `tags.suggest` results show: ↑↓ pick,
 // Tab replaces the word with the ref and a space. On a project's or a person's record view, the text starts with
 // its tag and a line says why.
+// The text is kept as a draft (`inbox:capture`): a cancel keeps it (`draft kept`), a save deletes it, and the next
+// capture first offers it (r restore · x discard · Esc close); a restored draft takes the place of the prefill.
 import type { TextareaRenderable } from "@opentui/core"
 import { createEffect, createSignal, For, onMount, Show } from "solid-js"
-import { act, createEscChord, printable, theme, useKeys, useNav, useQuery, useRuntime, useScreenKeys } from "../../../kernel/tui/api"
+import {
+  act,
+  createEscChord,
+  DRAFT_KEPT,
+  DraftPrompt,
+  notify,
+  printable,
+  theme,
+  useDraft,
+  useKeys,
+  useNav,
+  useQuery,
+  useRuntime,
+  useScreenKeys,
+  type Draft,
+} from "../../../kernel/tui/api"
 
 export const CAPTURE_TITLE = "Capture to inbox · ctrl+s save · esc cancel"
 const SUGGESTIONS = 5
@@ -15,6 +32,7 @@ const TYPING_TAG = /(?:^|[\s([])([#@][A-Za-z0-9][A-Za-z0-9-]*)$/
 const TAG_REST = /^[A-Za-z0-9-]*/
 
 type Prefill = { tag: string; why: string }
+type TextDraft = { text: string }
 
 export function CaptureOverlay(props: { close(): void }) {
   const rt = useRuntime()
@@ -26,10 +44,19 @@ export function CaptureOverlay(props: { close(): void }) {
   const [picked, setPicked] = createSignal(0)
   const [saving, setSaving] = createSignal(false)
 
+  // --- the draft: against the text capture starts with (empty, or the prefilled tag) ---
+  const [start, setStart] = createSignal("")
+  const draft = useDraft<TextDraft>("capture", () => ({ text: start() }))
+  const found = draft.saved && typeof draft.saved.values?.text === "string" ? draft.saved : undefined
+  const [offer, setOffer] = createSignal<Draft<TextDraft> | undefined>(found && found.values.text !== "" ? found : undefined)
+  if (draft.saved && !offer()) draft.discard()
+  let restored = false
+
   const sync = () => {
     if (!area) return
     setText(area.plainText)
     setCursor(area.cursorOffset)
+    if (!offer()) draft.schedule({ text: area.plainText })
   }
   const replace = (value: string, at: number) => {
     if (!area) return
@@ -50,11 +77,29 @@ export function CaptureOverlay(props: { close(): void }) {
   const [prefill, setPrefill] = createSignal<Prefill | undefined>(undefined)
   createEffect(() => {
     const c = context.data()
-    if (!c || prefill() || !area) return
+    if (!c || prefill() || !area || offer() || restored) return
     setPrefill(c)
     const typed = area.plainText
+    if (typed === "") setStart(`${c.tag} `)
     replace(`${c.tag} ${typed}`, c.tag.length + 1 + typed.length)
   })
+
+  const restore = () => {
+    const d = offer()
+    if (!d) return
+    restored = true
+    setOffer(undefined)
+    replace(d.values.text, d.values.text.length)
+  }
+  const discardDraft = () => {
+    draft.discard()
+    setOffer(undefined)
+  }
+  // A cancel keeps the draft (written now) and says so when it holds something.
+  const leave = () => {
+    if (draft.kept()) notify(DRAFT_KEPT)
+    props.close()
+  }
 
   // --- autocomplete ---
   const word = () => TYPING_TAG.exec(text().slice(0, cursor()))?.[1]
@@ -88,7 +133,10 @@ export function CaptureOverlay(props: { close(): void }) {
     const value = area.plainText
     const r = await act(() => rt.self().write.capture!({ text: value }) as Promise<{ ref: string }>, { ok: (out) => `captured ${out.ref}` })
     setSaving(false)
-    if (r.ok) props.close()
+    if (r.ok) {
+      draft.discard()
+      props.close()
+    }
   }
 
   onMount(() => {
@@ -101,21 +149,24 @@ export function CaptureOverlay(props: { close(): void }) {
     ])
   })
 
-  const esc = createEscChord(() => props.close())
+  const esc = createEscChord(leave)
 
   useScreenKeys((key) => {
     const name = key.name
+    if (offer()) return // the draft prompt has the keys
     if (esc.pending()) {
       // The key after Esc: `s` (or Ctrl+S / Alt+S) saves, anything else confirms the cancel.
       key.preventDefault()
       esc.clear()
       if (printable(key) === "s" || (name === "s" && (key.ctrl || key.meta || key.option))) void save()
-      else props.close()
+      else leave()
       return
     }
     if (name === "escape") {
       key.preventDefault()
-      if (!saving()) esc.arm()
+      if (saving()) return
+      draft.flush()
+      esc.arm()
     } else if (name === "s" && (key.ctrl || key.meta || key.option)) {
       key.preventDefault()
       void save()
@@ -135,9 +186,12 @@ export function CaptureOverlay(props: { close(): void }) {
 
   return (
     <box border borderColor={theme.accent} backgroundColor={theme.panel} flexDirection="column" width="80%" paddingLeft={1} paddingRight={1} title={CAPTURE_TITLE}>
+      <Show when={offer()}>
+        {(d: () => Draft<TextDraft>) => <DraftPrompt savedAt={d().savedAt} restore={restore} discard={discardDraft} close={() => props.close()} />}
+      </Show>
       <textarea
         ref={(r: TextareaRenderable) => (area = r)}
-        focused={keys.active()}
+        focused={keys.active() && !offer()}
         height={3}
         backgroundColor={theme.selectedBg}
         focusedBackgroundColor={theme.selectedBg}

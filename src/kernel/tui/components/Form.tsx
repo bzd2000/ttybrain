@@ -16,16 +16,23 @@
 //   plugin's own operation, for the ref it returned (all-or-nothing). A submit that wrote nothing (an edit with no
 //   change of its own) has them saved in an act of their own for its result's ref; without a ref the form stays
 //   open with an error.
-import { createEffect, createMemo, onCleanup, createSignal, For, onMount, Show } from "solid-js"
+// - Drafts (drafts.ts): a form openForm opened keeps a draft of every field it shows (own and extra), written a
+//   moment after typing stops and at once on Esc and on quit; a save deletes it, a cancel keeps it (`draft kept`).
+//   Reopened with a draft that differs from the initial values, the form first shows <DraftPrompt> and takes no
+//   keys until `r` (restore), `x` (discard) or Esc (close, keeping the draft); an equal draft is deleted silently.
+import { createEffect, createMemo, onCleanup, createSignal, For, onMount, Show, useContext } from "solid-js"
 import { runWithContext } from "../../context"
 import { parseDate } from "../../dates"
 import { ValidationError } from "../../errors"
 import { act, NO_REF_FOR_EXTRAS, useQuery, withFormExtras, type PendingExtras } from "../data"
+import { DRAFT_KEPT, FormDraftKey, sameValues, useDraftKey, type Draft } from "../drafts"
 import { createEscChord, ESC_WINDOW_MS } from "../escChord"
 import { printable, useKeys, useScreenKeys } from "../keys"
+import { notify } from "../messages"
 import { PluginScope, useApp } from "../scope"
 import { theme } from "../theme"
 import type { FieldDef } from "../../fields"
+import { DraftPrompt } from "./DraftPrompt"
 import { Field, type FieldSpec, type Suggestion } from "./Field"
 
 export type { FieldSpec } from "./Field"
@@ -109,6 +116,42 @@ export function Form(props: {
   )
   const fields = createMemo((): FieldSpec[] => (extraInitial() === undefined ? props.fields : [...props.fields, ...extraSpecs]))
   const extraOf = (name: string) => extras.find((x) => x.key === name)
+
+  // --- the draft: the values of every field shown, against the values the form opened with ---
+  const ownInitial = Object.fromEntries(props.fields.map((f) => [f.name, initial(f)]))
+  const ready = () => extraInitial() !== undefined
+  const initialValues = (): FormValues => ({ ...ownInitial, ...(extraInitial() ?? {}) })
+  const draft = useDraftKey<FormValues>(useContext(FormDraftKey), initialValues)
+  const pick = (v: FormValues, names: string[]) => Object.fromEntries(names.filter((n) => n in v).map((n) => [n, v[n] ?? null]))
+  // The draft offered: set while the form waits for r / x / Esc (it takes no keys meanwhile).
+  const [offer, setOffer] = createSignal<Draft<FormValues> | undefined>(
+    draft.saved && typeof draft.saved.values === "object" && draft.saved.values !== null ? draft.saved : undefined,
+  )
+  if (draft.saved && !offer()) draft.discard()
+  createEffect(() => {
+    const d = offer()
+    if (!d || !ready()) return
+    const names = fields().map((f) => f.name)
+    const shown = pick(d.values, names)
+    if (sameValues({ ...pick(initialValues(), names), ...shown }, pick(initialValues(), names))) {
+      draft.discard()
+      setOffer(undefined)
+    }
+  })
+  createEffect(() => {
+    const v = values()
+    if (ready() && !offer()) draft.schedule(v)
+  })
+  const restore = () => {
+    const d = offer()
+    if (!d) return
+    setOffer(undefined)
+    setValues((all) => ({ ...all, ...pick(d.values, Object.keys(all)) }))
+  }
+  const discardDraft = () => {
+    draft.discard()
+    setOffer(undefined)
+  }
 
   const current = () => fields()[index()]
   const valueOf = (name: string) => values()[name] ?? null
@@ -218,7 +261,10 @@ export function Form(props: {
         result = { ok: false, error: e }
       }
       setSaving(false)
-      if (result.ok) return props.close(result.ref)
+      if (result.ok) {
+        draft.discard()
+        return props.close(result.ref)
+      }
       const e = result.error
       const field = e instanceof ValidationError ? e.field : undefined
       if (field !== undefined && fields().some((f) => f.name === field)) {
@@ -243,10 +289,15 @@ export function Form(props: {
     setValue(f.name, choices[(at + d + choices.length) % choices.length]!)
   }
 
-  const esc = createEscChord(() => props.close())
+  // A cancel keeps the draft (written now) and says so when it holds something.
+  const leave = () => {
+    if (draft.kept()) notify(DRAFT_KEPT)
+    props.close()
+  }
+  const esc = createEscChord(leave)
   const cancel = () => {
     esc.clear()
-    props.close()
+    leave()
   }
 
   onMount(() => {
@@ -265,6 +316,7 @@ export function Form(props: {
   })
 
   useScreenKeys((key) => {
+    if (offer()) return // the draft prompt has the keys
     if (esc.pending()) {
       // The key after Esc: `s` (or Ctrl+S / Alt+S, still meaning save) saves, anything else confirms the cancel.
       key.preventDefault()
@@ -277,6 +329,7 @@ export function Form(props: {
     if (key.name === "escape") {
       key.preventDefault()
       if (saving()) return // the save goes on (busy retry included); cancelling now would still create the record
+      draft.flush()
       esc.arm()
     } else if (key.name === "s" && (key.ctrl || key.meta || key.option)) {
       key.preventDefault()
@@ -326,14 +379,18 @@ export function Form(props: {
       paddingRight={1}
       title={props.title}
     >
+      <Show when={ready() ? offer() : undefined}>
+        {(d: () => Draft<FormValues>) => <DraftPrompt savedAt={d().savedAt} restore={restore} discard={discardDraft} close={() => props.close()} />}
+      </Show>
       <For each={fields()}>
         {(f, i) => {
-          const editor = customEditor(f, () => keys.active() && index() === i())
+          const focused = () => keys.active() && !offer() && index() === i()
+          const editor = customEditor(f, focused)
           return (
             <Field
               spec={f}
               value={valueOf(f.name)}
-              focused={keys.active() && index() === i()}
+              focused={focused()}
               editor={editor}
               labelWidth={labelWidth()}
               preview={datePreview(f)?.text}

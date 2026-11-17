@@ -7,6 +7,7 @@ import { Confirm } from "./components/Confirm"
 import { Editor, type EditorOptions } from "./components/Editor"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { RuntimeProvider, useOptionalRuntime } from "./data"
+import { FormDraftKey, formDraftKey, pluginDraftKey } from "./drafts"
 import { notify } from "./messages"
 import type { TuiRegistry } from "./registry"
 import { PluginScope, useApp } from "./scope"
@@ -50,7 +51,8 @@ export type Overlay = {
   // Asks `<text>  y yes · n no`; resolves true on `y` only (false on `n` or Esc).
   confirm(text: string): Promise<boolean>
   // A full-screen text editor. Ctrl+S (or Esc s) calls `save` and closes on ok, or shows the error and stays open;
-  // Esc d (Alt+D) discards, asking first when the text changed. Edits stay in the editor until saved.
+  // Esc d (Alt+D) discards, asking first when the text changed. Edits stay in the editor until saved. With
+  // `draftKey` (unique within the calling plugin, which the kernel prefixes) the unsaved text is kept as a draft.
   openEditor(opts: EditorOptions): void
 }
 
@@ -89,7 +91,9 @@ export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: Tui
           }
           return (
             <PluginScope kernel={kernel} plugin={def.plugin} label={def.label} close={() => done()}>
-              <Component {...props} close={done} />
+              <FormDraftKey.Provider value={formDraftKey(def.plugin, def.id, props.recordRef, props.origin)}>
+                <Component {...props} close={done} />
+              </FormDraftKey.Provider>
             </PluginScope>
           )
         })
@@ -127,7 +131,12 @@ export function useOverlay(): Overlay {
   const service = useContext(OverlayContext)
   if (!service) throw new Error("useOverlay() must be called inside <TuiApp>")
   const runtime = useOptionalRuntime()
-  return { ...service, open: (c) => service.open(c, runtime) }
+  return {
+    ...service,
+    open: (c) => service.open(c, runtime),
+    openEditor: (opts) =>
+      service.openEditor(opts.draftKey === undefined ? opts : { ...opts, draftKey: pluginDraftKey(runtime?.id, opts.draftKey) }),
+  }
 }
 
 // The record forms registered for `recordType` (any plugin's), in registration order: what a component can offer

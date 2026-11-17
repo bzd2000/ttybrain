@@ -84,12 +84,13 @@ src/kernel/tui/
   app.tsx, frame.tsx        <TuiApp> (router, overlay stack, global keys), header and status bar
   keys.ts, escChord.ts      key dispatch layers, hints, text focus, the Esc chord; nav.ts: routes; overlay.tsx: overlays, openForm, confirm
   data.ts, refresh.ts       useQuery, act, useRuntime, useRecord; live refresh (PRAGMA data_version)
+  drafts.ts                 drafts of unsaved forms, capture and editor text (PM_HOME/drafts), useDraft
   scope.tsx, external.ts    PluginScope (which plugin a component belongs to); $VISUAL/$EDITOR handoff
-  components/               Table, Form, Field, Panel, Tabs, Menu, RecordView, RecordFields, OverviewScreen, Editor, Help, Switcher, KeyHints, ErrorBoundary
+  components/               Table, Form, Field, Panel, Tabs, Menu, RecordView, RecordFields, OverviewScreen, Editor, DraftPrompt, Help, Switcher, KeyHints, ErrorBoundary
   format.ts, theme.ts, messages.ts   display width/dates, colours and tones, status-bar notices
 src/plugins/tui.ts          builtinTuiParts: the list of built-in tui parts
 src/plugins/<id>/tui/       index.tsx = defineTui({ plugin, activate(ui) }) plus the plugin's screens, forms, panels
-tests/tui.tsx               renderTui(kernel, { parts, external, width, height, refreshMs }) -> { frame(), peek(), spans(), input, settle(), nav, renderer, destroy() }
+tests/tui.tsx               renderTui(kernel, { parts, external, width, height, refreshMs, draftMs }) -> { frame(), peek(), spans(), input, settle(), nav, renderer, destroy() }
 ```
 
 A part registers in `activate(ui)` with: `ui.screen` (built-in screens use a fixed number key: `1` Overview, `2` Projects, `4` Actions, `6` Inbox; `3` People and `5` Meetings are for phases 3-4; other screens get `7`, `8`, … in registration order), `recordTab`, `overviewPanel`, `listColumn`, `recordForm`, `fieldEditor`, `globalAction`, `statusBadge`. Registrations may be made only during `activate`. A part that throws is isolated and listed in Help; the rest of the app runs.
@@ -104,6 +105,7 @@ Rules:
 - **Live refresh.** `createLiveRefresh` polls `PRAGMA data_version` about every second and bumps a version that makes every `useQuery` reload, so changes from the CLI show up. After the app's own `act`, a refresh bump is scheduled too. `renderTui`'s `settle()` waits for in-flight loads and that scheduled bump; wait on a frame condition rather than sleeping.
 - **Acting on rows.** `Table` calls `onSelect(undefined)` when it has no rows; act on `e`, `x`, `Del` and the like only when the selected ref is among the rows currently shown. Selection is kept by ref across reloads. A Table scrolls only inside a height-bounded parent (a `<Panel grow>`). Edit forms send only the fields whose value changed, and close without writing when nothing changed.
 - **Forms.** `<Form title fields submit close>`; a field's `name` must equal the op input name, so a `ValidationError(field)` shows inline. `required` only marks `*`; the op validates. `submit(values)` returns `{ ok: true, ref? } | { ok: false, error }`, typically from `act`. `openForm(recordType, formId?, { recordRef?, prefill?, origin? })` resolves to the saved ref, or `undefined` on cancel.
+- **Drafts.** `drafts.ts` keeps unsaved text as JSON files in `PM_HOME/drafts/` (one per key, `{ key, savedAt, values }`, written atomically with `node:fs`), never in the database, so typing takes no write lock and causes no live refresh. A `<Form>` that `openForm` opened keeps one by itself under `<plugin>:<form>:<recordRef | new>[:from:<origin ref>]`, holding every field it shows (extra fields too); the editor keeps one only when `openEditor` gets a `draftKey` (the kernel prefixes the calling plugin); a plugin overlay uses `useDraft(key, initial)` (prefixed the same way) with `<DraftPrompt>`, as quick capture does. A draft is written 1 s after the last change (`renderTui`'s `draftMs` shortens it), at once on Esc and when the tree is disposed (quit), deleted by a save, kept by a cancel (`draft kept`); `savedAt` comes from the kernel clock. On reopen a draft that differs from the initial values is offered by `<DraftPrompt>` (`r` restore, `x` discard, Esc close) before the component takes any key: it claims every key, and the component's own handler returns early and its fields are unfocused meanwhile. Drafts older than 30 days are pruned at TUI start; draft I/O errors are swallowed (the first one is reported in the status bar).
 - **Tests.** Use `renderTui` and assert on frame text and on the database; seed through write ops inside `runWithContext(kernel.context())`; call `destroy()` in `finally`. `bash scripts/smoke-node.sh` runs the TUI self-check on Node.
 
 ## Who owns what

@@ -2,6 +2,8 @@
 // the Projects table, its field in the project Summary (<RecordFields>) and in the project form (saved through its
 // own set operation, in the same act as the project's own edit), and a fieldEditor overriding the default editor.
 import { afterEach, describe, expect, test } from "bun:test"
+import { readdirSync, readFileSync } from "node:fs"
+import { join } from "node:path"
 import { budget, budgetTui } from "../../../tests/fixtures/tui-fixture"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
@@ -230,6 +232,38 @@ describe("listColumn and field extension points", () => {
     await until(t, (f) => !f.includes("Edit CRM"))
     expect(await projectName()).toBe("Customer platform 3")
     expect(await getBudget("#CRM")).toBe(12000)
+  })
+
+  test("a form's draft holds its extra fields too, and restores them", async () => {
+    const t = await boot()
+    await projects(t)
+    t.input.pressKey("e")
+    await until(t, (f) => f.includes("Edit CRM") && budgetLine(f).includes("12000"))
+    for (let i = 0; i < 7; i++) t.input.pressTab()
+    for (let i = 0; i < 5; i++) t.input.pressBackspace()
+    await t.input.typeText("15000")
+    t.input.pressEscape()
+    await new Promise((r) => setTimeout(r, 30))
+    t.input.pressKey("z") // confirms the cancel
+    let frame = await until(t, (f) => !f.includes("Edit CRM"))
+    expect(frame.trimEnd().split("\n").at(-1)).toContain("draft kept")
+    const dir = join(kernel!.home, "drafts")
+    const files = readdirSync(dir)
+    expect(files.map(decodeURIComponent)).toEqual(["projects:project:#CRM.json"])
+    const values = JSON.parse(readFileSync(join(dir, files[0]!), "utf8")).values
+    expect(values["budget:budget"]).toBe("15000")
+    expect(values.name).toBe("Customer platform")
+
+    t.input.pressKey("e")
+    frame = await until(t, (f) => f.includes("Unsaved draft"))
+    expect(budgetLine(frame)).toContain("12000")
+    t.input.pressKey("r")
+    frame = await until(t, (f) => budgetLine(f).includes("15000"))
+    expect(budgetLine(frame)).toContain("15000")
+    t.input.pressKey("s", { ctrl: true })
+    await until(t, (f) => !f.includes("Edit CRM"))
+    expect(await getBudget("#CRM")).toBe(15000)
+    expect(readdirSync(dir)).toEqual([])
   })
 
   test("a blank number clears the extra field", async () => {

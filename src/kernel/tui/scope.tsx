@@ -4,6 +4,7 @@ import { createContext, useContext, type Accessor, type JSX } from "solid-js"
 import type { Kernel } from "../host"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import { RuntimeProvider } from "./data"
+import type { DraftStore } from "./drafts"
 import type { TuiRegistry } from "./registry"
 
 // The app-wide services components reach through useApp().
@@ -14,6 +15,8 @@ export type TuiAppContext = {
   track<T>(p: Promise<T>): Promise<T>
   // The live-refresh version (refresh.ts): bumps when the data changed.
   version: Accessor<number>
+  // The drafts of unsaved forms, capture and editor text (drafts.ts), under PM_HOME/drafts.
+  drafts: DraftStore
 }
 
 export const AppContext = createContext<TuiAppContext>()
