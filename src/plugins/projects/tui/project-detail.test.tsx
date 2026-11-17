@@ -186,27 +186,28 @@ describe("project detail", () => {
     expect(await markdown()).toBe("# A!")
   })
 
-  test("the context editor keeps a draft per project: discard keeps it, reopening offers it, a save deletes it", async () => {
-    const t = await open()
+  test("the context editor keeps a draft per project: a quit keeps it, reopening offers it, a save deletes it", async () => {
+    let t = await open()
     await inCtx(() => write().setContext!({ project: "CRM", markdown: "# A" }))
     await right(t, 7)
     t.input.pressKey("e")
     await until(t, "ctrl+s save")
     t.input.pressKey("END")
     await t.input.typeText(" draft")
-    t.input.pressKey("d", { meta: true }) // Esc d
-    await until(t, "Discard changes?")
-    t.input.pressKey("y")
-    let frame = await t.frame()
-    expect(frame).not.toContain("ctrl+s save")
-    expect(frame.trimEnd().split("\n").at(-1)).toContain("draft kept")
+    t.destroy() // quit without saving
+    t = tui = await renderTui(kernel!, { width: 110, height: 32 })
+    t.input.pressKey("2")
+    await t.frame()
+    await t.nav.open("#CRM")
+    await t.frame()
+    await right(t, 7)
     const dir = join(kernel!.home, "drafts")
     expect(readdirSync(dir)).toEqual([`${encodeURIComponent("projects:context:#CRM")}.json`])
     expect(JSON.parse(readFileSync(join(dir, readdirSync(dir)[0]!), "utf8")).values).toEqual({ text: "# A draft" })
     expect(await markdown()).toBe("# A")
 
     t.input.pressKey("e")
-    frame = await until(t, "Unsaved draft")
+    let frame = await until(t, "Unsaved draft")
     expect(frame).toContain("Unsaved draft from 09:00 · r restore · x discard")
     t.input.pressKey("r")
     frame = await t.frame()

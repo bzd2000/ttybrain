@@ -311,28 +311,42 @@ describe("form drafts", () => {
 })
 
 describe("editor drafts", () => {
-  test("with a draftKey: Esc d keeps a draft, reopening offers it, a save deletes it", async () => {
+  test("with a draftKey: a confirmed Esc d deletes the draft; a quit keeps it, reopening offers it, a save deletes it", async () => {
     await boot()
-    const t = await session()
+    let t = await session()
     const saved: string[] = []
     const open = () => overlay!.openEditor({ title: "Notes", initial: "# A", draftKey: "notes:TH-1", save: async (x) => (saved.push(x), { ok: true }) })
     open()
     await t.frame()
     t.input.pressKey("END")
     await t.input.typeText("!")
+    await sleep(60)
+    // The kernel prefixes the calling plugin.
+    expect(draftOf("todo:notes:TH-1")?.values).toEqual({ text: "# A!" })
     t.input.pressEscape()
     await sleep(30)
     t.input.pressKey("d")
     expect(await t.frame()).toContain("Discard changes?")
     t.input.pressKey("y")
     let frame = await until(t, (f) => !f.includes("ctrl+s save"))
-    expect(statusLine(frame)).toContain("draft kept")
-    // The kernel prefixes the calling plugin.
+    expect(statusLine(frame)).not.toContain("draft kept")
+    expect(draftOf("todo:notes:TH-1")).toBeUndefined()
+
+    open()
+    await t.frame()
+    t.input.pressKey("END")
+    await t.input.typeText("!")
+    t.destroy() // quit without saving
+    tui = undefined
     expect(draftOf("todo:notes:TH-1")?.values).toEqual({ text: "# A!" })
 
+    t = await session()
     open()
     frame = await t.frame()
     expect(frame).toContain(PROMPT)
+    // While the prompt shows, the status bar lists its keys, not the editor's.
+    expect(statusLine(frame)).toContain("r restore draft")
+    expect(statusLine(frame)).not.toContain("Ctrl+S")
     await t.input.typeText("zz")
     expect(await t.frame()).not.toContain("zz")
     t.input.pressKey("r")

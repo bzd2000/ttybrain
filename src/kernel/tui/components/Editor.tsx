@@ -4,11 +4,11 @@
 // ESC_WINDOW_MS, goes back to editing (never discards). A failed save shows its error and keeps the text; while
 // a save is in flight further saves and Esc are ignored. Holds text focus while open.
 // With `draftKey` the unsaved text is kept as a draft (drafts.ts): written a moment after typing stops and at once
-// on Esc and quit, deleted by a save, kept by a discard (`draft kept`); reopened with a draft that differs from
+// on Esc and quit, deleted by a save or a confirmed discard; reopened with a draft that differs from
 // `initial`, the editor first shows <DraftPrompt> (r restore · x discard · Esc close). Without it, no draft.
 import type { TextareaRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { createSignal, onMount, Show } from "solid-js"
+import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { runWithContext } from "../../context"
 import { DRAFT_KEPT, useDraftKey, type Draft } from "../drafts"
 import { createEscChord } from "../escChord"
@@ -68,13 +68,15 @@ export function Editor(props: EditorOptions & { close(): void; confirm(text: str
     setArmed(false)
   }
 
-  onMount(() => {
-    keys.textFocus(true)
-    keys.hints([
+  onMount(() => keys.textFocus(true))
+  createEffect(() => {
+    if (offer()) return // the draft prompt shows its own
+    const drop = keys.hints([
       { key: "Ctrl+S", label: "save" },
       { key: "Esc s", label: "save" },
       { key: "Esc d", label: "discard" },
     ])
+    onCleanup(drop)
   })
 
   const save = () => {
@@ -102,7 +104,12 @@ export function Editor(props: EditorOptions & { close(): void; confirm(text: str
     if (saving()) return
     draft.flush()
     if ((area?.plainText ?? props.initial) === props.initial) return leave()
-    void props.confirm(DISCARD_QUESTION).then((yes) => yes && leave())
+    // A confirmed discard throws the draft away too; answering no keeps editing (and the draft).
+    void props.confirm(DISCARD_QUESTION).then((yes) => {
+      if (!yes) return
+      draft.discard()
+      props.close()
+    })
   }
 
   useScreenKeys((key) => {

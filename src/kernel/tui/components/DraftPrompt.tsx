@@ -2,13 +2,19 @@
 // `Unsaved draft from HH:MM · r restore · x discard` (with the date when the draft is not from today). It claims
 // every key, so none reaches the field below or the global keys: `r` restores, `x` discards, Esc closes the
 // whole overlay (leaving the draft).
-import { printable, useScreenKeys } from "../keys"
+import { onCleanup } from "solid-js"
+import { printable, useKeys, useScreenKeys } from "../keys"
 import { useToday } from "../data"
 import { draftPromptText } from "../drafts"
 import { theme } from "../theme"
 
 export function DraftPrompt(props: { savedAt: string; restore(): void; discard(): void; close(): void }) {
   const today = useToday()
+  onCleanup(useKeys().hints([
+    { key: "r", label: "restore draft" },
+    { key: "x", label: "discard draft" },
+    { key: "Esc", label: "close" },
+  ]))
   useScreenKeys(
     (key) => {
       key.preventDefault()

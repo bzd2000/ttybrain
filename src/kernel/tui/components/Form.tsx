@@ -305,6 +305,7 @@ export function Form(props: {
   })
   // A focused longtext field says Enter adds a line.
   createEffect(() => {
+    if (offer()) return // the draft prompt shows its own
     const longtext = current()?.kind === "longtext"
     const drop = keys.hints([
       { key: "Tab", label: "next field" },

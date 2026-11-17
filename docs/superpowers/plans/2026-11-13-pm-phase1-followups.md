@@ -181,3 +181,10 @@ Inbox:
 - A health update made through `p` records project `#CRM` as "created from" I-n in provenance (for the final review) (Task 14).
 
 Fields: the RecordFields label column is not aligned with the Summary facts (the brief literally says `Budget  12000`) (Task 15).
+
+## Draft recovery (2026-11-17)
+
+Forms, quick capture and the Context editor keep unsaved values as drafts in `PM_HOME/drafts/` (`src/kernel/tui/drafts.ts`). Deferred minors:
+- Draft keys use the record ref exactly as the caller passed it: the same record opened as `#CRM` and as `CRM` gets two drafts. All callers pass canonical refs today.
+- The restore prompt shows no year (`from 12 Nov 10:42`); with the 30-day prune that only matters around New Year.
+- A `<Form>` rendered outside `openForm` keeps no draft (its key comes from `openForm`).

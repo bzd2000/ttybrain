@@ -7,7 +7,7 @@
 // The text is kept as a draft (`inbox:capture`): a cancel keeps it (`draft kept`), a save deletes it, and the next
 // capture first offers it (r restore · x discard · Esc close); a restored draft takes the place of the prefill.
 import type { TextareaRenderable } from "@opentui/core"
-import { createEffect, createSignal, For, onMount, Show } from "solid-js"
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import {
   act,
   createEscChord,
@@ -139,14 +139,16 @@ export function CaptureOverlay(props: { close(): void }) {
     }
   }
 
-  onMount(() => {
-    keys.textFocus(true)
-    keys.hints([
+  onMount(() => keys.textFocus(true))
+  createEffect(() => {
+    if (offer()) return // the draft prompt shows its own
+    const drop = keys.hints([
       { key: "Enter", label: "new line" },
       { key: "Tab", label: "accept suggestion" },
       { key: "Ctrl+S", label: "save" },
       { key: "Esc", label: "cancel" },
     ])
+    onCleanup(drop)
   })
 
   const esc = createEscChord(leave)
