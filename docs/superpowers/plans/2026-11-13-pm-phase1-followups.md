@@ -106,7 +106,7 @@ Collected from the phase 2 execution ledger (`.superpowers/sdd/2026-11-16-pm-pha
 
 ### Open phase 2 items
 
-- **Task 3, the web-terminal spike, was not done.** It was blocked: the `ttyd` download was denied, so nothing was tried in a browser terminal (xterm.js). Only `scripts/spikes/keyprobe.tsx` exists, in commit `65be26e` on the unmerged worktree branch `worktree-agent-a76c0089f9f6be211`. Still unknown: which keys xterm.js really delivers (Shift+Enter, Ctrl+S, Ctrl+J, Esc chords, Alt keys), and whether the TUI renders correctly there. R25 (the Shift+Enter and Ctrl+S alternatives) was decided without this evidence.
+- **Task 3, the web-terminal spike, was done afterwards** (2026-11-17, ttyd 1.7.7 driven from headless Chromium): see `docs/superpowers/spikes/2026-11-16-web-terminal.md`. Ctrl+J, Ctrl+S and Esc s all work in xterm.js; Shift+Enter arrives as Enter (it saves in quick capture, whose comment says it adds a line); the launcher needs `COLORTERM=truecolor`; OSC 52 does nothing under ttyd 1.7.7.
 - **Terminal restore on quit was only checked through a pty script** (see the Task 16 walk-through in the report); in Task 8 `stdin.isRaw` stayed true after `renderer.destroy()` in a pty script. Check it in a real terminal.
 - **Ctrl+J as a line feed on a real legacy terminal** and the Esc chord timing on a slow link are unverified (manual check).
 - Task 8: **Alt+D in the editor discards edited text with no confirmation** (`Editor.tsx`): data loss on an emacs "delete word" keystroke. Recommended fix: confirm, or drop the binding.
@@ -119,7 +119,7 @@ Plan rulings (R22 to R27, in the plan):
 - **R22.** `field` gets its data and TUI side in phase 2; its CLI side (`show --json`, `edit --<flag>`) is phase 5. Cost: a plugin's extra field is invisible to Copilot until phase 5. No built-in plugin uses fields.
 - **R23.** `overviewPanel` is data-driven (`load()` returns rows of cells with a ref), not a free component. Cost: no custom panel (a chart) until a `component` option is added, which is compatible.
 - **R24.** `recordForm(recordType, def)` is a TUI registration the spec does not name; it is how `n`/`e` and Inbox `p` open forms without inbox requiring `projects`. Cost: one more extension point to keep stable in `apiVersion` 1.
-- **R25.** Shift+Enter has `Ctrl+J`, and `Ctrl+S` has `Esc` `s`. Cost: may be insufficient in xterm.js (the Task 3 spike would have told).
+- **R25.** Shift+Enter has `Ctrl+J`, and `Ctrl+S` has `Esc` `s`. The Task 3 spike confirmed both are enough in xterm.js.
 - **R26.** The People TUI part holds only the "Stakeholders to contact" panel; the People screen is phase 3. Cost: none.
 - **R27.** Closed (not archived) projects show in their own `Closed` group. Cost: the spec names only active, on-hold and archived.
 
@@ -130,7 +130,7 @@ Pre-flight rulings:
 - **F4.** `provenance.originOf(recordType, ref)` (read-only) was added to the store and the `ctx.provenance` facade, so the Actions screen can show "For/from". Cost: one more kernel API in `apiVersion` 1.
 - **F5.** Task 13 adds both the people and inbox parts to `builtinTuiParts`; Task 14 only extends inbox. Cost: none.
 - `kernel.tuiErrors` was dropped; `registry.errors()` is the single source and Help reads it. Cost: add a getter later.
-- Task 3 ran in a separate worktree to be cherry-picked. Cost: none (it never finished).
+- Task 3 ran in a separate worktree; its probe was cherry-picked and the spike finished on the branch. Cost: none.
 
 Execution rulings:
 - The record prop is `recordRef`, not `ref` (Solid compiles `ref=` into an element ref). Cost: a rename back.
