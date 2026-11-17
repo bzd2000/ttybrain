@@ -18,5 +18,5 @@ export type { Cell, ReportDef, ReportSectionDef, ReportSectionResult } from "./r
 export type { GuideSection } from "./guide"
 export type { FieldDef, FieldType } from "./fields"
 export { BusyError, ConflictError, NotFoundError, PmError, suggest, ValidationError, ViewUnavailableError } from "./errors"
-export { addDays, isValidDate, parseDate, weekEnd } from "./dates"
+export { addDays, daysBetween, isValidDate, parseDate, weekEnd } from "./dates"
 export { formatRef, isValidCode, makeHandle, normalizeCode, normalizeHandle, parseRef } from "./refs"

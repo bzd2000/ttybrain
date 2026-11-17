@@ -118,6 +118,29 @@ describe("inbox screen", () => {
     expect(frame).toContain("New · 0")
   })
 
+  test("process an item into a note prefills person and text", async () => {
+    const t = await open(async () => {
+      await inCtx(async () => {
+        await write("people").addPerson!({ name: "Peter Janssens", handle: "peter" })
+        await write("inbox").capture!({ text: "@peter worried about #CRM budget" })
+      })
+    })
+    t.input.pressKey("p")
+    await until(t, (f) => f.includes("Note"))
+    t.input.pressKey("n")
+    let frame = await until(t, (f) => f.includes("New note"))
+    expect(frame).toContain("New note · @peter")
+    expect(frame).toContain("worried about budget")
+    expect(frame).not.toMatch(/Person\*/)
+    expect(lineWith(frame, "Project")).toContain("#CRM")
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, (f) => f.includes("→ N-1") && !f.includes("New note"))
+    const note = await inCtx(async () => (await (kernel!.runtime("people")!.data as any).selectFrom("note").select(["person_id", "project_id", "text"]).executeTakeFirst()) as any)
+    expect(note).toEqual({ person_id: 2, project_id: 1, text: "worried about budget" })
+    const it = await item("I-1")
+    expect([it.status, it.summary]).toEqual(["processed", "Note N-1"])
+  })
+
   test("p then Esc in the form leaves the item new", async () => {
     const t = await open(async () => void (await inCtx(() => write("inbox").capture!({ text: "think about it" }))))
     t.input.pressKey("p")

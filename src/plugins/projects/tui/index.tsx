@@ -1,4 +1,5 @@
-// The projects plugin's tui part: the Projects screen (slot 2) and the project's record forms (project, health).
+// The projects plugin's tui part: the Projects screen (slot 2), the project's record forms (project, health) and
+// tabs, and the person's Projects & roles and Actions tabs.
 import { defineTui } from "../../../kernel/tui/api"
 import { ActionsScreen } from "./actions-screen"
 import { DueForm } from "./due-form"
@@ -11,6 +12,8 @@ import { ProjectContext } from "./project-context"
 import { ProjectPeople } from "./project-people"
 import { ProjectSummary } from "./project-summary"
 import { registerPanels } from "./panels"
+import { PersonActions } from "./person-actions"
+import { PersonProjects } from "./person-projects"
 import { ProjectsScreen } from "./projects-screen"
 
 export const projectsTui = defineTui({
@@ -87,5 +90,27 @@ export const projectsTui = defineTui({
       component: ProjectPeople,
     })
     ui.recordTab("project", { id: "context", title: "Context", order: 80, component: ProjectContext })
+
+    // The person's tabs after people's own (Summary 10, Notes 20, Goals 30).
+    const personId = async (recordRef: string) => (await makeStore(ui).person(recordRef)).id
+    ui.recordTab("person", {
+      id: "projects",
+      title: "Projects & roles",
+      order: 40,
+      // The person's involvements.
+      count: async (recordRef) => n(ui.data.selectFrom("involvement").where("person_id", "=", await personId(recordRef))),
+      component: PersonProjects,
+    })
+    ui.recordTab("person", {
+      id: "actions",
+      title: "Actions",
+      order: 50,
+      // The open actions the person owns or that are for them.
+      count: async (recordRef) => {
+        const id = await personId(recordRef)
+        return n(ui.data.selectFrom("action").where("status", "=", "open").where((eb: any) => eb.or([eb("owner_id", "=", id), eb("for_person_id", "=", id)])))
+      },
+      component: PersonActions,
+    })
   },
 })

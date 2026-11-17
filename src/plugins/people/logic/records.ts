@@ -10,6 +10,7 @@ import {
   ViewUnavailableError,
   normalizeCode,
   type PluginContext,
+  type PluginRuntime,
 } from "../../../kernel/api"
 import type { GoalRecord, NoteRecord, PersonRecord } from "./schema"
 
@@ -17,7 +18,7 @@ const str = (v: unknown): string | null => (v === null || v === undefined ? null
 
 export type Store = ReturnType<typeof makeStore>
 
-export function makeStore(ctx: PluginContext) {
+export function makeStore(ctx: PluginRuntime) {
   const db = ctx.data
 
   const personQuery = () =>
@@ -196,7 +197,7 @@ export function makeStore(ctx: PluginContext) {
     return new Map(rows.map((r) => [Number(r.id), String(r.code)]))
   }
 
-  return { projectId, projectsOfPeople, projectCodes, personQuery, toPerson, noteQuery, toNote, goalQuery, toGoal, handles, handleId, personId, personById, person, activePerson, note, goal, noteId, goalId }
+  return { projectId, projectsOfPeople, projectCodes, unlessUnavailable, personQuery, toPerson, noteQuery, toNote, goalQuery, toGoal, handles, handleId, personId, personById, person, activePerson, note, goal, noteId, goalId }
 }
 
 export function registerRecordTypes(ctx: PluginContext, store: Store): void {

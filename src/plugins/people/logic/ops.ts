@@ -1,7 +1,6 @@
 // The exposed operations: one read with logic (staleStakeholders) and every write. Writes return the full
 // record with its `ref`; `describe` gives the change-set line (plugin reference §1).
 import {
-  addDays,
   ConflictError,
   currentContext,
   Deleted,
@@ -16,6 +15,7 @@ import {
   type Static,
 } from "../../../kernel/api"
 import type { Store } from "./records"
+import { isStale } from "./stale"
 import { GoalRecord, GoalStatus, Level, NoteKind, NoteRecord, PersonRecord, type GoalRecord as Goal, type PersonRecord as Person } from "./schema"
 
 const Name = NonBlank()
@@ -159,10 +159,9 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         output: Type.Array(StaleRow),
         toolDescription: "Active stakeholders with no note for `days` days: high influence first, then oldest contact first.",
         run: async (i: Static<typeof StaleInput>): Promise<StaleRow[]> => {
-          const cutoff = addDays(today(), -i.days)
           const rows = (await store.personQuery().where("p.is_stakeholder", "=", 1).where("p.archived_at", "is", null).execute())
             .map(store.toPerson)
-            .filter((p) => p.last_contact === null || p.last_contact < cutoff)
+            .filter((p) => isStale(p.last_contact, today(), i.days))
             .sort(
               (a, b) =>
                 Number(b.influence === "high") - Number(a.influence === "high") ||
