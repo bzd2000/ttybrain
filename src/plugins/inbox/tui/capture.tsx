@@ -1,5 +1,6 @@
 // The quick-capture overlay (`i` on any screen). A multi-line text: Enter saves through `capture` and closes with
-// `captured I-n`; Shift+Enter or Ctrl+J (the one every terminal sends distinctly) insert a newline; Esc cancels.
+// `captured I-n`; Ctrl+J inserts a newline (Shift+Enter only in a terminal that tells it from Enter: most, and
+// browser terminals, send both as Enter, which saves); Esc cancels.
 // While the word at the cursor is a tag being typed (`#cr`, `@ma`), up to 5 `tags.suggest` results show: ↑↓ pick,
 // Tab replaces the word with the ref and a space. On a project's or a person's record view, the text starts with
 // its tag and a line says why.
