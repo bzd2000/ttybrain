@@ -45,7 +45,7 @@ describe("overview panels", () => {
     ])
       expect(frame).toContain(s)
     expect(frame).toContain("Late milestones · next 14 days")
-    expect(frame).toContain("last contact over 30 days, high influence first")
+    expect(frame).toContain("last contact 30+ days ago, high influence first")
   })
 
   test("overdue panel", async () => {

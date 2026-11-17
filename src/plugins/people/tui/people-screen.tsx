@@ -95,20 +95,39 @@ export function PeopleScreen() {
     const projects = await store.projectsOfPeople(list.map((p) => p.id))
     return list.map((p) => ({ ...p, projects: projects.get(p.id) ?? [] }))
   })
-  const [tab, setTab] = createSignal<PeopleTab>("all")
-  const [sort, setSort] = createSignal<SortMode>(SORTS[0]!)
-  const [archived, setArchived] = createSignal(false)
+  // The route's params keep the tab, the sort, the archived toggle and the selection while a record is open (Esc
+  // pops to this screen again); the filter is not kept.
+  const params = untrack(() => {
+    const r = nav.route()
+    return (r.kind === "screen" ? r.params : undefined) ?? {}
+  })
+  const remember = (patch: Record<string, string>) => {
+    const here = nav.route()
+    if (here.kind === "screen" && Object.entries(patch).some(([k, v]) => here.params?.[k] !== v)) nav.replaceParams({ ...here.params, ...patch })
+  }
+  const [tab, setTabSignal] = createSignal<PeopleTab>(Object.values(TAB_KEYS).find((t) => t === params.tab) ?? "all")
+  const [sort, setSortSignal] = createSignal<SortMode>(SORTS.find((s) => s === params.sort) ?? SORTS[0]!)
+  const [archived, setArchivedSignal] = createSignal(params.archived === "1")
+  const setTab = (t: PeopleTab) => {
+    setTabSignal(t)
+    remember({ tab: t })
+  }
+  const setSort = (s: SortMode) => {
+    setSortSignal(s)
+    remember({ sort: s })
+  }
+  const setArchived = (a: boolean) => {
+    setArchivedSignal(a)
+    remember({ archived: a ? "1" : "0" })
+  }
   const [filter, setFilter] = createSignal("")
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal("")
   // `current`: the row the table has selected (undefined while it shows none); `want`: a row to select once it
-  // is loaded (a new person), dropped as soon as the table has selected it.
+  // is loaded (a new person, or the `selected` param after a record was open), dropped as soon as the table has
+  // selected it.
   const [current, setCurrent] = createSignal<string | undefined>()
-  // The route's `selected` param brings the selection back after a record was open (Esc pops to this screen again).
-  const [want, setWant] = createSignal<string | undefined>(untrack(() => {
-    const r = nav.route()
-    return r.kind === "screen" ? r.params?.selected : undefined
-  }))
+  const [want, setWant] = createSignal<string | undefined>(params.selected)
 
   const all = () => q.data() ?? []
   const counts = createMemo(() => tabCounts(all()))
@@ -128,8 +147,7 @@ export function PeopleScreen() {
   const select = (ref: string | undefined) => {
     setCurrent(ref)
     if (ref !== undefined && ref === want()) setWant(undefined)
-    const here = nav.route()
-    if (ref !== undefined && here.kind === "screen" && here.params?.selected !== ref) nav.replaceParams({ ...here.params, selected: ref })
+    if (ref !== undefined) remember({ selected: ref })
   }
 
   // A saved person becomes the selection (an edit may have changed the handle, so the ref).
@@ -185,10 +203,10 @@ export function PeopleScreen() {
     } else if (ch === "n") live(p, (x) => void overlay.openForm("note", "note", { prefill: { person: x.ref } }))
     else if (ch === "N") void personForm()
     else if (ch === "e") live(p, (x) => void personForm(x.ref))
-    else if (ch === "o") setSort((s) => SORTS[(SORTS.indexOf(s) + 1) % SORTS.length]!)
+    else if (ch === "o") setSort(SORTS[(SORTS.indexOf(sort()) + 1) % SORTS.length]!)
     else if (ch === "/") startFilter()
     else if (ch !== undefined && TAB_KEYS[ch] !== undefined) setTab(TAB_KEYS[ch]!)
-    else if (ch === "A") setArchived((a) => !a)
+    else if (ch === "A") setArchived(!archived())
     else if (ch === "r") {
       if (p !== undefined && p.archived) restore(p)
     } else return

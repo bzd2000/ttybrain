@@ -279,6 +279,45 @@ describe("People screen", () => {
     expect(lineWith(frame, "Aaron Aerts")).not.toContain("›")
   })
 
+  test("Esc back from a person keeps the tab", async () => {
+    const t = await open()
+    t.input.pressKey("t")
+    await until(t, (f) => f.includes("People · 2"))
+    t.input.pressEnter() // anna
+    await until(t, (f) => f.includes("› @anna"))
+    t.input.pressEscape()
+    const frame = await until(t, (f) => t.nav.route().kind === "screen" && f.includes("People · 2"))
+    expect(frame).toContain("People · 2")
+    expect(frame).toContain("Bob Maes")
+    for (const n of ["Luc Peeters", "Marie Dubois", "Nadia Benali"]) expect(frame).not.toContain(n)
+    expect(lineWith(frame, "Anna Smit")).toContain("›")
+  })
+
+  test("Esc back from an archived person keeps the archived group and the selection", async () => {
+    const t = await open()
+    await inCtx(() => write().archivePerson!({ ref: "@nadia" }))
+    t.input.pressKey("A")
+    await until(t, (f) => f.includes("Archived · 1"))
+    while (!lineWith(await t.frame(), "Nadia Benali").includes("›")) t.input.pressKey("j")
+    t.input.pressEnter()
+    await until(t, (f) => f.includes("› @nadia"))
+    t.input.pressEscape()
+    const frame = await until(t, (f) => t.nav.route().kind === "screen" && f.includes("Archived · 1") && lineWith(f, "Nadia Benali").includes("›"))
+    expect(frame).toContain("Archived · 1")
+    expect(lineWith(frame, "Nadia Benali")).toContain("›")
+  })
+
+  test("Esc back from a person keeps the sort", async () => {
+    const t = await open()
+    t.input.pressKey("o")
+    await until(t, (f) => f.includes("sort: last contact"))
+    t.input.pressEnter()
+    await until(t, (f) => f.includes("› @"))
+    t.input.pressEscape()
+    const frame = await until(t, (f) => t.nav.route().kind === "screen" && f.includes("People ·"))
+    expect(frame).toContain("sort: last contact")
+  })
+
   test("empty database shows EMPTY", async () => {
     const t = await open({ seed: false })
     const frame = await t.frame()

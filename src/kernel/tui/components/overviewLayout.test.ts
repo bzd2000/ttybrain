@@ -19,7 +19,7 @@ describe("overview layout", () => {
   })
 
   test("a short screen balances the columns and caps rows so each column fits", () => {
-    const needs = [full(6), full(0), full(6), full(0), full(6), { rows: 0, empty: "No one.", footer: "last contact over 30 days, high influence first" }, full(6)]
+    const needs = [full(6), full(0), full(6), full(0), full(6), { rows: 0, empty: "No one.", footer: "last contact 30+ days ago, high influence first" }, full(6)]
     const places = layoutOverview(needs, 22, 80)
     for (const c of [0, 1]) expect(places.filter((p) => p.column === c).reduce((s, p) => s + p.height, 0)).toBeLessThanOrEqual(22)
     for (const p of places) expect(p.height).toBeGreaterThanOrEqual(3)

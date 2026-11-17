@@ -121,6 +121,27 @@ describe("person record view", () => {
     expect(frame).toContain("@anna · Team · Stakeholder")
   })
 
+  test("a handle edit from Summary follows the rename, and Esc selects the renamed person", async () => {
+    const t = await open("@bob")
+    await until(t, (f) => tabLine(f).includes("Goals"))
+    t.input.pressKey("e")
+    await until(t, (f) => f.includes("Edit @bob"))
+    t.input.pressTab() // name → handle
+    await t.input.typeText("by")
+    t.input.pressKey("s", { ctrl: true })
+    let frame = await until(t, (f) => f.includes("› @bobby") && tabLine(f).includes("Goals"))
+    expect(frame).toContain("› @bobby Bob Maes")
+    expect(tabLine(frame)).toMatch(/Summary\s+Notes 1\s+Goals 1/)
+    expect(frame).toContain("@bobby · Team")
+    expect((await rows("person", ["handle"])).map((r) => r.handle)).toContain("bobby")
+    expect(t.nav.stack().length).toBe(3) // Overview, People, @bobby: the old route was replaced, not stacked on
+
+    t.input.pressEscape()
+    frame = await until(t, (f) => t.nav.route().kind === "screen" && lines(f).some((l) => l.includes("Bob Maes") && l.includes("›") && !l.includes("┌")))
+    expect(t.nav.route()).toEqual({ kind: "screen", screen: "people", params: { selected: "@bobby" } })
+    expect(lines(frame).find((l) => l.includes("Bob Maes") && !l.includes("┌"))).toContain("›")
+  })
+
   test("notes tab lists newest first; n adds; Del deletes after confirm", async () => {
     const t = await open("@marie", {
       tabs: 1,

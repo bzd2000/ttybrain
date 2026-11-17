@@ -61,7 +61,7 @@ export const peopleTui = defineTui({
       title: "Stakeholders to contact",
       priority: 60,
       empty: "No stakeholders to contact.",
-      footer: `last contact over ${days} days, high influence first`,
+      footer: `last contact ${days}+ days ago, high influence first`,
       load: async () => {
         const today = ui.clock.today()
         const rows: StaleRow[] = await ui.self().read.staleStakeholders!({ days })

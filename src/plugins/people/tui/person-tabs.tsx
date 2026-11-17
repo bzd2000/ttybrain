@@ -17,6 +17,7 @@ import {
   Table,
   theme,
   useKeys,
+  useNav,
   useOverlay,
   useQuery,
   useRuntime,
@@ -71,10 +72,23 @@ export function PersonSummary(props: { recordRef: string }) {
   const rt = useRuntime()
   const store = makeStore(rt)
   const overlay = useOverlay()
+  const nav = useNav()
   const keys = useKeys()
   keys.hints(SUMMARY_HINTS)
   const q = useQuery(() => store.person(props.recordRef), { key: () => props.recordRef })
 
+  // A handle edit changes the ref: the record view moves to the new one, and when it was opened from the People
+  // screen, that screen selects the renamed person after Esc.
+  const edit = async (p: PersonRecord) => {
+    const saved = await overlay.openForm("person", "person", { recordRef: p.ref })
+    if (saved === undefined || saved === p.ref) return
+    const top = nav.route()
+    if (top.kind !== "record" || top.ref !== p.ref) return
+    nav.back()
+    const below = nav.route()
+    if (below.kind === "screen" && below.screen === "people") nav.replaceParams({ ...below.params, selected: saved })
+    await nav.open(saved)
+  }
   const archive = async (p: PersonRecord) => {
     if (!(await overlay.confirm(archiveQuestion(p.ref)))) return
     await act(() => rt.self().write.archivePerson!({ ref: p.ref }), { ok: () => `archived ${p.ref}` })
@@ -85,7 +99,7 @@ export function PersonSummary(props: { recordRef: string }) {
     const p = q.data()
     if (p === undefined) return
     const ch = printable(key)
-    if (ch === "e") live(p, () => void overlay.openForm("person", "person", { recordRef: p.ref }))
+    if (ch === "e") live(p, () => void edit(p))
     else if (ch === "n") live(p, () => void overlay.openForm("note", "note", { prefill: { person: p.ref } }))
     else if (key.name === "delete") {
       if (!p.archived) void archive(p)
