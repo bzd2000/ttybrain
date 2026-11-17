@@ -1,10 +1,14 @@
-// The people plugin's tui part. Phase 2 has only the Overview's "Stakeholders to contact" panel.
+// The people plugin's tui part: the Overview's "Stakeholders to contact" panel and the person, note and goal forms.
 import { daysBetween, defineTui, type Cell } from "../../../kernel/tui/api"
 import type { StaleRow } from "../logic/ops"
+import { GoalForm, NoteForm, PersonForm } from "./forms"
 
 export const peopleTui = defineTui({
   plugin: "people",
   activate(ui) {
+    ui.recordForm("person", { id: "person", label: "Person", component: PersonForm })
+    ui.recordForm("note", { id: "note", label: "Note", component: NoteForm })
+    ui.recordForm("goal", { id: "goal", label: "Goal", component: GoalForm })
     const days = ui.config.staleContactDays
     ui.overviewPanel({
       id: "stakeholders-to-contact",
