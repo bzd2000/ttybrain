@@ -552,6 +552,30 @@ describe("TUI blocks", () => {
     expect(asked).toEqual(["T-1", "T-2"])
   })
 
+  test("a count that throws hides neither its tab nor a when tab", async () => {
+    const part: TuiDef = defineTui({
+      plugin: "thing",
+      activate: (ui) => {
+        ui.recordTab("thing", {
+          id: "main",
+          title: "Main",
+          order: 1,
+          count: async () => {
+            throw new Error("no count")
+          },
+          component: MainTab,
+        })
+        ui.recordTab("thing", { id: "extra", title: "Extra", order: 2, count: async () => 4, when: async () => true, component: NotesTab })
+      },
+    })
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    tui = await renderTui(kernel, { parts: [part] })
+    await tui.nav.open("T-1")
+    const frame = await tui.frame()
+    expect(lineWith(frame, "Main")).toMatch(/Main\s+Extra 4/)
+    expect(frame).toContain("main of T-1")
+  })
+
   test("a reload keeps the active tab's component mounted", async () => {
     let mounts = 0
     let loads = 0

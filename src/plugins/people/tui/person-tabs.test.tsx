@@ -115,7 +115,7 @@ describe("person record view", () => {
 
     // A team member who is a stakeholder too.
     t.input.pressEscape()
-    await sleep(30)
+    await until(t, () => t.nav.route().kind === "screen")
     await t.nav.open("@anna")
     frame = await until(t, (f) => f.includes("› @anna"))
     expect(frame).toContain("@anna · Team · Stakeholder")
@@ -235,6 +235,22 @@ describe("person record view", () => {
     const t = await open("@anna", { tabs: 2 })
     const frame = await until(t, (f) => f.includes("No goals yet"))
     expect(frame).toContain("No goals yet. Press n to add one.")
+  })
+
+  test("n on Notes and Goals for an archived person opens nothing and says so", async () => {
+    const t = await open("@bob", { tabs: 1, extra: () => write().archivePerson!({ ref: "@bob" }) })
+    await until(t, (f) => f.includes("Talked about training"))
+    t.input.pressKey("n")
+    let frame = await until(t, (f) => f.includes("@bob is archived — press r to restore"))
+    expect(lines(frame.trimEnd()).at(-1)).toContain("@bob is archived — press r to restore")
+    expect(frame).not.toContain("New note")
+    t.input.pressArrow("right")
+    await until(t, (f) => f.includes("PM training 2027") && !f.includes("Talked about training"))
+    t.input.pressKey("n")
+    frame = await until(t, (f) => f.includes("@bob is archived — press r to restore"))
+    expect(frame).not.toContain("New goal")
+    expect((await rows("note", ["id"])).length).toBe(2)
+    expect((await rows("goal", ["id"])).length).toBe(1)
   })
 
   test("archived person's summary says archived; r restores", async () => {

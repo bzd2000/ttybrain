@@ -34,6 +34,13 @@ import { PersonDetail } from "./person-detail"
 
 const firstLine = (s: string) => s.split("\n")[0] ?? ""
 
+// What needs a person who is not archived (a new note or goal, an edit of the person) runs only then.
+const live = (p: PersonRecord | undefined, run: () => void) => {
+  if (p === undefined) return
+  if (p.archived) notify(`${p.ref} is archived — press r to restore`, "error")
+  else run()
+}
+
 // `@marie · Stakeholder`, `@anna · Team · Stakeholder`.
 const personHeader = (p: PersonRecord) => [p.ref, ...(p.is_team ? ["Team"] : []), ...(p.is_stakeholder ? ["Stakeholder"] : [])].join(" · ")
 
@@ -72,8 +79,6 @@ export function PersonSummary(props: { recordRef: string }) {
     if (!(await overlay.confirm(archiveQuestion(p.ref)))) return
     await act(() => rt.self().write.archivePerson!({ ref: p.ref }), { ok: () => `archived ${p.ref}` })
   }
-  // e and n need a person who is not archived.
-  const live = (p: PersonRecord, run: () => void) => (p.archived ? notify(`${p.ref} is archived — press r to restore`, "error") : run())
 
   useScreenKeys((key) => {
     if (keys.typing()) return
@@ -133,22 +138,22 @@ export function PersonNotes(props: { recordRef: string }) {
 
   // Newest first, then by id; the project codes come from the projects.project view.
   const q = useQuery(
-    async (): Promise<NoteRow[]> => {
+    async (): Promise<{ person: PersonRecord; notes: NoteRow[] }> => {
       const p = await store.person(props.recordRef)
       const notes = (await store.noteQuery().where("n.person_id", "=", p.id).orderBy("n.date", "desc").orderBy("n.id", "desc").execute()).map(store.toNote)
       const codes = await store.projectCodes([...new Set(notes.flatMap((n) => (n.project_id === null ? [] : [n.project_id])))])
-      return notes.map((n) => ({ ...n, project: n.project_id === null ? null : (codes.get(n.project_id) ?? null) }))
+      return { person: p, notes: notes.map((n) => ({ ...n, project: n.project_id === null ? null : (codes.get(n.project_id) ?? null) })) }
     },
     { key: () => props.recordRef },
   )
   const rows = createMemo((): TableRow[] =>
-    (q.data() ?? []).map((n) => ({
+    (q.data()?.notes ?? []).map((n) => ({
       ref: n.ref,
       cells: { ref: n.ref, date: shortDate(n.date), kind: n.kind === "one_on_one" ? "1:1" : "interaction", project: n.project ?? "", text: firstLine(n.text) },
     })),
   )
   // The selected note, only while it is shown (a reload may have removed it).
-  const selected = () => (q.data() ?? []).find((n) => n.ref === sel.current())
+  const selected = () => (q.data()?.notes ?? []).find((n) => n.ref === sel.current())
 
   const add = async () => {
     const saved = await overlay.openForm("note", "note", { prefill: { person: props.recordRef } })
@@ -173,7 +178,7 @@ export function PersonNotes(props: { recordRef: string }) {
     if (keys.typing()) return
     const ch = printable(key)
     const n = selected()
-    if (ch === "n") void add()
+    if (ch === "n") live(q.data()?.person, () => void add())
     else if (ch === "e" && n !== undefined) void overlay.openForm("note", "note", { recordRef: n.ref })
     else if (key.name === "return" && n !== undefined) editText(n)
     else if (key.name === "delete" && n !== undefined) void remove(n)
@@ -183,7 +188,7 @@ export function PersonNotes(props: { recordRef: string }) {
 
   return (
     <box flexDirection="column" flexGrow={1} minHeight={0}>
-      <Panel title="Notes" count={q.data()?.length} focused={keys.active()} grow>
+      <Panel title="Notes" count={q.data()?.notes.length} focused={keys.active()} grow>
         <Show when={q.data() !== undefined}>
           <Table
             columns={NOTE_COLUMNS}
@@ -227,19 +232,19 @@ export function PersonGoals(props: { recordRef: string }) {
   const sel = useSelection()
 
   const q = useQuery(
-    async (): Promise<GoalRecord[]> => {
+    async (): Promise<{ person: PersonRecord; goals: GoalRecord[] }> => {
       const p = await store.person(props.recordRef)
-      return (await store.goalQuery().where("g.person_id", "=", p.id).execute()).map(store.toGoal).sort(byStatusAndTarget)
+      return { person: p, goals: (await store.goalQuery().where("g.person_id", "=", p.id).execute()).map(store.toGoal).sort(byStatusAndTarget) }
     },
     { key: () => props.recordRef },
   )
   const rows = createMemo((): TableRow[] =>
-    (q.data() ?? []).map((g) => {
+    (q.data()?.goals ?? []).map((g) => {
       const target: Cell = { text: dueLabel(g.target_date, today()), tone: g.status === "open" && g.target_date !== null && g.target_date < today() ? "red" : undefined }
       return { ref: g.ref, cells: { ref: g.ref, title: g.title, target, status: g.status } }
     }),
   )
-  const selected = () => (q.data() ?? []).find((g) => g.ref === sel.current())
+  const selected = () => (q.data()?.goals ?? []).find((g) => g.ref === sel.current())
 
   const add = async () => {
     const saved = await overlay.openForm("goal", "goal", { prefill: { person: props.recordRef } })
@@ -251,7 +256,7 @@ export function PersonGoals(props: { recordRef: string }) {
     if (keys.typing()) return
     const ch = printable(key)
     const g = selected()
-    if (ch === "n") void add()
+    if (ch === "n") live(q.data()?.person, () => void add())
     else if (ch === "e" && g !== undefined) void overlay.openForm("goal", "goal", { recordRef: g.ref })
     else if (ch === "x" && g !== undefined) setStatus(g, g.status === "open" ? "achieved" : "open")
     else if (ch === "d" && g !== undefined) {
@@ -262,7 +267,7 @@ export function PersonGoals(props: { recordRef: string }) {
 
   return (
     <box flexDirection="column" flexGrow={1} minHeight={0}>
-      <Panel title="Goals" count={q.data()?.length} focused={keys.active()} grow>
+      <Panel title="Goals" count={q.data()?.goals.length} focused={keys.active()} grow>
         <Show when={q.data() !== undefined}>
           <Table
             columns={GOAL_COLUMNS}

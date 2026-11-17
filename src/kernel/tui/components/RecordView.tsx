@@ -33,7 +33,8 @@ export function RecordView(props: { recordRef: string; tab?: string }) {
       const list = tabs()
       const shows = (t: RecordTabDef) => (t.when ? Promise.resolve().then(() => t.when!(props.recordRef)).catch(() => true) : Promise.resolve(true))
       const [values, checks] = await Promise.all([
-        Promise.all(list.map((t) => (t.count ? t.count(props.recordRef) : Promise.resolve(null)))),
+        // A count that throws shows none; it never fails the checks.
+        Promise.all(list.map((t) => (t.count ? Promise.resolve().then(() => t.count!(props.recordRef)).catch(() => null) : Promise.resolve(null)))),
         Promise.all(list.map(shows)),
       ])
       return {
