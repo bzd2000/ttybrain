@@ -17,6 +17,8 @@ export type RecordTabDef = {
   title: string
   order: number
   count?: (recordRef: string) => Promise<number | null>
+  // Whether the tab shows for this record (always without it). A check that throws keeps the tab.
+  when?: (recordRef: string) => Promise<boolean>
   component: Component<{ recordRef: string }>
 }
 export type OverviewRow = { ref: string; cells: Cell[] }

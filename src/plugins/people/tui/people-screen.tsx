@@ -34,6 +34,8 @@ import { lastText, lastTone, matchesFilter, peopleGroups, roleText, SORT_LABELS,
 
 export const EMPTY = "No people yet. Press N to add one."
 export const NO_MATCH = "No people match the filter."
+// Del's confirmation, here and in the person's Summary tab.
+export const archiveQuestion = (ref: string) => `Archive ${ref}? They stay in the history and can be restored.`
 const HINTS: Hint[] = [
   { key: "Enter", label: "open" },
   { key: "n", label: "note" },
@@ -136,7 +138,7 @@ export function PeopleScreen() {
     if (saved !== undefined) setWant(saved)
   }
   const archive = async (p: PersonRow) => {
-    const yes = await overlay.confirm(`Archive ${p.ref}? They stay in the history and can be restored.`)
+    const yes = await overlay.confirm(archiveQuestion(p.ref))
     if (!yes) return
     await act(() => rt.self().write.archivePerson!({ ref: p.ref }), { ok: () => `archived ${p.ref}` })
   }

@@ -494,6 +494,94 @@ describe("TUI blocks", () => {
     expect(frame).not.toContain("main of T-1")
   })
 
+  test("a tab whose when resolves false is left out, a throwing when keeps it", async () => {
+    // `later` resolves T-1's check only when the test says so: until then only the tabs without `when` show.
+    let release: (v: boolean) => void = () => {}
+    const later = new Promise<boolean>((r) => (release = r))
+    const asked: string[] = []
+    const part: TuiDef = defineTui({
+      plugin: "thing",
+      activate: (ui) => {
+        ui.recordTab("thing", { id: "main", title: "Main", order: 1, component: MainTab })
+        ui.recordTab("thing", {
+          id: "odd",
+          title: "Odd",
+          order: 2,
+          when: async (ref) => (ref === "T-1" ? later : Number(ref.slice(2)) % 2 === 1),
+          component: () => <text>odd tab</text>,
+        })
+        ui.recordTab("thing", {
+          id: "broken",
+          title: "Broken",
+          order: 3,
+          when: async (ref) => {
+            asked.push(ref)
+            throw new Error("no idea")
+          },
+          component: () => <text>broken tab</text>,
+        })
+        ui.recordTab("thing", { id: "notes", title: "Notes", order: 4, component: NotesTab })
+      },
+    })
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    tui = await renderTui(kernel, { parts: [part] })
+
+    await tui.nav.open("T-1")
+    let frame = await tui.peek() // the load waits on `later`
+    expect(lineWith(frame, "Main")).toContain("Notes")
+    expect(frame).not.toContain("Odd")
+    expect(frame).not.toContain("Broken")
+    release(true)
+    await tui.settle()
+    frame = await tui.frame()
+    expect(lineWith(frame, "Main")).toMatch(/Main.*Odd.*Broken.*Notes/)
+    await escape(tui)
+
+    // T-2: Odd resolves false and is left out; a route naming it falls back to the first tab.
+    await tui.nav.open("T-2", "odd")
+    await tui.settle()
+    frame = await tui.frame()
+    expect(frame).toContain("› T-2 Thing 2")
+    expect(lineWith(frame, "Main")).toMatch(/Main.*Broken.*Notes/)
+    expect(frame).not.toContain("Odd")
+    expect(frame).toContain("main of T-2")
+    expect(frame).not.toContain("odd tab")
+    // ← → go through the shown tabs only.
+    tui.input.pressArrow("right")
+    expect(await tui.frame()).toContain("broken tab")
+    expect(asked).toEqual(["T-1", "T-2"])
+  })
+
+  test("a reload keeps the active tab's component mounted", async () => {
+    let mounts = 0
+    let loads = 0
+    const part: TuiDef = defineTui({
+      plugin: "thing",
+      activate: (ui) => {
+        ui.recordTab("thing", {
+          id: "main",
+          title: "Main",
+          order: 1,
+          count: async () => ++loads,
+          component: () => {
+            onMount(() => void mounts++)
+            return <text>mounted tab</text>
+          },
+        })
+      },
+    })
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    tui = await renderTui(kernel, { parts: [part] })
+    await tui.nav.open("T-1")
+    expect(await tui.frame()).toContain("mounted tab")
+    const before = loads
+    kernel.events.emit("record.changed", { ref: "T-1" })
+    await tui.settle()
+    expect(lineWith(await tui.frame(), "Main")).not.toContain(`Main ${before} `)
+    expect(loads).toBeGreaterThan(before)
+    expect(mounts).toBe(1)
+  })
+
   test("nav.open shows the label without tabs or forms, and an error for an unknown ref", async () => {
     kernel = await makeTestKernel({ plugins: [thingPlugin] })
     tui = await renderTui(kernel, { parts: [thingPart] })

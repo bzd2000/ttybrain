@@ -5,10 +5,8 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
-import { defineTui, theme, type TuiDef } from "../../../kernel/tui/api"
+import { theme } from "../../../kernel/tui/api"
 import { builtinPlugins } from "../../index"
-import { builtinTuiParts } from "../../tui"
-import { peopleTui } from "./index"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -74,21 +72,10 @@ async function seed() {
   })
 }
 
-// The person record view comes later (its tabs); until then a stand-in tab gives `nav.open("@x")` a record view
-// instead of the person form, so Enter and Esc can be tested here.
-const withPersonTab: TuiDef = defineTui({
-  plugin: "people",
-  activate(ui) {
-    peopleTui.activate(ui)
-    ui.recordTab("person", { id: "stand-in", title: "Stand-in", order: 1, component: () => <text>person view</text> })
-  },
-})
-
-async function open(opts: { seed?: boolean; personTab?: boolean; width?: number; height?: number } = {}): Promise<RenderedTui> {
+async function open(opts: { seed?: boolean; width?: number; height?: number } = {}): Promise<RenderedTui> {
   kernel = await makeTestKernel({ plugins: builtinPlugins })
   if (opts.seed !== false) await seed()
-  const parts = opts.personTab ? builtinTuiParts.map((p) => (p === peopleTui ? withPersonTab : p)) : undefined
-  tui = await renderTui(kernel, { width: opts.width ?? 120, height: opts.height ?? 30, parts })
+  tui = await renderTui(kernel, { width: opts.width ?? 120, height: opts.height ?? 30 })
   tui.input.pressKey("3")
   await until(tui, (f) => f.includes("People ·") || f.includes("No people yet"))
   return tui
@@ -275,13 +262,14 @@ describe("People screen", () => {
   })
 
   test("Enter opens the person and Esc comes back to the same row", async () => {
-    const t = await open({ personTab: true })
+    const t = await open()
     t.input.pressKey("j") // marie
     t.input.pressEnter()
     let frame = await until(t, (f) => f.includes("› @marie Marie Dubois"))
     expect(frame).toContain("› @marie Marie Dubois")
     expect(lines(frame)[0]).toContain("pm · 3 People")
-    expect(frame).toContain("person view")
+    expect(frame).toContain("Summary")
+    expect(frame).toContain("@marie · Stakeholder")
     // A person sorting above marie: she would be row 0 if the selection had been reset.
     await inCtx(() => write().addPerson!({ name: "Aaron Aerts", handle: "aaron", is_stakeholder: true, influence: "high" }))
     t.input.pressEscape()
