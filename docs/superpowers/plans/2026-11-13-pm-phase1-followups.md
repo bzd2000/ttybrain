@@ -206,13 +206,17 @@ Controller rulings:
 
 ### Deferred minors and concerns
 
-- **Concern (for the final review):** editing a person's handle (or a project's code) from its record view leaves the route on the old ref, so its loads fail (Task 5).
 - Task 1: name sort case-insensitivity is untested (no mixed-case names); no `int:high` / `int:low` filter test.
 - Task 2: emptying a required field on edit (note date, person name) sends `""` and gets the op's error; type `both` giving the `interaction` default, and an unresolved prefilled person, are untested; the `process.tsx` header comment line is too long; the tests were written after the code (no RED evidence).
 - Task 3: Del on an archived person and `r` on a live one give no feedback; `want` is set after an edit even when the person is outside the tab or filter.
 - Task 4: the panel shows the previous person's facts for one frame after the selection changes; `refOf` runs before the slice; the panel title is empty when nothing is selected; the `┌` line filter in the test helpers is blunt.
 - Task 5: `archiveQuestion` lives in the screen module (better in `people-list` or a shared module); a stale `chosen` tab can return when its `when` later turns true; on an archived person's Notes and Goals, `e` / `x` / `d` / Del / Enter still run and the operation rejects them (only `n` is guarded).
 - Task 6: an `(eb: any)` in the Actions count; the row-ref encoding `#CODE\nrole` is parsed inline with `split`; the Del test relies on the implicit first-row selection.
+- Task 6: `n` on Projects & roles has no archived guard (`activePerson` rejects it with a hint); an archived project's row is muted but still shows its status.
+- Final review: Esc from a record opened from a person tab comes back to Summary, not the tab you left (a kernel matter, as on Projects).
+- Final review: the People filter is not kept across a record visit (the tab, the sort, the archived toggle and the selection are; Projects keeps only the selection).
+- Final review: the MaxListeners warning in `capture.test.tsx` predates this branch (it is on origin/main too).
+- Deferred to a later phase: a kernel `nav.replaceRecord(ref)`, so a record route follows a rename from any plugin or the CLI. The person Summary's `e` follows a handle edit itself (back, then open the new ref); the `#CODE` edit in Projects has the same gap and is not fixed.
 
 ## Draft recovery (2026-11-17)
 
