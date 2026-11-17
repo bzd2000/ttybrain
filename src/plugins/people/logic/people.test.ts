@@ -287,8 +287,24 @@ describe("people", () => {
       { ref: "@jan", name: "Jan Wouters", influence: "low", interest: null, last_contact: "2026-10-01", projects: [] },
     ])
     expect((await read("staleStakeholders", { days: 30, limit: 2 })).map((r: any) => r.ref)).toEqual(["@luc", "@marie"])
-    // Exactly `days` ago is not older than today − days.
-    expect((await read("staleStakeholders", { days: 41 })).map((r: any) => r.ref)).toEqual(["@luc", "@jan"])
+    // Exactly `days` ago is stale (>= days): marie's note is 41 days old.
+    expect((await read("staleStakeholders", { days: 41 })).map((r: any) => r.ref)).toEqual(["@luc", "@marie", "@jan"])
+    expect((await read("staleStakeholders", { days: 42 })).map((r: any) => r.ref)).toEqual(["@luc", "@jan"])
+  })
+
+  test("never-contacted sorts first and is stale", async () => {
+    await ok("person", "add", "Dated One", "--stakeholder", "--influence", "high")
+    await ok("person", "add", "Zed Never", "--stakeholder", "--influence", "high")
+    await ok("note", "add", "dated", "x", "--interaction", "--date", "2026-09-01")
+    expect((await read("staleStakeholders", { days: 30 })).map((r: any) => r.ref)).toEqual(["@zed", "@dated"])
+  })
+
+  test("stale boundary is staleContactDays or more", async () => {
+    await ok("person", "add", "Exact", "--stakeholder", "--influence", "high")
+    await ok("person", "add", "Almost", "--stakeholder", "--influence", "high")
+    await ok("note", "add", "exact", "x", "--interaction", "--date", "2026-10-14") // 30 days before 2026-11-13
+    await ok("note", "add", "almost", "x", "--interaction", "--date", "2026-10-15") // 29 days
+    expect((await read("staleStakeholders", { days: 30 })).map((r: any) => r.ref)).toEqual(["@exact"])
   })
 
   test("record types and the @ tag", async () => {

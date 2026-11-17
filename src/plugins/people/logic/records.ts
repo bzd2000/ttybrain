@@ -10,6 +10,7 @@ import {
   ViewUnavailableError,
   normalizeCode,
   type PluginContext,
+  type PluginRuntime,
 } from "../../../kernel/api"
 import type { GoalRecord, NoteRecord, PersonRecord } from "./schema"
 
@@ -17,7 +18,7 @@ const str = (v: unknown): string | null => (v === null || v === undefined ? null
 
 export type Store = ReturnType<typeof makeStore>
 
-export function makeStore(ctx: PluginContext) {
+export function makeStore(ctx: PluginRuntime) {
   const db = ctx.data
 
   const personQuery = () =>
