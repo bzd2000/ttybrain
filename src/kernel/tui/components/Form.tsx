@@ -1,5 +1,6 @@
 // <Form>: the overlay every create and edit goes through (spec §9 "Forms").
-// - Tab / Shift+Tab move between fields; Enter moves on, and on the last field submits; Ctrl+S, or Esc then `s`
+// - One meaning per key: Tab / Shift+Tab move between fields; Enter is "new line" (it reaches a longtext field's
+//   textarea, and does nothing in any one-line field: it never saves and never moves); Ctrl+S, or Esc then `s`
 //   (also Alt+S, which is how a fast Esc s arrives), submits from anywhere. Esc not followed by `s` within
 //   ESC_WINDOW_MS cancels.
 // - enum fields cycle with ←→; record fields autocomplete from the kernel's record type search (↑↓ pick, Tab
@@ -15,7 +16,7 @@
 //   plugin's own operation, for the ref it returned (all-or-nothing). A submit that wrote nothing (an edit with no
 //   change of its own) has them saved in an act of their own for its result's ref; without a ref the form stays
 //   open with an error.
-import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
+import { createEffect, createMemo, onCleanup, createSignal, For, onMount, Show } from "solid-js"
 import { runWithContext } from "../../context"
 import { parseDate } from "../../dates"
 import { ValidationError } from "../../errors"
@@ -250,11 +251,17 @@ export function Form(props: {
 
   onMount(() => {
     keys.textFocus(true)
-    keys.hints([
+  })
+  // A focused longtext field says Enter adds a line.
+  createEffect(() => {
+    const longtext = current()?.kind === "longtext"
+    const drop = keys.hints([
       { key: "Tab", label: "next field" },
+      ...(longtext ? [{ key: "Enter", label: "new line" }] : []),
       { key: "Ctrl+S", label: "save" },
       { key: "Esc", label: "cancel" },
     ])
+    onCleanup(drop)
   })
 
   useScreenKeys((key) => {
@@ -279,9 +286,8 @@ export function Form(props: {
       if (key.shift) move(-1)
       else if (!accept()) move(1)
     } else if (key.name === "return") {
-      key.preventDefault()
-      if (index() === fields().length - 1) submit()
-      else move(1)
+      // A longtext field's textarea takes Enter as a new line; anywhere else it does nothing.
+      if (f?.kind !== "longtext") key.preventDefault()
     } else if ((key.name === "up" || key.name === "down") && suggestions().length > 0) {
       key.preventDefault()
       const d = key.name === "up" ? -1 : 1

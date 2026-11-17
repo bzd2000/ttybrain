@@ -159,7 +159,7 @@ describe("actions screen", () => {
     expect((await rows<any>(["due_date"]))[5].due_date).toBe("2026-11-20")
   })
 
-  test("d on a dated action starts empty: +1w moves it to Next week; empty Enter writes nothing", async () => {
+  test("d on a dated action starts empty: +1w moves it to Next week; empty Ctrl+S writes nothing", async () => {
     const t = await open()
     t.input.pressArrow("down") // A-2, due 2026-11-13 (This week)
     t.input.pressArrow("down") // A-3, due 2026-11-15
@@ -168,14 +168,14 @@ describe("actions screen", () => {
     const form = await t.frame()
     expect(form).toContain("now: Sun 15 Nov 2026")
     expect(form).not.toContain("2026-11-15")
-    t.input.pressEnter() // empty: closes without a write
+    t.input.pressKey("s", { ctrl: true }) // empty: closes without a write
     await untilThat(t, (f) => !f.includes("now: Sun"))
     expect((await rows<any>(["due_date"]))[2].due_date).toBe("2026-11-15")
     t.input.pressKey("d")
     await t.frame()
     await type(t, "+1w")
     expect(await t.frame()).toContain("→ 2026-11-20")
-    t.input.pressEnter()
+    t.input.pressKey("s", { ctrl: true })
     const frame = await untilThat(t, (f) => f.includes("Next week · 2"))
     expect(frame).toContain("This week · 1")
     expect((await rows<any>(["due_date"]))[2].due_date).toBe("2026-11-20")

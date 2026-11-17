@@ -1,7 +1,7 @@
 // One form field: `› Label*  <editor>  <preview>`, then its `✗ <message>` and, for a record field, the
 // suggestions. The editor is an <input>, except an enum field, which shows `‹ value ›` and cycles with ←→ (the
 // keys themselves are handled by <Form>), and a longtext field, which is a <textarea> that keeps newlines (an
-// <input> strips them): Ctrl+J adds a line, Enter and Tab still move on (<Form> claims them), its height follows
+// <input> strips them): Enter adds a line (<Form> leaves it to the textarea; in any other field it does nothing), its height follows
 // its lines up to LONGTEXT_MAX_LINES. An `editor` element replaces the default editor.
 import type { TextareaRenderable } from "@opentui/core"
 import { For, onMount, Show, type JSX } from "solid-js"

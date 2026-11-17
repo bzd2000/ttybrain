@@ -1,14 +1,14 @@
-// The quick-capture overlay (`i` on any screen). A multi-line text: Enter saves through `capture` and closes with
-// `captured I-n`; Ctrl+J inserts a newline (Shift+Enter only in a terminal that tells it from Enter: most, and
-// browser terminals, send both as Enter, which saves); Esc cancels.
+// The quick-capture overlay (`i` on any screen). A multi-line text: Enter inserts a newline; Ctrl+S, or Esc then
+// `s` (a fast Esc s arrives as Alt+S, which saves too), saves through `capture` and closes with `captured I-n`;
+// Esc not followed by `s` within ESC_WINDOW_MS cancels. While saving, further saves and Esc are ignored.
 // While the word at the cursor is a tag being typed (`#cr`, `@ma`), up to 5 `tags.suggest` results show: ↑↓ pick,
 // Tab replaces the word with the ref and a space. On a project's or a person's record view, the text starts with
 // its tag and a line says why.
 import type { TextareaRenderable } from "@opentui/core"
 import { createEffect, createSignal, For, onMount, Show } from "solid-js"
-import { act, theme, useKeys, useNav, useQuery, useRuntime, useScreenKeys } from "../../../kernel/tui/api"
+import { act, createEscChord, printable, theme, useKeys, useNav, useQuery, useRuntime, useScreenKeys } from "../../../kernel/tui/api"
 
-export const CAPTURE_TITLE = "Capture to inbox · enter save · esc cancel"
+export const CAPTURE_TITLE = "Capture to inbox · ctrl+s save · esc cancel"
 const SUGGESTIONS = 5
 // A tag being typed right before the cursor: the prefix and at least one character, at a word start.
 const TYPING_TAG = /(?:^|[\s([])([#@][A-Za-z0-9][A-Za-z0-9-]*)$/
@@ -94,25 +94,35 @@ export function CaptureOverlay(props: { close(): void }) {
   onMount(() => {
     keys.textFocus(true)
     keys.hints([
-      { key: "Enter", label: "save" },
+      { key: "Enter", label: "new line" },
       { key: "Tab", label: "accept suggestion" },
-      { key: "Ctrl+J", label: "new line" },
+      { key: "Ctrl+S", label: "save" },
       { key: "Esc", label: "cancel" },
     ])
   })
 
+  const esc = createEscChord(() => props.close())
+
   useScreenKeys((key) => {
     const name = key.name
+    if (esc.pending()) {
+      // The key after Esc: `s` (or Ctrl+S / Alt+S) saves, anything else confirms the cancel.
+      key.preventDefault()
+      esc.clear()
+      if (printable(key) === "s" || (name === "s" && (key.ctrl || key.meta || key.option))) void save()
+      else props.close()
+      return
+    }
     if (name === "escape") {
       key.preventDefault()
-      if (!saving()) props.close()
-    } else if (name === "linefeed" || (name === "return" && (key.shift || key.meta || key.option))) {
+      if (!saving()) esc.arm()
+    } else if (name === "s" && (key.ctrl || key.meta || key.option)) {
+      key.preventDefault()
+      void save()
+    } else if (name === "linefeed" || name === "return") {
       key.preventDefault()
       area?.insertText("\n")
       sync()
-    } else if (name === "return") {
-      key.preventDefault()
-      void save()
     } else if (name === "tab") {
       key.preventDefault()
       accept()

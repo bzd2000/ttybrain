@@ -169,21 +169,21 @@ describe("forms", () => {
     await t.input.typeText("+2d")
     const frame = await t.frame()
     expect(lineWith(frame, "Due")).toContain("→ 2026-11-15")
-    t.input.pressEnter() // Enter on the last field submits
+    t.input.pressKey("s", { ctrl: true })
     const after = await t.frame()
     expect(await things()).toEqual([{ title: "Write spec", due: "2026-11-15" }])
     expect(after).not.toContain("New thing")
     expect(statusLine(after)).toContain("added TH-1")
   })
 
-  test("longtext keeps newlines through an edit and submit; Ctrl+J adds a line", async () => {
+  test("longtext keeps newlines through an edit and submit; Enter adds a line", async () => {
     const t = await open()
     void overlay!.openForm("thing", "notes")
     let frame = await t.frame()
     expect(frame).toContain("line one")
     expect(frame).toContain("line two")
     await t.input.typeText(" end")
-    t.input.pressKey("j", { ctrl: true })
+    t.input.pressEnter()
     await t.input.typeText("three")
     frame = await t.frame()
     expect(frame).toContain("three")
@@ -192,6 +192,34 @@ describe("forms", () => {
     t.input.pressKey("s", { ctrl: true })
     await t.frame()
     expect(submitted).toEqual([{ notes: "line one\nline two end\nthree", title: "T" }])
+  })
+
+  test("Enter in a one-line field does nothing", async () => {
+    const t = await open()
+    overlay!.openForm("thing")
+    await t.frame()
+    await t.input.typeText("Keep")
+    t.input.pressEnter()
+    let frame = await t.frame()
+    expect(frame).toContain("New thing")
+    expect(lineWith(frame, "Title")).toContain("›")
+    expect(lineWith(frame, "Due")).not.toContain("›")
+    t.input.pressTab()
+    t.input.pressEnter() // last field: still nothing (no save)
+    frame = await t.frame()
+    expect(frame).toContain("New thing")
+    expect(lineWith(frame, "Due")).toContain("›")
+    expect(await things()).toEqual([])
+  })
+
+  test("Shift+Tab moves back a field", async () => {
+    const t = await open()
+    overlay!.openForm("thing")
+    await t.frame()
+    t.input.pressTab()
+    expect(lineWith(await t.frame(), "Due")).toContain("›")
+    t.input.pressTab({ shift: true })
+    expect(lineWith(await t.frame(), "Title")).toContain("›")
   })
 
   test("date field shows invalid date", async () => {
@@ -296,7 +324,7 @@ describe("forms", () => {
     t.input.pressArrow("right")
     t.input.pressArrow("right")
     expect(lineWith(await t.frame(), "Size")).toContain("large")
-    t.input.pressEnter()
+    t.input.pressKey("s", { ctrl: true })
     await t.frame()
     expect(submitted).toEqual([{ owner: "@anna", size: "large" }])
   })

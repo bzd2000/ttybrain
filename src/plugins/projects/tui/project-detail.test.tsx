@@ -223,7 +223,7 @@ describe("project detail", () => {
     await t.frame()
     t.input.pressTab()
     await t.input.typeText("reviewer")
-    t.input.pressEnter()
+    t.input.pressKey("s", { ctrl: true })
     frame = await until(t, "reviewer")
     expect(await involvements()).toEqual(["Sponsor", "architect", "reviewer"])
     expect(lineWith(frame, "Bob")).toContain("reviewer")
