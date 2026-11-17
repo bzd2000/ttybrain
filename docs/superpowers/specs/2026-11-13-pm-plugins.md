@@ -93,8 +93,9 @@ pm goal   list|add|edit|done|drop
 
 | Extension point | What |
 |---|---|
-| `screen` | **People** (3): All / Stakeholders / Team list, with a detail panel |
-| `recordTab` on `person` | **Notes**, **Goals** (team members only) |
+| `screen` | **People** (3): All / Stakeholders / Team tabs (`a` `s` `t`), sorts (`o`), filter (`/`: `infl:`, `int:`, text), archived (`A`, Del, `r`), new person (`N`), new note (`n`); a detail panel from 110 columns (sections for team members) |
+| `recordTab` on `person` | **Summary**, **Notes**, **Goals** (team members only, through the `when` option) |
+| `recordForm` | `person`, `note`, `goal` |
 | `overviewPanel` | **Stakeholders to contact** (uses `staleContactDays`) |
 | `tagType` | `@handle` → person |
 | `listColumn` | — (People columns are its own) |
@@ -180,7 +181,7 @@ pm report status <project>
 |---|---|
 | `screen` | **Projects** (2), **Actions** (4) |
 | `recordTab` on `project` | **Summary**, Milestones, Deliverables, Risks & issues, Decisions, Actions, People, **Context** |
-| `recordTab` on `person` | **Projects & roles**, **Actions** (owned by or for that person) |
+| `recordTab` on `person` | **Projects & roles**, **Actions** (the open ones owned by or for that person) |
 | `overviewPanel` | Overdue actions · Due this week · Projects needing attention · Late milestones (+ next 14 days) · High risks & issues |
 | `reportSection` in `project-status` | Health · Milestones · Deliverables · Risks & issues · Decisions · Actions (in that order) |
 | `report` | `project-status` (the section slot that meetings also uses) |

@@ -93,7 +93,7 @@ src/plugins/<id>/tui/       index.tsx = defineTui({ plugin, activate(ui) }) plus
 tests/tui.tsx               renderTui(kernel, { parts, external, width, height, refreshMs, draftMs }) -> { frame(), peek(), spans(), input, settle(), nav, renderer, destroy() }
 ```
 
-A part registers in `activate(ui)` with: `ui.screen` (built-in screens use a fixed number key: `1` Overview, `2` Projects, `4` Actions, `6` Inbox; `3` People and `5` Meetings are for phases 3-4; other screens get `7`, `8`, … in registration order), `recordTab`, `overviewPanel`, `listColumn`, `recordForm`, `fieldEditor`, `globalAction`, `statusBadge`. Registrations may be made only during `activate`. A part that throws is isolated and listed in Help; the rest of the app runs.
+A part registers in `activate(ui)` with: `ui.screen` (built-in screens use a fixed number key: `1` Overview, `2` Projects, `4` Actions, `6` Inbox; `3` People is built in phase 3; `5` Meetings is for phase 4; other screens get `7`, `8`, … in registration order), `recordTab`, `overviewPanel`, `listColumn`, `recordForm`, `fieldEditor`, `globalAction`, `statusBadge`. Registrations may be made only during `activate`. A part that throws is isolated and listed in Help; the rest of the app runs.
 
 Rules:
 - **Imports.** A tui part imports kernel things only from `src/kernel/tui/api.ts`, and logic only from its own plugin's `logic/`, never another plugin's files. Logic and the rest of the kernel never import `solid-js` or `@opentui/*`. Only `src/kernel/tui/` and `src/plugins/*/tui/` may. Keep imports extensionless (the Node build adds `.js`).

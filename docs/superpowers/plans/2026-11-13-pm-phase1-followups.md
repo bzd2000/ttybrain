@@ -182,6 +182,38 @@ Inbox:
 
 Fields: the RecordFields label column is not aligned with the Summary facts (the brief literally says `Budget  12000`) (Task 15).
 
+## Phase 3 (People UI)
+
+Collected from the phase 3 execution ledger (`.superpowers/sdd/2026-11-17-pm-phase3-people-ui/progress.md`). Task numbers refer to `docs/superpowers/plans/2026-11-17-pm-phase3-people-ui.md`.
+
+### Rulings made during phase 3 (and what each costs if wrong)
+
+Plan rulings (P1 to P10, in the plan):
+- **P1.** Groups dropped: the mockup's "Sales key users" row has no data model counterpart. Cost: a later phase adds a group record type.
+- **P2.** The detail panel shows only at 110 columns and wider (`PANEL_MIN_WIDTH`); below that Enter gives the same information. Cost: one constant.
+- **P3.** A team member's panel uses stacked sections (Open actions, 1:1 notes, Goals), not tabs as in the mockup. Cost: a focus model for the panel if real tabs are wanted.
+- **P4.** `a` / `s` / `t` are the tabs, so archived is `A`; `n` adds a note, so a new person is `N`; Del archives after a confirmation and `r` restores. Cost: a key-letter change.
+- **P5.** `staleStakeholders` changed from strictly-more to "`staleContactDays` or more", so the Overview panel and the screen agree. Cost: someone contacted exactly `staleContactDays` ago now appears in the panel.
+- **P6.** "Role" is job title and organisation; project roles have their own tab. Cost: none.
+- **P7.** Person type is one enum in the form (`stakeholder` / `team` / `both` / `other`); the CLI keeps its flags. Cost: none.
+- **P8.** Note kinds show their raw values (`one_on_one`, `interaction`) in the form. Cost: cosmetic.
+- **P9.** `recordTab.when` is a new, additive option in `apiVersion` 1, used by the Goals tab. Cost: one more option to keep stable for external plugins.
+- **P10.** Goals: `x` toggles achieved / open and `d` drops; there is no goal delete because no operation exists. Cost: none.
+
+Controller rulings:
+- Tab counts ignore the filter while the panel title follows it, as on Projects. Cost: one changed count.
+- The out-of-brief RecordView fix (memoise `recordType` and tabs so a live refresh does not remount the active tab) was accepted: a real phase 2 bug that Task 5's tests exposed, with its own test. Cost: a kernel diff outside the plan.
+
+### Deferred minors and concerns
+
+- **Concern (for the final review):** editing a person's handle (or a project's code) from its record view leaves the route on the old ref, so its loads fail (Task 5).
+- Task 1: name sort case-insensitivity is untested (no mixed-case names); no `int:high` / `int:low` filter test.
+- Task 2: emptying a required field on edit (note date, person name) sends `""` and gets the op's error; type `both` giving the `interaction` default, and an unresolved prefilled person, are untested; the `process.tsx` header comment line is too long; the tests were written after the code (no RED evidence).
+- Task 3: Del on an archived person and `r` on a live one give no feedback; `want` is set after an edit even when the person is outside the tab or filter.
+- Task 4: the panel shows the previous person's facts for one frame after the selection changes; `refOf` runs before the slice; the panel title is empty when nothing is selected; the `┌` line filter in the test helpers is blunt.
+- Task 5: `archiveQuestion` lives in the screen module (better in `people-list` or a shared module); a stale `chosen` tab can return when its `when` later turns true; on an archived person's Notes and Goals, `e` / `x` / `d` / Del / Enter still run and the operation rejects them (only `n` is guarded).
+- Task 6: an `(eb: any)` in the Actions count; the row-ref encoding `#CODE\nrole` is parsed inline with `split`; the Del test relies on the implicit first-row selection.
+
 ## Draft recovery (2026-11-17)
 
 Forms, quick capture and the Context editor keep unsaved values as drafts in `PM_HOME/drafts/` (`src/kernel/tui/drafts.ts`). Deferred minors:
