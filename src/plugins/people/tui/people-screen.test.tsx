@@ -27,8 +27,11 @@ const people = () =>
   inCtx(async () => (await (kernel!.runtime("people")!.data as any).selectFrom("person").select(["handle", "name", "archived_at"]).orderBy("id").execute()) as any[])
 
 const lines = (frame: string) => frame.split("\n")
-const lineWith = (frame: string, s: string) => lines(frame).find((l) => l.includes(s)) ?? ""
-const indexOf = (frame: string, s: string) => lines(frame).findIndex((l) => l.includes(s))
+// The detail panel's title (the selected person's name) sits in the panels' top border line: skip that line so a
+// name finds its list row.
+const titleLine = (l: string) => l.includes("┌")
+const lineWith = (frame: string, s: string) => lines(frame).find((l) => l.includes(s) && !titleLine(l)) ?? ""
+const indexOf = (frame: string, s: string) => lines(frame).findIndex((l) => l.includes(s) && !titleLine(l))
 const statusLine = (frame: string) => lines(frame.trimEnd()).at(-1)!
 // The names, in the order the frame shows them (each must be there).
 const order = (frame: string, names: string[]) => {
@@ -52,7 +55,8 @@ async function escape(t: RenderedTui) {
 }
 
 // Stakeholders marie (high/high, a note on 3 Oct), luc (high/low) and nadia (low/low); anna (team and
-// stakeholder, no levels) and bob (team); marie is the sponsor of #CRM.
+// stakeholder, no levels) and bob (team); marie is the sponsor of #CRM. An open follow-up for marie (due 10 Nov),
+// a 1:1 note and an open goal for bob.
 async function seed() {
   await inCtx(async () => {
     const w = write()
@@ -64,6 +68,9 @@ async function seed() {
     await w.addPerson!({ name: "Bob Maes", handle: "bob", is_team: true })
     await w.addNote!({ person: "@marie", kind: "interaction", date: "2026-10-03", text: "Budget talk" })
     await write("projects").addInvolvement!({ project: "CRM", person: "@marie", role: "sponsor" })
+    await write("projects").addAction!({ title: "Send revised budget", due: "2026-11-10", forPerson: "@marie" })
+    await w.addNote!({ person: "@bob", kind: "one_on_one", date: "2026-11-12", text: "Talked about training" })
+    await w.addGoal!({ person: "@bob", title: "PM training 2027" })
   })
 }
 
@@ -77,11 +84,11 @@ const withPersonTab: TuiDef = defineTui({
   },
 })
 
-async function open(opts: { seed?: boolean; personTab?: boolean } = {}): Promise<RenderedTui> {
+async function open(opts: { seed?: boolean; personTab?: boolean; width?: number; height?: number } = {}): Promise<RenderedTui> {
   kernel = await makeTestKernel({ plugins: builtinPlugins })
   if (opts.seed !== false) await seed()
   const parts = opts.personTab ? builtinTuiParts.map((p) => (p === peopleTui ? withPersonTab : p)) : undefined
-  tui = await renderTui(kernel, { width: 120, height: 30, parts })
+  tui = await renderTui(kernel, { width: opts.width ?? 120, height: opts.height ?? 30, parts })
   tui.input.pressKey("3")
   await until(tui, (f) => f.includes("People ·") || f.includes("No people yet"))
   return tui
@@ -297,5 +304,97 @@ describe("People screen", () => {
     t.input.pressKey("g")
     const frame = await until(t, (f) => /3 People\s+4\b/.test(f))
     expect(lines(frame).find((l) => l.includes("3 People") && !l.includes("▾"))).toMatch(/3 People\s+4\b/)
+  })
+})
+
+describe("People screen: the detail panel", () => {
+  test("panel shows a stakeholder's facts, follow-ups and interactions", async () => {
+    const t = await open()
+    t.input.pressKey("j") // marie
+    const frame = await until(t, (f) => f.includes("Open follow-ups"))
+    expect(lines(frame).find(titleLine)).toContain("Marie Dubois")
+    expect(frame).toContain("CFO, Acme")
+    expect(frame).toContain("CRM sponsor")
+    expect(frame).toContain("high · interest high")
+    expect(frame).toContain("Open follow-ups")
+    expect(lineWith(frame, "Send revised budget")).toContain("A-1")
+    expect(lineWith(frame, "Send revised budget")).toContain("-3d")
+    expect(frame).toContain("Interactions")
+    expect(lineWith(frame, "Budget talk")).toContain("3 Oct")
+    expect(frame).not.toContain("Goals")
+    expect(indexOf(frame, "Open follow-ups")).toBeLessThan(indexOf(frame, "Interactions"))
+    const spans = await t.spans()
+    const row = spans.lines.find((l) => l.spans.map((s) => s.text).join("").includes("Send revised budget"))!
+    const due = row.spans.find((s) => s.text.includes("-3d"))!
+    expect(rgbToHex(due.fg).toLowerCase()).toBe(theme.red)
+    const head = spans.lines.flatMap((l) => l.spans).find((s) => s.text.includes("Open follow-ups"))!
+    expect(rgbToHex(head.fg).toLowerCase()).toBe(theme.accent)
+  })
+
+  test("panel shows a team member's actions, 1:1 notes and goals", async () => {
+    const t = await open()
+    await inCtx(() => write("projects").addAction!({ title: "Book trainer", owner: "@bob", due: "2026-11-20" }))
+    for (let i = 0; i < 4; i++) t.input.pressKey("j") // luc → marie → nadia → anna → bob
+    const frame = await until(t, (f) => f.includes("1:1 notes") && f.includes("Book trainer"))
+    expect(lines(frame).find(titleLine)).toContain("Bob Maes")
+    expect(frame).toContain("Open actions")
+    expect(lineWith(frame, "Book trainer")).toContain("A-2")
+    expect(lineWith(frame, "Book trainer")).toContain("20 Nov")
+    expect(frame).not.toContain("Send revised budget") // marie's follow-up, owned by me
+    expect(frame).toContain("1:1 notes")
+    expect(lineWith(frame, "Talked about training")).toContain("12 Nov")
+    expect(frame).toContain("Goals")
+    expect(frame).toContain("PM training 2027")
+    expect(frame).not.toContain("Open follow-ups")
+    expect(frame).not.toContain("Interactions")
+    expect(frame).not.toContain("interest") // no Influence fact for a team member
+    expect(indexOf(frame, "Open actions")).toBeLessThan(indexOf(frame, "1:1 notes"))
+    expect(indexOf(frame, "1:1 notes")).toBeLessThan(indexOf(frame, "Goals"))
+  })
+
+  test("panel hidden below 110 columns", async () => {
+    const long = "Maximiliaan Vandenbroucke-De Smet-Claess"
+    expect(long.length).toBe(40)
+    let t = await open({ width: 80, height: 24 })
+    await inCtx(() => write().addPerson!({ name: long, handle: "max" }))
+    let frame = await until(t, (f) => f.includes("Other · 1"))
+    expect(frame).toContain("Stakeholders · 4")
+    expect(frame).not.toContain("Open follow-ups")
+    expect(frame).not.toContain(long)
+    expect(lineWith(frame, "Maximiliaan")).toContain("…")
+    t.destroy()
+    tui = undefined
+    await kernel!.cleanup()
+    kernel = undefined
+    t = await open({ width: 110, height: 30 })
+    frame = await until(t, (f) => f.includes("Influence"))
+    expect(lines(frame).find(titleLine)).toContain("Luc Peeters")
+    expect(frame).toContain("high · interest low")
+  })
+
+  test("panel follows the selection", async () => {
+    const t = await open()
+    let frame = await until(t, (f) => f.includes("high · interest low"))
+    expect(lines(frame).find(titleLine)).toContain("Luc Peeters")
+    t.input.pressArrow("down")
+    frame = await until(t, (f) => f.includes("high · interest high"))
+    expect(lines(frame).find(titleLine)).toContain("Marie Dubois")
+    expect(frame).toContain("CRM sponsor")
+    expect(frame).not.toContain("high · interest low")
+    t.input.pressArrow("down")
+    t.input.pressArrow("down") // anna: a stakeholder and a team member
+    frame = await until(t, (f) => (lines(f).find(titleLine) ?? "").includes("Anna Smit") && f.includes("Goals"))
+    expect(frame).toContain("— · interest —")
+    expect(indexOf(frame, "Interactions")).toBeLessThan(indexOf(frame, "Goals"))
+  })
+
+  test("nothing selected shows a prompt", async () => {
+    const t = await open()
+    t.input.pressKey("/")
+    await t.input.typeText("zzz")
+    t.input.pressEnter()
+    const frame = await until(t, (f) => f.includes("Select a person."))
+    expect(frame).toContain("No people match the filter.")
+    expect(frame).toContain("Select a person.")
   })
 })

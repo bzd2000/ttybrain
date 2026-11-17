@@ -197,7 +197,7 @@ export function makeStore(ctx: PluginRuntime) {
     return new Map(rows.map((r) => [Number(r.id), String(r.code)]))
   }
 
-  return { projectId, projectsOfPeople, projectCodes, personQuery, toPerson, noteQuery, toNote, goalQuery, toGoal, handles, handleId, personId, personById, person, activePerson, note, goal, noteId, goalId }
+  return { projectId, projectsOfPeople, projectCodes, unlessUnavailable, personQuery, toPerson, noteQuery, toNote, goalQuery, toGoal, handles, handleId, personId, personById, person, activePerson, note, goal, noteId, goalId }
 }
 
 export function registerRecordTypes(ctx: PluginContext, store: Store): void {

@@ -5,6 +5,8 @@
 //   stakeholder), then the columns other plugins registered for the list "people".
 // - Keys: Enter opens the person, n note, N new person, e edit, o next sort, / filter (Enter applies, Esc clears),
 //   a / s / t tabs (and ←→), A archived, Del archive (after a confirmation), r restore.
+// - At PANEL_MIN_WIDTH columns and wider, the selected person's <PersonDetail> sits in a panel right of the list.
+import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import {
   act,
@@ -27,6 +29,7 @@ import {
   type TableRow,
 } from "../../../kernel/tui/api"
 import { makeStore } from "../logic/records"
+import { PANEL_MIN_WIDTH, PersonDetail } from "./person-detail"
 import { lastText, lastTone, matchesFilter, peopleGroups, roleText, SORT_LABELS, SORTS, tabCounts, type PeopleTab, type PersonRow, type SortMode } from "./people-list"
 
 export const EMPTY = "No people yet. Press N to add one."
@@ -81,6 +84,8 @@ export function PeopleScreen() {
   const keys = useKeys()
   const today = useToday()
   const days = rt.config.staleContactDays
+  const dims = useTerminalDimensions()
+  const wide = () => dims().width >= PANEL_MIN_WIDTH
 
   // One query: every person (archived too) with their last contact, then their project codes.
   const q = useQuery(async (): Promise<PersonRow[]> => {
@@ -200,35 +205,48 @@ export function PeopleScreen() {
         onChange={(id) => setTab(id as PeopleTab)}
         focused={keys.active()}
       />
-      <Panel title="People" count={q.data() === undefined ? undefined : shownCount()} focused={keys.active()} footer={footer()} grow>
-        <Show when={editing()}>
-          <box flexDirection="row" height={1} flexShrink={0} gap={1}>
-            <text fg={theme.accent}>/</text>
-            <input
-              flexGrow={1}
-              value={draft()}
-              focused={keys.active()}
-              backgroundColor={theme.selectedBg}
-              focusedBackgroundColor={theme.selectedBg}
-              textColor={theme.text}
-              focusedTextColor={theme.text}
-              onInput={(v: string) => setDraft(v)}
-            />
+      <box flexDirection="row" flexGrow={1} minHeight={0} gap={1}>
+        <box flexDirection="column" flexGrow={1.7} flexBasis={0} minWidth={0} minHeight={0}>
+          <Panel title="People" count={q.data() === undefined ? undefined : shownCount()} focused={keys.active()} footer={footer()} grow>
+            <Show when={editing()}>
+              <box flexDirection="row" height={1} flexShrink={0} gap={1}>
+                <text fg={theme.accent}>/</text>
+                <input
+                  flexGrow={1}
+                  value={draft()}
+                  focused={keys.active()}
+                  backgroundColor={theme.selectedBg}
+                  focusedBackgroundColor={theme.selectedBg}
+                  textColor={theme.text}
+                  focusedTextColor={theme.text}
+                  onInput={(v: string) => setDraft(v)}
+                />
+              </box>
+            </Show>
+            <Show when={q.data() !== undefined}>
+              <Table
+                columns={COLUMNS}
+                groups={tableGroups()}
+                selectedRef={loaded(want()) ? want() : undefined}
+                onSelect={select}
+                onOpen={(ref) => void nav.open(ref)}
+                focused={keys.active()}
+                empty={filter() === "" ? EMPTY : NO_MATCH}
+                listId="people"
+              />
+            </Show>
+          </Panel>
+        </box>
+        <Show when={wide()}>
+          <box flexDirection="column" flexGrow={1} flexBasis={0} minWidth={0} minHeight={0}>
+            <Panel title={selected()?.name ?? ""} grow>
+              <Show when={selected()?.ref} fallback={<text fg={theme.muted}>Select a person.</text>}>
+                {(ref: () => string) => <PersonDetail recordRef={ref()} />}
+              </Show>
+            </Panel>
           </box>
         </Show>
-        <Show when={q.data() !== undefined}>
-          <Table
-            columns={COLUMNS}
-            groups={tableGroups()}
-            selectedRef={loaded(want()) ? want() : undefined}
-            onSelect={select}
-            onOpen={(ref) => void nav.open(ref)}
-            focused={keys.active()}
-            empty={filter() === "" ? EMPTY : NO_MATCH}
-            listId="people"
-          />
-        </Show>
-      </Panel>
+      </box>
     </box>
   )
 }

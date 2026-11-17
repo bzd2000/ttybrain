@@ -15,7 +15,7 @@ export const SORT_LABELS: Record<SortMode, string> = {
   name: "name",
 }
 
-export const roleText = (p: PersonRow): string => [p.job_title, p.organisation].filter(Boolean).join(", ")
+export const roleText = (p: Pick<PersonRecord, "job_title" | "organisation">): string => [p.job_title, p.organisation].filter(Boolean).join(", ")
 
 export function lastText(p: PersonRow, today: string): string {
   return p.last_contact === null ? "never" : `${daysBetween(p.last_contact, today)}d`
