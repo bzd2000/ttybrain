@@ -104,7 +104,8 @@ export function useQuery<T>(load: () => Promise<T>, opts: { key?: () => unknown 
     setLoading(true)
     const current = () => alive && mine === seq
     session
-      .track(runWithContext(session.kernel.context(), load))
+      // async: a load that throws before its first await fails this query, not the component that called it
+      .track(runWithContext(session.kernel.context(), async () => load()))
       .then(
         (value) => {
           if (!current()) return

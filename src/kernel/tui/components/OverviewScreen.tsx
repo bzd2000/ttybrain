@@ -1,8 +1,8 @@
 // The Overview screen (slot 1): the plugins' panels in two columns balanced by height (overviewLayout.ts), Tab
 // moving through them in priority order. The screen loads every panel through useQuery, so it knows each one's
 // row count and can size them to fit the screen: each panel shows its count in the title, as many rows as fit
-// (at most MAX_ROWS) plus `+N more`, or its `empty` text. ↑↓ move within the focused panel and Enter opens the
-// selected row's ref.
+// (at most MAX_ROWS) plus `+N more`, or its `empty` text, or `⚠ <error>` when its first load failed (spec §9).
+// ↑↓ move within the focused panel and Enter opens the selected row's ref.
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { useQuery, type Query } from "../data"
@@ -23,6 +23,7 @@ const MAX_COLUMN = 16
 const FRAME_LINES = 2
 
 type PanelEntry = Registered<OverviewPanelDef>
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 export function OverviewScreen() {
   const app = useApp()
@@ -97,6 +98,9 @@ function OverviewPanel(props: { def: PanelEntry; query: Query<OverviewRow[]>; pl
   return (
     <box height={props.place.height} flexShrink={0} flexDirection="column" overflow="hidden">
       <Panel title={props.def.title} count={props.query.data()?.length} focused={props.focused} footer={props.def.footer} grow>
+        <Show when={props.query.error() !== undefined && props.query.data() === undefined}>
+          <text fg={theme.red} flexShrink={0}>{`⚠ ${errorText(props.query.error())}`}</text>
+        </Show>
         <Show when={props.query.data() !== undefined}>
           <Table columns={columns()} rows={shown()} header={false} empty={props.def.empty} focused={props.focused} onOpen={(ref) => void nav.open(ref)} />
           <Show when={more() > 0}>

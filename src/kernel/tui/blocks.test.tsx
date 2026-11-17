@@ -438,6 +438,31 @@ describe("TUI blocks", () => {
     expect(frame).not.toContain("Nothing in P1.")
   })
 
+  for (const how of ["throws", "rejects"] as const) {
+    test(`a panel whose load ${how} shows its error in place, and the other panels still show`, async () => {
+      const brokenPart: TuiDef = defineTui({
+        plugin: "thing",
+        activate: (ui) => {
+          ui.overviewPanel({ id: "ok", title: "Fine", priority: 10, empty: "Nothing.", load: async () => [{ ref: "T-1", cells: [{ text: "fine row" }] }] })
+          ui.overviewPanel({
+            id: "bad",
+            title: "Broken",
+            priority: 20,
+            empty: "Nothing.",
+            load: how === "throws" ? () => { throw new Error("kaboom") } : async () => { throw new Error("kaboom") },
+          })
+        },
+      })
+      kernel = await makeTestKernel({ plugins: [thingPlugin] })
+      tui = await renderTui(kernel, { parts: [brokenPart] })
+      const frame = await tui.frame()
+      expect(frame).toContain("fine row")
+      expect(frame).toContain("Broken")
+      expect(lineWith(frame, "kaboom")).toContain("⚠ kaboom")
+      expect(frame).not.toContain("Overview: kaboom")
+    })
+  }
+
   test("Enter on a panel row opens the record view", async () => {
     kernel = await makeTestKernel({ plugins: [thingPlugin] })
     tui = await renderTui(kernel, { parts: [thingPart] })
