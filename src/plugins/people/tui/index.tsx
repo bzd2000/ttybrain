@@ -1,11 +1,23 @@
-// The people plugin's tui part: the Overview's "Stakeholders to contact" panel and the person, note and goal forms.
+// The people plugin's tui part: the People screen (slot 3), the Overview's "Stakeholders to contact" panel and the person, note and goal forms.
 import { daysBetween, defineTui, type Cell } from "../../../kernel/tui/api"
 import type { StaleRow } from "../logic/ops"
 import { GoalForm, NoteForm, PersonForm } from "./forms"
+import { PeopleScreen } from "./people-screen"
 
 export const peopleTui = defineTui({
   plugin: "people",
   activate(ui) {
+    ui.screen({
+      id: "people",
+      title: "People",
+      slot: 3,
+      component: PeopleScreen,
+      // The people who are not archived.
+      count: async () => {
+        const row = await ui.data.selectFrom("person").select((eb) => eb.fn.countAll().as("n")).where("archived_at", "is", null).executeTakeFirstOrThrow()
+        return Number(row.n)
+      },
+    })
     ui.recordForm("person", { id: "person", label: "Person", component: PersonForm })
     ui.recordForm("note", { id: "note", label: "Note", component: NoteForm })
     ui.recordForm("goal", { id: "goal", label: "Goal", component: GoalForm })
