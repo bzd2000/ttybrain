@@ -6,7 +6,8 @@ const str = (v: unknown): string | null => (v === null || v === undefined ? null
 
 export type Store = ReturnType<typeof makeStore>
 
-export function makeStore(ctx: PluginContext) {
+// Only `data` is used, so a TUI component can build one from its runtime.
+export function makeStore(ctx: Pick<PluginContext, "data">) {
   const db = ctx.data
 
   const toItem = (r: any): ItemRecord => ({

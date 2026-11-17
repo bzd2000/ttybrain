@@ -24,7 +24,8 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
       summary,
       args: [{ name: "item", required: true }],
       run: async ({ args }) => {
-        const i: ItemRecord = await write()[verb]!({ ref: args.item })
+        // A dismissal from the CLI is attributed to it, as `done` is by default.
+        const i: ItemRecord = await write()[verb]!(verb === "dismiss" ? { ref: args.item, by: "cli" } : { ref: args.item })
         return { json: i, text: `${i.ref} ${i.status}` }
       },
     })

@@ -1,6 +1,6 @@
 // Milestones, deliverables, risks, decisions and actions as records: their queries and mappers, lookups by display
 // ref, the soft references they carry (owners, meetings), and the five record types (MS-, D-, R-, DE-, A-).
-import { formatRef, NotFoundError, parseRef, Type, ValidationError, type PluginContext, type Static } from "../../../kernel/api"
+import { formatRef, NotFoundError, parseRef, Type, ValidationError, type PluginContext, type PluginRuntime, type Static } from "../../../kernel/api"
 import type { Store } from "./records"
 
 const Text = Type.String()
@@ -95,7 +95,7 @@ const int = (v: unknown): number | null => (v === null || v === undefined ? null
 
 export type Items = ReturnType<typeof makeItems>
 
-export function makeItems(ctx: PluginContext, store: Store) {
+export function makeItems(ctx: PluginRuntime, store: Store) {
   const db = ctx.data
 
   const milestoneQuery = () =>

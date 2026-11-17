@@ -13,12 +13,13 @@ import type { TableAccess } from "./db/scope"
 import { openRaw } from "./db/sqlite"
 import { IsolationError, PmError } from "./errors"
 import { EventBus } from "./events"
+import { FieldRegistry } from "./fields"
 import { GuideRegistry } from "./guide"
 import { MigrationRunner, ownerOf, ownTablesOf, type Migration } from "./migrations"
 import { OperationRegistry } from "./operations"
 import { resolvePaths, type Paths } from "./paths"
 import { assertPluginId } from "./plugin-id"
-import type { PluginContext, PluginDef } from "./plugin"
+import type { PluginContext, PluginDef, PluginRuntime } from "./plugin"
 import { ProvenanceStore } from "./provenance"
 import { RecordTypeRegistry } from "./records"
 import { ReportRegistry } from "./reports"
@@ -47,10 +48,13 @@ export type Kernel = {
   tags: TagRegistry
   reports: ReportRegistry
   guide: GuideRegistry
+  fields: FieldRegistry
   changeSets: ChangeSetService
   commands: CommandRegistry
   events: EventBus
   context(origin?: Origin): OpContext
+  // A loaded plugin's runtime (the same `data`, operations, records, tags as its context); undefined unless `ok`.
+  runtime(pluginId: string): PluginRuntime | undefined
   shutdown(): Promise<void>
 }
 
@@ -67,7 +71,12 @@ type Slot = {
   error?: string
   migrations: Migration[]
   off: Array<() => void> // event subscriptions
+  ctx?: PluginContext
+  runtime?: PluginRuntime
 }
+
+// The context keys a runtime carries: everything but the registrations (PluginRuntime).
+const RUNTIME_KEYS: Array<keyof PluginRuntime> = ["id", "data", "config", "clock", "use", "self", "records", "tags", "provenance"]
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -90,9 +99,10 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const records = new RecordTypeRegistry()
   const provenance = new ProvenanceStore(db, records)
   const ops = new OperationRegistry({ db, events, records, provenance, validateOutputs: opts.env.PM_TEST === "1" })
-  const tags = new TagRegistry()
+  const tags = new TagRegistry(records)
   const reports = new ReportRegistry()
   const guide = new GuideRegistry()
+  const fields = new FieldRegistry()
   const commands = new CommandRegistry()
   const views = new ViewRegistry()
   const changeSets = new ChangeSetService({ db, ops, records, provenance })
@@ -162,6 +172,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     tags.remove(id)
     reports.remove(id)
     guide.remove(id)
+    fields.remove(id)
     views.remove(id)
     commands.remove(id)
     for (const t of byId.values()) {
@@ -223,7 +234,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         live()
         tags.register(def, id)
       },
-      tags: { resolve: (text) => tags.resolve(text) },
+      tags: { resolve: (text) => tags.resolve(text), suggest: (partial, limit) => tags.suggest(partial, limit) },
       command: (def) => {
         live()
         commands.register(id, def)
@@ -240,14 +251,26 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         live()
         guide.section(id, def)
       },
-      provenance: { createdFrom: (type, ref) => provenance.createdFrom(type, ref) },
+      field: (recordType, def) => {
+        live()
+        fields.register(id, recordType, def)
+      },
+      provenance: {
+        createdFrom: (type, ref) => provenance.createdFrom(type, ref),
+        originOf: (type, id) => provenance.originOf(type, id),
+        originsOf: (type, ids) => provenance.originsOf(type, ids),
+      },
       on: (event, fn) => {
         live()
         const off = events.on(event, fn)
         s.off.push(off)
         return off
       },
-      emit: (event, payload) => events.emit(event, payload),
+      // Inside a write, listeners hear the event only once it commits (and never if it rolls back).
+      emit: (event, payload) => {
+        if (db.inWrite()) db.afterCommit(() => events.emit(event, payload))
+        else events.emit(event, payload)
+      },
     }
   }
 
@@ -260,7 +283,9 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
       continue
     }
     try {
-      await s.def.activate(contextFor(s))
+      s.ctx = contextFor(s)
+      await s.def.activate(s.ctx)
+      fields.check(s.def.id, ops)
       await runner.run(s.def.id, s.migrations, false)
       s.status = "ok"
     } catch (e) {
@@ -316,10 +341,20 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     tags,
     reports,
     guide,
+    fields,
     changeSets,
     commands,
     events,
     context: (origin) => ({ actor: "me", today: clock.today(), now: clock.now(), ...(origin ? { origin } : {}) }),
+    runtime: (pluginId) => {
+      const s = byId.get(pluginId)
+      if (s?.status !== "ok" || !s.ctx) return undefined
+      if (!s.runtime) {
+        const ctx = s.ctx
+        s.runtime = Object.fromEntries(RUNTIME_KEYS.map((key) => [key, ctx[key]])) as PluginRuntime
+      }
+      return s.runtime
+    },
     shutdown: () => db.close(),
   }
 }

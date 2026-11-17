@@ -4,6 +4,8 @@ A personal project-portfolio tool: a CLI (`pm <thing> <verb>`, also usable by an
 
 ## CLI
 
+`pm` with no arguments (in a terminal) opens the terminal UI; `pm <thing> <verb>` runs the CLI.
+
 ```bash
 bun install
 bun run pm help                                   # all commands
@@ -27,9 +29,9 @@ Every command supports `--json`. Exit codes: `0` OK, `1` validation, `2` not fou
 ```bash
 bun test                      # all tests
 bun typecheck                 # type-check
-bash scripts/smoke-node.sh    # build for Node 26 and run the self-checks and a CLI walk-through (ends with "smoke ok")
-bun start                     # the terminal UI preview (needs a TTY)
-npm run start:node            # the same on Node: builds dist-node/, then runs node --experimental-ffi dist-node/index.js
+bash scripts/smoke-node.sh    # build for Node 26 and run the self-checks and a CLI walk-through (includes "tui ok", ends with "smoke ok")
+bun start                     # `pm` with no arguments: the terminal UI (needs a TTY)
+npm run start:node            # the same on Node: builds dist-node/, then runs node --experimental-ffi dist-node/bin/pm.js
 ```
 
 The Node FFI warning on `start:node` is expected. The CLI itself needs no flag.

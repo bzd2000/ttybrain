@@ -29,6 +29,9 @@ const KERNEL_TABLES = [
     result_ref TEXT, PRIMARY KEY (change_set_id, position))`,
 ]
 
+// The tables and index KERNEL_TABLES creates.
+const KERNEL_OBJECTS = KERNEL_TABLES.map((ddl) => /IF NOT EXISTS (\w+)/.exec(ddl)![1]!)
+
 type SchemaObject = { type: string; name: string; tbl_name: string; sql: string | null }
 
 const quote = (name: string) => `"${name.replace(/"/g, '""')}"`
@@ -83,7 +86,18 @@ export class MigrationRunner {
     private readonly clock: Clock = systemClock,
   ) {}
 
+  // Read-only when every kernel object already exists, so a boot does not wait for (or take) the write lock.
   async ensureKernelTables(): Promise<void> {
+    if (!this.kernelTablesExist()) await this.createKernelTables()
+    this.bootCount()
+  }
+
+  private kernelTablesExist(): boolean {
+    const names = new Set(this.kdb.raw.prepare("SELECT name FROM sqlite_schema").all([]).map((r) => String(r.name)))
+    return KERNEL_OBJECTS.every((n) => names.has(n))
+  }
+
+  private async createKernelTables(): Promise<void> {
     try {
       await this.kdb.withWriteLock(() =>
         this.kdb.transaction(async () => {
@@ -93,7 +107,6 @@ export class MigrationRunner {
     } finally {
       this.kdb.invalidateSchema()
     }
-    this.bootCount()
   }
 
   pending(pluginId: string, migrations: Migration[]): Migration[] {

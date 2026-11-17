@@ -153,6 +153,6 @@ export class OperationRegistry {
       const hookCtx = { actor: ctx.actor, today: ctx.today, now: ctx.now }
       db.afterCommit(() => void runWithContext(hookCtx, async () => events.emit("record.changed", payload)))
       return out
-    })
+    }, { op: true })
   }
 }

@@ -19,12 +19,12 @@ async function pm(...argv: string[]) {
 }
 
 describe("bin/pm.ts", () => {
-  test("no arguments prints the help and the phase-2 note", async () => {
+  test("no arguments with a non-TTY stdout prints the help", async () => {
     const r = await pm()
     expect(r.code).toBe(0)
     expect(r.err).toBe("")
     expect(r.out).toContain("  plugin list")
-    expect(r.out).toEndWith('\nThe terminal UI arrives in phase 2; run "bun start" for the preview.\n')
+    expect(r.out).not.toContain("phase 2")
   })
 
   test("runs a command and exits with its code", async () => {

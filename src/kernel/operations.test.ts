@@ -171,6 +171,21 @@ describe("OperationRegistry: writes", () => {
     ])
   })
 
+  test("originOf / originsOf read a record's origin, many in one query", async () => {
+    const api = expose()
+    await inCtx(() => api.write.add!({ title: "none" }))
+    await inCtx(() => api.write.add!({ title: "from inbox" }), { type: "inbox", ref: "I-3" })
+    await inCtx(() => api.write.add!({ title: "from meeting" }), { type: "meeting", ref: "M-2" })
+    expect(await provenance.originOf("fixture_item", 1)).toBeUndefined()
+    expect(await provenance.originOf("fixture_item", 2)).toEqual({ type: "inbox", ref: "I-3" })
+    expect(await provenance.originOf("other_type", 2)).toBeUndefined()
+    expect([...(await provenance.originsOf("fixture_item", [1, 2, 3, 99]))]).toEqual([
+      [2, { type: "inbox", ref: "I-3" }],
+      [3, { type: "meeting", ref: "M-2" }],
+    ])
+    expect((await provenance.originsOf("fixture_item", [])).size).toBe(0)
+  })
+
   test("with origin inbox I-3, provenance records the new ref", async () => {
     const api = expose()
     await inCtx(() => api.write.add!({ title: "no origin" }))

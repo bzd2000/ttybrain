@@ -121,13 +121,13 @@ describe("allowed", () => {
     ])
   })
 
-  test("insert and update (inside a write)", async () => {
+  test("insert and update (inside a write operation)", async () => {
     await kdb.write(async () => {
       const ins = await contracts.insertInto("contract").values({ project_id: 2, title: "Hosting", value: 50 }).executeTakeFirst()
       expect(ins.insertId).toBe(4n)
       const upd = await contracts.updateTable("contract").set({ value: 130 }).where("id", "=", 1).executeTakeFirst()
       expect(upd.numUpdatedRows).toBe(1n)
-    })
+    }, { op: true })
     expect(kdb.raw.prepare("SELECT title, value FROM contracts_contract WHERE id IN (1, 4) ORDER BY id").all([])).toEqual([
       { title: "SaaS licence", value: 130 },
       { title: "Hosting", value: 50 },
@@ -268,6 +268,7 @@ describe("nested builder queries", () => {
         .columns(["project_id", "title", "value"])
         .expression(contracts.selectFrom("party").select([(eb) => eb.val(9).as("project_id"), "name", (eb) => eb.val(1).as("value")]))
         .execute(),
+      { op: true },
     )
     expect(kdb.raw.prepare("SELECT title FROM contracts_contract WHERE project_id = 9 ORDER BY id").all([])).toEqual([
       { title: "Vendor B" },
@@ -381,7 +382,7 @@ describe("pragmas never reach prepare", () => {
   })
 
   test("legitimate DML and migration DDL still pass", async () => {
-    await kdb.write(() => sql`UPDATE contracts_contract SET value = value + 1 WHERE id = 1`.execute(contracts))
+    await kdb.write(() => sql`UPDATE contracts_contract SET value = value + 1 WHERE id = 1`.execute(contracts), { op: true })
     expect(await contracts.selectFrom("contract").select("value").where("id", "=", 1).executeTakeFirst()).toEqual({ value: 121 })
     migrating = true
     await sql`/* own */ CREATE TABLE contracts_extra (id INTEGER PRIMARY KEY)`.execute(contracts)
@@ -413,9 +414,25 @@ describe("data changes need a write (R15)", () => {
     expect(e.message).not.toBe(OUTSIDE)
   })
 
-  test("the same insert inside a write runs", async () => {
-    await kdb.write(() => contracts.insertInto("contract").values({ title: "x" }).execute())
+  test("the same insert inside a write operation runs", async () => {
+    await kdb.write(() => contracts.insertInto("contract").values({ title: "x" }).execute(), { op: true })
     expect(count()).toBe(4)
+  })
+
+  test("a bare kernel write that is not an operation (the TUI's act, a change set) does not allow it", async () => {
+    await expect(kdb.write(() => contracts.insertInto("contract").values({ title: "x" }).execute())).rejects.toThrow(OUTSIDE)
+    await expect(kdb.write(() => sql`DELETE FROM contracts_contract`.execute(contracts))).rejects.toThrow(OUTSIDE)
+    expect(count()).toBe(3)
+  })
+
+  test("inside a bare write, an operation's nested scope allows it, and the bare scope still does not afterwards", async () => {
+    await kdb.write(async () => {
+      await kdb.write(() => contracts.insertInto("contract").values({ title: "op" }).execute(), { op: true })
+      // a kernel transaction nested inside the operation inherits the operation's scope
+      await kdb.write(() => kdb.transaction(() => contracts.insertInto("contract").values({ title: "op-tx" }).execute()), { op: true })
+      await expect(contracts.insertInto("contract").values({ title: "bare" }).execute()).rejects.toThrow(OUTSIDE)
+    })
+    expect(count()).toBe(5)
   })
 
   test("a kernel transaction that is not a write (a view build) does not allow it either", async () => {
