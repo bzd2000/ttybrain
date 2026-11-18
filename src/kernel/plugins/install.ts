@@ -192,7 +192,13 @@ export async function removePlugin(
   id: string,
   opts: { purgeData: boolean; env?: Env } & InstallerOptions,
 ): Promise<void> {
-  const p = kernel.plugins.find((x) => x.id === id)
+  const matches = kernel.plugins.filter((x) => x.id === id)
+  // Two entries can share an id (a broken manifest falls back to its directory name): never guess which one.
+  if (matches.length > 1) {
+    const dirs = matches.map((x) => x.dir ?? x.source).join(", ")
+    throw new ValidationError(`plugin id "${id}" is used by more than one plugin (${dirs}); remove the folder or package by hand`)
+  }
+  const p = matches[0]
   if (!p) throw new NotFoundError(`no plugin "${id}"`, { suggestions: suggest(id, kernel.plugins.map((x) => x.id)), hint: 'run "pm plugin list"' })
   if (p.source === "built-in") throw new ValidationError(`"${id}" is built in; use "pm plugin disable ${id}"`)
   const paths = kernel.paths

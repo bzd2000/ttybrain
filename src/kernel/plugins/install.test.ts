@@ -2,7 +2,7 @@
 // one-time trust warning, and removing them (with or without their data). Tarballs are packed in the test from
 // a tiny built plugin with no dependencies, so everything works offline.
 import { afterEach, expect, test } from "bun:test"
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { spawnSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -239,6 +239,28 @@ test("remove refuses a folder that resolves outside the plugins folder", async (
   expect(await runCli(["plugin", "remove", "demo", "--yes"], k, a.io)).toBe(1)
   expect(a.err.join("")).toContain(`"demo" is at ${elsewhere}, outside ${plugins}; remove it by hand`)
   expect(existsSync(join(elsewhere, "package.json"))).toBe(true)
+})
+
+test("remove refuses an id that more than one plugin uses", async () => {
+  const plugins = tmp()
+  // plugins/a is a working plugin with pm.id "keep"; plugins/keep has a broken manifest, so its id falls back to "keep".
+  const working = join(plugins, "a")
+  cpSync(await builtPlugin("keep"), working, { recursive: true })
+  const broken = join(plugins, "keep")
+  write(broken, "package.json", "{ not json")
+  const k = await boot(plugins)
+  expect(listed(k).map((p) => [p.id, p.status])).toEqual([
+    ["keep", "ok"],
+    ["keep", "failed"],
+  ])
+  const before = objects(k, "keep")
+  const r = io()
+  expect(await runCli(["plugin", "remove", "keep", "--yes", "--purge-data"], k, r.io)).toBe(1)
+  expect(r.err.join("")).toContain(`plugin id "keep" is used by more than one plugin (${working}, ${broken}); remove the folder or package by hand`)
+  expect(existsSync(join(working, "package.json"))).toBe(true)
+  expect(existsSync(join(broken, "package.json"))).toBe(true)
+  expect(objects(k, "keep")).toEqual(before)
+  expect(migrationRows(k, "keep")).toEqual(["001"])
 })
 
 test("remove --purge-data drops its tables and kernel rows", async () => {
