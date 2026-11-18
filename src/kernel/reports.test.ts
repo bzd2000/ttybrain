@@ -193,6 +193,223 @@ since 2026-10-14
   })
 })
 
+describe("embeddable reports", () => {
+  const section = (title: string, extra: Partial<ReportSectionResult> = {}): ReportSectionResult => ({
+    title,
+    columns: ["ref", "title"],
+    rows: [{ ref: "MS-1", title: "Outline approved" }],
+    empty: "none",
+    ...extra,
+  })
+
+  test("a section may return several sections, in place", async () => {
+    const reports = new ReportRegistry()
+    reports.report(def)
+    reports.section("status", "projects", { id: "first", order: 10, run: async () => actions })
+    reports.section("status", "meetings", { id: "many", order: 20, run: async () => [section("A"), { title: 1 } as any, section("B")] })
+    reports.section("status", "meetings", { id: "none", order: 25, run: async () => [] })
+    reports.section("status", "projects", { id: "last", order: 30, run: async () => risks })
+    const r = await reports.run("status", { project: "CRM" })
+    expect(r.sections).toEqual([actions, section("A"), { title: "many", columns: [], rows: [], empty: "", note: "error: malformed section result" }, section("B"), risks])
+  })
+
+  test("md groups sections under ## group with ### titles", () => {
+    const r = {
+      title: "Board pack",
+      sections: [
+        section("Attendees", { columns: ["who"], rows: [{ who: "@peter" }] }),
+        section("Milestones", { group: "CRM CRM rollout · since 2026-10-14" }),
+        section("Risks", { group: "CRM CRM rollout · since 2026-10-14", rows: [], empty: "no open risks" }),
+        section("Milestones", { group: "ERP ERP upgrade · since 2026-10-28", rows: [{ ref: "MS-4", title: "Go-live" }] }),
+        section("Ask", { group: "ERP ERP upgrade · since 2026-10-28", columns: ["#", "Ask"], rows: [{ "#": 2, Ask: "Release contingency" }] }),
+      ],
+    }
+    expect(renderReport(r, "md")).toBe(`# Board pack
+
+## Attendees
+
+| who |
+| --- |
+| @peter |
+
+## CRM CRM rollout · since 2026-10-14
+
+### Milestones
+
+| ref | title |
+| --- | --- |
+| MS-1 | Outline approved |
+
+### Risks
+
+_no open risks_
+
+## ERP ERP upgrade · since 2026-10-28
+
+### Milestones
+
+| ref | title |
+| --- | --- |
+| MS-4 | Go-live |
+
+### Ask
+
+| # | Ask |
+| --- | --- |
+| 2 | Release contingency |
+`)
+    expect(renderReport(r, "text")).toBe(`Board pack
+
+Attendees
+who
+@peter
+
+CRM CRM rollout · since 2026-10-14
+
+Milestones
+ref   title
+MS-1  Outline approved
+
+Risks
+no open risks
+
+ERP ERP upgrade · since 2026-10-28
+
+Milestones
+ref   title
+MS-4  Go-live
+
+Ask
+#  Ask
+2  Release contingency
+`)
+  })
+
+  test("a group heading repeats after an ungrouped section breaks the run", () => {
+    const r = { title: "T", sections: [section("A", { group: "G" }), section("B", { rows: [] }), section("C", { group: "G", rows: [] })] }
+    expect(renderReport(r, "md")).toBe("# T\n\n## G\n\n### A\n\n| ref | title |\n| --- | --- |\n| MS-1 | Outline approved |\n\n## B\n\n_none_\n\n## G\n\n### C\n\n_none_\n")
+  })
+
+  test("marks prefix the first cell in md and text, and json keeps them", async () => {
+    const milestones: ReportSectionResult = {
+      title: "Milestones",
+      columns: ["ref", "title"],
+      rows: [
+        { ref: "MS-1", title: "Outline approved" },
+        { ref: "MS-12", title: "Go-live" },
+        { ref: "MS-3", title: "Training" },
+      ],
+      empty: "no milestones",
+      marks: [{ icon: "✓", tone: "green" }, { icon: "○" }, null],
+    }
+    const reports = new ReportRegistry()
+    reports.report(def)
+    reports.section("status", "projects", { id: "ms", order: 1, run: async () => milestones })
+    const r = await reports.run("status", { project: "CRM" })
+    expect(r.sections).toEqual([milestones])
+    expect(renderReport(r, "md")).toBe(`# Status report
+
+## Milestones
+
+| ref | title |
+| --- | --- |
+| ✓ MS-1 | Outline approved |
+| ○ MS-12 | Go-live |
+| MS-3 | Training |
+`)
+    expect(renderReport(r, "text")).toBe(`Status report
+
+Milestones
+ref      title
+✓ MS-1   Outline approved
+○ MS-12  Go-live
+MS-3     Training
+`)
+    const grouped = { title: "T", sections: [{ ...milestones, group: "CRM", text: "Ask: more budget." }] }
+    expect(JSON.parse(renderReport(grouped, "json"))).toEqual(grouped)
+    expect(renderReport(grouped, "json")).toBe(JSON.stringify(grouped, null, 2))
+  })
+
+  test("marks of the wrong length make the section an error note", async () => {
+    const reports = new ReportRegistry()
+    reports.report(def)
+    reports.section("status", "projects", { id: "short", order: 1, run: async () => section("A", { marks: [] }) })
+    reports.section("status", "projects", { id: "long", order: 2, run: async () => section("B", { marks: [null, { icon: "✓" }] }) })
+    reports.section("status", "projects", { id: "notarray", order: 3, run: async () => section("C", { marks: "✓" as any }) })
+    reports.section("status", "projects", { id: "ok", order: 4, run: async () => section("D", { marks: [{ icon: "✓" }] }) })
+    const r = await reports.run("status", { project: "CRM" })
+    const note = (id: string) => ({ title: id, columns: [], rows: [], empty: "", note: "error: malformed section result" })
+    expect(r.sections).toEqual([note("short"), note("long"), note("notarray"), section("D", { marks: [{ icon: "✓" }] })])
+  })
+
+  test("a text paragraph renders after the table", () => {
+    const r = {
+      title: "Minutes",
+      sections: [
+        section("Decisions", { text: "Budget **approved** for Q1.", note: "since 2026-10-14" }),
+        section("Notes", { columns: [], rows: [], empty: "", text: "Peter will follow up.\n\nNext meeting in March." }),
+        section("Risks", { rows: [], empty: "no open risks", text: "Watch the vendor." }),
+      ],
+    }
+    expect(renderReport(r, "md")).toBe(`# Minutes
+
+## Decisions
+
+| ref | title |
+| --- | --- |
+| MS-1 | Outline approved |
+
+Budget **approved** for Q1.
+
+_since 2026-10-14_
+
+## Notes
+
+Peter will follow up.
+
+Next meeting in March.
+
+## Risks
+
+_no open risks_
+
+Watch the vendor.
+`)
+    expect(renderReport(r, "text")).toBe(`Minutes
+
+Decisions
+ref   title
+MS-1  Outline approved
+Budget **approved** for Q1.
+since 2026-10-14
+
+Notes
+Peter will follow up.
+
+Next meeting in March.
+
+Risks
+no open risks
+Watch the vendor.
+`)
+  })
+
+  test("title may be a function of the prepared params", async () => {
+    const reports = new ReportRegistry()
+    const seen: unknown[] = []
+    reports.report({
+      ...def,
+      prepare: (p: { project: string }) => ({ code: p.project.toUpperCase() }),
+      title: async (input: { code: string }) => (seen.push(input), `Status ${input.code}`),
+    })
+    reports.section("status", "projects", { id: "a", order: 1, run: async () => risks })
+    expect(await reports.run("status", { project: "crm" })).toEqual({ title: "Status CRM", sections: [risks] })
+    expect(seen).toEqual([{ code: "CRM" }])
+    reports.report({ ...def, id: "plain", cliName: "plain", title: (input: { project: string }) => `Plain ${input.project}` })
+    expect((await reports.run("plain", { project: "ERP" })).title).toBe("Plain ERP")
+  })
+})
+
 describe("GuideRegistry", () => {
   test("header, kernel conventions, then sections in plugin load order and then order", () => {
     const guide = new GuideRegistry()

@@ -8,7 +8,7 @@ import type { Config } from "./config"
 import type { FieldDef } from "./fields"
 import type { PluginApi, ReadOp, WriteOp } from "./operations"
 import type { RecordTypeDef } from "./records"
-import type { ReportDef, ReportSectionDef } from "./reports"
+import type { ReportDef, ReportResult, ReportSectionDef } from "./reports"
 import type { TagRegistry, TagTypeDef } from "./tags"
 import type { ViewDef } from "./views"
 
@@ -56,6 +56,12 @@ export interface PluginContext {
   command(def: CommandDef): void
   report(def: ReportDef): void
   reportSection(reportId: string, def: ReportSectionDef): void
+  // Run any registered report (in the caller's operation context) and render a result, so a plugin can embed
+  // another plugin's report in its own.
+  readonly reports: {
+    run(reportId: string, params: unknown): Promise<ReportResult>
+    render(r: ReportResult, format: "md" | "text" | "json"): string
+  }
   guideSection(def: { title: string; markdown: string; order?: number }): void
   // An extra field on another plugin's records (`recordType`), stored in this plugin's own table and read and
   // written through this plugin's own operations `def.get` (read) and `def.set` (write); boot checks both exist.
@@ -72,4 +78,4 @@ export interface PluginContext {
 }
 
 // The read/write side of a context, without registrations: what a plugin's TUI part gets (`kernel.runtime(id)`).
-export type PluginRuntime = Pick<PluginContext, "id" | "data" | "config" | "clock" | "use" | "self" | "records" | "tags" | "provenance">
+export type PluginRuntime = Pick<PluginContext, "id" | "data" | "config" | "clock" | "use" | "self" | "records" | "tags" | "reports" | "provenance">
