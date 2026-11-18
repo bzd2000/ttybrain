@@ -26,8 +26,7 @@ function builtinIds(): string[] {
 
 // The running pm's API sources, when they exist: src/kernel/ of the checkout (this module is src/kernel/plugins/
 // under Bun and dist-node/kernel/plugins/ under Node, both three levels below the checkout).
-export function pmApiSources(): { api: string; tui: string } | undefined {
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..")
+export function pmApiSources(root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..")): { api: string; tui: string } | undefined {
   const api = join(root, "src", "kernel", "api.ts")
   const tui = join(root, "src", "kernel", "tui", "api.ts")
   return existsSync(api) && existsSync(tui) ? { api, tui } : undefined
@@ -52,6 +51,7 @@ const packageJson = (id: string) => {
     files: ["dist"],
     pm: { plugin: true, id, tui: "dist/tui/index.js" },
     peerDependencies: peers,
+    devDependencies: { "@types/bun": "^1.4", typescript: "^7", "solid-js": "^1.9", "@opentui/solid": "^0.8.4", "@opentui/core": "^0.8.4" },
     peerDependenciesMeta: Object.fromEntries(Object.keys(peers).map((k) => [k, { optional: true }])),
   })
 }
@@ -70,7 +70,7 @@ const tsconfig = (sources: { api: string; tui: string } | undefined) =>
       verbatimModuleSyntax: true,
       skipLibCheck: true,
       noEmit: true,
-      types: [],
+      types: ["bun"],
       ...(sources && { paths: { "@pm/api": [sources.api], "@pm/api/tui": [sources.tui] } }),
     },
     include: ["src"],
@@ -182,14 +182,14 @@ Type-checking needs a git checkout of pm: \`tsconfig.json\` points \`@pm/api\` a
 
 // Creates <parent>/<id> with the template files and returns its path. Throws a ValidationError for an id that is
 // taken by a built-in plugin or whose folder exists, and assertPluginId's error for an invalid id.
-export function scaffoldPlugin(parent: string, id: string): string {
+export function scaffoldPlugin(parent: string, id: string, opts: { pmRoot?: string } = {}): string {
   assertPluginId(id)
   if (builtinIds().includes(id)) throw new ValidationError(`plugin id "${id}" is taken by a built-in plugin`)
   const dir = resolve(parent, id)
   if (existsSync(dir)) throw new ValidationError(`already exists: ${dir}`)
   const files: Record<string, string> = {
     "package.json": packageJson(id),
-    "tsconfig.json": tsconfig(pmApiSources()),
+    "tsconfig.json": tsconfig(pmApiSources(opts.pmRoot)),
     "README.md": readme(id),
     "src/logic/index.ts": logic(id),
     "src/logic/index.test.ts": test(id),
@@ -201,4 +201,9 @@ export function scaffoldPlugin(parent: string, id: string): string {
     writeFileSync(path, text)
   }
   return dir
+}
+
+// The text `pm plugin new` prints, with the note when pm's API sources can't be found.
+export function createdText(dir: string, id: string, pmRoot?: string): string {
+  return `created ${dir}; next: pm plugin build ${id}${pmApiSources(pmRoot) ? "" : `\n${NO_SOURCES_NOTE}`}`
 }

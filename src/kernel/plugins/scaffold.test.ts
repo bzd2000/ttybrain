@@ -6,7 +6,9 @@ import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
 import { runCli } from "../cli/dispatch"
 import { buildPlugin } from "./build"
-import { pmApiSources, scaffoldPlugin } from "./scaffold"
+import { spawnSync } from "node:child_process"
+import { symlinkSync } from "node:fs"
+import { createdText, pmApiSources, scaffoldPlugin } from "./scaffold"
 
 const temps: string[] = []
 const kernels: TestKernel[] = []
@@ -90,6 +92,23 @@ test("tsconfig paths point at this pm's API sources", () => {
   expect(ts.compilerOptions.jsxImportSource).toBe("@opentui/solid")
   expect(ts.compilerOptions.paths).toEqual({ "@pm/api": [sources!.api], "@pm/api/tui": [sources!.tui] })
 })
+
+test("no pm sources found: no tsconfig paths, and a note", () => {
+  const empty = tmp()
+  expect(pmApiSources(empty)).toBeUndefined()
+  const dir = scaffoldPlugin(tmp(), "nopaths", { pmRoot: empty })
+  expect(JSON.parse(readFileSync(join(dir, "tsconfig.json"), "utf8")).compilerOptions.paths).toBeUndefined()
+  expect(createdText(dir, "nopaths", empty)).toBe(`created ${dir}; next: pm plugin build nopaths\nnote: no pm sources found; type-checking needs a git checkout of pm`)
+})
+
+test("a fresh scaffold type-checks with zero errors", () => {
+  const dir = scaffoldPlugin(tmp(), "typed")
+  // Stands in for `npm install` of its devDependencies: pm's own node_modules has the same packages.
+  symlinkSync(join(import.meta.dir, "../../../node_modules"), join(dir, "node_modules"))
+  const r = spawnSync(process.execPath, ["check"], { cwd: dir, encoding: "utf8" })
+  expect(r.stdout + r.stderr).toContain("No type errors")
+  expect(r.status).toBe(0)
+}, 60_000)
 
 test("pm plugin new <id> creates <cwd>/<id>", async () => {
   const k = await makeTestKernel()
