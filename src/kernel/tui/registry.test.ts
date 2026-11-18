@@ -34,7 +34,7 @@ describe("plugin runtime", () => {
   })
 
   test("runtime is undefined for a plugin that is not loaded", () => {
-    expect(k.runtime("meetings")).toBeUndefined()
+    expect(k.runtime("assistant")).toBeUndefined()
     expect(Object.keys(k.runtime("projects")!).sort()).toEqual(["clock", "config", "data", "id", "provenance", "records", "reports", "self", "tags", "use"])
   })
 
@@ -52,9 +52,9 @@ describe("plugin runtime", () => {
 
 describe("bootTui", () => {
   test("a part whose plugin is not loaded is skipped", () => {
-    const reg = bootTui(k, [part("meetings", (ui) => ui.screen(screen("meetings", 4)))], { builtin: true })
+    const reg = bootTui(k, [part("assistant", (ui) => ui.screen(screen("assistant", 4)))], { builtin: true })
     expect(reg.screens()).toEqual([])
-    expect(reg.errors()).toEqual([{ plugin: "meetings", error: 'tui part for "meetings": plugin is not loaded' }])
+    expect(reg.errors()).toEqual([{ plugin: "assistant", error: 'tui part for "assistant": plugin is not loaded' }])
   })
 
   test("a part whose activate throws loses everything it registered; its logic stays loaded", () => {
