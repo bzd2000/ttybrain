@@ -251,9 +251,11 @@ Controller rulings:
 
 - Task 1: `wellFormed` doesn't check a mark's contents (icon type, tone enum, arrays); the host test uses today 2026-11-20; a report that runs itself has no recursion guard; the order in the grouping test differs from the brief (covered elsewhere); Markdown doesn't escape icons and text widths use `.length` (wide emoji).
 - Task 2: `prepare` duplicates `projectStatus`'s meeting-ref check (for a correct field name); a decision-form test depends on field order.
+- Task 3: the builtins test does not assert status (`bin.test` covers it).
 - Task 4: the agenda edit line shows the project as a bare code (`"ERP"`), not `#ERP`; `editAgendaItem` bumps `updated_at` on a no-op; the `(no change)` lines aren't documented; the MaxListeners warning is pre-existing.
 - Task 5: agenda add computes the printed position itself, not from the op; agenda text can't start with `-` (dispatcher); `--file` errors drop the reason.
 - Task 6: one failed `project-status` run blanks every project block and makes prep reject (no per-project catch; near-unreachable); the minutes queries skip `unlessUnavailable`.
+- Task 6: the `SectionSchema` mirror in `src/plugins/meetings/logic/reports.ts` must be kept in step with the kernel's `ReportSectionResult`.
 - Task 7: the clipboard spy is never restored; a bold group heading is untested.
 - Task 8: the unknown-project to field mapping is untested and matches error text (add a test, comment `records.ts`); the cancelled-meeting negative check reads the frame without `settle`; `x` / Del are claimed even with nothing planned selected; a long comment line in `Form.tsx`.
 - Task 9: the tests' `until` returns quietly on timeout, so the selection-follows steps aren't asserted directly; a weak `—` assertion; `x` on a held meeting shows "already held" in the tabs while the screen ignores it; `a` / `D` on an item without a project are untested; `e` in Prep opens the full form focused on its first field.

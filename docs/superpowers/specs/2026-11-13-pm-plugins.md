@@ -255,7 +255,7 @@ Agenda items have no ref of their own: they are addressed by meeting and positio
 | `recordTab` on `meeting` | **Agenda**, **Prep**, **Notes**, **Export** (board pack while planned, minutes once held, `m` switches, `w` writes `<exportDir>/<date>-<slug>.md`, `y` copies by OSC 52) |
 | `recordForm` on `meeting` | meeting, agenda item, attendees |
 | `recordTab` on `project` | — (left out for now) |
-| `report` | `board` and `minutes`. The board embeds `project-status` per agenda project through `ctx.reports.run`, with `since` from `sinceDate`; its title is `<title> · <date>` |
+| `report` | `board` and `minutes`. The board embeds `project-status` per agenda project through `ctx.reports.run`, with `since` from `sinceDate`; its title is `<title> · <date>`, and the minutes' is `Minutes · <title> · <date>` |
 | keys | `x` (close) and `w` (write the export) are plain keys on the screen and tabs; `quickAction` is not used (phase 5) |
 | `guideSection` | how to prepare a meeting and turn notes into actions and decisions |
 
