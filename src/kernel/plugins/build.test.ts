@@ -140,6 +140,7 @@ test("namespace imports of shared modules fail", async () => {
     [`export * from "@opentui/core"\n`, 'src/tui/index.tsx: use named imports from "@opentui/core"'],
     [`export * as c from "@opentui/core"\n`, 'src/tui/index.tsx: use named imports from "@opentui/core"'],
     [`export const w = () => import("solid-js/store")\n`, 'src/tui/index.tsx: use named imports from "solid-js/store"'],
+    ["export const w = () => import(`solid-js`)\n", 'src/tui/index.tsx: use named imports from "solid-js"'],
   ]
   for (const [tui, message] of cases) {
     const dir = pluginDir({ "src/logic/index.ts": LOGIC(), "src/tui/index.tsx": tui })
@@ -147,11 +148,21 @@ test("namespace imports of shared modules fail", async () => {
     expect(err).toBeInstanceOf(ValidationError)
     expect((err as Error).message).toBe(message)
   }
-  // A subpath of a shared package is not shared: pm would not hand the plugin its own instance.
-  const dir = pluginDir({ "src/logic/index.ts": LOGIC(), "src/tui/index.tsx": `import { render } from "solid-js/web"\nexport { render }\n` })
-  expect((await buildPlugin(dir).catch((e: unknown) => e) as Error).message).toBe(
-    'src/tui/index.tsx: "solid-js/web" is not shared by pm; use @pm/api, @pm/api/tui, solid-js, solid-js/store, @opentui/solid or @opentui/core',
-  )
+  // A subpath of a shared package, or another OpenTUI package, is not shared: it would load a second instance.
+  const notShared: Array<[string, string]> = [
+    [`import { render } from "solid-js/web"\nexport { render }\n`, "solid-js/web"],
+    [`import { ThreeRenderable } from "@opentui/three"\nexport { ThreeRenderable }\n`, "@opentui/three"],
+    ["export const t = () => import(`@opentui/react`)\n", "@opentui/react"],
+  ]
+  for (const [code, spec] of notShared) {
+    const dir = pluginDir({ "src/logic/index.ts": LOGIC(), "src/tui/index.tsx": code })
+    expect(((await buildPlugin(dir).catch((e: unknown) => e)) as Error).message).toBe(
+      `src/tui/index.tsx: "${spec}" is not shared by pm; use @pm/api, @pm/api/tui, solid-js, solid-js/store, @opentui/solid or @opentui/core`,
+    )
+  }
+  // A computed specifier can't be checked statically: it is left alone.
+  const computed = pluginDir({ "src/logic/index.ts": LOGIC(), "src/tui/index.tsx": "const n = \"x\"\nexport const w = () => import(`./${n}`)\n" })
+  expect(await buildPlugin(computed)).toEqual({ files: 2, shims: ["@pm/api"] })
 })
 
 test("a built plugin loads in pm and its UI is reactive", async () => {
@@ -196,6 +207,23 @@ test("a shim outside pm and a missing export", async () => {
   } finally {
     g.__PM_MODULES__ = before
     if (before) installApiModule()
+  }
+})
+
+test("a shim exports names that clash with its own locals", async () => {
+  const dir = pluginDir(
+    { "src/logic/index.ts": `import { m, __pm0, definePlugin } from "@pm/api"\nexport const got = [m, __pm0]\nexport default definePlugin\n` },
+    { tui: false },
+  )
+  await buildPlugin(dir)
+  const g = globalThis as { __PM_MODULES__?: Record<string, unknown> }
+  const before = g.__PM_MODULES__
+  try {
+    g.__PM_MODULES__ = { "@pm/api": { m: "the m", __pm0: "the __pm0", definePlugin: () => null } }
+    const mod = (await import(join(dir, "dist/logic/index.js"))) as { got: unknown[] }
+    expect(mod.got).toEqual(["the m", "the __pm0"])
+  } finally {
+    g.__PM_MODULES__ = before
   }
 })
 

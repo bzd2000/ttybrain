@@ -110,7 +110,8 @@ export async function buildPlugin(dir: string): Promise<{ files: number; shims: 
         imported.set(spec, list)
         const shim = posix.relative(posix.dirname(out), `dist/__pm/${shimFileName(spec)}`)
         source.value = shim.startsWith(".") ? shim : "./" + shim
-      } else if (SHARED_PACKAGES.some((p) => spec.startsWith(p + "/"))) {
+      } else if (spec.startsWith("@opentui/") || SHARED_PACKAGES.some((p) => spec.startsWith(p + "/"))) {
+        // Any other OpenTUI package would bring its own @opentui/core: a second copy.
         errors.push(`${src}: "${spec}" is not shared by pm; use ${SHARED.slice(0, -1).join(", ")} or ${SHARED.at(-1)}`)
       }
     }
@@ -131,9 +132,14 @@ export async function buildPlugin(dir: string): Promise<{ files: number; shims: 
           use(p.node.source, [NAMESPACE])
         },
         CallExpression(p: BabelPath) {
+          if (p.node.callee.type !== "Import") return
+          // A string or a template literal without expressions names the module; a computed specifier can't be
+          // checked statically and is left alone (it may name the plugin's own files).
           const [arg] = p.node.arguments
-          if (p.node.callee.type !== "Import" || arg?.type !== "StringLiteral" || arg.value.startsWith(".")) return
-          use({ value: arg.value }, [NAMESPACE]) // a dynamic import only gets the whole module: a namespace
+          const spec =
+            arg?.type === "StringLiteral" ? arg.value : arg?.type === "TemplateLiteral" && arg.expressions.length === 0 ? arg.quasis[0].value.cooked : undefined
+          if (typeof spec !== "string" || spec.startsWith(".")) return
+          use({ value: spec }, [NAMESPACE]) // a dynamic import only gets the whole module: a namespace
         },
       },
     })
@@ -174,7 +180,8 @@ export async function buildPlugin(dir: string): Promise<{ files: number; shims: 
 const RESERVED = new Set(
   "await break case catch class const continue debugger default delete do else enum export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield".split(" "),
 )
-const plainName = (n: string) => /^[A-Za-z_$][\w$]*$/.test(n) && !RESERVED.has(n)
+// `m` and `__pm<n>` are the shim's own locals, so they take the aliased path too.
+const plainName = (n: string) => /^[A-Za-z_$][\w$]*$/.test(n) && !RESERVED.has(n) && n !== "m" && !/^__pm\d+$/.test(n)
 
 // A shim: the host's module from globalThis.__PM_MODULES__, checked at load for every name the plugin imports.
 export function shimSource(name: string, names: string[]): string {
