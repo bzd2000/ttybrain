@@ -48,4 +48,34 @@ code=$?
 set -e
 [ "$code" -eq 2 ] || fail "project show NOPE: expected exit 2, got $code"
 
+# The fixture plugin (tests/fixtures/plugin-contracts), built with `pm plugin build` and loaded on Node: first as a
+# folder in PM_PLUGINS, then packed and installed with `pm plugin add <tgz>` through npm (offline: no dependencies).
+cp -R tests/fixtures/plugin-contracts "$PM_HOME/src-contracts"
+rm -rf "$PM_HOME/src-contracts/dist" "$PM_HOME/src-contracts/node_modules"
+out="$(pm plugin build "$PM_HOME/src-contracts")"; echo "$out"
+expect_in "plugin build" "built pm-plugin-contracts 0.1.0" "$out"
+
+mkdir -p "$PM_HOME/folder-plugins"
+cp -R "$PM_HOME/src-contracts" "$PM_HOME/folder-plugins/contracts"
+out="$(PM_PLUGINS="$PM_HOME/folder-plugins" pm contract add CRM "Support")"; echo "$out"
+expect_in "contract add (folder)" "C-1 Support" "$out"
+out="$(PM_PLUGINS="$PM_HOME/folder-plugins" pm contract list)"; echo "$out"
+echo "$out" | grep -Eq "^C-1 +#CRM +Support" || fail "contract list (folder): expected \"C-1 #CRM Support\", got: $out"
+out="$(PM_PLUGINS="$PM_HOME/folder-plugins" pm plugin list)"; echo "$out"
+echo "$out" | grep -Eq "^contracts +0\.1\.0 +folder +ok" || fail "plugin list: expected \"contracts 0.1.0 folder ok\", got: $out"
+
+tgz="$(cd "$PM_HOME/src-contracts" && npm pack --silent --pack-destination "$PM_HOME")"
+out="$(PM_PLUGINS="$PM_HOME/npm-plugins" PM_PLUGIN_INSTALLER=npm pm plugin add "$PM_HOME/$tgz")"; echo "$out"
+expect_in "plugin add" "added contracts 0.1.0 (npm)" "$out"
+# Same database: the folder copy's C-1 is still there, and the npm copy adds C-2.
+out="$(PM_PLUGINS="$PM_HOME/npm-plugins" pm contract add CRM "Renewal")"; echo "$out"
+expect_in "contract add (npm)" "C-2 Renewal" "$out"
+out="$(PM_PLUGINS="$PM_HOME/npm-plugins" pm contract list)"; echo "$out"
+echo "$out" | grep -Eq "^C-2 +#CRM +Renewal" || fail "contract list (npm): expected \"C-2 #CRM Renewal\", got: $out"
+out="$(PM_PLUGINS="$PM_HOME/npm-plugins" pm plugin list)"; echo "$out"
+echo "$out" | grep -Eq "^contracts +0\.1\.0 +npm +ok" || fail "plugin list: expected \"contracts 0.1.0 npm ok\", got: $out"
+
+out="$(PM_PLUGINS="$PM_HOME/npm-plugins" node --experimental-ffi dist-node/kernel/tui/selfcheck.js --expect-screen Contracts 2>&1)" || fail "tui self-check (contracts): $out"; echo "$out"
+expect_in "tui (contracts)" "tui ok" "$out"
+
 echo "smoke ok"

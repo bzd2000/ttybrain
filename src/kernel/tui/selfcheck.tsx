@@ -2,6 +2,8 @@
 // and checks that a second boot on the same database writes nothing (read-only boot, also on node:sqlite), that a
 // useQuery screen reloads after another connection's commit (data_version) and that an error boundary holds; then
 // the loader path: the built-ins discovered from their manifests and their tui entries imported and booted.
+// With `--expect-screen <title>` it then boots with discovery (the plugins folder from PM_PLUGINS in the
+// environment), renders, presses `7` (the first external screen) and requires `7 <title>` in the header.
 // Run: `bun src/kernel/tui/selfcheck.tsx` or, after the Node build,
 // `node --experimental-ffi dist-node/kernel/tui/selfcheck.js`. Prints `tui ok` on success.
 import { SyntaxStyle } from "@opentui/core"
@@ -69,7 +71,7 @@ function check(cond: boolean, what: string): void {
   if (!cond) throw new Error(what)
 }
 
-export async function runTuiSelfCheck(): Promise<void> {
+export async function runTuiSelfCheck(opts: { expectScreen?: string } = {}): Promise<void> {
   const home = mkdtempSync(join(tmpdir(), "pm-tui-selfcheck-"))
   const env = { PM_HOME: home, PM_TEST: "1" }
   const clock = fixedClock("2026-11-13")
@@ -138,6 +140,7 @@ export async function runTuiSelfCheck(): Promise<void> {
     rmSync(home, { recursive: true, force: true })
   }
   await checkLoaderPath(clock)
+  if (opts.expectScreen !== undefined) await checkExternalScreen(clock, opts.expectScreen)
 }
 
 // On Node this imports the compiled dist-node/plugins/*/tui/index.js through their package.json manifests.
@@ -162,6 +165,40 @@ async function checkLoaderPath(clock: ReturnType<typeof fixedClock>): Promise<vo
   }
 }
 
+// An external plugin from PM_PLUGINS: its tui entry is loaded through the shared modules and its screen gets key 7.
+async function checkExternalScreen(clock: ReturnType<typeof fixedClock>, title: string): Promise<void> {
+  const home = mkdtempSync(join(tmpdir(), "pm-tui-selfcheck-"))
+  const plugins = process.env.PM_PLUGINS
+  try {
+    const kernel = await bootKernel({ env: { PM_HOME: home, PM_TEST: "1", ...(plugins !== undefined && { PM_PLUGINS: plugins }) }, clock, discover: true })
+    try {
+      const failed = kernel.plugins.filter((p) => p.status !== "ok")
+      check(failed.length === 0, `plugins failed to load: ${failed.map((p) => `${p.id}: ${p.error ?? p.status}`).join("; ")}`)
+      installTuiModules()
+      const parts = await loadTuiParts(kernel)
+      check(parts.errors.length === 0, `tui entries failed to load: ${parts.errors.map((e) => e.error).join("; ")}`)
+      const registry = bootTui(kernel, parts.builtin, { builtin: true, external: parts.external })
+      check(registry.errors().length === 0, `tui parts failed to boot: ${registry.errors().map((e) => e.error).join("; ")}`)
+      let handle: TuiHandle | undefined
+      const setup = await testRender(() => <TuiApp kernel={kernel} registry={registry} refreshMs={20} expose={(h) => (handle = h)} />, { width: 100, height: 24 })
+      try {
+        await setup.renderOnce()
+        setup.mockInput.pressKey("7")
+        await handle!.idle()
+        await setup.renderOnce()
+        const header = setup.captureCharFrame().split("\n")[0] ?? ""
+        check(header.includes(`pm · 7 ${title}`), `key 7 did not open the "${title}" screen: "${header}"`)
+      } finally {
+        setup.renderer.destroy()
+      }
+    } finally {
+      await kernel.shutdown()
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+}
+
 function isEntry(): boolean {
   const script = process.argv[1]
   if (!script) return false
@@ -173,7 +210,13 @@ function isEntry(): boolean {
 }
 
 if (isEntry()) {
-  runTuiSelfCheck().then(
+  const at = process.argv.indexOf("--expect-screen")
+  const expectScreen = at === -1 ? undefined : process.argv[at + 1]
+  if (at !== -1 && !expectScreen) {
+    console.error("tui FAILED: --expect-screen needs a title")
+    process.exit(1)
+  }
+  runTuiSelfCheck(expectScreen === undefined ? {} : { expectScreen }).then(
     () => {
       console.log("tui ok")
       process.exit(0)
