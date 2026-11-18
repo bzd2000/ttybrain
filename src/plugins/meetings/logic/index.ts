@@ -1,10 +1,12 @@
 // The meetings plugin: boards, steering committees and other meetings, with agenda and asks (plugin reference §3).
-// Tables, the M- record type, views, the operations, the `pm meeting` commands and the guide section.
+// Tables, the M- record type, views, the operations, the `pm meeting` commands, the board and minutes reports
+// (with the prep and report reads) and the guide section.
 import { definePlugin } from "../../../kernel/api"
 import { registerCommands } from "./commands"
 import { registerGuide } from "./guide"
 import { registerOps } from "./ops"
 import { makeStore, registerRecordTypes } from "./records"
+import { registerReports } from "./reports"
 import { registerSchema } from "./schema"
 import { registerViews } from "./views"
 
@@ -22,6 +24,7 @@ export const meetings = definePlugin({
     registerRecordTypes(ctx, store)
     registerOps(ctx, store)
     registerCommands(ctx, store)
+    registerReports(ctx, store)
     registerGuide(ctx)
   },
 })
