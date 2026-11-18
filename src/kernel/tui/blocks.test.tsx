@@ -576,6 +576,34 @@ describe("TUI blocks", () => {
     expect(frame).toContain("main of T-1")
   })
 
+  test("a tab taller than the screen scrolls inside the tab and keeps the breadcrumb", async () => {
+    const tall = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join("\n")
+    const part: TuiDef = defineTui({
+      plugin: "thing",
+      activate: (ui) => {
+        ui.recordTab("thing", {
+          id: "tall",
+          title: "Tall",
+          order: 1,
+          component: () => (
+            <box flexDirection="column" flexGrow={1}>
+              <scrollbox flexGrow={1} minHeight={0}>
+                <text>{tall}</text>
+              </scrollbox>
+            </box>
+          ),
+        })
+      },
+    })
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    tui = await renderTui(kernel, { parts: [part], width: 80, height: 24 })
+    await tui.nav.open("T-1")
+    await tui.settle()
+    const frame = await tui.frame()
+    expect(frame).toContain("line 1")
+    expect(frame).toContain("› T-1 Thing 1")
+  })
+
   test("a reload keeps the active tab's component mounted", async () => {
     let mounts = 0
     let loads = 0

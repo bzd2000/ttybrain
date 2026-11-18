@@ -52,7 +52,7 @@ export function RecordView(props: { recordRef: string; tab?: string }) {
   const shownRef = () => (props.recordRef.startsWith("#") ? props.recordRef.slice(1) : props.recordRef)
 
   return (
-    <box flexDirection="column" flexGrow={1} paddingLeft={1} paddingRight={1}>
+    <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1}>
       <Show when={rec.label() !== undefined} fallback={<text fg={theme.muted}>{`› ${shownRef()}`}</text>}>
         <text fg={theme.text}>{`› ${shownRef()} ${rec.label()}`}</text>
       </Show>
@@ -64,7 +64,7 @@ export function RecordView(props: { recordRef: string; tab?: string }) {
       />
       <Show when={active()} keyed>
         {(t: Registered<RecordTabDef>) => (
-          <box flexDirection="column" flexGrow={1}>
+          <box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0}>
             <PluginScope kernel={app.kernel} plugin={t.plugin} label={t.title}>
               <t.component recordRef={props.recordRef} />
             </PluginScope>

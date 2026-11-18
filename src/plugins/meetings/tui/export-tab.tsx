@@ -103,7 +103,7 @@ export function ExportTab(props: { recordRef: string }) {
   })
 
   return (
-    <box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} paddingTop={1}>
+    <box flexDirection="column" flexGrow={1} minHeight={0} paddingTop={1}>
       <Show when={q.data()}>
         {(d: () => { kind: Kind; text: string }) => (
           <box flexDirection="row" height={1} flexShrink={0} gap={2}>
