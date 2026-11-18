@@ -1,8 +1,9 @@
 // The meeting record view's Notes tab: the agenda list on the left and, on the right, the meeting notes (plain
 // text, scrolling) above what was logged in the meeting: the actions (`A-3 title · owner · due`) and decisions
-// linked to it, read through the projects views. Keys: ↑↓ select an item, e edit the notes in the built-in editor
-// (keeping a draft per meeting), E in $VISUAL/$EDITOR, a log an action, D log a decision (both linked to the
-// meeting and the selected item's project), x close the meeting, PgUp/PgDn scroll the notes.
+// linked to it, read through the projects views (at most LOGGED_MAX lines, fewer on a short screen, then
+// `+n more`). Keys: ↑↓ select an item, e edit the notes in the built-in editor (keeping a draft per meeting), E in
+// $VISUAL/$EDITOR, a log an action, D log a decision (both linked to the meeting and the selected item's project),
+// x close the meeting, PgUp/PgDn scroll the notes.
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import {
@@ -37,6 +38,18 @@ const HINTS: Hint[] = [
 ]
 const PAGE = 10 // lines a PgUp/PgDn scrolls
 const UNMEASURED = 200 // the logged lines' width before the first measure
+const LOGGED_MAX = 6 // logged lines shown at most; the rest are `+n more`
+const NOTES_MIN = 5 // rows the Notes panel keeps however much is logged
+const BORDERS = 2 // a panel's top and bottom border
+
+// The logged lines that fit in a column of `height` rows (0: not measured yet) under a Notes panel of at least
+// NOTES_MIN rows: at most LOGGED_MAX, then `+n more` for the rest (that line counts against the room, not the cap).
+export function loggedRows(logged: string[], height: number): { shown: string[]; more: number } {
+  const room = height === 0 ? LOGGED_MAX + 1 : Math.max(1, height - NOTES_MIN - 2 * BORDERS)
+  if (logged.length <= Math.min(room, LOGGED_MAX)) return { shown: logged, more: 0 }
+  const n = Math.min(LOGGED_MAX, room - 1)
+  return { shown: logged.slice(0, n), more: logged.length - n }
+}
 
 type Store = ReturnType<typeof makeStore>
 type Runtime = ReturnType<typeof useRuntime>
@@ -95,6 +108,8 @@ export function NotesTab(props: { recordRef: string }) {
   const [position, setPosition] = createSignal<number | undefined>()
   const item = createMemo(() => q.data()?.meeting.agenda.find((a) => a.position === position()))
   const [width, setWidth] = createSignal(0)
+  const [height, setHeight] = createSignal(0)
+  const rows = createMemo(() => loggedRows(q.data()?.logged ?? [], height()))
   let box: ScrollBoxRenderable | undefined
 
   const save = async (m: MeetingRecord, markdown: string): Promise<{ ok: true } | { ok: false; error: unknown }> => {
@@ -130,7 +145,16 @@ export function NotesTab(props: { recordRef: string }) {
   return (
     <box flexDirection="row" flexGrow={1} minHeight={0} paddingTop={1} gap={1}>
       <AgendaList recordRef={props.recordRef} onSelect={setPosition} />
-      <box flexDirection="column" flexGrow={1} flexShrink={1} minWidth={0} minHeight={0}>
+      <box
+        flexDirection="column"
+        flexGrow={1}
+        flexShrink={1}
+        minWidth={0}
+        minHeight={0}
+        onSizeChange={function () {
+          setHeight(this.height)
+        }}
+      >
         <Panel title="Notes" grow>
           <Show when={q.data()}>
             {(d: () => { meeting: MeetingRecord }) => (
@@ -149,13 +173,19 @@ export function NotesTab(props: { recordRef: string }) {
               setWidth(this.width)
             }}
           >
-            <For each={q.data()?.logged ?? []} fallback={<text fg={theme.muted}>Nothing logged yet. Press a or D.</text>}>
+            <Show when={rows().shown.length === 0 && rows().more === 0}>
+              <text fg={theme.muted}>Nothing logged yet. Press a or D.</text>
+            </Show>
+            <For each={rows().shown}>
               {(l) => (
                 <text wrapMode="none" fg={theme.text}>
                   {truncate(l, width() === 0 ? UNMEASURED : Math.max(1, width()))}
                 </text>
               )}
             </For>
+            <Show when={rows().more > 0}>
+              <text fg={theme.muted}>{`+${rows().more} more`}</text>
+            </Show>
           </box>
         </Panel>
       </box>

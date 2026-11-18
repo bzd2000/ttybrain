@@ -12,6 +12,7 @@ import { clearMessages } from "../../../kernel/tui/messages"
 import { builtinPlugins } from "../../index"
 import { attendeeLines } from "./agenda-list"
 import { exportFileName } from "./export-tab"
+import { loggedRows } from "./notes-tab"
 import { sinceText } from "./prep-tab"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -340,6 +341,50 @@ describe("meeting tabs", () => {
     expect(await inCtx(async () => (await data("meetings").selectFrom("meeting").select("notes").where("id", "=", 2).executeTakeFirst()).notes)).toBe(
       "Opened at 10:00, closed at 11:00",
     )
+  })
+
+  test("long notes at 80x24 scroll inside the tab and keep the breadcrumb", async () => {
+    const notes = Array.from({ length: 60 }, (_, i) => `Note line ${i + 1}`).join("\n")
+    const t = await open("M-1", 2, { width: 80, height: 24, extra: () => write().setNotes!({ meeting: "M-1", markdown: notes }) })
+    const frame = await until(t, (f) => f.includes("Note line 1") && f.includes("Logged in this meeting"))
+    expect(frame).toContain("› M-1 SteerCo Q3")
+    expect(frame).toContain("Note line 1")
+    expect(frame).toContain("A-2 Share integration specs")
+  })
+
+  test("many logged items at 80x24: the logged panel stops at its cap with +n more and the notes keep their room", async () => {
+    const t = await open("M-1", 2, {
+      width: 80,
+      height: 24,
+      extra: async () => {
+        await write().setNotes!({ meeting: "M-1", markdown: "Opened at 10:00\nBudget discussed" })
+        // A-2 is already logged against M-1: 24 more make 25.
+        for (let i = 3; i <= 26; i++) await write("projects").addAction!({ title: `Follow-up ${i}`, meeting: "M-1" })
+      },
+    })
+    const frame = await until(t, (f) => f.includes("+19 more"))
+    expect(frame).toContain("› M-1 SteerCo Q3")
+    expect(frame).toContain("Opened at 10:00")
+    expect(frame).toContain("Budget discussed")
+    expect(frame).toContain("A-2 Share integration specs")
+    expect(frame).toContain("A-7 Follow-up 7") // the sixth logged line
+    expect(frame).not.toContain("A-8 Follow-up 8")
+    // The logged panel closes: its bottom border is the line under `+19 more`.
+    const rows = lines(frame)
+    const more = rows.findIndex((l) => l.includes("+19 more"))
+    expect(rows[more + 1]).toMatch(/└─+┘/)
+  })
+
+  test("logged rows: at most 6, fewer when the column is short, +n more for the rest", () => {
+    const logged = Array.from({ length: 25 }, (_, i) => `A-${i + 1}`)
+    expect(loggedRows(logged.slice(0, 6), 30)).toEqual({ shown: logged.slice(0, 6), more: 0 })
+    expect(loggedRows(logged.slice(0, 7), 30)).toEqual({ shown: logged.slice(0, 6), more: 1 })
+    expect(loggedRows(logged, 0)).toEqual({ shown: logged.slice(0, 6), more: 19 }) // not measured yet
+    // 14 rows: the Notes panel keeps 5 + 2 borders, the Logged panel's borders take 2, 5 rows are left.
+    expect(loggedRows(logged, 14)).toEqual({ shown: logged.slice(0, 4), more: 21 })
+    expect(loggedRows(logged.slice(0, 5), 14)).toEqual({ shown: logged.slice(0, 5), more: 0 })
+    // No room at all: only the `+n more` line.
+    expect(loggedRows(logged, 8)).toEqual({ shown: [], more: 25 })
   })
 
   test("export tab shows the board pack before and the minutes after closing; m switches", async () => {
