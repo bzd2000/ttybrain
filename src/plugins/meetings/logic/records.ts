@@ -6,6 +6,7 @@ import {
   normalizeHandle,
   NotFoundError,
   parseRef,
+  suggest,
   ValidationError,
   ViewUnavailableError,
   type PluginContext,
@@ -13,6 +14,8 @@ import {
 } from "../../../kernel/api"
 import type { AgendaItem, MeetingRecord } from "./schema"
 
+// How many records a "did you mean" looks through (a person's whole team and stakeholders, every project).
+const TAG_CANDIDATES = 1000
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
 
 export type Store = ReturnType<typeof makeStore>
@@ -94,21 +97,46 @@ export function makeStore(ctx: PluginRuntime) {
   }
 
   // Soft references, resolved through the kernel's record types (the plugins may not be loaded).
+  // "Did you mean" candidates: every record the tag prefix completes to (`@` people, `#` projects), bare.
+  async function tagCandidates(prefix: "@" | "#"): Promise<string[]> {
+    return (await ctx.tags.suggest(prefix, TAG_CANDIDATES)).map((r) => r.ref.slice(prefix.length))
+  }
+
   async function personId(handle: string): Promise<number> {
     const h = normalizeHandle(handle)
     const found = await ctx.records.resolve(`@${h}`)
-    if (!found || found.type !== "person") throw new NotFoundError(`unknown person "${handle.trim()}"`)
+    if (!found || found.type !== "person")
+      throw new NotFoundError(`unknown person "${handle.trim()}"`, { suggestions: suggest(h, await tagCandidates("@")) })
     return found.id
   }
 
   async function projectId(code: string): Promise<number> {
     const c = normalizeCode(code)
     const found = await ctx.records.resolve(`#${c}`)
-    if (!found || found.type !== "project") throw new NotFoundError(`unknown project "${c}"`)
+    if (!found || found.type !== "project") throw new NotFoundError(`unknown project "${c}"`, { suggestions: suggest(c, await tagCandidates("#")) })
     return found.id
   }
 
-  return { meetingId, meeting, openMeeting, personId, projectId, unlessUnavailable }
+  // The id the next meeting gets (an integer primary key takes the highest id plus one), for the add line.
+  async function nextMeetingId(): Promise<number> {
+    const rows = await db.selectFrom("meeting").select("id").orderBy("id", "desc").limit(1).execute()
+    return rows.length ? Number(rows[0]!.id) + 1 : 1
+  }
+
+  // Held meetings with an agenda item for the project, most recent first (same date: highest id first).
+  async function heldMeetingsWith(projectId: number): Promise<Array<{ id: number; title: string; date: string }>> {
+    const rows = await db
+      .selectFrom("meeting as m")
+      .select(["m.id", "m.title", "m.date"])
+      .where("m.status", "=", "held")
+      .where((eb) => eb.exists(eb.selectFrom("agenda_item as a").select("a.id").whereRef("a.meeting_id", "=", "m.id").where("a.project_id", "=", projectId)))
+      .orderBy("m.date", "desc")
+      .orderBy("m.id", "desc")
+      .execute()
+    return rows.map((r) => ({ id: Number(r.id), title: String(r.title), date: String(r.date) }))
+  }
+
+  return { meetingId, meeting, openMeeting, personId, projectId, nextMeetingId, heldMeetingsWith, unlessUnavailable }
 }
 
 export function registerRecordTypes(ctx: PluginContext, store: Store): void {

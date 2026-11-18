@@ -1,6 +1,7 @@
 // The meetings plugin: boards, steering committees and other meetings, with agenda and asks (plugin reference §3).
-// This is the skeleton (tables, the M- record type, views); operations, commands and reports are added on top.
+// Tables, the M- record type, views and the operations; commands and reports are added on top.
 import { definePlugin } from "../../../kernel/api"
+import { registerOps } from "./ops"
 import { makeStore, registerRecordTypes } from "./records"
 import { registerSchema } from "./schema"
 import { registerViews } from "./views"
@@ -17,5 +18,6 @@ export const meetings = definePlugin({
     registerSchema(ctx)
     registerViews(ctx)
     registerRecordTypes(ctx, store)
+    registerOps(ctx, store)
   },
 })

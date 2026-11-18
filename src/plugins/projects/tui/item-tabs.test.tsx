@@ -324,9 +324,11 @@ describe("delete", () => {
 
 describe("meeting-linked forms", () => {
   test("action and decision forms carry a prefilled meeting", async () => {
-    // Without the meetings plugin loaded, a meeting ref is a soft reference that is not validated.
-    kernel = await makeTestKernel({ plugins: builtinPlugins.filter((p) => p.id !== "meetings") })
-    await seed()
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await seed(async () => {
+      await write("meetings").addMeeting!({ title: "SteerCo Q4", date: "2026-12-04", projects: ["CRM"] })
+      await write("meetings").addMeeting!({ title: "Board", date: "2026-12-10", kind: "board" })
+    })
     tui = await renderTui(kernel, { parts: [part], width: 120, height: 32 })
     tui.input.pressKey("3")
     expect(await tui.frame()).toContain("home screen")
