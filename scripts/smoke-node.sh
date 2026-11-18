@@ -36,8 +36,11 @@ out="$(pm report overview --format text)"; echo "$out"
 expect_in "report overview" "CRM" "$out"
 out="$(pm inbox add "x #CRM")"; echo "$out"
 expect_in "inbox add" "I-1" "$out"
+# The built-ins are discovered from dist-node/plugins/*/package.json (written by the build).
 out="$(pm plugin list)"; echo "$out"
-for p in people projects inbox; do expect_in "plugin list" "$p" "$out"; done
+for p in people projects meetings inbox; do
+  echo "$out" | grep -Eq "^$p +1\.0\.0 +built-in +ok" || fail "plugin list: expected \"$p 1.0.0 built-in ok\", got: $out"
+done
 
 set +e
 pm project show NOPE

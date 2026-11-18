@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
-import { builtinPlugins } from "../../index"
+import { builtinPlugins } from "../../../../tests/builtins"
 import { people } from "../../people/logic/index"
 import { projects } from "../../projects/logic/index"
 import { runWithContext } from "../../../kernel/context"

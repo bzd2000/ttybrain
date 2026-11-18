@@ -20,9 +20,7 @@ function walk(dir: string, out: string[] = []): string[] {
   return out
 }
 
-// src/plugins/index.ts and tui.ts are the host's built-in lists (Task 3 deletes them), not plugin code.
-const hostLists = [join(pluginsDir, "index.ts"), join(pluginsDir, "tui.ts")]
-const files = walk(pluginsDir).filter((f) => !hostLists.includes(f))
+const files = walk(pluginsDir)
 
 describe("plugin imports", () => {
   test("plugins reach the kernel only through @pm/api and @pm/api/tui", () => {

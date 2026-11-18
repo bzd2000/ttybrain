@@ -4,7 +4,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import type { Config } from "./config"
-import { builtinPluginDir, discoverPlugins, type PluginCandidate } from "./loader"
+import { builtinPluginDir, discoverPlugins, installApiModule, type PluginCandidate } from "./loader"
+import * as api from "./api"
 import { resolvePaths, type Paths } from "./paths"
 
 const temps: string[] = []
@@ -152,6 +153,13 @@ describe("discoverPlugins", () => {
     expect(existsSync(marker)).toBe(false)
   })
 
+  test("a disabled npm dependency that is not installed is listed disabled, not failed", async () => {
+    const { paths, builtinDir } = setup()
+    npmDeps(paths, { "pm-plugin-gone": "1.0.0" })
+    const cs = await discoverPlugins(paths, config(["pm-plugin-gone"]), { builtinDir })
+    expect(cs).toEqual([{ id: "pm-plugin-gone", source: "npm", dir: join(paths.plugins, "node_modules", "pm-plugin-gone"), disabled: true }])
+  })
+
   test("a hanging import times out", async () => {
     const { paths, builtinDir } = setup()
     plugin(join(paths.plugins, "x"), { id: "x", main: `await new Promise(() => {})\nexport default {}\n` })
@@ -178,4 +186,18 @@ describe("discoverPlugins", () => {
     expect(cs.map((c) => [c.id, c.source, c.error, c.def?.id])).toEqual([["s", "npm", undefined, "s"]])
     expect(cs[0]!.dir).toBe(real)
   })
+})
+
+test("installApiModule adds @pm/api to the existing shared-module object in place", () => {
+  const g = globalThis as { __PM_MODULES__?: Record<string, unknown> }
+  const before = g.__PM_MODULES__
+  const shared: Record<string, unknown> = { other: 1 }
+  g.__PM_MODULES__ = shared
+  try {
+    installApiModule()
+    expect(g.__PM_MODULES__).toBe(shared)
+    expect(shared).toEqual({ other: 1, "@pm/api": api })
+  } finally {
+    g.__PM_MODULES__ = before
+  }
 })

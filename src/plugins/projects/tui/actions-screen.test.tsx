@@ -7,7 +7,7 @@ import { fixedClock } from "../../../kernel/clock"
 import { runCli } from "../../../kernel/cli/dispatch"
 import { runWithContext } from "../../../kernel/context"
 import { bootKernel, type Kernel } from "../../../kernel/host"
-import { builtinPlugins } from "../../index"
+import { builtinPlugins } from "../../../../tests/builtins"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 

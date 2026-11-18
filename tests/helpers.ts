@@ -4,19 +4,23 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fixedClock, type Clock } from "../src/kernel/clock"
-import { bootKernel, type Kernel } from "../src/kernel/host"
-import type { PluginDef } from "../src/kernel/plugin"
+import { bootKernel, type BootOptions, type Kernel } from "../src/kernel/host"
 
 export type TestKernel = Kernel & { home: string; cleanup(): Promise<void> }
 
 export async function makeTestKernel(
-  opts: { plugins?: PluginDef[]; today?: string; clock?: Clock; env?: Record<string, string> } = {},
+  opts: { plugins?: BootOptions["plugins"]; discover?: BootOptions["discover"]; today?: string; clock?: Clock; env?: Record<string, string> } = {},
 ): Promise<TestKernel> {
   const home = mkdtempSync(join(tmpdir(), "pm-test-"))
   const env = { PM_HOME: home, PM_TEST: "1", ...opts.env }
   let kernel: Kernel
   try {
-    kernel = await bootKernel({ env, plugins: opts.plugins ?? [], clock: opts.clock ?? fixedClock(opts.today ?? "2026-11-13") })
+    kernel = await bootKernel({
+      env,
+      plugins: opts.plugins ?? [],
+      ...(opts.discover !== undefined && { discover: opts.discover }),
+      clock: opts.clock ?? fixedClock(opts.today ?? "2026-11-13"),
+    })
   } catch (e) {
     rmSync(home, { recursive: true, force: true })
     throw e

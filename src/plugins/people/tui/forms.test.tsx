@@ -6,7 +6,7 @@ import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
 import { defineTui, type TuiDef } from "../../../kernel/tui/api"
 import { useOverlay, type Overlay } from "../../../kernel/tui/overlay"
-import { builtinPlugins } from "../../index"
+import { builtinPlugins } from "../../../../tests/builtins"
 import { peopleTui } from "./index"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))

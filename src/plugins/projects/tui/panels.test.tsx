@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
-import { builtinPlugins } from "../../index"
+import { builtinPlugins } from "../../../../tests/builtins"
 import { theme } from "../../../kernel/tui/theme"
 import { rgbToHex } from "@opentui/core"
 

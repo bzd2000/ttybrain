@@ -65,6 +65,17 @@ for await (const file of walk(srcDir)) {
   await writeFile(out, result.code)
   count++
 }
+// The built-in plugins' manifests, with their entries pointing at the compiled .js files (the loader reads them).
+const toJs = (entry) => entry.replace(/\.[jt]sx?$/, ".js")
+for (const entry of await readdir(path.join(srcDir, "plugins"), { withFileTypes: true })) {
+  const manifest = path.join(srcDir, "plugins", entry.name, "package.json")
+  if (!entry.isDirectory() || !existsSync(manifest)) continue
+  const pkg = JSON.parse(await readFile(manifest, "utf8"))
+  if (typeof pkg.main === "string") pkg.main = toJs(pkg.main)
+  if (typeof pkg.pm?.tui === "string") pkg.pm.tui = toJs(pkg.pm.tui)
+  await mkdir(path.join(outDir, "plugins", entry.name), { recursive: true })
+  await writeFile(path.join(outDir, "plugins", entry.name, "package.json"), JSON.stringify(pkg, null, 2) + "\n")
+}
 // The CLI entry is `bin.pm` in package.json: make it directly executable (`npm link` puts it on the PATH).
 const bin = path.join(outDir, "bin", "pm.js")
 await writeFile(bin, "#!/usr/bin/env -S node --experimental-ffi\n" + (await readFile(bin, "utf8")))

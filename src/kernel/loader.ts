@@ -32,7 +32,7 @@ export function builtinPluginDir(): string {
 // Shared modules an external plugin's built shims read (`pm plugin build`).
 export function installApiModule(): void {
   const g = globalThis as { __PM_MODULES__?: Record<string, unknown> }
-  g.__PM_MODULES__ = { ...g.__PM_MODULES__, "@pm/api": api }
+  ;(g.__PM_MODULES__ ??= {})["@pm/api"] = api // in place: the TUI adds its modules to the same object
 }
 
 type Obj = Record<string, unknown>
@@ -155,16 +155,18 @@ export async function discoverPlugins(
 
   for (const name of npmDependencies(paths.plugins)) {
     const linked = join(paths.plugins, "node_modules", name)
-    let dir: string
+    let dir = linked
+    let installed = true
     try {
       dir = realpathSync(linked)
+      installed = readManifest(dir).kind !== "none"
     } catch {
-      out.push({ id: name, source: "npm", dir: linked, error: `not installed; run npm install in ${paths.plugins}` })
-      continue
+      installed = false
     }
-    const m = readManifest(dir)
-    if (m.kind === "none") {
-      out.push({ id: name, source: "npm", dir, error: `not installed; run npm install in ${paths.plugins}` })
+    if (!installed) {
+      // No manifest to read pm.id from: the id is the package name, and a disabled one is just disabled.
+      const disabled = config.plugins.disabled.includes(name)
+      out.push({ id: name, source: "npm", dir, ...(disabled ? { disabled: true } : { error: `not installed; run npm install in ${paths.plugins}` }) })
       continue
     }
     const c = await candidate(dir, name, "npm", ctx)

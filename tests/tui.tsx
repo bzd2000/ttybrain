@@ -10,7 +10,7 @@ import { bootTui } from "../src/kernel/tui/boot"
 import { clearMessages } from "../src/kernel/tui/messages"
 import type { Nav } from "../src/kernel/tui/nav"
 import type { TuiDef } from "../src/kernel/tui/types"
-import { builtinTuiParts } from "../src/plugins/tui"
+import { builtinTuiParts } from "./builtins"
 
 export type RenderedTui = {
   frame(): Promise<string>

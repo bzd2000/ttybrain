@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
-import { builtinPlugins } from "../../plugins"
+import { builtinPlugins } from "../../../tests/builtins"
 import { runWithContext } from "../context"
 import { IsolationError } from "../errors"
 import { bootTui } from "./boot"

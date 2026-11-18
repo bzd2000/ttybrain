@@ -59,7 +59,8 @@ describe("logic/UI split", () => {
       }
     }
     expect(offenders).toEqual([])
-    expect([...seen].map(rel)).toContain("src/plugins/index.ts")
+    // Plugins' logic entries are imported dynamically by the loader; the next test covers their files.
+    expect([...seen].map(rel)).toContain("src/kernel/loader.ts")
     expect([...seen].map(rel)).toContain("src/kernel/host.ts")
   })
 

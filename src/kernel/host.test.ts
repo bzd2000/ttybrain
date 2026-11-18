@@ -1,15 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { alpha, bare, beta, broken, itemView, reader } from "../../tests/fixtures/plugins"
 import { makeTestKernel, type TestKernel } from "../../tests/helpers"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { currentContext, definePlugin, Type, type PluginContext } from "./api"
+import { currentContext, definePlugin, sql, Type, type PluginContext } from "./api"
 import { fixedClock } from "./clock"
 import { runWithContext } from "./context"
 import { bootKernel } from "./host"
 import { IsolationError, NotFoundError, ViewUnavailableError } from "./errors"
 import type { PluginApi } from "./operations"
+import { runCli } from "./cli/dispatch"
 
 let kernels: TestKernel[] = []
 async function boot(opts: Parameters<typeof makeTestKernel>[0]) {
@@ -358,5 +359,84 @@ describe("disabled plugins and reads", () => {
     const k = await boot({ plugins: [reader({ alpha: "^1.2" }), alpha({ version: "1.4.0" })] })
     await inCtx(k, () => api(k, "alpha").write.add!({ title: "seen" }))
     expect(await inCtx(k, () => api(k, "reader").read.titles!({}))).toEqual(["seen"])
+  })
+})
+
+describe("plugin candidates and sources", () => {
+  const temps: string[] = []
+  afterEach(() => {
+    for (const d of temps.splice(0)) rmSync(d, { recursive: true, force: true })
+  })
+  const tmp = () => {
+    const d = mkdtempSync(join(tmpdir(), "pm-cand-"))
+    temps.push(d)
+    return d
+  }
+  // A folder plugin under `pluginsDir/<id>` whose index.js is `main`.
+  const folderPlugin = (pluginsDir: string, id: string, main: string) => {
+    const dir = join(pluginsDir, id)
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: `pm-plugin-${id}`, version: "1.0.0", type: "module", main: "index.js", pm: { plugin: true, id } }))
+    writeFileSync(join(dir, "index.js"), main)
+    return dir
+  }
+  // discover over `pluginsDir` with an empty built-in folder.
+  const discovering = (pluginsDir: string, timeoutMs?: number) => {
+    const builtinDir = tmp()
+    return { env: { PM_PLUGINS: pluginsDir }, discover: { builtinDir, ...(timeoutMs !== undefined && { timeoutMs }) } }
+  }
+
+  test("a candidate with an error is listed failed, others boot", async () => {
+    const dir = tmp()
+    const k = await boot({ plugins: [bare("ok"), { id: "bad", source: "folder", dir, error: "boom" }] })
+    expect(k.plugins).toEqual([
+      { id: "ok", version: "1.0.0", source: "built-in", status: "ok" },
+      { id: "bad", version: "", source: "folder", status: "failed", error: "boom", dir },
+    ])
+  })
+
+  test("a disabled candidate is listed disabled and its dependants are skipped", async () => {
+    const dir = tmp()
+    const k = await boot({ plugins: [{ id: "p", source: "folder", dir, version: "1.0.0", disabled: true }, bare("d", { requires: { p: "^1" } })] })
+    expect(status(k)).toEqual({ p: "disabled", d: 'failed: requires "p", which is disabled' })
+    expect(k.plugins[0]).toEqual({ id: "p", version: "1.0.0", source: "folder", status: "disabled", dir })
+  })
+
+  test("external migrations may not create triggers", async () => {
+    const dir = tmp()
+    const def = definePlugin({
+      id: "trig",
+      name: "Trig",
+      version: "1.0.0",
+      apiVersion: 1,
+      activate(ctx) {
+        ctx.migration("001", async (db) => {
+          await db.schema.createTable("t").addColumn("id", "integer", (c) => c.primaryKey()).execute()
+          await sql`CREATE TRIGGER trig_t_ai AFTER INSERT ON trig_t BEGIN SELECT 1; END`.execute(db)
+        })
+      },
+    })
+    const k = await boot({ plugins: [{ id: "trig", source: "folder", dir, version: "1.0.0", def }] })
+    expect(k.plugins[0]).toMatchObject({ id: "trig", source: "folder", status: "failed" })
+    expect(k.plugins[0]!.error).toContain("external plugins may not create triggers")
+  })
+
+  test("an external activate that hangs times out", async () => {
+    const pluginsDir = tmp()
+    folderPlugin(pluginsDir, "x", `export default { id: "x", name: "X", version: "1.0.0", apiVersion: 1, activate() { return new Promise(() => {}) } }\n`)
+    const k = await boot(discovering(pluginsDir, 200))
+    expect(k.plugins).toEqual([
+      { id: "x", version: "1.0.0", source: "folder", status: "failed", error: "x: timed out after 200 ms while activating", dir: join(pluginsDir, "x") },
+    ])
+  })
+
+  test("plugin list shows the source", async () => {
+    const pluginsDir = tmp()
+    const dir = folderPlugin(pluginsDir, "hello", `export default { id: "hello", name: "Hello", version: "1.0.0", apiVersion: 1, activate() {} }\n`)
+    const k = await boot(discovering(pluginsDir))
+    expect(k.plugins).toEqual([{ id: "hello", version: "1.0.0", source: "folder", status: "ok", dir }])
+    let out = ""
+    expect(await runCli(["plugin", "list", "--json"], k, { out: (s) => void (out += s), err: () => {}, stdin: async () => "" })).toBe(0)
+    expect(JSON.parse(out)).toEqual([{ id: "hello", version: "1.0.0", source: "folder", status: "ok", error: null }])
   })
 })

@@ -1,4 +1,5 @@
-// The `pm` entry point. It boots the kernel with the built-in plugins. With no arguments and a terminal on
+// The `pm` entry point. It boots the kernel with the plugins the loader discovers (built-ins, plugin folders,
+// npm dependencies). With no arguments and a terminal on
 // stdout it opens the TUI (loaded with a dynamic import, so the CLI path never loads the UI); with no arguments
 // otherwise it prints the help; else it runs the CLI. Then it shuts the kernel down and exits with the code.
 // `--db` is read before boot. Stdin is read only when a command asks for it.
@@ -9,13 +10,12 @@ import { runCli } from "../kernel/cli/dispatch"
 import { printError, type CliIo } from "../kernel/cli/output"
 import { bootKernel } from "../kernel/host"
 import { installShutdownHandlers } from "../kernel/shutdown"
-import { builtinPlugins } from "../plugins"
 
 export async function main(argv: string[], env: Record<string, string | undefined>, io: CliIo): Promise<number> {
   const { global } = leading(argv)
   let kernel
   try {
-    kernel = await bootKernel({ env, flags: global.db !== undefined ? { db: global.db } : {}, plugins: builtinPlugins })
+    kernel = await bootKernel({ env, flags: global.db !== undefined ? { db: global.db } : {}, discover: true })
   } catch (e) {
     return printError(e, global.json, io)
   }
@@ -25,8 +25,12 @@ export async function main(argv: string[], env: Record<string, string | undefine
   try {
     if (argv.length === 0 && process.stdout.isTTY) {
       const { runTui } = await import("../kernel/tui/run")
-      const { builtinTuiParts } = await import("../plugins/tui")
-      await runTui(kernel, builtinTuiParts, {
+      // Temporary (Task 4 moves this into runTui): each ok plugin's tui entry (default export), built-ins first.
+      type Part = Parameters<typeof runTui>[1][number]
+      const withTui = kernel.plugins.filter((p) => p.status === "ok" && p.tui !== undefined)
+      const ordered = [...withTui.filter((p) => p.source === "built-in"), ...withTui.filter((p) => p.source !== "built-in")]
+      const parts = await Promise.all(ordered.map(async (p) => ((await import(p.tui!)) as { default: Part }).default))
+      await runTui(kernel, parts, {
         onRenderer: (renderer) => {
           stopTui = async () => {
             if (!renderer.isDestroyed) renderer.destroy()

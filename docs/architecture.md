@@ -27,12 +27,14 @@ src/kernel/                 knows nothing about projects or people
   cli/                      args.ts, commands.ts (registry), dispatch.ts (`runCli`), kernel-commands.ts, output.ts
   shutdown.ts               clean shutdown on SIGHUP/SIGTERM
   isolation-selfcheck.ts    repeats the isolation cases on the current runtime (also run by the Node smoke test)
-src/bin/pm.ts               the `pm` entry point: boots the kernel with `src/plugins/index.ts` and runs the CLI
+  loader.ts                 discoverPlugins(): built-in folder, plugin folders, npm deps → plugin candidates (manifests)
+src/bin/pm.ts               the `pm` entry point: boots the kernel with discovered plugins (`discover: true`) and runs the CLI
+src/plugins/<id>/package.json  the plugin manifest (`main`, `pm.id`, `pm.tui`); the build copies it to dist-node with .js entries
 src/plugins/<id>/logic/     index.ts (definePlugin), schema.ts, views.ts, ops*.ts, commands*.ts, records.ts, report.ts, guide.ts: NO UI imports
                             (meetings: ops.ts, records.ts, since.ts, reports.ts, commands.ts, views.ts, guide.ts, schema.ts)
 src/kernel/tui/             the TUI kernel: frame, router, keys, overlays, data hooks, building blocks (see "The TUI")
 src/plugins/<id>/tui/       screens, record tabs, panels, forms, badges: each plugin's TUI part (`defineTui`)
-tests/helpers.ts            makeTestKernel; tests/fixtures/ fixture plugins
+tests/helpers.ts            makeTestKernel; tests/builtins.ts the built-ins as static lists (tests only); tests/fixtures/ fixture plugins
 ```
 
 Every feature is a plugin, built-ins included: `people`, `projects`, `meetings`, `inbox`, `assistant`. Built-ins use exactly the same API that external plugins will use in phase 5. If a built-in needs something the API doesn't offer, **extend the API**; never take a shortcut into the kernel.
@@ -90,7 +92,6 @@ src/kernel/tui/
   components/               Table, Form, Field, Panel, Tabs, Menu, RecordView, RecordFields, OverviewScreen, Editor, DraftPrompt, Help, Switcher, KeyHints, ErrorBoundary, ReportSections
   export.ts                 writeExport(dir, fileName, text), the hooks useWriteExport() and useCopyText()
   format.ts, theme.ts, messages.ts   display width/dates, colours and tones, status-bar notices
-src/plugins/tui.ts          builtinTuiParts: the list of built-in tui parts
 src/plugins/<id>/tui/       index.tsx = defineTui({ plugin, activate(ui) }) plus the plugin's screens, forms, panels
 tests/tui.tsx               renderTui(kernel, { parts, external, width, height, refreshMs, draftMs }) -> { frame(), peek(), spans(), input, settle(), nav, renderer, destroy() }
 ```

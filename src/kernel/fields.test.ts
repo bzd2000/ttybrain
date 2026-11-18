@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { budget } from "../../tests/fixtures/tui-fixture"
 import { makeTestKernel, type TestKernel } from "../../tests/helpers"
-import { builtinPlugins } from "../plugins/index"
+import { builtinPlugins } from "../../tests/builtins"
 import { definePlugin, type PluginContext } from "./api"
 import { IsolationError } from "./errors"
 
