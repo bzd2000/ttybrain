@@ -71,12 +71,25 @@ describe("ReportSections", () => {
     expect(colorOf(spans, "Last reviewed")).toBe(theme.muted)
   })
 
-  test("long lines truncate by display width with an ellipsis", async () => {
+  test("a long row is cut with an ellipsis to the width of its box and takes one line", async () => {
     kernel = await makeTestKernel({ plugins: [thingPlugin] })
-    const long = [{ title: "S", columns: ["a"], rows: [{ a: "x".repeat(300) }], empty: "" }]
-    tui = await renderTui(kernel, { parts: [screenPart(() => <ReportSections sections={long} />)] })
+    const long = [{ title: "S", columns: ["a"], rows: [{ a: "word ".repeat(20) + "END" }], empty: "" }]
+    tui = await renderTui(kernel, {
+      parts: [screenPart(() => (
+        <box width={40}>
+          <ReportSections sections={long} />
+        </box>
+      ))],
+    })
     tui.input.pressKey("2")
-    expect(await tui.frame()).toContain("…")
+    let frame = await tui.frame()
+    for (let i = 0; i < 20 && !frame.includes("…"); i++) frame = await tui.frame() // the measure lands after a render
+    const lines = frame.split("\n").map((l) => l.trimEnd())
+    const hits = lines.filter((l) => l.includes("word word"))
+    expect(hits).toHaveLength(1)
+    expect(hits[0]!.endsWith("…")).toBe(true)
+    expect(hits[0]!.length).toBeLessThanOrEqual(40)
+    expect(lines.some((l) => l.includes("END"))).toBe(false)
   })
 
   test("useCopyText calls OSC 52 and useWriteExport writes into the export folder", async () => {
