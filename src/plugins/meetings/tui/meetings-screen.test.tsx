@@ -218,11 +218,14 @@ describe("Meetings screen", () => {
     const t = await open()
     await select(t, "Board December")
     t.input.pressEnter()
-    await until(t, (f) => f.includes("Edit M-2"))
+    let frame = await until(t, (f) => f.includes("› M-2 Board December"))
+    expect(frame).toContain("› M-2 Board December")
+    expect(frame).toContain("No agenda yet. Press n to add an item.")
     // A meeting sorting above it: it would move the selection if it had been reset.
     await inCtx(() => write().addMeeting!({ title: "Kick-off", date: "2026-11-11" }))
     t.input.pressEscape()
-    const frame = await until(t, (f) => !f.includes("Edit M-2") && f.includes("Kick-off") && lineWith(f, "Board December").includes("›"))
+    frame = await until(t, (f) => !f.includes("› M-2 Board December") && f.includes("Kick-off") && lineWith(f, "Board December").includes("›"))
+    expect(frame).not.toContain("› M-2 Board December")
     expect(lineWith(frame, "Board December")).toContain("›")
   })
 

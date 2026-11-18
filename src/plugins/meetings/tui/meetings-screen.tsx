@@ -52,6 +52,11 @@ const COLUMNS: TableColumn[] = [
 // `Thu 4 Dec`: the long date without its year.
 const dayDate = (iso: string) => longDate(iso).replace(/ \d+$/, "")
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`
+// The status line after closing: `closed M-4: 3 actions, 1 decision`.
+export const closedMessage = (ref: string, out: unknown) => {
+  const { actions, decisions } = (out as { logged: { actions: number; decisions: number } }).logged
+  return `closed ${ref}: ${plural(actions, "action")}, ${plural(decisions, "decision")}`
+}
 // The project codes of the agenda, in agenda order, without `#`.
 const codes = (m: MeetingRecord) => [...new Set(m.agenda.flatMap((a) => (a.project === null ? [] : [a.project.slice(1)])))]
 
@@ -128,12 +133,7 @@ export function MeetingsScreen() {
   }
   const close = async (m: MeetingRecord) => {
     if (!(await overlay.confirm(closeQuestion(m.ref)))) return
-    await act(() => rt.self().write.closeMeeting!({ ref: m.ref }), {
-      ok: (out) => {
-        const { actions, decisions } = (out as { logged: { actions: number; decisions: number } }).logged
-        return `closed ${m.ref}: ${plural(actions, "action")}, ${plural(decisions, "decision")}`
-      },
-    })
+    await act(() => rt.self().write.closeMeeting!({ ref: m.ref }), { ok: (out) => closedMessage(m.ref, out) })
   }
   const cancel = async (m: MeetingRecord) => {
     if (!(await overlay.confirm(cancelQuestion(m.ref)))) return
