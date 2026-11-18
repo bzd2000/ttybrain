@@ -100,6 +100,9 @@ valid), now with a `source` per plugin.
    candidate and an external `activate` are each raced against 5000 ms (R2): on timeout the plugin fails with
    `<id>: timed out after 5000 ms while <importing|activating>`; built-ins have no timeout. Two plugins with the
    same id: the first loads, the later one fails as a duplicate.
+   Accepted gaps (controller rulings, final review): an external migration's `up` has no timeout, so a migration
+   that awaits forever hangs boot while holding the write lock; and the Node smoke checks only the external
+   screen's title, not its reactivity (Bun's `build.test.ts` covers reactivity).
 6. The existing host steps then apply unchanged: sort by `requires`, `apiVersion` check, activate, migrate,
    isolate on failure, cascade to dependants.
 7. **TUI parts**: `runTui` loads the `pm.tui` entry of each plugin whose logic is `ok`, in load order. A tui part

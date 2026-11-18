@@ -24,7 +24,7 @@ Project agents:
 - `bun test`: run all tests. Run a single test with `bun test ./src/kernel/tui/app.test.tsx` (the `./` makes it a path) or `bun test -t "<name pattern>"`
 - `bun typecheck`: type-check (`bun check`)
 - `bun run pm <thing> <verb> …`: run the CLI (`bun src/bin/pm.ts`); `PM_HOME=<dir>` or `--db <file>` points it at a scratch database
-- `bash scripts/smoke-node.sh`: build for Node, run the self-checks (including the TUI one, which prints `tui ok`) a CLI walk-through, the fixture plugin walk (build, load as a folder and via `npm pack` + `pm plugin add`) and a `pm plugin new` scaffold step on Node 26 (needs only node/npm); `tui ok` prints twice (built-ins, then with the fixture plugin's screen); the last line is `smoke ok`. Run it after touching SQLite, isolation, transactions, process handling or module loading
+- `bash scripts/smoke-node.sh`: build for Node, run the self-checks (including the TUI one, which prints `tui ok`), a CLI walk-through, the fixture plugin walk (build, load as a folder and via `npm pack` + `pm plugin add`) and a `pm plugin new` scaffold step on Node 26 (needs only node/npm); `tui ok` prints twice (built-ins, then with the fixture plugin's screen); the last line is `smoke ok`. Run it after touching SQLite, isolation, transactions, process handling or module loading
 - `bun src/kernel/isolation-selfcheck.ts`: the isolation self-check on Bun (`node dist-node/kernel/isolation-selfcheck.js` on Node)
 - `npm run start:node`: run on Node. It runs `build:node` (`scripts/build-node.mjs`, which compiles `src/` to `dist-node/` with Babel), then `node --experimental-ffi dist-node/bin/pm.js`
 
