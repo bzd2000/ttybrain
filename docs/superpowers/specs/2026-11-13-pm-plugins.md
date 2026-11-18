@@ -184,9 +184,10 @@ pm report status <project>
 | `recordTab` on `person` | **Projects & roles**, **Actions** (every action owned by or for that person: open ones first, then done and cancelled; the tab count is the open ones) |
 | `overviewPanel` | Overdue actions · Due this week · Projects needing attention · Late milestones (+ next 14 days) · High risks & issues |
 | `reportSection` in `project-status` | Health · Milestones · Deliverables · Risks & issues · Decisions · Actions (in that order) |
-| `report` | `project-status` (the section slot that meetings also uses) |
+| `report` | `project-status`, with params `project`, `since`, `reference` (the date the due-soon windows count from, default today: a meeting's date) and `previous-meeting` (an `M-n`: its open actions are listed too); the names are kebab-case because report params are CLI flags. Its sections mark rows: Health `●` in the health colour, Milestones `✓` / `○` (red when late), Deliverables `✓` / `◐` / `○`, Risks `▲` (red for high), Actions `!` (red for overdue). Meetings uses it as the section slot of its board pack |
 | `tagType` | `#CODE` → project |
 | `quickAction` on `project` | Update health (`h`) |
+| `recordForm` `action`, `decision` | with `prefill.meeting` (`M-n`) a new action or decision is linked to that meeting (no field; the form's title names the meeting) |
 | `guideSection` | how to turn notes into actions, decisions, risks, health and deliverable updates |
 
 **Events emitted:** `project.changed`, `action.changed`, `health.changed` (phase 2+; not emitted yet — use `record.changed`).
@@ -221,17 +222,17 @@ It reads `people.person` (attendee names) and `projects.project` (agenda project
 
 | Read (with logic) | Input | Returns |
 |---|---|---|
-| `sinceDate` | `meeting`, `project` | the "since" date (design §8 rule) |
-| `prep` | `meeting` | per agenda project: its `project-status` sections plus the ask |
+| `sinceDate` | `meeting`, `project` | `{ since, source, previous }`: the "since" date (design §8 rule), where it came from, and the previous held meeting that covered the project |
+| `prep` | `meeting` | per agenda item: its project's `project-status` sections (with row marks) plus the ask |
 | `report` | `meeting`, `kind` (board/minutes), `format` (md/text/json) | rendered report |
 
 | Write | Input | Change-set line |
 |---|---|---|
 | `addMeeting` | title, date, kind, `attendees?`, `projects?` (creates agenda items) | `+ meeting M-5 "SteerCo Q1" 2027-03-04` |
-| `editMeeting` / `cancelMeeting` | … | `~ M-5 date 4 Mar → 11 Mar` |
+| `editMeeting` / `cancelMeeting` | … | `~ M-5 date 2027-03-04 → 2027-03-11`, `~ M-5 cancelled` |
 | `closeMeeting` | `meeting` | `~ M-4 held` |
 | `setAttendees` | `meeting`, `people[]` | `~ M-4 attendees +@tom −@luc` |
-| `addAgendaItem` / `editAgendaItem` / `moveAgendaItem` / `removeAgendaItem` | … | `~ M-4 item 2 ask: "Release contingency"` |
+| `addAgendaItem` / `editAgendaItem` / `moveAgendaItem` / `removeAgendaItem` | … | `~ M-4 item 2 ask: "Release contingency"` (also `+ M-4 item 3 "Budget"`, `~ M-4 item 4 → 2`, `- M-4 item 2 "AOB"`) |
 | `setNotes` | `meeting`, `markdown` | `~ M-4 notes` |
 
 Actions and decisions logged during a meeting are created through `projects.write.addAction` and `projects.write.addDecision`, with `meeting: "M-4"`. Meetings doesn't store them.
@@ -244,15 +245,18 @@ pm meeting agenda <M-n> add|edit|move|remove
 pm report board <M-n> | minutes <M-n>   [--format md|text|json]
 ```
 
+Agenda items have no ref of their own: they are addressed by meeting and position (`pm meeting agenda M-4 edit 2`). `--kind` defaults to `other` on the CLI (the TUI form starts at `steering`). `--attendees` and `--projects` take comma-separated lists; the TUI form takes them as tag text (`@peter @marie`, `#CRM #ERP`). Held meetings stay writable (notes are often finished afterwards); cancelled ones are read-only, and nothing reopens a meeting. Commands print a short result line; the change-set lines above go to the change log.
+
 ### UI and other contributions
 
 | Extension point | What |
 |---|---|
 | `screen` | **Meetings** (5) |
-| `recordTab` on `meeting` | **Agenda**, **Prep**, **Notes**, **Export** |
+| `recordTab` on `meeting` | **Agenda**, **Prep**, **Notes**, **Export** (board pack while planned, minutes once held, `m` switches, `w` writes `<exportDir>/<date>-<slug>.md`, `y` copies by OSC 52) |
+| `recordForm` on `meeting` | meeting, agenda item, attendees |
 | `recordTab` on `project` | — (left out for now) |
-| `report` | `board` and `minutes`. Both embed `project-status` per agenda project, with "since" from `sinceDate` |
-| `quickAction` on `meeting` | Close meeting (`x`), Export (`w`) |
+| `report` | `board` and `minutes`. The board embeds `project-status` per agenda project through `ctx.reports.run`, with `since` from `sinceDate`; its title is `<title> · <date>` |
+| keys | `x` (close) and `w` (write the export) are plain keys on the screen and tabs; `quickAction` is not used (phase 5) |
 | `guideSection` | how to prepare a meeting and turn notes into actions and decisions |
 
 ---

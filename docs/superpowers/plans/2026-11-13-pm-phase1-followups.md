@@ -218,6 +218,47 @@ Controller rulings:
 - Final review: the MaxListeners warning in `capture.test.tsx` predates this branch (it is on origin/main too).
 - Deferred to a later phase: a kernel `nav.replaceRecord(ref)`, so a record route follows a rename from any plugin or the CLI. The person Summary's `e` follows a handle edit itself (back, then open the new ref); the `#CODE` edit in Projects has the same gap and is not fixed.
 
+## Phase 4 (Meetings)
+
+Collected from the phase 4 execution ledger (`.superpowers/sdd/2026-11-18-pm-phase4-meetings/progress.md`). Task numbers refer to `docs/superpowers/plans/2026-11-18-pm-phase4-meetings.md`.
+
+### Rulings made during phase 4 (and what each costs if wrong)
+
+Plan rulings (M1 to M11, in the plan):
+- **M1.** Prep look: generic drawing with row hints. Reports gain optional per-row `marks` (icon and tone); projects marks its sections. Cost: one optional field in the report contract (`apiVersion` 1, additive).
+- **M2.** The board pack embeds projects' `project-status` through `ctx.reports.run`, so other plugins' sections appear too. Needs a section returning several sections, `group` headings and a title that depends on the params. Cost: four small additive kernel changes.
+- **M3.** The Export tab shows the board pack while the meeting is planned and the minutes once it is held; `m` switches. Cost: none.
+- **M4.** The file name is fixed: `<exportDir>/<date>-<slug>.md`. A second export overwrites it. Cost: no way to keep two versions short of renaming the file.
+- **M5.** Copy uses OSC 52 only. ttyd 1.7.7 ignores it, so `y` reports when the terminal refuses; container download is phase 6. Cost: `y` doesn't work in the browser terminal yet.
+- **M6.** Attendees and projects in the meeting form are tag text (`@peter @marie`, `#CRM #ERP`), since the form has no multi-select. Cost: no autocomplete in those two fields.
+- **M7.** Agenda items are addressed by meeting and position, with no record type or ref. Cost: a later plugin cannot link to one agenda item.
+- **M8.** Held meetings stay writable, cancelled ones are read-only, there is no reopen. Cost: a meeting closed by mistake can't be reopened.
+- **M9.** `quickAction` is not built; `x` and `w` are plain keys. Cost: none.
+- **M10.** No Meetings tab on the project record. Cost: none.
+- **M11.** The meeting kind defaults to `other` on the CLI and to `steering` in the TUI form. Cost: one default.
+
+Controller rulings:
+- `SinceResult` is the `sinceDate` output type `{ since, source, previous }`, exported from `meetings/logic/since.ts`. Cost: one type name.
+- The `project-status` param key is `previous-meeting` (kebab-case), because report params become CLI flags verbatim; the plan said `previousMeeting`. Cost: one param name.
+- The edit change line labels `sinceDate` as `since`, matching the CLI flag. Cost: one word in a change line.
+- Meeting commands print short result lines like the people and projects commands; change-set lines stay in the change log. The plan's "every write prints its change-set line" was imprecise. Cost: one output line per command.
+- Task 6's single overdue-and-linked action is impossible (`project-status` dedupes overdue first), so the seed's two actions (A-1 overdue, A-2 from M-1) stand; they pin both paths. Cost: none.
+- `SubmitResult.field` (an optional field on a failed submit) was accepted as an out-of-plan kernel addition: `NotFoundError` has no field and a `ValidationError` would change the CLI exit code 2 to 1. It is documented and tested. Cost: one optional field in the form contract.
+- Task 9's deviations were accepted: the weekday comes from the date (2026-12-04 is a Friday), the ask is pinned below the Prep scrollbox so it stays visible at 80x24, PgUp/PgDn scroll the prep, `p` is guarded on cancelled meetings, and an item without a project is titled `Prep · <item text>`. Cost: layout tweaks.
+- Decisions show as `DE-n` (the real ref from `refOf`), not the plan's `D-n`. Cost: none.
+
+### Deferred minors and concerns
+
+- Task 1: `wellFormed` doesn't check a mark's contents (icon type, tone enum, arrays); the host test uses today 2026-11-20; a report that runs itself has no recursion guard; the order in the grouping test differs from the brief (covered elsewhere); Markdown doesn't escape icons and text widths use `.length` (wide emoji).
+- Task 2: `prepare` duplicates `projectStatus`'s meeting-ref check (for a correct field name); a decision-form test depends on field order.
+- Task 4: the agenda edit line shows the project as a bare code (`"ERP"`), not `#ERP`; `editAgendaItem` bumps `updated_at` on a no-op; the `(no change)` lines aren't documented; the MaxListeners warning is pre-existing.
+- Task 5: agenda add computes the printed position itself, not from the op; agenda text can't start with `-` (dispatcher); `--file` errors drop the reason.
+- Task 6: one failed `project-status` run blanks every project block and makes prep reject (no per-project catch; near-unreachable); the minutes queries skip `unlessUnavailable`.
+- Task 7: the clipboard spy is never restored; a bold group heading is untested.
+- Task 8: the unknown-project to field mapping is untested and matches error text (add a test, comment `records.ts`); the cancelled-meeting negative check reads the frame without `settle`; `x` / Del are claimed even with nothing planned selected; a long comment line in `Form.tsx`.
+- Task 9: the tests' `until` returns quietly on timeout, so the selection-follows steps aren't asserted directly; a weak `—` assertion; `x` on a held meeting shows "already held" in the tabs while the screen ignores it; `a` / `D` on an item without a project are untested; `e` in Prep opens the full form focused on its first field.
+- Task 10 (concern): `RecordView`'s tab box lacks `minHeight 0` (`RecordView.tsx:55/67`), so tall content can push the record header off screen; Export works around it locally with `flexBasis 0`, and the kernel fix should replace that workaround (`ProjectContext` and long Notes may overflow too). `E` ($EDITOR) on Notes has no positive test; the export slug cut at 40 can end in `-`; after `m` the choice sticks, so a later close doesn't switch to the minutes; the Notes scroll ref is detached when the notes are empty; `Lines` is imported from `prep-tab` (better in a shared module).
+
 ## Draft recovery (2026-11-17)
 
 Forms, quick capture and the Context editor keep unsaved values as drafts in `PM_HOME/drafts/` (`src/kernel/tui/drafts.ts`). Deferred minors:
