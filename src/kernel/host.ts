@@ -22,7 +22,7 @@ import { assertPluginId } from "./plugin-id"
 import type { PluginContext, PluginDef, PluginRuntime } from "./plugin"
 import { ProvenanceStore } from "./provenance"
 import { RecordTypeRegistry } from "./records"
-import { ReportRegistry } from "./reports"
+import { renderReport, ReportRegistry } from "./reports"
 import { satisfies } from "./semver"
 import { TagRegistry } from "./tags"
 import { ViewRegistry } from "./views"
@@ -76,7 +76,7 @@ type Slot = {
 }
 
 // The context keys a runtime carries: everything but the registrations (PluginRuntime).
-const RUNTIME_KEYS: Array<keyof PluginRuntime> = ["id", "data", "config", "clock", "use", "self", "records", "tags", "provenance"]
+const RUNTIME_KEYS: Array<keyof PluginRuntime> = ["id", "data", "config", "clock", "use", "self", "records", "tags", "reports", "provenance"]
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -247,6 +247,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         live()
         reports.section(reportId, id, def)
       },
+      reports: { run: (reportId, params) => reports.run(reportId, params), render: renderReport },
       guideSection: (def) => {
         live()
         guide.section(id, def)

@@ -173,6 +173,23 @@ describe("project detail", () => {
     expect(lineWith(frame, "Context · markdown")).toContain("100%") // it fits: scrolled to the end
   })
 
+  test("a long context at 80x24 scrolls inside the tab and keeps the breadcrumb", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await seed()
+    const long = Array.from({ length: 60 }, (_, i) => `Paragraph ${i + 1}`).join("\n\n")
+    await inCtx(() => write().setContext!({ project: "CRM", markdown: long }))
+    tui = await renderTui(kernel, { width: 80, height: 24 })
+    tui.input.pressKey("2")
+    await tui.frame()
+    await tui.nav.open("#CRM")
+    await tui.frame()
+    await right(tui, 7)
+    const frame = await until(tui, "Paragraph 1")
+    expect(frame).toContain("Context · markdown")
+    expect(frame).toContain("Paragraph 1")
+    expect(frame).toContain("› CRM CRM replatforming")
+  })
+
   test("e edits context", async () => {
     const t = await open()
     await inCtx(() => write().setContext!({ project: "CRM", markdown: "# A" }))

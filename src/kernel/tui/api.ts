@@ -48,6 +48,12 @@ export { Panel } from "./components/Panel"
 // The extra fields of a record (the `field` extension point) as `Label  value` rows.
 export { RecordFields } from "./components/RecordFields"
 export { RecordView } from "./components/RecordView"
+// Report section results as lines with their row marks (put it in a scrollbox); `skipColumns` leaves columns out.
+export { ReportSections } from "./components/ReportSections"
+export type { Mark, ReportSectionResult } from "../reports"
+// useWriteExport(): (fileName, text) => Promise<absolute path>, into the configured export folder (fileName is plain,
+// no separators). useCopyText(): (text) => boolean, copies through the terminal (OSC 52). Call both during setup.
+export { useCopyText, useWriteExport } from "./export"
 export { Table, type TableColumn, type TableGroup, type TableProps, type TableRow } from "./components/Table"
 export { Tabs, type TabItem } from "./components/Tabs"
 export { addDays, daysBetween, weekEnd } from "../dates"

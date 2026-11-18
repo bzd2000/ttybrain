@@ -29,6 +29,7 @@ src/kernel/                 knows nothing about projects or people
   isolation-selfcheck.ts    repeats the isolation cases on the current runtime (also run by the Node smoke test)
 src/bin/pm.ts               the `pm` entry point: boots the kernel with `src/plugins/index.ts` and runs the CLI
 src/plugins/<id>/logic/     index.ts (definePlugin), schema.ts, views.ts, ops*.ts, commands*.ts, records.ts, report.ts, guide.ts: NO UI imports
+                            (meetings: ops.ts, records.ts, since.ts, reports.ts, commands.ts, views.ts, guide.ts, schema.ts)
 src/kernel/tui/             the TUI kernel: frame, router, keys, overlays, data hooks, building blocks (see "The TUI")
 src/plugins/<id>/tui/       screens, record tabs, panels, forms, badges: each plugin's TUI part (`defineTui`)
 tests/helpers.ts            makeTestKernel; tests/fixtures/ fixture plugins
@@ -86,14 +87,15 @@ src/kernel/tui/
   data.ts, refresh.ts       useQuery, act, useRuntime, useRecord; live refresh (PRAGMA data_version)
   drafts.ts                 drafts of unsaved forms, capture and editor text (PM_HOME/drafts), useDraft
   scope.tsx, external.ts    PluginScope (which plugin a component belongs to); $VISUAL/$EDITOR handoff
-  components/               Table, Form, Field, Panel, Tabs, Menu, RecordView, RecordFields, OverviewScreen, Editor, DraftPrompt, Help, Switcher, KeyHints, ErrorBoundary
+  components/               Table, Form, Field, Panel, Tabs, Menu, RecordView, RecordFields, OverviewScreen, Editor, DraftPrompt, Help, Switcher, KeyHints, ErrorBoundary, ReportSections
+  export.ts                 writeExport(dir, fileName, text), the hooks useWriteExport() and useCopyText()
   format.ts, theme.ts, messages.ts   display width/dates, colours and tones, status-bar notices
 src/plugins/tui.ts          builtinTuiParts: the list of built-in tui parts
 src/plugins/<id>/tui/       index.tsx = defineTui({ plugin, activate(ui) }) plus the plugin's screens, forms, panels
 tests/tui.tsx               renderTui(kernel, { parts, external, width, height, refreshMs, draftMs }) -> { frame(), peek(), spans(), input, settle(), nav, renderer, destroy() }
 ```
 
-A part registers in `activate(ui)` with: `ui.screen` (built-in screens use a fixed number key: `1` Overview, `2` Projects, `4` Actions, `6` Inbox; `3` People is built in phase 3; `5` Meetings is for phase 4; other screens get `7`, `8`, … in registration order), `recordTab`, `overviewPanel`, `listColumn`, `recordForm`, `fieldEditor`, `globalAction`, `statusBadge`. Registrations may be made only during `activate`. A part that throws is isolated and listed in Help; the rest of the app runs.
+A part registers in `activate(ui)` with: `ui.screen` (built-in screens use a fixed number key: `1` Overview, `2` Projects, `4` Actions, `6` Inbox; `3` People (phase 3) and `5` Meetings (phase 4) are built; other screens get `7`, `8`, … in registration order), `recordTab`, `overviewPanel`, `listColumn`, `recordForm`, `fieldEditor`, `globalAction`, `statusBadge`. Registrations may be made only during `activate`. A part that throws is isolated and listed in Help; the rest of the app runs.
 
 Rules:
 - **Imports.** A tui part imports kernel things only from `src/kernel/tui/api.ts`, and logic only from its own plugin's `logic/`, never another plugin's files. Logic and the rest of the kernel never import `solid-js` or `@opentui/*`. Only `src/kernel/tui/` and `src/plugins/*/tui/` may. Keep imports extensionless (the Node build adds `.js`).
@@ -104,8 +106,9 @@ Rules:
 - **The `recordRef` prop rule.** A record reference prop is `recordRef`, never `ref`: Solid compiles a JSX `ref=` into an element-ref callback. This holds for `RecordTabDef.component`, `count?(recordRef)`, `when?(recordRef)` (the tab shows only for records it resolves true for; a throwing check keeps it), `RecordFormProps.recordRef` and `<RecordView recordRef>`. `Route` objects (plain data) keep a `ref` field.
 - **Live refresh.** `createLiveRefresh` polls `PRAGMA data_version` about every second and bumps a version that makes every `useQuery` reload, so changes from the CLI show up. After the app's own `act`, a refresh bump is scheduled too. `renderTui`'s `settle()` waits for in-flight loads and that scheduled bump; wait on a frame condition rather than sleeping.
 - **Acting on rows.** `Table` calls `onSelect(undefined)` when it has no rows; act on `e`, `x`, `Del` and the like only when the selected ref is among the rows currently shown. Selection is kept by ref across reloads. A Table scrolls only inside a height-bounded parent (a `<Panel grow>`). Edit forms send only the fields whose value changed, and close without writing when nothing changed.
-- **Forms.** `<Form title fields submit close>`; a field's `name` must equal the op input name, so a `ValidationError(field)` shows inline. `required` only marks `*`; the op validates. `submit(values)` returns `{ ok: true, ref? } | { ok: false, error }`, typically from `act`. `openForm(recordType, formId?, { recordRef?, prefill?, origin? })` resolves to the saved ref, or `undefined` on cancel.
+- **Forms.** `<Form title fields submit close>`; a field's `name` must equal the op input name, so a `ValidationError(field)` shows inline. `required` only marks `*`; the op validates. `submit(values)` returns `{ ok: true, ref? } | { ok: false, error, field? }`, typically from `act`; `field` puts an error that names no field itself (an op's `NotFoundError` for one of the values) under that field. `openForm(recordType, formId?, { recordRef?, prefill?, origin? })` resolves to the saved ref, or `undefined` on cancel.
 - **Drafts.** `drafts.ts` keeps unsaved text as JSON files in `PM_HOME/drafts/` (one per key, `{ key, savedAt, values }`, written atomically with `node:fs`), never in the database, so typing takes no write lock and causes no live refresh. A `<Form>` that `openForm` opened keeps one by itself under `<plugin>:<form>:<recordRef | new>[:from:<origin ref>]`, holding every field it shows (extra fields too); the editor keeps one only when `openEditor` gets a `draftKey` (the kernel prefixes the calling plugin); a plugin overlay uses `useDraft(key, initial)` (prefixed the same way) with `<DraftPrompt>`, as quick capture does. A draft is written 1 s after the last change (`renderTui`'s `draftMs` shortens it), at once on Esc and when the tree is disposed (quit), deleted by a save or by the editor's confirmed discard (Esc d, `y`), kept by a form's or quick capture's Esc cancel (`draft kept`); `savedAt` comes from the kernel clock. On reopen a draft that differs from the initial values is offered by `<DraftPrompt>` (`r` restore, `x` discard, Esc close) before the component takes any key: it claims every key and shows its own status-bar hints, and the component's own handler returns early, its hints are withdrawn and its fields are unfocused meanwhile. Drafts older than 30 days are pruned at TUI start; draft I/O errors are swallowed (the first one is reported in the status bar).
+- **Reports and exports in the TUI.** `<ReportSections sections skipColumns?>` draws `ReportSectionResult`s as lines (title, one line per row with its mark's icon and tone, `empty`, `text`, muted `note`, a group heading once per group); it takes no keys and the caller puts it in a scrollbox. `useWriteExport()` returns `(fileName, text) => Promise<absolute path>` that writes into `config.exportDir` (creating it, overwriting a file of that name; the name is plain, no separators), and `useCopyText()` returns `(text) => boolean` that copies through the terminal with OSC 52 (false when the terminal refuses; ttyd ignores OSC 52). Call both hooks during component setup. Plugins never import `node:fs` for exports.
 - **Tests.** Use `renderTui` and assert on frame text and on the database; seed through write ops inside `runWithContext(kernel.context())`; call `destroy()` in `finally`. `bash scripts/smoke-node.sh` runs the TUI self-check on Node.
 
 ## Who owns what
@@ -114,7 +117,7 @@ Rules:
 |---|---|---|---|---|
 | `people` | — | projects | person, note, goal | `@handle`, `N-`, `G-` |
 | `projects` | people | people, meetings | project, health_update, milestone, deliverable, risk, decision, action, involvement | `#CODE`, `MS-`, `D-`, `R-`, `DE-`, `A-` |
-| `meetings` (phase 4) | projects, people | people, projects | meeting, attendee, agenda_item | `M-` |
+| `meetings` | projects, people | people, projects | meeting, attendee, agenda_item | `M-` |
 | `inbox` | — | — | item, link | `I-` |
 | `assistant` (phase 7) | — | all (as tools) | — | — |
 
@@ -134,6 +137,9 @@ Rules:
   - references accept `A-12` or `12`, `CRM` or `#CRM`, `anna` or `@anna`.
 - An empty action owner, or the token `me`, means **me**. So `me` is a reserved handle: no person can have it.
 - **Reports** are registered with `ctx.report({ id, params, prepare?, … })` and extended with `ctx.reportSection(reportId, …)`. The optional `prepare(params)` turns validated params into what the sections get (parsed dates, defaults). Param names `json`, `db`, `from-inbox`, `yes`, `help` and `format` are reserved (they collide with CLI flags).
+  - A section result may carry `group` (a heading shared by consecutive sections: Markdown writes it as `##` and the section title as `###`, text and the TUI draw it once), `marks` (one `{ icon?, tone? }` or `null` per row; the icon is written before the row's first cell, the TUI colours it by tone) and `text` (a Markdown paragraph after the table). All three are optional and additive in `apiVersion` 1.
+  - A section's `run` may return an array of results, spliced into the report in its place; each element is checked on its own, and a malformed one becomes an error note. A report's `title` may be a function of what `prepare` returned (the board's title names the meeting).
+  - `ctx.reports.run(reportId, params)` runs any registered report in the caller's operation context and `ctx.reports.render(result, "md" | "text" | "json")` renders one. The meetings board pack embeds `project-status` this way (one run per agenda project), so sections other plugins add to it appear in the board pack too. Report params become CLI flags verbatim, so they are kebab-case (`previous-meeting`).
 
 ## Runtimes
 

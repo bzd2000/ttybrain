@@ -1,7 +1,7 @@
 // projects' reports: `project-status` (`pm report status <project>`, the prep block, built from projectStatus) and
 // `overview` (`pm report overview`, the Overview screen as text). Other plugins add sections to both (meetings
 // to the status report, people and inbox to the overview); the kernel owns neither.
-import { addDays, Type, type Cell, type PluginContext } from "../../../kernel/api"
+import { addDays, parseRef, Type, ValidationError, type Cell, type Mark, type PluginContext } from "../../../kernel/api"
 import type { Items } from "./items"
 import { makeOverview, type OverviewAction } from "./overview"
 import { date, today } from "./ops-project"
@@ -11,6 +11,7 @@ import type { ProjectStatus, StatusInput } from "./status"
 const SINCE_DAYS = 30 // the status report's default "since": today − 30
 
 type Row = Record<string, Cell>
+const healthTone = (health: string | null): NonNullable<Mark["tone"]> => (health === "green" || health === "amber" || health === "red" ? health : "muted")
 const me = (owner: string | null) => owner ?? "me"
 
 export function registerReports(ctx: PluginContext, store: Store, items: Items): void {
@@ -34,22 +35,34 @@ function registerStatusReport(ctx: PluginContext, store: Store): void {
     params: Type.Object({
       project: Type.String({ description: "the project code" }),
       since: Type.Optional(Type.String({ description: "report changes since this date (default: 30 days ago)" })),
+      reference: Type.Optional(Type.String({ description: "the date the due-soon windows count from (default: today), e.g. a meeting's date" })),
+      "previous-meeting": Type.Optional(Type.String({ description: "a meeting ref (M-n): its open actions are listed too" })),
     }),
     describe: "a project's status: health, milestones, deliverables, risks, decisions and actions since a date",
-    // Fail the command (not a section) on an unknown project or a bad date.
-    prepare: async (p: { project: string; since?: string }): Promise<StatusInput> => ({
-      project: (await store.project(p.project)).code,
-      since: p.since !== undefined ? date(p.since, "since") : addDays(today(), -SINCE_DAYS),
-    }),
+    // Fail the command (not a section) on an unknown project, a bad date or a bad meeting ref.
+    prepare: async (p: { project: string; since?: string; reference?: string; "previous-meeting"?: string }): Promise<StatusInput> => {
+      const input: StatusInput = {
+        project: (await store.project(p.project)).code,
+        since: p.since !== undefined ? date(p.since, "since") : addDays(today(), -SINCE_DAYS),
+      }
+      if (p.reference !== undefined) input.reference = date(p.reference, "reference")
+      const meeting = p["previous-meeting"]
+      if (meeting !== undefined) {
+        if (parseRef(meeting, "M-") === null) throw new ValidationError(`invalid meeting "${meeting.trim()}"`, { field: "previous-meeting", hint: "a meeting ref, e.g. M-4" })
+        input.previousMeeting = meeting.trim()
+      }
+      return input
+    },
   })
 
-  const section = (id: string, order: number, build: (s: ProjectStatus, p: StatusInput) => { title: string; columns: string[]; rows: Row[]; empty: string; note?: string }) =>
+  const section = (id: string, order: number, build: (s: ProjectStatus, p: StatusInput) => { title: string; columns: string[]; rows: Row[]; marks?: Array<Mark | null>; empty: string; note?: string }) =>
     ctx.reportSection("project-status", { id, order, run: async (p: StatusInput) => build(await status(p), p) })
 
   section("health", 10, (s, p) => ({
     title: "Health",
     columns: ["Project", "Name", "Health", "Date", "Comment"],
     rows: [{ Project: s.project.ref, Name: s.project.name, Health: s.project.health ?? "not set", Date: s.project.healthDate, Comment: s.project.healthComment }],
+    marks: [{ icon: "●", tone: healthTone(s.project.health) }],
     empty: "",
     ...(s.project.healthStale ? { note: `⚠ health not updated since ${p.since}` } : {}),
   }))
@@ -57,18 +70,21 @@ function registerStatusReport(ctx: PluginContext, store: Store): void {
     title: "Milestones",
     columns: ["ID", "Milestone", "Due", "Done", "Late"],
     rows: [...s.milestones.completed, ...s.milestones.upcoming].map((m) => ({ ID: m.ref, Milestone: m.title, Due: m.due_date, Done: m.done_date, Late: m.late ? "late" : "" })),
+    marks: [...s.milestones.completed, ...s.milestones.upcoming].map((m): Mark => ({ icon: m.done_date !== null ? "✓" : "○", ...(m.late ? { tone: "red" as const } : {}) })),
     empty: `No milestones completed since ${p.since} or due in the next 60 days.`,
   }))
   section("deliverables", 30, (s, p) => ({
     title: "Deliverables",
     columns: ["ID", "Deliverable", "Owner", "Due", "Status"],
     rows: s.deliverables.map((d) => ({ ID: d.ref, Deliverable: d.title, Owner: d.owner, Due: d.due_date, Status: d.status })),
+    marks: s.deliverables.map((d): Mark => ({ icon: d.status === "delivered" ? "✓" : d.status === "in_progress" || d.status === "in_review" ? "◐" : "○" })),
     empty: `No deliverables changed since ${p.since} or due in the next 30 days.`,
   }))
   section("risks", 40, (s) => ({
     title: "Risks & issues",
     columns: ["ID", "Type", "Severity", "Title", "Owner", "Mitigation"],
     rows: s.risks.map((r) => ({ ID: r.ref, Type: r.type, Severity: r.severity, Title: r.title, Owner: r.owner, Mitigation: r.mitigation })),
+    marks: s.risks.map((r): Mark => ({ icon: "▲", ...(r.severity === "high" ? { tone: "red" as const } : {}) })),
     empty: "No open risks or issues.",
   }))
   section("decisions", 50, (s, p) => ({
@@ -80,12 +96,18 @@ function registerStatusReport(ctx: PluginContext, store: Store): void {
   section("actions", 60, (s) => {
     const seen = new Set<string>()
     const rows: Row[] = []
+    const marks: Mark[] = []
     for (const [why, list] of [
       ["overdue", s.actions.overdue],
       ["previous meeting", s.actions.fromMeeting],
     ] as const)
-      for (const a of list) if (!seen.has(a.ref)) seen.add(a.ref), rows.push({ ID: a.ref, Action: a.title, Owner: me(a.owner), Due: a.due_date, Why: why })
-    return { title: "Actions", columns: ["ID", "Action", "Owner", "Due", "Why"], rows, empty: "No overdue actions." }
+      for (const a of list)
+        if (!seen.has(a.ref)) {
+          seen.add(a.ref)
+          rows.push({ ID: a.ref, Action: a.title, Owner: me(a.owner), Due: a.due_date, Why: why })
+          marks.push({ icon: "!", ...(why === "overdue" ? { tone: "red" as const } : {}) })
+        }
+    return { title: "Actions", columns: ["ID", "Action", "Owner", "Due", "Why"], rows, marks, empty: "No overdue actions." }
   })
 }
 

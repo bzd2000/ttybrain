@@ -4,11 +4,11 @@ import { makeTestKernel, type TestKernel } from "../../tests/helpers"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { definePlugin, Type } from "./api"
+import { currentContext, definePlugin, Type, type PluginContext } from "./api"
 import { fixedClock } from "./clock"
 import { runWithContext } from "./context"
 import { bootKernel } from "./host"
-import { IsolationError, ViewUnavailableError } from "./errors"
+import { IsolationError, NotFoundError, ViewUnavailableError } from "./errors"
 import type { PluginApi } from "./operations"
 
 let kernels: TestKernel[] = []
@@ -134,6 +134,33 @@ describe("a working kernel", () => {
     expect(status(k)).toEqual({ alpha: "ok", probe: "ok" })
     expect(seen.other).toBeUndefined()
     expect(Object.keys(seen.own!.read)).toEqual(["hi"])
+  })
+
+  test("a plugin runs another plugin's report through ctx.reports.run and renders it", async () => {
+    const publisher = definePlugin({
+      id: "pub",
+      name: "Pub",
+      version: "1.0.0",
+      apiVersion: 1,
+      activate(ctx) {
+        ctx.report({ id: "status", cliName: "status", title: (p: { code: string }) => `Status ${p.code}`, params: Type.Object({ code: Type.String() }), describe: "x" })
+        ctx.reportSection("status", {
+          id: "today",
+          order: 1,
+          run: async (p: { code: string }) => ({ title: "Today", columns: ["code", "day"], rows: [{ code: p.code, day: currentContext().today }], empty: "", marks: [{ icon: "✓" }] }),
+        })
+      },
+    })
+    let reports: PluginContext["reports"] | undefined
+    const embedder = definePlugin({ id: "embed", name: "Embed", version: "1.0.0", apiVersion: 1, activate: (ctx) => void (reports = ctx.reports) })
+    const k = await boot({ plugins: [publisher, embedder], today: "2026-11-20" })
+    expect(status(k)).toEqual({ pub: "ok", embed: "ok" })
+    const r = await inCtx(k, () => reports!.run("status", { code: "CRM" }))
+    const sections = r.sections.map((s) => ({ ...s, group: "CRM" }))
+    expect(reports!.render({ title: r.title, sections }, "md")).toBe("# Status CRM\n\n## CRM\n\n### Today\n\n| code | day |\n| --- | --- |\n| ✓ CRM | 2026-11-20 |\n")
+    expect(k.runtime("embed")!.reports).toBe(reports!)
+    const err = await error(() => inCtx(k, () => reports!.run("nope", {})), NotFoundError)
+    expect(err.message).toBe('no report "nope"')
   })
 
   test("ctx.data is scoped: another plugin's table is rejected", async () => {

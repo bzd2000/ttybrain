@@ -1,6 +1,6 @@
 # pm
 
-A personal project-portfolio tool: a CLI (`pm <thing> <verb>`, also usable by an AI agent) and, from phase 2, a terminal UI built with [OpenTUI](https://opentui.com) and Solid. It is a small plugin kernel plus plugins (`people`, `projects`, `inbox`). Data is one SQLite file under `PM_HOME` (default `~/.pm`). It runs on Bun 1.3.14+ and Node.js 26.4+. See `docs/architecture.md`.
+A personal project-portfolio tool: a CLI (`pm <thing> <verb>`, also usable by an AI agent) and, from phase 2, a terminal UI built with [OpenTUI](https://opentui.com) and Solid. It is a small plugin kernel plus plugins (`people`, `projects`, `meetings`, `inbox`). Data is one SQLite file under `PM_HOME` (default `~/.pm`). It runs on Bun 1.3.14+ and Node.js 26.4+. See `docs/architecture.md`.
 
 ## CLI
 

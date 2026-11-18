@@ -116,6 +116,21 @@ function NotesForm(props: RecordFormProps) {
   )
 }
 
+// A submit that fails with a plain error, naming the field to show it under.
+function OwnerErrorForm(props: RecordFormProps) {
+  return (
+    <Form
+      title="Owner check"
+      fields={[
+        { name: "owner", label: "Owner", kind: "text" },
+        { name: "title", label: "Title", kind: "text" },
+      ]}
+      submit={async () => ({ ok: false, error: new Error('unknown person "zorro"'), field: "owner" })}
+      close={props.close}
+    />
+  )
+}
+
 let overlay: Overlay | undefined
 function Home() {
   overlay = useOverlay()
@@ -129,6 +144,7 @@ const todoPart: TuiDef = defineTui({
     ui.recordForm("thing", { id: "thing", label: "Thing", component: ThingForm })
     ui.recordForm("thing", { id: "assign", label: "Assign", component: AssignForm })
     ui.recordForm("thing", { id: "notes", label: "Notes", component: NotesForm })
+    ui.recordForm("thing", { id: "owner-error", label: "Owner check", component: OwnerErrorForm })
   },
 })
 
@@ -245,6 +261,18 @@ describe("forms", () => {
     expect(frame).toContain("New thing")
     expect(lineWith(frame, "Due")).toContain("+2d")
     expect(await things()).toEqual([])
+  })
+
+  test("a failed submit that names a field shows its error under that field", async () => {
+    const t = await open()
+    overlay!.openForm("thing", "owner-error")
+    await t.frame()
+    t.input.pressKey("s", { ctrl: true })
+    const frame = await t.frame()
+    const lines = frame.split("\n")
+    const owner = lines.findIndex((l) => l.includes("Owner") && !l.includes("Owner check"))
+    expect(lines[owner + 1]).toContain('✗ unknown person "zorro"')
+    expect(frame).toContain("Owner check")
   })
 
   test("typing q in a field does not quit", async () => {

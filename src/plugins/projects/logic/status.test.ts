@@ -124,6 +124,34 @@ describe("projects: projectStatus and the project-status report", () => {
     expect((await status({ project: "NOPE" }).catch((e) => e)).code).toBe("not_found")
   })
 
+  test("project-status takes reference and previousMeeting", async () => {
+    await inCtx(() => api().write.addAction!({ title: "From M-1", project: "CRM", meeting: "M-1" }))
+    await ok("milestone", "add", "CRM", "Far away", "--due", "2027-01-20") // MS-7
+    const rowsOf = (j: any, title: string) => j.sections.find((s: any) => s.title === title).rows
+    const plain = (await ok("report", "status", "CRM", "--json")).json
+    expect(rowsOf(plain, "Actions").map((x: any) => x.ID)).toEqual(["A-1"])
+    expect(rowsOf(plain, "Milestones").map((x: any) => x.ID)).not.toContain("MS-7")
+    const prep = (await ok("report", "status", "CRM", "--reference", "2026-12-04", "--previous-meeting", "M-1", "--json")).json
+    expect(rowsOf(prep, "Actions").map((x: any) => [x.ID, x.Why])).toEqual([["A-1", "overdue"], ["A-2", "overdue"], ["A-6", "previous meeting"]])
+    expect(rowsOf(prep, "Milestones").map((x: any) => x.ID)).toContain("MS-7")
+    expect((await run("report", "status", "CRM", "--reference", "someday", "--json")).json.error.field).toBe("reference")
+    expect((await run("report", "status", "CRM", "--previous-meeting", "X-1", "--json")).code).toBe(1)
+  })
+
+  test("status sections carry marks", async () => {
+    const md = (await ok("report", "status", "CRM", "--format", "md")).out
+    expect(md).toMatch(/^\| ✓ MS-1 /m)
+    expect(md).toMatch(/^\| ○ MS-3 /m)
+    expect(md).toMatch(/^\| ▲ R-2 /m)
+    const json = (await ok("report", "status", "CRM", "--json")).json
+    const marks = (title: string) => json.sections.find((s: any) => s.title === title).marks
+    expect(marks("Health")).toEqual([{ icon: "●", tone: "amber" }])
+    expect(marks("Milestones")).toEqual([{ icon: "✓" }, { icon: "○", tone: "red" }, { icon: "○" }])
+    expect(marks("Deliverables")).toEqual([{ icon: "○" }, { icon: "✓" }])
+    expect(marks("Risks & issues")).toEqual([{ icon: "▲", tone: "red" }, { icon: "▲", tone: "red" }, { icon: "▲" }, { icon: "▲" }])
+    expect(marks("Actions")).toEqual([{ icon: "!", tone: "red" }])
+  })
+
   test("report status CRM --format md: sections in order, the stale-health note", async () => {
     const r = await ok("report", "status", "CRM", "--format", "md")
     expect(r.out).toContain("## Risks & issues")
