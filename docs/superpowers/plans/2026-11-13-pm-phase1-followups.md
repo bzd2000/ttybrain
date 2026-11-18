@@ -254,6 +254,39 @@ Controller rulings:
 - Task 6 (deferred): the board pack is not fail-soft: `ctx.reports.run("project-status", …)` in the per-project loop (`src/plugins/meetings/logic/reports.ts:91`) has no try/catch, so one failing project fails the whole pack instead of showing that project's error in its block.
 - Task 10: done in the final fix wave: `RecordView` gives its outer box `minHeight 0` and the tab box a zero basis with `minHeight 0`, so a tall tab scrolls inside itself and the record header stays; Export's local `flexBasis 0` is gone. The Notes tab's Logged panel shows at most 6 lines (fewer on a short screen, the Notes panel keeps 5 rows), then `+n more`. Still open: `E` ($EDITOR) on Notes has no positive test; the export slug cut at 40 can end in `-`; after `m` the choice sticks, so a later close doesn't switch to the minutes; the Notes scroll ref is detached when the notes are empty; `Lines` is imported from `prep-tab` (better in a shared module).
 
+## Phase 5 part 1 (plugin loading)
+
+Collected from the execution ledger (`.superpowers/sdd/2026-11-18-pm-phase5-part1-plugin-loading/progress.md`). Task numbers refer to `docs/superpowers/plans/2026-11-18-pm-phase5-part1-plugin-loading.md`.
+
+### Rulings made during phase 5 part 1 (and what each costs if wrong)
+
+Plan rulings (R1 to R7, in the plan):
+- **R1.** `pm.id` is required in every manifest, so a disabled plugin's id is known without importing it; the loader fails a candidate whose `pm.id` differs from `PluginDef.id`. Cost: one more manifest field.
+- **R2.** Importing an external candidate and an external `activate` each time out after 5000 ms (`<id>: timed out after 5000 ms while <importing|activating>`); built-ins have none. Cost: a slow plugin must do its work after boot.
+- **R3.** A tui `activate` must be synchronous; a thenable fails the part (`<id>: tui activate must be synchronous`). Cost: no async tui setup.
+- **R4.** Shims are generated from what the plugin imports; the build never imports UI modules. A missing export fails at load with `rebuild the plugin with this pm`; `import * as` or `export *` of a shared module fails the build. Cost: named imports only.
+- **R5.** `pm plugin remove` is destructive (`--yes`); `--purge-data` also drops the plugin's data. Cost: one more flag.
+- **R6.** Installer: `npm` if it runs, else `bun add --cwd` under Bun, else an error; `PM_PLUGIN_INSTALLER=npm|bun` forces one. Cost: none.
+- **R7.** The test-only built-in lists moved to `tests/builtins.ts`; `src/plugins/index.ts` and `tui.ts` are deleted. Cost: none.
+
+Controller rulings:
+- Built-in load order is `inbox`, `people`, `projects`, `meetings` (directory name, then the `requires` sort). Panels sort by priority and screens use fixed slots, so nothing visible changes. Cost: none visible.
+- Task 2's minors M1 (`installApiModule` mutates `__PM_MODULES__` in place) and M4 (the disabled check comes before the installed check for an npm dependency) were folded into Task 3; Task 3's exact candidate discriminator (instead of duck-typing a `PluginDef`) into Task 4; an atomic config write (temp file and rename) into Task 6, since a truncated config would stop every boot. Cost: a few lines each.
+- Task 10 also fixed the untested "no pm sources" branch of the scaffold note (a brief requirement). Cost: one test.
+
+### Deferred minors and concerns
+
+- Task 1: a bare `src/kernel` path import is not flagged by the plugin-imports test; `default === named` export is not asserted.
+- Task 2: untested built-in no-timeout and disabled built-in; the EACCES message text.
+- Task 3: a disabled npm plugin is matched by package name only; a failed candidate shadows a later one with the same id.
+- Task 4: fixed polling bounds in `app.test.tsx` (~250) and `boot.test.ts` (~433) fall through silently (a plausible cause of an unreproduced 2-failure run); the "q quits" test loads zero tui parts; `withTimeout` is duplicated in `host.ts` and `loader.ts`; the Help capture hint is padded (`i         capture`) and the test uses a regex.
+- Task 5: `enable` of a non-disabled id still writes the config; an id disabled only through `PM_CONFIG_JSON` prints "enabled" but stays disabled; the single-plugin without-builtins cases assert only the header line; the unknown-id JSON output and suggestions are untested.
+- Task 6 (security, for the final review): the config merge copies `__proto__` from JSON and `deepFreeze` misses the prototype; the atomic config write replaces a symlinked config and drops its mode; the origin check runs before the write lock (an accepted, undocumented gap); the inbox-missing error names `--from-inbox` on non-CLI paths (verbatim text).
+- Task 7: a plugin's own npm dependencies that import Solid or OpenTUI load their own copies (documented as a known limit); a computed ``import(`solid-${x}`)`` is not caught (accepted, documented); logic reachability ignores a dynamic relative `import()`; the build text prints "undefined undefined" without a name or version; the babel-options parity test misses the test-file filter and the `toJs` pattern differs; non-source files in `src/` are not copied to `dist/`.
+- Task 8 (destructive, for the final review): a symlinked folder entry pointing inside the plugins dir deletes the target, not the link; provenance rows with the plugin's type as origin type are left dangling by a purge; no test purges a disabled or failed external plugin; `remove` with no installer says "pm plugin add needs npm"; an upgrade to a non-plugin version is not undone; a bare npm name is treated as a path when a same-named directory exists in the cwd; the `..` prefix check refuses `..foo` (fails safe).
+- Task 9: a fixed 20 ms sleep before the unhandled-rejection check (`tests/external-plugin.test.ts` ~528); the failing-migration case doesn't assert that no `kernel_plugin_migration` row exists, and the no-tables assertion is trivial in five cases; the selfcheck's `checkExternalScreen` duplicates the `checkLoaderPath` sequence.
+- Task 10: `plugin new --json` omits the no-sources note; the scaffold test uses `process.chdir`; the README template hard-codes `~/.pm/plugins`; the scaffold's devDependencies are unproven by a real `npm install` (the test symlinks `node_modules`).
+
 ## Draft recovery (2026-11-17)
 
 Forms, quick capture and the Context editor keep unsaved values as drafts in `PM_HOME/drafts/` (`src/kernel/tui/drafts.ts`). Deferred minors:

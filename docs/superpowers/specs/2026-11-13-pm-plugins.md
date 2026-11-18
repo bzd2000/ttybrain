@@ -359,3 +359,25 @@ None. It doesn't own data.
 | **Guide** | `pm guide`, composed from `guideSection`s in dependency order |
 | **Published views** | registry; creates the `__pub_` views at startup, checks columns, and turns each into an assistant read tool |
 | **Events** | `ctx.on` / emit; the TUI's live refresh also listens to them |
+
+---
+
+## Writing an external plugin
+
+The built-ins above are packages like any other (`src/plugins/<id>/package.json`), so an external plugin looks the same. Design: `2026-11-18-pm-phase5-plugins-design.md`.
+
+**Steps.** `pm plugin new contracts` scaffolds `./contracts` (`package.json`, `tsconfig.json`, `src/logic/index.ts` with a migration and a command, `src/logic/index.test.ts`, `src/tui/index.tsx` with a screen and a project `recordTab`). `pm plugin build contracts` compiles `src/` to `dist/`. Then either copy the folder into `~/.pm/plugins/` (`PM_PLUGINS`), or `pm plugin add ./contracts` (a folder, an npm name or a `.tgz`; the first add prints the trust warning). `pm plugin list` shows its source (`folder` or `npm`) and status; `pm plugin remove contracts --yes` removes it (`--purge-data` drops its tables too).
+
+**Manifest.** `package.json` with `"type": "module"`, `main` (the logic entry, default export a `definePlugin(...)`), and `"pm": { "plugin": true, "id": "contracts", "tui": "dist/tui/index.js" }` (`tui` optional, default export a `defineTui(...)`). `pm.id` must equal the `PluginDef` id and `version` the `PluginDef.version`, or the plugin fails to load. Ids may not equal a built-in's.
+
+**Imports.** Only `@pm/api` (logic) and `@pm/api/tui` (tui part), plus `solid-js`, `solid-js/store`, `@opentui/solid` and `@opentui/core` in the tui part. These are pm's own instances, provided at runtime through generated shims, so:
+- use named imports only (`import * as` or `export *` of a shared module fails the build);
+- no other `@opentui/*` package;
+- the logic entry, directly or through its own files, must not import the UI modules or `@pm/api/tui`;
+- a plugin built against an older pm that uses a since-removed export fails at load with `rebuild the plugin with this pm`; rebuild it.
+
+**Rules.** Everything in `docs/architecture.md` applies: data only through `ctx.data`, views and operations; schema changes only in migrations (external plugins may not create triggers); a tui `activate` must be synchronous; importing and `activate` each time out after 5 s. A failing plugin is isolated and shown by `pm plugin list` and in Help; pm keeps running.
+
+**Type-checking** needs pm's TypeScript sources (the scaffold's `tsconfig` points `@pm/api*` at the running pm's `src/kernel/api.ts` and `src/kernel/tui/api.ts`), so author from a git checkout of pm. Building does not need them. There are no `.d.ts` files yet.
+
+**Not supported yet (Part 2).** `quickAction`, the CLI side of extra fields (`CommandDef.record`) and tag types registered by an external plugin.

@@ -64,16 +64,17 @@ Every plugin, built-in or external, is a directory with a `package.json`:
 {
   "name": "pm-plugin-contracts", "version": "0.1.0", "type": "module",
   "main": "dist/logic/index.js",
-  "pm": { "plugin": true, "tui": "dist/tui/index.js" }
+  "pm": { "plugin": true, "id": "contracts", "tui": "dist/tui/index.js" }
 }
 ```
 
 - `main` (required) is the logic entry; its default export is a `PluginDef` (`definePlugin`). `pm.tui`
   (optional) is the tui entry; its default export is a `TuiDef` (`defineTui`). A named export is not accepted.
-- `id`, `version`, `apiVersion`, `requires` and `reads` come from the `PluginDef`. The loader checks that
-  `package.json` `version` equals `PluginDef.version` and fails the plugin otherwise.
+- `id`, `version`, `apiVersion`, `requires` and `reads` come from the `PluginDef`. **`pm.id` is required** (plan
+  ruling R1) so a disabled plugin's id is known without importing it. The loader checks that `package.json`
+  `version` equals `PluginDef.version` and `pm.id` equals `PluginDef.id`, and fails the plugin otherwise.
 - **Built-ins** use the same format with source entries: `src/plugins/<id>/package.json` has
-  `"main": "logic/index.ts"`, `"pm": { "plugin": true, "tui": "tui/index.tsx" }`. Under Node the build
+  `"main": "logic/index.ts"`, `"pm": { "plugin": true, "id": "<id>", "tui": "tui/index.tsx" }`. Under Node the build
   (`scripts/build-node.mjs`) writes the same `package.json` into `dist-node/plugins/<id>/` with `.js` entries.
   Built-ins carry `"private": true` and no peer dependencies.
 
@@ -91,17 +92,20 @@ valid), now with a `source` per plugin.
 3. **npm prefix**: the `dependencies` of `paths.plugins/package.json`, each resolved under
    `paths.plugins/node_modules/<name>/package.json` and marked `pm.plugin`. Source `npm`.
 4. Candidates are imported with dynamic `import()` of a `file://` URL. Each import is wrapped: an import error,
-   a missing or invalid default export, a manifest mismatch, a duplicate id, or an external id taken by a
+   a missing or invalid default export, a manifest mismatch (`version`, `pm.id`), a duplicate id, or an external id taken by a
    built-in makes a **failed** entry (id from the `PluginDef` when it loaded, else the directory name) that
    `pm plugin list` and Help show. Nothing a failed candidate did is kept.
 5. **Disabled plugins are not imported** (their logic code doesn't run), but still listed with status
-   `disabled`. The id of a disabled plugin is taken from `package.json` `pm.id` when present, else the
-   directory name; built-ins set `pm.id`. *(Builder's call how the id is known before import; the requirement is
-   that disabled code never runs.)*
+   `disabled`. The id of a disabled plugin is its `package.json` `pm.id` (required, R1). Importing an external
+   candidate and an external `activate` are each raced against 5000 ms (R2): on timeout the plugin fails with
+   `<id>: timed out after 5000 ms while <importing|activating>`; built-ins have no timeout. Two plugins with the
+   same id: the first loads, the later one fails as a duplicate.
 6. The existing host steps then apply unchanged: sort by `requires`, `apiVersion` check, activate, migrate,
    isolate on failure, cascade to dependants.
 7. **TUI parts**: `runTui` loads the `pm.tui` entry of each plugin whose logic is `ok`, in load order. A tui part
-   whose import or `activate` fails (sync **or async**, see followups line 158) is listed as failed in Help; its
+   whose import or `activate` fails is listed as failed in Help; a tui `activate` must be synchronous (R3): if it
+   returns a thenable the part fails with `<id>: tui activate must be synchronous`, its registrations are removed
+   and the rejection is swallowed; its
    logic stays loaded (spec §3.1). Built-in tui parts boot as built-in (screen slots 2–6); others as external
    (slots from 7).
 8. `src/plugins/index.ts` and `src/plugins/tui.ts` go away; `src/bin/pm.ts` uses the loader. The TUI self-check
@@ -130,11 +134,16 @@ As spec §3.6, with these decisions:
   `@pm/api/tui`, `solid-js`, `solid-js/store`, `@opentui/solid`, `@opentui/core` before loading tui parts.
 - `pm plugin build [dir]` compiles `<dir>/src/` to `<dir>/dist/` with Babel (TypeScript preset; Solid preset in
   universal mode with `moduleName: "@opentui/solid"` for `.tsx`), adds `.js` to relative imports, and rewrites
-  each shared-module import to a generated shim in `dist/__pm/<name>.js`. A shim re-exports the named exports
-  the host has at build time from `globalThis.__PM_MODULES__[name]`, and throws
+  each shared-module import to a generated shim in `dist/__pm/<name>.js`. **Shims are generated from what the
+  plugin imports** (R4), not from the host's export list, so the build never imports UI modules. A shim
+  re-exports those names from `globalThis.__PM_MODULES__[name]`, and throws
   `"<name>" is provided by pm; load this plugin from pm` when that global is missing.
-- An export the plugin imports that the running host no longer has fails at load with
+- At load, each shim checks that every imported name exists on the host module; a missing one fails with
   `rebuild the plugin with this pm (missing export "<x>" from "<name>")`; failure isolation handles it.
+- **Only named imports** of shared modules are allowed: `import * as x` or `export *` fails the build with
+  `<file>: use named imports from "<name>"`. An `@opentui/*` package other than the two shared ones
+  (`@opentui/solid`, `@opentui/core`) fails the build. A computed `import()` of a shared module is not caught
+  (accepted); a plugin's own npm dependencies that import Solid load their own copy (known limit).
 - The build fails when the logic entry, directly or through its own files, imports `solid-js`, `@opentui/*` or
   `@pm/api/tui` (spec §3.1).
 - **Supported author setup** *(my call)*: a git checkout of pm (run with Bun, or built for Node from that checkout).
@@ -150,7 +159,7 @@ As spec §3.6, with these decisions:
 | Command | Behaviour |
 |---|---|
 | `pm plugin add <npm-name\|path\|tgz>` | `npm install` in `paths.plugins` (creates its `package.json` if missing); with no `npm`, under Bun, `bun add --cwd`. A first add of a non-built-in source prints the trust warning (spec §3.7). A path to a plugin **folder** is installed through npm too (a `file:` dependency) |
-| `pm plugin remove <id>` | npm uninstall, or delete the folder for source `folder`. Built-in: error `"<id>" is built in; use "pm plugin disable <id>"`. Tables stay unless `--purge-data --yes`, which drops the plugin's tables and its kernel rows (migrations, provenance) |
+| `pm plugin remove <id>` | **Destructive: needs `--yes`** (R5; it deletes a folder or uninstalls a package). npm uninstall, or delete the folder for source `folder`. An id used by more than one plugin is refused (remove by hand). Built-in: error `"<id>" is built in; use "pm plugin disable <id>"`. Tables stay unless `--purge-data --yes`, which drops the plugin's tables and its kernel rows (migrations, provenance) |
 | `pm plugin enable\|disable <id>` | edit `plugins.disabled` in the config file. Works for built-ins. `disable` lists the plugins that require it and will be skipped too. Unknown id: not-found error A disabled plugin's tables and data stay untouched, and `enable` brings them back as they were; there is no way to purge a built-in's data (user's decision) |
 | `pm plugin build [dir]` | §3.4 |
 | `pm plugin new <id>` | scaffold `<id>/` (in the current directory) with `package.json`, `src/logic/index.ts` (a migration, a command), `src/tui/index.tsx` (a screen, a project `recordTab`), a test, and a `tsconfig.json` whose `paths` point `@pm/api*` at the running pm's API source files (`src/kernel/api.ts`, `src/kernel/tui/api.ts`). `pm plugin build <id>` then works on it without edits |
@@ -242,10 +251,9 @@ One design, two plans and two merge requests, in this order:
 
 *(My call: Part 1 is already the largest change so far; splitting keeps each review readable.)*
 
-## 5. Left to the builder
+## 5. Left to the builder (settled in the build)
 
-- How the loader knows a disabled plugin's id without importing it (§3.2 step 5), within "disabled code never
-  runs".
+- How the loader knows a disabled plugin's id without importing it: settled by R1, `pm.id` is required (§3.1).
 - The exact `__PM_MODULES__` shape and shim file names.
 - The internal layout of the loader and build modules, and how `pm plugin new`'s template files are stored.
 - The text of new messages not fixed above, following existing message style.
