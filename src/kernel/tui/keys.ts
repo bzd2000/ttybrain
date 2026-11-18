@@ -16,7 +16,8 @@ import { createContext, createSignal, onCleanup, onMount, useContext, type Acces
 
 export type Hint = { key: string; label: string }
 
-// The spec §9 key table, as Help shows it. `c` (assistant) stays unclaimed until phase 7.
+// The spec §9 key table, as Help shows it (Help adds the registered global actions after these). `c`
+// (assistant) stays unclaimed until phase 7.
 export const GLOBAL_KEYS: Hint[] = [
   { key: "↑↓ / j k", label: "move" },
   { key: "Enter", label: "open" },
@@ -30,7 +31,6 @@ export const GLOBAL_KEYS: Hint[] = [
   { key: "x", label: "done or close" },
   { key: "Del", label: "delete" },
   { key: "/", label: "filter" },
-  { key: "i", label: "capture" },
   { key: "?", label: "help" },
   { key: "q", label: "quit" },
 ]

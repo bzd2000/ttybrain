@@ -4,7 +4,7 @@ import { makeTestKernel, type TestKernel } from "../../tests/helpers"
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { currentContext, definePlugin, sql, Type, type PluginContext } from "./api"
+import { currentContext, definePlugin, sql, Type, type PluginContext, type PluginDef } from "./api"
 import { fixedClock } from "./clock"
 import { runWithContext } from "./context"
 import { bootKernel } from "./host"
@@ -393,6 +393,14 @@ describe("plugin candidates and sources", () => {
       { id: "ok", version: "1.0.0", source: "built-in", status: "ok" },
       { id: "bad", version: "", source: "folder", status: "failed", error: "boom", dir },
     ])
+  })
+
+  test("a bare def whose activate is not a function is a failed built-in, not a candidate", async () => {
+    const def = { id: "odd", name: "Odd", version: "1.2.0", apiVersion: 1, activate: "nope" } as unknown as PluginDef
+    const k = await boot({ plugins: [def] })
+    expect(k.plugins).toHaveLength(1)
+    expect(k.plugins[0]).toMatchObject({ id: "odd", version: "1.2.0", source: "built-in", status: "failed" })
+    expect(k.plugins[0]!.error).toContain("activate")
   })
 
   test("a disabled candidate is listed disabled and its dependants are skipped", async () => {

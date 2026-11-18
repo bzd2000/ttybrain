@@ -187,8 +187,12 @@ describe("TUI shell", () => {
     const setup = await createTestRenderer({ width: 100, height: 30 })
     try {
       let resolved = false
-      const done = runTui(kernel, builtinTuiParts, { renderer: setup.renderer }).then(() => (resolved = true))
-      await setup.renderOnce()
+      const done = runTui(kernel, { renderer: setup.renderer }).then(() => (resolved = true))
+      // runTui loads the tui entries before it renders.
+      for (let i = 0; i < 40 && !firstLine(setup.captureCharFrame()).includes("pm · 1 Overview"); i++) {
+        await new Promise((r) => setTimeout(r, 25))
+        await setup.renderOnce()
+      }
       expect(firstLine(setup.captureCharFrame())).toContain("pm · 1 Overview ▾")
       expect(resolved).toBe(false)
       setup.mockInput.pressKey("q")

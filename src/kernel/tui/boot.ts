@@ -1,12 +1,14 @@
 // Activates the plugins' tui parts. Each part gets a TuiContext: its plugin's runtime (same data, operations,
 // records and tags as the logic part) plus registration methods tagged with the plugin id. A part whose plugin
-// is not loaded is skipped; a part whose activate throws loses everything it registered, while its logic stays
-// loaded. The registry is sealed once every part has run.
+// is not loaded is skipped; a part whose activate throws, or returns a promise (activate must be synchronous),
+// loses everything it registered, while its logic stays loaded. The registry is sealed once every part has run.
 import type { Kernel } from "../host"
 import { TuiRegistry } from "./registry"
 import type { TuiContext, TuiDef } from "./types"
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
+const isThenable = (v: unknown): v is PromiseLike<unknown> =>
+  (typeof v === "object" || typeof v === "function") && v !== null && typeof (v as { then?: unknown }).then === "function"
 
 // `parts` are booted with `opts.builtin` (built-in parts may claim screen slots 2–6; others are numbered from 7),
 // then `opts.external` with builtin false, all into one registry.
@@ -41,12 +43,19 @@ export function bootTui(kernel: Kernel, parts: TuiDef[], opts: { builtin?: boole
       globalAction: (def) => (live(), registry.addGlobalAction(id, def)),
       statusBadge: (def) => (live(), registry.addBadge(id, def)),
     }
-    try {
-      part.activate(ui)
-    } catch (e) {
+    const fail = (error: string) => {
       failed = true
       registry.remove(id)
-      registry.recordError(id, `${id}: ${message(e)}`)
+      registry.recordError(id, `${id}: ${error}`)
+    }
+    try {
+      const result: unknown = part.activate(ui)
+      if (isThenable(result)) {
+        result.then(undefined, () => {}) // a rejection is swallowed: the part has failed already
+        fail("tui activate must be synchronous")
+      }
+    } catch (e) {
+      fail(message(e))
     }
   }
   for (const part of parts) boot(part, opts.builtin ?? false)

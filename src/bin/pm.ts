@@ -25,12 +25,8 @@ export async function main(argv: string[], env: Record<string, string | undefine
   try {
     if (argv.length === 0 && process.stdout.isTTY) {
       const { runTui } = await import("../kernel/tui/run")
-      // Temporary (Task 4 moves this into runTui): each ok plugin's tui entry (default export), built-ins first.
-      type Part = Parameters<typeof runTui>[1][number]
-      const withTui = kernel.plugins.filter((p) => p.status === "ok" && p.tui !== undefined)
-      const ordered = [...withTui.filter((p) => p.source === "built-in"), ...withTui.filter((p) => p.source !== "built-in")]
-      const parts = await Promise.all(ordered.map(async (p) => ((await import(p.tui!)) as { default: Part }).default))
-      await runTui(kernel, parts, {
+      // runTui loads each loaded plugin's tui entry (pm.tui) itself.
+      await runTui(kernel, {
         onRenderer: (renderer) => {
           stopTui = async () => {
             if (!renderer.isDestroyed) renderer.destroy()

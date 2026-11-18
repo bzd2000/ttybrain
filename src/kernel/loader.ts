@@ -23,7 +23,7 @@ export type PluginCandidate = {
   disabled?: boolean // in config.plugins.disabled: not imported
 }
 
-const DEFAULT_TIMEOUT_MS = 5000
+export const DEFAULT_TIMEOUT_MS = 5000
 
 export function builtinPluginDir(): string {
   return fileURLToPath(new URL("../plugins/", import.meta.url))
@@ -80,7 +80,8 @@ function subdirs(root: string): string[] {
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+// Races `p` against `ms` (R2); the timer is cleared either way.
+export function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error(message)), ms)

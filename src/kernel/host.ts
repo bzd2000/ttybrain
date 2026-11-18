@@ -93,7 +93,8 @@ const RUNTIME_KEYS: Array<keyof PluginRuntime> = ["id", "data", "config", "clock
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-const isDef = (p: PluginDef | PluginCandidate): p is PluginDef => typeof (p as PluginDef).activate === "function"
+// A candidate (from the loader) always carries `source`; a bare PluginDef never does.
+const isDef = (p: PluginDef | PluginCandidate): p is PluginDef => !Object.hasOwn(p, "source")
 
 // Races an external plugin's activate against the timeout (R2).
 function withTimeout<T>(p: Promise<T>, ms: number, text: string): Promise<T> {

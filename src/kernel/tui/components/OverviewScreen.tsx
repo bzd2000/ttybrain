@@ -62,7 +62,7 @@ export function OverviewScreen() {
     </box>
   )
   return (
-    <Show when={panels.length > 0} fallback={<text fg={theme.muted}>No panels</text>}>
+    <Show when={panels.length > 0} fallback={<text fg={theme.muted}>No panels yet: plugins add them here.</text>}>
       <KeyHints
         hints={[
           { key: "Tab", label: "next panel" },

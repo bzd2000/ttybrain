@@ -1,6 +1,7 @@
 // The TUI self-check: renders <TuiApp> on the current runtime with OpenTUI's test renderer and checks the frame,
 // and checks that a second boot on the same database writes nothing (read-only boot, also on node:sqlite), that a
-// useQuery screen reloads after another connection's commit (data_version) and that an error boundary holds.
+// useQuery screen reloads after another connection's commit (data_version) and that an error boundary holds; then
+// the loader path: the built-ins discovered from their manifests and their tui entries imported and booted.
 // Run: `bun src/kernel/tui/selfcheck.tsx` or, after the Node build,
 // `node --experimental-ffi dist-node/kernel/tui/selfcheck.js`. Prints `tui ok` on success.
 import { SyntaxStyle } from "@opentui/core"
@@ -15,6 +16,7 @@ import { bootKernel } from "../host"
 import { TuiApp, type TuiHandle } from "./app"
 import { bootTui } from "./boot"
 import { useQuery, useRuntime } from "./data"
+import { installTuiModules, loadTuiParts } from "./load"
 import { defineTui } from "./types"
 
 // A fixture plugin with a migration and a published view, so the second boot has something it could rewrite.
@@ -129,6 +131,29 @@ export async function runTuiSelfCheck(): Promise<void> {
       } finally {
         md.renderer.destroy()
       }
+    } finally {
+      await kernel.shutdown()
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+  await checkLoaderPath(clock)
+}
+
+// On Node this imports the compiled dist-node/plugins/*/tui/index.js through their package.json manifests.
+async function checkLoaderPath(clock: ReturnType<typeof fixedClock>): Promise<void> {
+  const home = mkdtempSync(join(tmpdir(), "pm-tui-selfcheck-"))
+  try {
+    const kernel = await bootKernel({ env: { PM_HOME: home, PM_TEST: "1" }, clock, discover: true })
+    try {
+      installTuiModules()
+      const parts = await loadTuiParts(kernel)
+      check(parts.errors.length === 0, `tui entries failed to load: ${parts.errors.map((e) => e.error).join("; ")}`)
+      const ids = parts.builtin.map((p) => p.plugin).sort().join(",")
+      check(ids === "inbox,meetings,people,projects" && parts.external.length === 0, `unexpected tui parts: ${ids}`)
+      const registry = bootTui(kernel, parts.builtin, { builtin: true, external: parts.external })
+      check(registry.errors().length === 0, `tui parts failed to boot: ${registry.errors().map((e) => e.error).join("; ")}`)
+      check(registry.screenBySlot(2)?.id !== undefined && registry.globalActions().some((a) => a.key === "i"), "the built-in tui parts registered nothing")
     } finally {
       await kernel.shutdown()
     }
