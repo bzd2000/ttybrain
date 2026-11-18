@@ -1,4 +1,4 @@
-// The kernel's own commands: help, guide, plugin list|enable|disable|build and report. They are CommandDefs like the plugins'
+// The kernel's own commands: help, guide, plugin list|add|remove|enable|disable|build and report. They are CommandDefs like the plugins'
 // ones, so they get the same argument parsing, --json and --help. `help` and `guide` have no verb (verb "").
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
@@ -6,6 +6,7 @@ import { updateConfigFile } from "../config"
 import { NotFoundError, suggest } from "../errors"
 import type { Kernel } from "../host"
 import { buildPlugin } from "../plugins/build"
+import { addPlugin, removePlugin, TRUST_WARNING } from "../plugins/install"
 import { renderReport, type ReportDef } from "../reports"
 import { commandName, flagSignature, GLOBAL_FLAGS, signature, usage } from "./args"
 import type { CommandDef, FlagDef } from "./commands"
@@ -46,6 +47,34 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
       run: async () => {
         const rows = kernel.plugins.map((p) => ({ id: p.id, version: p.version, source: p.source, status: p.status, error: p.error ?? null }))
         return { json: rows, text: formatTable(["id", "version", "source", "status", "error"], rows) }
+      },
+    },
+    {
+      thing: "plugin",
+      verb: "add",
+      summary: "install a plugin from npm, a folder or a .tgz into the plugins folder (from the next run)",
+      args: [{ name: "spec", required: true }],
+      run: async ({ args }) => {
+        // The installer choice (PM_PLUGIN_INSTALLER) comes from the process environment, which pm's entry point boots with.
+        const { name, id, version, warned } = await addPlugin(kernel.paths, String(args.spec), process.env)
+        return {
+          json: { name, id, version, source: "npm", warned },
+          text: `${warned ? `${TRUST_WARNING}\n` : ""}added ${id} ${version} (npm)`,
+        }
+      },
+    },
+    {
+      thing: "plugin",
+      verb: "remove",
+      summary: "uninstall an npm plugin or delete a folder plugin; its data stays unless --purge-data",
+      args: [{ name: "id", required: true }],
+      flags: { "purge-data": { type: "boolean", description: "also drop the plugin's tables and its kernel rows (migrations, provenance)" } },
+      destructive: true,
+      run: async ({ args, flags }) => {
+        const id = String(args.id)
+        const purged = flags["purge-data"] === true
+        await removePlugin(kernel, id, { purgeData: purged, env: process.env })
+        return { json: { id, removed: true, purged }, text: purged ? `removed ${id} and its data` : `removed ${id}` }
       },
     },
     {

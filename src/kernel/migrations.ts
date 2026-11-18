@@ -8,6 +8,7 @@ import { systemClock, type Clock } from "./clock"
 import type { KernelDb } from "./db/kernel-db"
 import type { TableAccess } from "./db/scope"
 import { IsolationError } from "./errors"
+import type { Kernel } from "./host"
 import { assertPluginId, isReservedName } from "./plugin-id"
 import type { Paths } from "./paths"
 
@@ -74,6 +75,36 @@ export function ownerOf(kdb: KernelDb, name: string): string | undefined {
     if (physical === name || physical.slice(i + 1) === name) return owner
   }
   return undefined
+}
+
+// `pm plugin remove <id> --purge-data`: drops everything in the plugin's namespace (`<id>_*`: its tables,
+// indexes, triggers, its own views and its published `<id>__pub_*` views), its applied-migration rows and the
+// provenance rows of the record types it registered (known only when it was loaded this run), in one kernel
+// write transaction. Ids have no `_`, so the prefix never reaches another plugin's namespace.
+export async function purgePluginData(kernel: Kernel, id: string): Promise<void> {
+  assertPluginId(id)
+  const kdb = kernel.db
+  const types = kernel.records.typesOf(id)
+  const prefix = `${id}_`
+  try {
+    await kdb.write(async () => {
+      // Its tables may reference each other; checked once at commit, when all are gone.
+      kdb.raw.exec("PRAGMA defer_foreign_keys = ON")
+      const objects = kdb.raw
+        .prepare("SELECT type, name FROM sqlite_schema WHERE type IN ('view', 'trigger', 'index', 'table')")
+        .all([])
+        .map((r) => ({ type: String(r.type), name: String(r.name) }))
+        .filter((o) => o.name.toLowerCase().startsWith(prefix))
+      for (const type of ["view", "trigger", "index", "table"]) {
+        for (const o of objects) if (o.type === type) kdb.raw.exec(`DROP ${type.toUpperCase()} IF EXISTS ${quote(o.name)}`)
+      }
+      kdb.raw.prepare("DELETE FROM kernel_plugin_migration WHERE plugin = ?").run([id])
+      const forget = kdb.raw.prepare("DELETE FROM kernel_record_origin WHERE record_type = ?")
+      for (const type of types) forget.run([type])
+    })
+  } finally {
+    kdb.invalidateSchema()
+  }
 }
 
 export class MigrationRunner {
