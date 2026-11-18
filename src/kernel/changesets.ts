@@ -69,7 +69,7 @@ export class ChangeSetService {
             const out = await call(op.input)
             const ref: string = out.ref
             // The set's own origin follows the same rule as any write's (operations.ts): deletes record nothing.
-            await provenance.recordWrite(`${op.plugin}.${op.operation}`, out, origin)
+            await provenance.recordWrite(op.plugin, op.operation, out, origin)
             await db.kysely
               .insertInto("kernel_change_set_op")
               .values({

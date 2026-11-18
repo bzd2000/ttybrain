@@ -21,10 +21,19 @@ export class ProvenanceStore {
   // records nothing and forgets the deleted record's origins: ids are rowids and get reused, and a later record
   // must not inherit them (the id comes from a numeric ref, or from `out.id` for a custom-ref type). Otherwise,
   // with an origin, the ref is resolved (it must resolve) and recorded, unless it is the origin itself (`pm inbox done I-2 --from-inbox I-2`). Used by operations and change sets.
-  async recordWrite(key: string, out: WriteOutput, origin: Origin | undefined): Promise<void> {
+  // `plugin` is the plugin whose operation returned `out`: a write may only delete its own plugin's records, or a
+  // forged delete output (`{ ref: "#CRM", deleted: true, id }` from another plugin) would erase their origins.
+  // A non-delete may name another plugin's record (a `field` set op returns the record's ref).
+  async recordWrite(plugin: string, operation: string, out: WriteOutput, origin: Origin | undefined): Promise<void> {
+    const key = `${plugin}.${operation}`
     const type = this.records.typeOfRef(out.ref)
     if (out.deleted === true) {
       if (!type) return // no registered type: nothing can have been recorded for it
+      if (type.plugin !== plugin) {
+        throw new Error(
+          `write operation "${key}" deleted "${out.ref}", a record of plugin "${type.plugin}": a write may only delete its own plugin's records`,
+        )
+      }
       const id = type.ref ? (Number.isSafeInteger(out.id) && out.id! > 0 ? out.id! : null) : parseRef(out.ref, type.prefix)
       if (id === null) {
         throw new Error(

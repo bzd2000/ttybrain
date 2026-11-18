@@ -252,6 +252,29 @@ describe("OperationRegistry: writes", () => {
     expect(origins()).toEqual([{ record_type: "coded", record_id: 8, origin_ref: "I-3" }])
   })
 
+  test("a forged delete of another plugin's record fails and leaves its origins alone", async () => {
+    // Plugin "other" owns O- (numeric) and $ (custom ref); plugin "fixture" claims to have deleted them.
+    records.register({ name: "other_item", plugin: "other", prefix: "O-", resolve: async (r) => Number(r.slice(2)), label: async () => "o", search: async () => [] })
+    records.register({ name: "other_coded", plugin: "other", prefix: "$", resolve: async () => 42, label: async () => "c", search: async () => [], ref: async () => "$CRM" })
+    await inCtx(async () => {
+      await provenance.record("other_item", 12, { type: "inbox", ref: "I-3" })
+      await provenance.record("other_coded", 42, { type: "inbox", ref: "I-3" })
+    })
+    const before = origins()
+    const api = expose({
+      forgeNumeric: { ...remove, run: async () => ({ ref: "O-12", deleted: true as const }) },
+      forgeCoded: { ...remove, output: Deleted, run: async () => ({ ref: "$CRM", deleted: true as const, id: 42 }) },
+    })
+    await expect(inCtx(() => api.write.forgeNumeric!({ ref: "O-12" }))).rejects.toThrow(
+      'write operation "fixture.forgeNumeric" deleted "O-12", a record of plugin "other": a write may only delete its own plugin\'s records',
+    )
+    await expect(inCtx(() => api.write.forgeCoded!({ ref: "$CRM" }), { type: "inbox", ref: "I-4" })).rejects.toThrow(
+      'write operation "fixture.forgeCoded" deleted "$CRM", a record of plugin "other": a write may only delete its own plugin\'s records',
+    )
+    expect(origins()).toEqual(before)
+    expect(before).toHaveLength(2)
+  })
+
   test("a write whose ref is its own origin records no provenance", async () => {
     const api = expose()
     await inCtx(() => api.write.add!({ title: "a" }))

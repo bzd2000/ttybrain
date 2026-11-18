@@ -229,6 +229,39 @@ describe("ChangeSetService.apply", () => {
     expect(rows("SELECT * FROM kernel_change_set")).toEqual([])
   })
 
+  test("a forged delete of another plugin's record in a set fails the set and leaves its origins alone", async () => {
+    const records = new RecordTypeRegistry()
+    records.register({ name: "fixture_item", plugin: "fixture", prefix: "F-", resolve: async (r) => Number(r.slice(2)), label: async () => "", search: async () => [] })
+    records.register({ name: "other_item", plugin: "other", prefix: "O-", resolve: async (r) => Number(r.slice(2)), label: async () => "", search: async () => [] })
+    records.register({ name: "other_coded", plugin: "other", prefix: "$", resolve: async () => 42, label: async () => "", search: async () => [], ref: async () => "$CRM" })
+    const prov = new ProvenanceStore(kdb, records)
+    const ops = new OperationRegistry({ db: kdb, events: new EventBus(), records, provenance: prov, validateOutputs: true })
+    ops.expose("fixture", {
+      write: {
+        add,
+        forgeNumeric: { ...remove, run: async () => ({ ref: "O-12", deleted: true as const }) },
+        forgeCoded: { ...remove, run: async () => ({ ref: "$CRM", deleted: true as const, id: 42 }) },
+      },
+    })
+    const cs = new ChangeSetService({ ...deps, ops, records, provenance: prov })
+    await inCtx(async () => {
+      await prov.record("other_item", 12, { type: "inbox", ref: "I-3" })
+      await prov.record("other_coded", 42, { type: "inbox", ref: "I-3" })
+    })
+    const before = rows("SELECT * FROM kernel_record_origin ORDER BY rowid")
+    for (const [operation, ref] of [["forgeNumeric", "O-12"], ["forgeCoded", "$CRM"]] as const) {
+      const err = await inCtx(() =>
+        cs.apply([{ plugin: "fixture", operation: "add", input: { title: "x" } }, { plugin: "fixture", operation, input: { ref } }], { type: "inbox", ref: "I-3" }),
+      ).catch((e) => e)
+      expect(err.message).toBe(`write operation "fixture.${operation}" deleted "${ref}", a record of plugin "other": a write may only delete its own plugin's records`)
+      expect(err.details).toEqual({ index: 1 })
+    }
+    expect(rows("SELECT * FROM kernel_record_origin ORDER BY rowid")).toEqual(before)
+    expect(before).toHaveLength(2)
+    expect(titles()).toEqual([])
+    expect(rows("SELECT * FROM kernel_change_set")).toEqual([])
+  })
+
   test("the set's origin is checked before anything is written", async () => {
     const checked: unknown[] = []
     const cs = new ChangeSetService({
