@@ -3,15 +3,33 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
+import { defineTui, type TuiDef } from "../../../kernel/tui/api"
+import { useOverlay, type Overlay } from "../../../kernel/tui/overlay"
 import { builtinPlugins } from "../../index"
+import { projectsTui } from "./index"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+let overlay: Overlay | undefined
+function Home() {
+  overlay = useOverlay()
+  return <text>home screen</text>
+}
+// The projects part plus a test screen that captures the overlay.
+const part: TuiDef = defineTui({
+  plugin: "projects",
+  activate(ui) {
+    projectsTui.activate(ui)
+    ui.screen({ id: "home", title: "Home", slot: 3, component: Home })
+  },
+})
 
 let kernel: TestKernel | undefined
 let tui: RenderedTui | undefined
 afterEach(async () => {
   tui?.destroy()
   tui = undefined
+  overlay = undefined
   await kernel?.cleanup()
   kernel = undefined
 })
@@ -301,5 +319,31 @@ describe("delete", () => {
     const frame = await t.frame()
     expect(frame).toContain("No milestones yet. Press n to add one.")
     expect(frame).not.toContain("Delete")
+  })
+})
+
+describe("meeting-linked forms", () => {
+  test("action and decision forms carry a prefilled meeting", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await seed()
+    tui = await renderTui(kernel, { parts: [part], width: 120, height: 32 })
+    tui.input.pressKey("3")
+    expect(await tui.frame()).toContain("home screen")
+    void overlay!.openForm("action", "action", { prefill: { meeting: "M-1", project: "#CRM" } })
+    let frame = await until(tui, "New action")
+    expect(frame).toContain("New action · M-1")
+    expect(frame).not.toContain("Meeting")
+    await type(tui, "Send the minutes")
+    tui.input.pressKey("s", { ctrl: true })
+    await untilThat(tui, (f) => !f.includes("New action"))
+    expect(await rows("action", ["title", "meeting_id", "project_id"])).toEqual([{ title: "Send the minutes", meeting_id: 1, project_id: 1 }])
+    void overlay!.openForm("decision", "decision", { prefill: { meeting: "M-2", project: "#CRM" } })
+    frame = await until(tui, "New decision")
+    expect(frame).toContain("New decision · M-2")
+    tui.input.pressTab() // title (date comes first)
+    await type(tui, "Go with B")
+    tui.input.pressKey("s", { ctrl: true })
+    await untilThat(tui, (f) => !f.includes("New decision"))
+    expect(await rows("decision", ["title", "meeting_id"])).toEqual([{ title: "Go with B", meeting_id: 2 }])
   })
 })
