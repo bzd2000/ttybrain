@@ -1,10 +1,11 @@
-// The kernel's own commands: help, guide, plugin list|enable|disable and report. They are CommandDefs like the plugins'
+// The kernel's own commands: help, guide, plugin list|enable|disable|build and report. They are CommandDefs like the plugins'
 // ones, so they get the same argument parsing, --json and --help. `help` and `guide` have no verb (verb "").
-import { mkdirSync, writeFileSync } from "node:fs"
-import { dirname, resolve } from "node:path"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { dirname, join, resolve } from "node:path"
 import { updateConfigFile } from "../config"
 import { NotFoundError, suggest } from "../errors"
 import type { Kernel } from "../host"
+import { buildPlugin } from "../plugins/build"
 import { renderReport, type ReportDef } from "../reports"
 import { commandName, flagSignature, GLOBAL_FLAGS, signature, usage } from "./args"
 import type { CommandDef, FlagDef } from "./commands"
@@ -81,6 +82,21 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
         return {
           json: { id, disabled: true, alsoSkipped: skipped.map(([d]) => d) },
           text: `disabled ${id}${also ? `; also skipped: ${also}` : ""}`,
+        }
+      },
+    },
+    {
+      thing: "plugin",
+      verb: "build",
+      summary: "compile a plugin's src/ to dist/ with shims for pm's shared modules (default dir: .)",
+      args: [{ name: "dir" }],
+      run: async ({ args }) => {
+        const dir = resolve(typeof args.dir === "string" ? args.dir : ".")
+        const { files, shims } = await buildPlugin(dir)
+        const { name, version } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { name?: string; version?: string }
+        return {
+          json: { name: name ?? null, version: version ?? null, files, shims },
+          text: `built ${name} ${version}: ${files} files, shims for ${shims.length > 0 ? shims.join(", ") : "none"}`,
         }
       },
     },

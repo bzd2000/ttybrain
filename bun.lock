@@ -5,18 +5,18 @@
     "": {
       "name": "project",
       "dependencies": {
+        "@babel/core": "7.29.7",
+        "@babel/preset-typescript": "7.27.1",
         "@opentui/core": "^0.8.4",
         "@opentui/solid": "^0.8.4",
+        "babel-plugin-module-resolver": "5.0.2",
+        "babel-preset-solid": "1.9.16",
         "kysely": "0.28.18",
         "solid-js": "^1.9",
         "typebox": "1.4.3",
       },
       "devDependencies": {
-        "@babel/core": "7.29.7",
-        "@babel/preset-typescript": "7.27.1",
         "@types/bun": "latest",
-        "babel-plugin-module-resolver": "5.0.2",
-        "babel-preset-solid": "1.9.16",
       },
       "peerDependencies": {
         "typescript": "^7",

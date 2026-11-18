@@ -13,6 +13,11 @@ const root = path.resolve(import.meta.dirname, "..")
 const srcDir = path.join(root, "src")
 const outDir = path.join(root, "dist-node")
 
+// The same values as src/kernel/plugins/babel-options.ts (`pm plugin build`); a test checks they match. They are
+// written as JSON so the test can read them from this file.
+const solidOptions = { "moduleName": "@opentui/solid", "generate": "universal" }
+const resolveExtensions = [".tsx", ".ts", ".jsx", ".js"]
+
 // Node resolves bare "solid-js" to Solid's server (non-reactive) build, so point it at the client build.
 const solidRuntime = {
   "solid-js": "solid-js/dist/solid.js",
@@ -31,7 +36,7 @@ function resolvePath(specifier, currentFile) {
   }
   if (!specifier.startsWith(".")) return specifier
   const base = path.resolve(path.dirname(currentFile), specifier)
-  for (const ext of [".tsx", ".ts", ".jsx", ".js"]) {
+  for (const ext of resolveExtensions) {
     if (existsSync(base + ext)) return specifier + ".js"
     if (existsSync(path.join(base, "index" + ext))) return specifier + "/index.js"
   }
@@ -56,7 +61,7 @@ for await (const file of walk(srcDir)) {
     babelrc: false,
     plugins: [[moduleResolver, { resolvePath }]],
     presets: [
-      ...(/x$/.test(file) ? [[solid, { moduleName: "@opentui/solid", generate: "universal" }]] : []),
+      ...(/x$/.test(file) ? [[solid, solidOptions]] : []),
       [ts],
     ],
   })
