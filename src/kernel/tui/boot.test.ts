@@ -15,6 +15,7 @@ import { renderTui, type RenderedTui } from "../../../tests/tui"
 import * as api from "../api"
 import { definePlugin } from "../api"
 import * as tuiApi from "./api"
+import { bootTui } from "./boot"
 import { installTuiModules, loadTuiParts } from "./load"
 import { runTui } from "./run"
 import type { TuiDef } from "./types"
@@ -173,11 +174,18 @@ test("an async tui activate fails the part only", async () => {
     tui.input.pressKey("?")
     const help = await tui.frame()
     expect(help).toContain("ext: tui activate must be synchronous")
-    tui.input.pressKey("escape")
+    tui.input.pressKey("?") // closes Help (Esc followed at once by g would arrive as Alt+g)
+    expect(await tui.frame()).not.toContain("Plugin problems")
     tui.input.pressKey("g")
     const switcher = await tui.frame()
-    expect(switcher).toContain("Projects")
+    expect(switcher).toContain("─Screens")
+    expect(switcher).toMatch(/\b2 Projects\b/)
     expect(switcher).not.toContain("Ext screen")
+    // The registry itself: the failed part's screen is gone, the built-ins' screens stay.
+    const registry = bootTui(kernel, builtinTuiParts, { builtin: true, external: [asyncPart] })
+    expect(registry.screens().filter((sc) => sc.plugin === "ext")).toEqual([])
+    expect(registry.screens().map((sc) => sc.slot)).toEqual([2, 3, 4, 5, 6])
+    expect(registry.errors()).toEqual([{ plugin: "ext", error: "ext: tui activate must be synchronous" }])
     await new Promise((r) => setTimeout(r, 20))
     expect(rejections).toEqual([])
   } finally {
