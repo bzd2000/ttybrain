@@ -1,5 +1,5 @@
 // The "Inbox" section of the overview report: the items still new.
-import type { PluginContext } from "../../../kernel/api"
+import type { PluginContext } from "@pm/api"
 
 const clip = (s: string, n = 60) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 

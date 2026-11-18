@@ -1,6 +1,6 @@
 // The exposed operations (plugin reference §4): getItem reads; capture, editItem, markProcessed, dismiss and
 // reopen write. Tags are resolved only through ctx.tags, so the inbox knows nothing about projects or people.
-import { currentContext, NonBlank, parseTags, Type, type PluginContext, type Static } from "../../../kernel/api"
+import { currentContext, NonBlank, parseTags, Type, type PluginContext, type Static } from "@pm/api"
 import type { Store } from "./records"
 import { ItemRecord, ProcessedBy } from "./schema"
 

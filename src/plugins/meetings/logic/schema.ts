@@ -1,5 +1,5 @@
 // The meetings plugin's tables (plugin reference §3) and the TypeBox shapes of its records.
-import { sql, Type, type PluginContext, type Static } from "../../../kernel/api"
+import { sql, Type, type PluginContext, type Static } from "@pm/api"
 
 export const MEETING_KINDS = ["board", "steering", "other"] as const
 export const MEETING_STATUSES = ["planned", "held", "cancelled"] as const

@@ -3,7 +3,7 @@
 // out) and its first #tag as the project and its first @tag as the person, with the item as origin (provenance). Once the form saved, the item is
 // marked processed (`<label> <ref>`, by you). These are two writes: if the second fails, the record stays and the
 // item stays new (the error shows in the status bar).
-import { act, Menu, notify, useOverlay, useRecordForms, useRuntime } from "../../../kernel/tui/api"
+import { act, Menu, notify, useOverlay, useRecordForms, useRuntime } from "@pm/api/tui"
 
 // The record forms the menu offers, in order (a form missing from the registry is left out); without `form`, the
 // type's first form (people's note, phase 3).

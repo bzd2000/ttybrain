@@ -1,6 +1,6 @@
 // The Overview's project queries, shared by the `overview` report sections (report.ts) and the TUI panels
 // (tui/panels.ts): one place decides what is overdue, due this week, needing attention, late or high-severity.
-import { addDays, weekEnd, type PluginRuntime } from "../../../kernel/api"
+import { addDays, weekEnd, type PluginRuntime } from "@pm/api"
 import type { ActionRecord, Items, MilestoneRecord, RiskRecord } from "./items"
 import type { Store } from "./records"
 import type { ProjectRecord } from "./schema"

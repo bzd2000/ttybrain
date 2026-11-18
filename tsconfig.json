@@ -12,6 +12,7 @@
 
     // Bundler mode
     "moduleResolution": "bundler",
+    "paths": { "@pm/api": ["./src/kernel/api.ts"], "@pm/api/tui": ["./src/kernel/tui/api.ts"] },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,

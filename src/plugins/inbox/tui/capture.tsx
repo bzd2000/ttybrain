@@ -23,7 +23,7 @@ import {
   useRuntime,
   useScreenKeys,
   type Draft,
-} from "../../../kernel/tui/api"
+} from "@pm/api/tui"
 
 export const CAPTURE_TITLE = "Capture to inbox · ctrl+s save · esc cancel"
 const SUGGESTIONS = 5

@@ -19,9 +19,16 @@ const solidRuntime = {
   "solid-js/store": "solid-js/store/dist/store.js",
 }
 
+// The plugin API names (tsconfig `paths`) map to the kernel files; the output mirrors src/.
+const hostModules = { "@pm/api": "kernel/api", "@pm/api/tui": "kernel/tui/api" }
+
 // Node ESM needs explicit extensions: "./App" -> "./App.js", "./dir" -> "./dir/index.js".
 function resolvePath(specifier, currentFile) {
   if (solidRuntime[specifier]) return solidRuntime[specifier]
+  if (hostModules[specifier]) {
+    const rel = path.relative(path.dirname(path.resolve(currentFile)), path.join(srcDir, hostModules[specifier])).split(path.sep).join("/")
+    return (rel.startsWith(".") ? rel : "./" + rel) + ".js"
+  }
   if (!specifier.startsWith(".")) return specifier
   const base = path.resolve(path.dirname(currentFile), specifier)
   for (const ext of [".tsx", ".ts", ".jsx", ".js"]) {

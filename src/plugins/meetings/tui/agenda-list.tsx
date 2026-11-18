@@ -3,7 +3,7 @@
 // to two lines, the ones that do not fit counted as `+n`. 32 columns wide, 24 on a terminal under 100 columns.
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, For } from "solid-js"
-import { displayWidth, Panel, Table, theme, truncate, useKeys, useQuery, useRuntime, type TableColumn, type TableRow } from "../../../kernel/tui/api"
+import { displayWidth, Panel, Table, theme, truncate, useKeys, useQuery, useRuntime, type TableColumn, type TableRow } from "@pm/api/tui"
 import { makeStore } from "../logic/records"
 import type { MeetingRecord } from "../logic/schema"
 

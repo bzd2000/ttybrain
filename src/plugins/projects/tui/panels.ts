@@ -1,6 +1,6 @@
 // The projects plugin's Overview panels: overdue actions, due this week, projects needing attention, late and
 // upcoming milestones, high risks and issues. They read through the same makeOverview the `overview` report uses.
-import { daysBetween, dueLabel, shortDate, type Cell, type OverviewRow, type TuiContext } from "../../../kernel/tui/api"
+import { daysBetween, dueLabel, shortDate, type Cell, type OverviewRow, type TuiContext } from "@pm/api/tui"
 import { makeItems } from "../logic/items"
 import { ATTENTION_DAYS, makeOverview, type OverviewAction } from "../logic/overview"
 import { makeStore } from "../logic/records"

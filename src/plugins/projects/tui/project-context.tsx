@@ -18,7 +18,7 @@ import {
   useRuntime,
   useScreenKeys,
   type Hint,
-} from "../../../kernel/tui/api"
+} from "@pm/api/tui"
 
 export const EMPTY = "No context yet. Press e to write it, or let your MCP integration fill it in."
 const HINTS: Hint[] = [

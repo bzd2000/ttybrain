@@ -17,7 +17,7 @@ import {
   type Hint,
   type TableColumn,
   type TableRow,
-} from "../../../kernel/tui/api"
+} from "@pm/api/tui"
 import { makeStore } from "../logic/records"
 
 export const EMPTY = "No projects yet. Press n to add one."

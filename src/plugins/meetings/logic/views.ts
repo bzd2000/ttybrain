@@ -1,6 +1,6 @@
 // The published views: meetings.meeting, meetings.agenda_item and meetings.attendee.
 // They are a versioned contract; other plugins join them, never the tables.
-import type { PluginContext } from "../../../kernel/api"
+import type { PluginContext } from "@pm/api"
 
 export function registerViews(ctx: PluginContext): void {
   ctx.publish("meeting", {

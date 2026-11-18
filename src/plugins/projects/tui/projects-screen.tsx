@@ -24,7 +24,7 @@ import {
   type TableColumn,
   type TableGroup,
   type TableRow,
-} from "../../../kernel/tui/api"
+} from "@pm/api/tui"
 import { makeStore } from "../logic/records"
 import type { ProjectRecord } from "../logic/schema"
 

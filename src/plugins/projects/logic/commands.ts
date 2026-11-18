@@ -1,7 +1,7 @@
 // `pm project …` and `pm involve …`. Reads go through ctx.data (own tables and views); writes only through
 // ctx.self().write.*, so they are validated, transactional and recorded like any other caller's.
 import { readFile } from "node:fs/promises"
-import { formatTable, NotFoundError, ValidationError, type FlagDef, type PluginContext } from "../../../kernel/api"
+import { formatTable, NotFoundError, ValidationError, type FlagDef, type PluginContext } from "@pm/api"
 import type { Store } from "./records"
 import { HEALTHS, PROJECT_STATUSES, type ContextRecord, type InvolvementRecord, type ProjectRecord } from "./schema"
 

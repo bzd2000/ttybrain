@@ -1,5 +1,5 @@
 // The people plugin: your team and your stakeholders, notes on them, and team members' goals (plugin reference §1).
-import { definePlugin } from "../../../kernel/api"
+import { definePlugin } from "@pm/api"
 import { registerCommands } from "./commands"
 import { registerGuide } from "./guide"
 import { registerOps } from "./ops"
@@ -25,3 +25,5 @@ export const people = definePlugin({
     registerGuide(ctx)
   },
 })
+
+export default people

@@ -1,5 +1,5 @@
 // The agent guide's section on processing the inbox (design §6).
-import type { PluginContext } from "../../../kernel/api"
+import type { PluginContext } from "@pm/api"
 
 const MARKDOWN = `
 The user captures quick notes in the inbox, with \`#project\` and \`@person\` tags. Process them like this:

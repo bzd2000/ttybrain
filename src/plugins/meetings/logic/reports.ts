@@ -2,7 +2,7 @@
 // project, made of projects' `project-status` sections run through ctx.reports, plus the asks) and `minutes`
 // (`pm report minutes <M-n>`: attendees, notes, and the decisions and actions linked to the meeting). The reads
 // `prep` (per agenda item: its project's status sections and the since) and `report` (a rendered report) serve the TUI.
-import { NonBlank, Type, type Cell, type PluginContext, type ReportSectionResult, type Static } from "../../../kernel/api"
+import { NonBlank, Type, type Cell, type PluginContext, type ReportSectionResult, type Static } from "@pm/api"
 import type { Store } from "./records"
 import type { MeetingRecord as Meeting } from "./schema"
 import { sinceFor, type SinceResult } from "./since"

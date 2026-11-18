@@ -19,7 +19,7 @@ import {
   type Hint,
   type TableColumn,
   type TableRow,
-} from "../../../kernel/tui/api"
+} from "@pm/api/tui"
 import { makeStore } from "../logic/records"
 import type { AgendaItem, MeetingRecord } from "../logic/schema"
 import { attendeeNames } from "./agenda-list"

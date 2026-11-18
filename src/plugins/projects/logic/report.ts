@@ -1,7 +1,7 @@
 // projects' reports: `project-status` (`pm report status <project>`, the prep block, built from projectStatus) and
 // `overview` (`pm report overview`, the Overview screen as text). Other plugins add sections to both (meetings
 // to the status report, people and inbox to the overview); the kernel owns neither.
-import { addDays, parseRef, Type, ValidationError, type Cell, type Mark, type PluginContext } from "../../../kernel/api"
+import { addDays, parseRef, Type, ValidationError, type Cell, type Mark, type PluginContext } from "@pm/api"
 import type { Items } from "./items"
 import { makeOverview, type OverviewAction } from "./overview"
 import { date, today } from "./ops-project"

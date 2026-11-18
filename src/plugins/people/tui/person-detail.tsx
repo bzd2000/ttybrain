@@ -6,7 +6,7 @@
 // - A team member (stakeholder or not): open goals by target date, last.
 // Projects data comes only from the projects.* views (none without the projects plugin). It takes no keys.
 import { For, Show } from "solid-js"
-import { displayWidth, dueLabel, shortDate, theme, toneColor, truncate, useQuery, useRuntime, useToday, type Tone } from "../../../kernel/tui/api"
+import { displayWidth, dueLabel, shortDate, theme, toneColor, truncate, useQuery, useRuntime, useToday, type Tone } from "@pm/api/tui"
 import { makeStore } from "../logic/records"
 import { roleText } from "./people-list"
 

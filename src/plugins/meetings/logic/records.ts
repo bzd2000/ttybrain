@@ -11,7 +11,7 @@ import {
   ViewUnavailableError,
   type PluginContext,
   type PluginRuntime,
-} from "../../../kernel/api"
+} from "@pm/api"
 import type { AgendaItem, MeetingRecord } from "./schema"
 
 // How many records a "did you mean" looks through (a person's whole team and stakeholders, every project).

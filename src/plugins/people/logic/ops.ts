@@ -13,7 +13,7 @@ import {
   ValidationError,
   type PluginContext,
   type Static,
-} from "../../../kernel/api"
+} from "@pm/api"
 import type { Store } from "./records"
 import { isStale } from "./stale"
 import { GoalRecord, GoalStatus, Level, NoteKind, NoteRecord, PersonRecord, type GoalRecord as Goal, type PersonRecord as Person } from "./schema"

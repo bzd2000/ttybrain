@@ -1,6 +1,6 @@
 // The "since" date for a project in a meeting (design §8): the meeting's own `since_date`, else the date of the
 // most recent earlier held meeting with an agenda item for that project, else the meeting date minus 30 days.
-import { addDays, formatRef } from "../../../kernel/api"
+import { addDays, formatRef } from "@pm/api"
 import type { Store } from "./records"
 import type { MeetingRecord } from "./schema"
 

@@ -1,6 +1,6 @@
 // The inbox plugin's tui part: quick capture (`i` on every screen), the `● n new in inbox` badge, the Inbox screen
 // (slot 6), the item's edit form and the Overview's Inbox panel.
-import { defineTui, truncate } from "../../../kernel/tui/api"
+import { defineTui, truncate } from "@pm/api/tui"
 import { CaptureOverlay } from "./capture"
 import { InboxScreen, ItemForm, oneLine } from "./inbox-screen"
 
@@ -40,3 +40,5 @@ export const inboxTui = defineTui({
     })
   },
 })
+
+export default inboxTui
