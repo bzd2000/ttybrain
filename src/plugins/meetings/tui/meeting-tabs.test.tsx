@@ -1,5 +1,7 @@
-// The meeting record view's Agenda and Prep tabs, against the built-in plugins seeded through write ops (the
+// The meeting record view's Agenda, Prep, Notes and Export tabs, against the built-in plugins seeded through write ops (the
 // Task 6 seed: M-1 SteerCo Q3 held on 28 Oct covering #CRM, and M-2 Steering committee Q4 on 4 Dec).
+import { readFile } from "node:fs/promises"
+import { join } from "node:path"
 import { rgbToHex } from "@opentui/core"
 import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
@@ -9,6 +11,7 @@ import { theme } from "../../../kernel/tui/api"
 import { clearMessages } from "../../../kernel/tui/messages"
 import { builtinPlugins } from "../../index"
 import { attendeeLines } from "./agenda-list"
+import { exportFileName } from "./export-tab"
 import { sinceText } from "./prep-tab"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -64,7 +67,7 @@ async function seed() {
   })
 }
 
-// Opens `ref` and moves `tabs` tabs right (Agenda → Prep is 1).
+// Opens `ref` and moves `tabs` tabs right (Agenda → Prep is 1, Notes 2, Export 3).
 async function open(ref: string, tabs = 0, opts: { width?: number; height?: number; extra?: () => Promise<void> } = {}): Promise<RenderedTui> {
   kernel = await makeTestKernel({ plugins: builtinPlugins })
   await seed()
@@ -281,8 +284,135 @@ describe("meeting tabs", () => {
       expect(frame).not.toContain("Edit item")
       expect(frame).not.toContain("Close M-3")
     }
+    t.input.pressArrow("right")
+    await until(t, (f) => f.includes("Logged in this meeting"))
+    for (const k of ["e", "E", "a", "D", "x"]) {
+      await fresh(() => t.input.pressKey(k))
+      frame = await until(t, (f) => statusLine(f).includes("M-3 is cancelled"))
+      expect(statusLine(frame)).toContain("M-3 is cancelled")
+      expect(frame).not.toContain("ctrl+s save")
+      expect(frame).not.toContain("New action")
+      expect(frame).not.toContain("New decision")
+      expect(frame).not.toContain("Close M-3")
+    }
     expect(await agenda(3)).toEqual([{ position: 1, text: "CRM replatforming status" }])
     const status = await inCtx(async () => (await data("meetings").selectFrom("meeting").select("status").where("id", "=", 3).executeTakeFirst()).status)
     expect(status).toBe("cancelled")
+  })
+
+  test("notes tab shows notes and what was logged; e edits through the editor and saves", async () => {
+    const t = await open("M-2", 2)
+    let frame = await until(t, (f) => f.includes("No notes yet. Press e to write them."))
+    expect(frame).toContain("1. Minutes")
+    expect(frame).toContain("Logged in this meeting")
+    expect(frame).not.toContain("A-2")
+
+    // Logged against M-2 (A-2 belongs to M-1): the panel and the tab count follow.
+    await inCtx(async () => {
+      await write("projects").addAction!({ title: "Book the room", owner: "peter", due: "2026-11-20", meeting: "M-2" }) // A-3
+      await write("projects").addAction!({ title: "Circulate the pack", meeting: "M-2" }) // A-4
+      await write("projects").addDecision!({ title: "Go with vendor B", project: "CRM", meeting: "M-2" }) // DE-1
+    })
+    frame = await until(t, (f) => f.includes("DE-1 Go with vendor B") && /Notes 3\s+Export/.test(f))
+    expect(frame).toContain("A-3 Book the room · @peter · 20 Nov")
+    expect(frame).toContain("A-4 Circulate the pack · me")
+    expect(frame).toContain("DE-1 Go with vendor B")
+    expect(frame).toMatch(/Notes 3\s+Export/)
+    expect(frame).not.toContain("Share integration specs")
+
+    // e opens the built-in editor on the notes and saves them with setNotes.
+    t.input.pressKey("e")
+    await until(t, (f) => f.includes("Notes · M-2 · ctrl+s save"))
+    await t.input.typeText("Opened at 10:00")
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, (f) => !f.includes("ctrl+s save") && f.includes("Opened at 10:00"))
+    expect(frame).not.toContain("No notes yet.")
+    const notes = await inCtx(async () => (await data("meetings").selectFrom("meeting").select("notes").where("id", "=", 2).executeTakeFirst()).notes)
+    expect(notes).toBe("Opened at 10:00")
+
+    // e again starts from the saved notes.
+    t.input.pressKey("e")
+    await until(t, (f) => f.includes("Notes · M-2 · ctrl+s save"))
+    t.input.pressKey("END")
+    await t.input.typeText(", closed at 11:00")
+    t.input.pressKey("s", { ctrl: true })
+    await until(t, (f) => !f.includes("ctrl+s save") && f.includes("Opened at 10:00, closed at 11:00"))
+    expect(await inCtx(async () => (await data("meetings").selectFrom("meeting").select("notes").where("id", "=", 2).executeTakeFirst()).notes)).toBe(
+      "Opened at 10:00, closed at 11:00",
+    )
+  })
+
+  test("export tab shows the board pack before and the minutes after closing; m switches", async () => {
+    const t = await open("M-2", 3)
+    let frame = await until(t, (f) => f.includes("# Steering committee Q4 · 2026-12-04"))
+    expect(lineWith(frame, "2026-12-04-steering-committee-q4.md")).toContain("Board pack")
+    expect(frame).toContain("› M-2 Steering committee Q4") // the pack scrolls inside the tab
+    expect(frame).toContain("## Agenda")
+    expect(frame).toContain(ASK)
+    // PgDn scrolls down to the project block's actions.
+    expect(frame).not.toContain("Send revised budget to Peter")
+    for (let i = 0; i < 5 && !frame.includes("Send revised budget to Peter"); i++) {
+      t.input.pressKey("\u001b[6~") // PgDn
+      frame = await until(t, (f) => !f.includes("# Steering committee Q4 · 2026-12-04"))
+    }
+    frame = await until(t, (f) => f.includes("Send revised budget to Peter"))
+    expect(frame).toContain("Send revised budget to Peter")
+    expect(frame).not.toContain("# Steering committee Q4 · 2026-12-04")
+
+    // Closing makes the minutes the default.
+    await inCtx(() => write().closeMeeting!({ ref: "M-2" }))
+    frame = await until(t, (f) => f.includes("# Minutes · Steering committee Q4 · 2026-12-04"))
+    expect(lineWith(frame, "2026-12-04-steering-committee-q4-minutes.md")).toContain("Minutes")
+    expect(frame).toContain("## Notes")
+
+    // m switches between them.
+    t.input.pressKey("m")
+    frame = await until(t, (f) => f.includes("# Steering committee Q4 · 2026-12-04"))
+    expect(lineWith(frame, "2026-12-04-steering-committee-q4.md")).toContain("Board pack")
+    t.input.pressKey("m")
+    frame = await until(t, (f) => f.includes("# Minutes · Steering committee Q4"))
+    expect(lineWith(frame, "-minutes.md")).toContain("Minutes")
+  })
+
+  test("w writes <date>-<slug>.md under exportDir and says where", async () => {
+    const t = await open("M-2", 3)
+    await until(t, (f) => f.includes("# Steering committee Q4 · 2026-12-04"))
+    t.input.pressKey("w")
+    const path = join(kernel!.config.exportDir, "2026-12-04-steering-committee-q4.md")
+    const frame = await until(t, (f) => statusLine(f).includes("wrote "))
+    expect(statusLine(frame)).toContain(`wrote ${path}`)
+    const expected = (await inCtx(() => kernel!.runtime("meetings")!.self().read.report!({ meeting: "M-2", kind: "board", format: "md" }))) as { text: string }
+    expect(await readFile(path, "utf8")).toBe(expected.text)
+    expect(expected.text).toContain("# Steering committee Q4 · 2026-12-04")
+  })
+
+  test("export slug", () => {
+    expect(exportFileName({ date: "2026-12-04", title: "SteerCo Q4: CRM/ERP 🚀" }, "board")).toBe("2026-12-04-steerco-q4-crm-erp.md")
+    expect(exportFileName({ date: "2026-12-04", title: "SteerCo Q4: CRM/ERP 🚀" }, "minutes")).toBe("2026-12-04-steerco-q4-crm-erp-minutes.md")
+    expect(exportFileName({ date: "2026-12-04", title: "🚀🚀" }, "board")).toBe("2026-12-04-meeting.md")
+    expect(exportFileName({ date: "2026-12-04", title: "a".repeat(50) }, "board")).toBe(`2026-12-04-${"a".repeat(40)}.md`)
+  })
+
+  test("y copies through OSC 52 and says so", async () => {
+    const t = await open("M-2", 3)
+    await until(t, (f) => f.includes("# Steering committee Q4 · 2026-12-04"))
+    const copied: string[] = []
+    let accept = true
+    ;(t.renderer as any).copyToClipboardOSC52 = (text: string) => (copied.push(text), accept)
+    t.input.pressKey("y")
+    let frame = await until(t, (f) => statusLine(f).includes("copied to clipboard"))
+    expect(statusLine(frame)).toContain("copied to clipboard")
+    const expected = (await inCtx(() => kernel!.runtime("meetings")!.self().read.report!({ meeting: "M-2", kind: "board", format: "md" }))) as { text: string }
+    expect(copied).toEqual([expected.text])
+
+    clearMessages()
+    await until(t, (f) => !statusLine(f).includes("copied"))
+    accept = false
+    t.input.pressKey("y")
+    frame = await until(t, (f) => statusLine(f).includes("OSC 52"))
+    expect(statusLine(frame)).toContain("the terminal did not accept the copy (OSC 52)")
+    const line = (await t.spans()).lines.find((l) => l.spans.map((s) => s.text).join("").includes("OSC 52"))!
+    expect(rgbToHex(line.spans.find((s) => s.text.includes("OSC 52"))!.fg).toLowerCase()).toBe(theme.red)
+    expect(copied).toHaveLength(2)
   })
 })

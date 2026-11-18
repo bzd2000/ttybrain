@@ -45,8 +45,8 @@ export function sinceText(s: SinceResult): string {
   return `since ${date} (30 days before)`
 }
 
-// Plain lines cut to the measured width.
-function Lines(props: { text: string }) {
+// Plain lines cut to the measured width (the Export tab shows the Markdown with them too).
+export function Lines(props: { text: string }) {
   const [width, setWidth] = createSignal(0)
   return (
     <box

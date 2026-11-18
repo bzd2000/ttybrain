@@ -232,4 +232,18 @@ describe("actions screen", () => {
     expect(lineWith(frame, "From the inbox")).toContain("inbox I-1")
     expect(lineWith(frame, "Prepare budget")).toContain("—")
   })
+
+  test("an action from a meeting shows the meeting title", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await seed()
+    await inCtx(async () => {
+      await write("meetings").addMeeting!({ title: "SteerCo Q4", date: "2026-12-04" }) // M-1
+      await write().addAction!({ title: "Send the minutes", meeting: "M-1" })
+    })
+    tui = await renderTui(kernel, { width: 120, height: 32 })
+    tui.input.pressKey("4")
+    const frame = await untilThat(tui, (f) => f.includes("Send the minutes"))
+    expect(lineWith(frame, "Send the minutes")).toContain("SteerCo Q4")
+    expect(lineWith(frame, "Prepare budget")).toContain("—")
+  })
 })
