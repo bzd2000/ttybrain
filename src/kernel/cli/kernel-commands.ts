@@ -7,6 +7,7 @@ import { NotFoundError, suggest } from "../errors"
 import type { Kernel } from "../host"
 import { buildPlugin } from "../plugins/build"
 import { addPlugin, removePlugin, TRUST_WARNING } from "../plugins/install"
+import { NO_SOURCES_NOTE, pmApiSources, scaffoldPlugin } from "../plugins/scaffold"
 import { renderReport, type ReportDef } from "../reports"
 import { commandName, flagSignature, GLOBAL_FLAGS, signature, usage } from "./args"
 import type { CommandDef, FlagDef } from "./commands"
@@ -127,6 +128,18 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
           json: { name: name ?? null, version: version ?? null, files, shims },
           text: `built ${name} ${version}: ${files} files, shims for ${shims.length > 0 ? shims.join(", ") : "none"}`,
         }
+      },
+    },
+    {
+      thing: "plugin",
+      verb: "new",
+      summary: "scaffold a new plugin folder <id> in the current directory (a migration, a command, a screen, a project tab, a test)",
+      args: [{ name: "id", required: true }],
+      run: async ({ args }) => {
+        const id = String(args.id)
+        const dir = scaffoldPlugin(process.cwd(), id)
+        const note = pmApiSources() ? "" : `\n${NO_SOURCES_NOTE}`
+        return { json: { id, dir }, text: `created ${dir}; next: pm plugin build ${id}${note}` }
       },
     },
     ...kernel.reports.list().map((r) => reportCommand(kernel, r)),

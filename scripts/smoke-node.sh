@@ -75,6 +75,15 @@ echo "$out" | grep -Eq "^C-2 +#CRM +Renewal" || fail "contract list (npm): expec
 out="$(PM_PLUGINS="$PM_HOME/npm-plugins" pm plugin list)"; echo "$out"
 echo "$out" | grep -Eq "^contracts +0\.1\.0 +npm +ok" || fail "plugin list: expected \"contracts 0.1.0 npm ok\", got: $out"
 
+# pm plugin new: scaffold, build and load a plugin on Node.
+mkdir -p "$PM_HOME/new-src" "$PM_HOME/new-plugins"
+out="$(cd "$PM_HOME/new-src" && node "$OLDPWD/dist-node/bin/pm.js" plugin new demo)"; echo "$out"
+expect_in "plugin new" "next: pm plugin build demo" "$out"
+pm plugin build "$PM_HOME/new-src/demo" >/dev/null
+cp -R "$PM_HOME/new-src/demo" "$PM_HOME/new-plugins/demo"
+out="$(PM_PLUGINS="$PM_HOME/new-plugins" pm demo list)"; echo "$out"
+expect_in "demo list" "no items" "$out"
+
 out="$(PM_PLUGINS="$PM_HOME/npm-plugins" node --experimental-ffi dist-node/kernel/tui/selfcheck.js --expect-screen Contracts 2>&1)" || fail "tui self-check (contracts): $out"; echo "$out"
 expect_in "tui (contracts)" "tui ok" "$out"
 
