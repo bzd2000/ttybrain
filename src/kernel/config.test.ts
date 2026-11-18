@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { loadConfig, updateConfigFile } from "./config"
@@ -65,6 +65,41 @@ test("updateConfigFile writes atomically: a failing write leaves the old file in
   updateConfigFile(paths, (cfg) => void (cfg.staleContactDays = 1))
   expect(readFileSync(paths.config, "utf8")).toBe('{\n  "staleContactDays": 1\n}\n')
   expect(readdirSync(dir)).toEqual(["config.json"])
+})
+test("updateConfigFile writes through a symlinked config and keeps the file's mode", () => {
+  const { dir, env } = setup()
+  const elsewhere = mkdtempSync(join(tmpdir(), "pm-cfg-real-"))
+  const real = join(elsewhere, "real.json")
+  writeFileSync(real, '{"staleContactDays": 14}')
+  chmodSync(real, 0o600)
+  symlinkSync(real, join(dir, "config.json"))
+  const paths = resolvePaths(env)
+  updateConfigFile(paths, (cfg) => void (cfg.staleContactDays = 1))
+  expect(lstatSync(paths.config).isSymbolicLink()).toBe(true)
+  expect(readFileSync(real, "utf8")).toBe('{\n  "staleContactDays": 1\n}\n')
+  expect(statSync(real).mode & 0o777).toBe(0o600)
+  expect(readdirSync(elsewhere)).toEqual(["real.json"])
+  expect(readdirSync(dir)).toEqual(["config.json"])
+  rmSync(elsewhere, { recursive: true })
+})
+test("updateConfigFile keeps a regular file's mode", () => {
+  const { env } = setup("{}")
+  const paths = resolvePaths(env)
+  chmodSync(paths.config, 0o640)
+  updateConfigFile(paths, (cfg) => void (cfg.a = 1))
+  expect(statSync(paths.config).mode & 0o777).toBe(0o640)
+})
+test("config keys __proto__, constructor and prototype are ignored", () => {
+  const { env } = setup('{"__proto__": {"x": 1}, "constructor": {"y": 2}, "prototype": 3, "plugins": {"__proto__": {"z": 1}}}')
+  const e = { ...env, PM_CONFIG_JSON: '{"__proto__": {"w": 1}}' }
+  const c = loadConfig(resolvePaths(e), e) as unknown as Record<string, unknown>
+  expect(Object.getPrototypeOf(c)).toBe(Object.prototype)
+  expect(Object.getPrototypeOf(c.plugins)).toBe(Object.prototype)
+  expect(c.x).toBeUndefined()
+  expect(c.w).toBeUndefined()
+  expect((c.plugins as Record<string, unknown>).z).toBeUndefined()
+  expect(Object.hasOwn(c, "constructor")).toBe(false)
+  expect(Object.hasOwn(c, "prototype")).toBe(false)
 })
 test("fixedClock", () => {
   expect(fixedClock("2026-11-13").now()).toBe("2026-11-13T09:00:00")

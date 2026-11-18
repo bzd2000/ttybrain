@@ -78,6 +78,28 @@ test("enable of an id that is no longer installed still removes it", async () =>
   expect(config()).toEqual({ plugins: { disabled: [] } })
 })
 
+test("enable notes that PM_CONFIG_JSON still disables the plugin", async () => {
+  writeFileSync(configFile(), JSON.stringify({ plugins: { disabled: ["meetings"] } }))
+  const envJson = '{"plugins":{"disabled":["meetings"]}}'
+  // The command reads PM_CONFIG_JSON from the process environment, which pm's entry point boots with.
+  const before = process.env.PM_CONFIG_JSON
+  process.env.PM_CONFIG_JSON = envJson
+  try {
+    const k = await bootKernel({ env: { PM_HOME: home, PM_TEST: "1", PM_CONFIG_JSON: envJson }, discover: true, clock: fixedClock("2026-11-13") })
+    kernels.push(k)
+    expect(await run(k, "plugin", "enable", "meetings")).toEqual({ code: 0, out: "enabled meetings; note: PM_CONFIG_JSON still disables it\n", err: "" })
+    expect(config()).toEqual({ plugins: { disabled: [] } })
+    const json = await run(k, "plugin", "enable", "meetings", "--json")
+    expect(JSON.parse(json.out)).toEqual({ id: "meetings", disabled: false, stillDisabledBy: "PM_CONFIG_JSON" })
+    // PM_CONFIG_JSON that does not disable it: no note.
+    process.env.PM_CONFIG_JSON = '{"staleContactDays": 3}'
+    expect(await run(k, "plugin", "enable", "meetings")).toEqual({ code: 0, out: "enabled meetings\n", err: "" })
+  } finally {
+    if (before === undefined) delete process.env.PM_CONFIG_JSON
+    else process.env.PM_CONFIG_JSON = before
+  }
+})
+
 test("unknown id", async () => {
   const k = await boot()
   const r = await run(k, "plugin", "disable", "nope")

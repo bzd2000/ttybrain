@@ -10,7 +10,8 @@ import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { runCli } from "../cli/dispatch"
 import { resolvePaths } from "../paths"
 import { buildPlugin } from "./build"
-import { addPlugin } from "./install"
+import { addPlugin, removePlugin } from "./install"
+import { ValidationError } from "../errors"
 
 const hasNpm = spawnSync("npm", ["--version"], { stdio: "ignore" }).status === 0
 const WARNING = "warning: plugins run inside pm with full access to your files and data, like any npm package. Only add plugins you trust."
@@ -35,15 +36,16 @@ function write(dir: string, path: string, text: string): void {
 
 // A built plugin folder `<parent>/<id>`: a table with an index, a published view and a record type `<id>-thing`.
 // `plugin: false` writes a package without pm.plugin.
-async function builtPlugin(id: string, o: { parent?: string; plugin?: boolean } = {}): Promise<string> {
+async function builtPlugin(id: string, o: { parent?: string; plugin?: boolean; version?: string } = {}): Promise<string> {
   const dir = join(o.parent ?? tmp(), id)
+  const version = o.version ?? "1.0.0"
   const pm = o.plugin === false ? {} : { pm: { plugin: true, id } }
-  write(dir, "package.json", JSON.stringify({ name: `pm-plugin-${id}`, version: "1.0.0", type: "module", main: "dist/logic/index.js", ...pm }))
+  write(dir, "package.json", JSON.stringify({ name: `pm-plugin-${id}`, version, type: "module", main: "dist/logic/index.js", ...pm }))
   write(
     dir,
     "src/logic/index.ts",
     `import { definePlugin } from "@pm/api"\n` +
-      `export default definePlugin({ id: ${JSON.stringify(id)}, name: "T", version: "1.0.0", apiVersion: 1, activate(ctx) {\n` +
+      `export default definePlugin({ id: ${JSON.stringify(id)}, name: "T", version: ${JSON.stringify(version)}, apiVersion: 1, activate(ctx) {\n` +
       `  ctx.migration("001", async (db) => {\n` +
       `    await db.schema.createTable("thing").addColumn("id", "integer", (c) => c.primaryKey()).addColumn("name", "text").execute()\n` +
       `    await db.schema.createIndex("thing_name").on("thing").column("name").execute()\n` +
@@ -166,12 +168,47 @@ test("add of a package that is not a pm plugin is undone", async () => {
   expect(allow(k)).toEqual([])
 }, 60_000)
 
+for (const installer of installers) {
+  test.skipIf(installer === "npm" && !hasNpm)(`a failed upgrade to a version that is not a pm plugin puts the old one back (${installer})`, async () => {
+    const v1 = pack(await builtPlugin("demo"))
+    const v2 = pack(await builtPlugin("demo", { plugin: false, version: "2.0.0" }))
+    const plugins = join(tmp(), "plugins")
+    await withInstaller(installer, async () => {
+      const k = await boot(plugins)
+      expect(await runCli(["plugin", "add", v1], k, io().io)).toBe(0)
+      const before = deps(plugins)
+      const a = io()
+      expect(await runCli(["plugin", "add", v2], k, a.io)).toBe(1)
+      expect(a.err.join("")).toContain('"pm-plugin-demo" is not a pm plugin (package.json has no pm.plugin)')
+      expect(deps(plugins)).toEqual(before)
+      const installed = JSON.parse(readFileSync(join(plugins, "node_modules", "pm-plugin-demo", "package.json"), "utf8")) as { version: string }
+      expect(installed.version).toBe("1.0.0")
+      const next = await boot(plugins)
+      const l = io()
+      expect(await runCli(["plugin", "list", "--json"], next, l.io)).toBe(0)
+      expect(JSON.parse(l.out.join(""))).toEqual([{ id: "demo", version: "1.0.0", source: "npm", status: "ok", error: null }])
+    })
+  }, 60_000)
+}
+
 test("add with no installer", async () => {
   const paths = resolvePaths({ PM_HOME: tmp(), PM_PLUGINS: join(tmp(), "plugins") })
   const failing = addPlugin(paths, "pm-plugin-demo", {}, { which: () => false, underBun: false })
   await expect(failing).rejects.toThrow("pm plugin add needs npm on the PATH")
   const forced = addPlugin(paths, "pm-plugin-demo", { PM_PLUGIN_INSTALLER: "yarn" })
   await expect(forced).rejects.toThrow("PM_PLUGIN_INSTALLER must be npm or bun")
+})
+
+test("remove of an npm plugin with no installer names the remove command", async () => {
+  const plugins = tmp()
+  // Installed by hand, so no installer runs: a dependency and its folder under node_modules.
+  cpSync(await builtPlugin("demo"), join(plugins, "node_modules", "pm-plugin-demo"), { recursive: true })
+  writeFileSync(join(plugins, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "pm-plugin-demo": "1.0.0" } }))
+  const k = await boot(plugins)
+  expect(listed(k)).toEqual([{ id: "demo", source: "npm", status: "ok", error: null }])
+  const failing = removePlugin(k, "demo", { purgeData: false, env: {}, which: () => false, underBun: false })
+  await expect(failing).rejects.toThrow(new ValidationError("pm plugin remove needs npm on the PATH"))
+  expect(existsSync(join(plugins, "node_modules", "pm-plugin-demo", "package.json"))).toBe(true)
 })
 
 test("add of a local path that does not exist fails before the installer runs", async () => {
@@ -229,15 +266,32 @@ test("remove of a folder plugin deletes the folder, keeps tables", async () => {
   expect(migrationRows(k, "demo")).toEqual(["001"])
 })
 
-test("remove refuses a folder that resolves outside the plugins folder", async () => {
+test("remove of a symlinked folder plugin removes the link, not its target, inside the plugins folder", async () => {
+  const plugins = tmp()
+  // plugins/.work/demo (a dot-name, so not a candidate itself) holds the sources; plugins/demo links to it.
+  const target = await builtPlugin("demo", { parent: join(plugins, ".work") })
+  write(target, "MY_SOURCE.txt", "keep me")
+  symlinkSync(target, join(plugins, "demo"))
+  const k = await boot(plugins)
+  expect(listed(k)).toEqual([{ id: "demo", source: "folder", status: "ok", error: null }])
+  const a = io()
+  expect(await runCli(["plugin", "remove", "demo", "--yes"], k, a.io)).toBe(0)
+  expect(a.out.join("")).toBe("removed demo\n")
+  expect(lstatSync(join(plugins, "demo"), { throwIfNoEntry: false })).toBeUndefined()
+  expect(readFileSync(join(target, "MY_SOURCE.txt"), "utf8")).toBe("keep me")
+  expect(existsSync(join(target, "package.json"))).toBe(true)
+})
+
+test("remove of a symlinked folder plugin removes the link, not its target, outside the plugins folder", async () => {
   const plugins = tmp()
   const elsewhere = await builtPlugin("demo")
   symlinkSync(elsewhere, join(plugins, "demo"))
   const k = await boot(plugins)
   expect(listed(k)).toEqual([{ id: "demo", source: "folder", status: "ok", error: null }])
   const a = io()
-  expect(await runCli(["plugin", "remove", "demo", "--yes"], k, a.io)).toBe(1)
-  expect(a.err.join("")).toContain(`"demo" is at ${elsewhere}, outside ${plugins}; remove it by hand`)
+  expect(await runCli(["plugin", "remove", "demo", "--yes"], k, a.io)).toBe(0)
+  expect(a.out.join("")).toBe("removed demo\n")
+  expect(lstatSync(join(plugins, "demo"), { throwIfNoEntry: false })).toBeUndefined()
   expect(existsSync(join(elsewhere, "package.json"))).toBe(true)
 })
 

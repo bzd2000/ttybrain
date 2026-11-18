@@ -1,8 +1,8 @@
 // The kernel's own commands: help, guide, plugin list|add|remove|enable|disable|build and report. They are CommandDefs like the plugins'
 // ones, so they get the same argument parsing, --json and --help. `help` and `guide` have no verb (verb "").
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { dirname, join, resolve } from "node:path"
-import { updateConfigFile } from "../config"
+import { basename, dirname, join, resolve } from "node:path"
+import { loadConfig, updateConfigFile } from "../config"
 import { NotFoundError, suggest } from "../errors"
 import type { Kernel } from "../host"
 import { buildPlugin } from "../plugins/build"
@@ -92,6 +92,11 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
           if (!disabled.includes(id)) knownPlugin(kernel, id)
           plugins.disabled = disabled.filter((d) => d !== id)
         })
+        // The file no longer lists it, so if the merged config still does, PM_CONFIG_JSON (read from the process
+        // environment, which pm's entry point boots with) disables it.
+        if (loadConfig(kernel.paths, process.env).plugins.disabled.includes(id)) {
+          return { json: { id, disabled: false, stillDisabledBy: "PM_CONFIG_JSON" }, text: `enabled ${id}; note: PM_CONFIG_JSON still disables it` }
+        }
         return { json: { id, disabled: false }, text: `enabled ${id}` }
       },
     },
@@ -126,7 +131,7 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
         const { name, version } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { name?: string; version?: string }
         return {
           json: { name: name ?? null, version: version ?? null, files, shims },
-          text: `built ${name} ${version}: ${files} files, shims for ${shims.length > 0 ? shims.join(", ") : "none"}`,
+          text: `built ${name ?? basename(dir)}${version !== undefined ? ` ${version}` : ""}: ${files} files, shims for ${shims.length > 0 ? shims.join(", ") : "none"}`,
         }
       },
     },

@@ -23,8 +23,9 @@ type Installer = { kind: "npm" | "bun"; cmd: string }
 
 const runs = (cmd: string) => spawnSync(cmd, ["--version"], { stdio: "ignore" }).status === 0
 
-// R6: PM_PLUGIN_INSTALLER forces one; else npm when it runs; else bun when pm runs on Bun.
-export function chooseInstaller(env: Env, opts: InstallerOptions = {}): Installer {
+// R6: PM_PLUGIN_INSTALLER forces one; else npm when it runs; else bun when pm runs on Bun. `command` names the
+// `pm plugin` command that needs it, in the error.
+export function chooseInstaller(env: Env, opts: InstallerOptions = {}, command: "add" | "remove" = "add"): Installer {
   const underBun = opts.underBun ?? process.versions.bun !== undefined
   const bun: Installer = { kind: "bun", cmd: underBun ? process.execPath : "bun" }
   const forced = env.PM_PLUGIN_INSTALLER
@@ -33,7 +34,7 @@ export function chooseInstaller(env: Env, opts: InstallerOptions = {}): Installe
   if (forced !== undefined && forced !== "") throw new ValidationError(`PM_PLUGIN_INSTALLER must be npm or bun, not "${forced}"`)
   if ((opts.which ?? runs)("npm")) return { kind: "npm", cmd: "npm" }
   if (underBun) return bun
-  throw new ValidationError("pm plugin add needs npm on the PATH", { hint: "install Node.js (it comes with npm), or run pm with Bun" })
+  throw new ValidationError(`pm plugin ${command} needs npm on the PATH`, { hint: "install Node.js (it comes with npm), or run pm with Bun" })
 }
 
 // Runs the installer in `dir` without a shell. Its output is kept back and written to stderr only on failure.
@@ -114,6 +115,10 @@ function addedName(dir: string, before: Record<string, string>, after: Record<st
   return changed[0]
 }
 
+// The install spec that brings back dependency `name` as recorded (`value` from package.json): a file:
+// dependency (relative to the plugins folder, where the installer runs) as is, a range as `name@range`.
+const reinstallSpec = (name: string, value: string) => (/^(file:|\.|\/)/.test(value) ? value : `${name}@${value}`)
+
 export async function addPlugin(
   paths: Paths,
   spec: string,
@@ -134,8 +139,10 @@ export async function addPlugin(
   if (name === undefined) throw new ValidationError(`could not tell which package "${spec}" installed`, { hint: `check ${join(dir, "package.json")}` })
 
   const undo = async (message: string): Promise<never> => {
-    // Only a package this add brought in is taken out again; one that was there before stays.
-    if (!(name in before)) await runInstaller(installer, uninstallArgs(installer, dir, name), dir, "uninstall").catch(() => {})
+    // A package this add brought in is taken out again; one that was there before is put back as it was.
+    const previous = before[name]
+    const args = previous === undefined ? uninstallArgs(installer, dir, name) : installArgs(installer, dir, reinstallSpec(name, previous))
+    await runInstaller(installer, args, dir, previous === undefined ? "uninstall" : "install").catch(() => {})
     throw new ValidationError(message, { hint: "only packages with pm.plugin in their package.json can be added" })
   }
   let pkg: Obj
@@ -175,16 +182,18 @@ function packageNameOf(paths: Paths, p: PluginStatus): string | undefined {
   }) ?? (deps.includes(p.id) ? p.id : undefined)
 }
 
-// The folder plugin's real directory, which must be inside the plugins folder: a symlink to elsewhere is
-// never followed into a delete.
-function folderToDelete(paths: Paths, p: PluginStatus): string {
+// What removing a folder plugin deletes. A symlinked entry is only unlinked, wherever it points: its target
+// is never followed into a delete. A real directory must be inside the plugins folder.
+function folderRemoval(paths: Paths, p: PluginStatus): () => void {
+  const entry = p.dir!
+  if (lstatSync(entry, { throwIfNoEntry: false })?.isSymbolicLink()) return () => unlinkSync(entry)
   const root = realpathSync(paths.plugins)
-  const real = realpathSync(p.dir!)
+  const real = realpathSync(entry)
   const rel = relative(root, real)
   if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
     throw new ValidationError(`"${p.id}" is at ${real}, outside ${root}; remove it by hand`)
   }
-  return real
+  return () => rmSync(real, { recursive: true, force: true })
 }
 
 export async function removePlugin(
@@ -205,16 +214,12 @@ export async function removePlugin(
   // Everything that can refuse is checked before the data goes.
   let remove: () => Promise<void>
   if (p.source === "folder") {
-    const real = folderToDelete(paths, p)
-    const entry = p.dir!
-    remove = async () => {
-      rmSync(real, { recursive: true, force: true })
-      if (entry !== real && lstatSync(entry, { throwIfNoEntry: false })?.isSymbolicLink()) unlinkSync(entry)
-    }
+    const removeFolder = folderRemoval(paths, p)
+    remove = async () => removeFolder()
   } else {
     const name = packageNameOf(paths, p)
     if (name === undefined) throw new NotFoundError(`"${id}" is not a dependency in ${join(paths.plugins, "package.json")}`)
-    const installer = chooseInstaller(opts.env ?? process.env, opts)
+    const installer = chooseInstaller(opts.env ?? process.env, opts, "remove")
     remove = () => runInstaller(installer, uninstallArgs(installer, paths.plugins, name), paths.plugins, "uninstall")
   }
   if (opts.purgeData) await purgePluginData(kernel, id)

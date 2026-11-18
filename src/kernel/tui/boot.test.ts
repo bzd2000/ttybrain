@@ -127,6 +127,19 @@ test("the tui entry of a plugin whose logic failed or is disabled is not importe
   expect(await loadTuiParts(kernel)).toEqual({ builtin: [], external: [], errors: [] })
 })
 
+// Renders until the frame contains `text` (up to 400 rounds of 25 ms, about 10 s) and returns it; else throws
+// with the last frame.
+async function untilFrame(setup: Awaited<ReturnType<typeof createTestRenderer>>, text: string): Promise<string> {
+  let frame = ""
+  for (let i = 0; i < 400; i++) {
+    await setup.renderOnce()
+    frame = setup.captureCharFrame()
+    if (frame.includes(text)) return frame
+    await new Promise((r) => setTimeout(r, 25))
+  }
+  throw new Error(`timed out after about 10 s waiting for "${text}" in the frame:\n${frame}`)
+}
+
 test("runTui loads the tui entries and lists a failed import under Plugin problems", async () => {
   const pluginsDir = tmp()
   folderPlugin(pluginsDir, "ext", { tui: `throw new Error("tui boom")\n` })
@@ -134,18 +147,9 @@ test("runTui loads the tui entries and lists a failed import under Plugin proble
   const setup = await createTestRenderer({ width: 100, height: 30 })
   try {
     const done = runTui(k, { renderer: setup.renderer })
-    let frame = ""
-    for (let i = 0; i < 80 && !frame.includes("pm · 1 Overview"); i++) {
-      await new Promise((r) => setTimeout(r, 25))
-      await setup.renderOnce()
-      frame = setup.captureCharFrame()
-    }
+    await untilFrame(setup, "pm · 1 Overview")
     setup.mockInput.pressKey("?")
-    for (let i = 0; i < 40 && !frame.includes("Plugin problems"); i++) {
-      await setup.renderOnce()
-      frame = setup.captureCharFrame()
-      if (!frame.includes("Plugin problems")) await new Promise((r) => setTimeout(r, 25))
-    }
+    const frame = await untilFrame(setup, "Plugin problems")
     expect(frame).toContain("ext: tui boom")
     setup.mockInput.pressKey("?") // closes Help
     await setup.renderOnce()
@@ -154,7 +158,7 @@ test("runTui loads the tui entries and lists a failed import under Plugin proble
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
   }
-})
+}, 25_000)
 
 test("an async tui activate fails the part only", async () => {
   const rejections: unknown[] = []

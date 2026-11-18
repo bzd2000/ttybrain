@@ -250,3 +250,19 @@ test("pm plugin build [dir] prints what it built", async () => {
   expect(await runCli(["plugin", "build", join(dir, "nope")], kernel, io)).toBe(1)
   expect(o.err).toContain(`no package.json in ${join(dir, "nope")}`)
 })
+
+test("pm plugin build names a package without name or version by its folder", async () => {
+  const dir = pluginDir({ "src/logic/index.ts": LOGIC() }, { tui: false })
+  const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as Record<string, unknown>
+  delete pkg.name
+  delete pkg.version
+  writeFileSync(join(dir, "package.json"), JSON.stringify(pkg))
+  kernel = await makeTestKernel({ plugins: [] })
+  const o = { out: "", err: "" }
+  const io = { out: (s: string) => void (o.out += s), err: (s: string) => void (o.err += s), stdin: async () => "" }
+  expect(await runCli(["plugin", "build", dir], kernel, io)).toBe(0)
+  expect(o).toEqual({ out: "built demo: 1 files, shims for @pm/api\n", err: "" })
+  o.out = ""
+  expect(await runCli(["plugin", "build", dir, "--json"], kernel, io)).toBe(0)
+  expect(JSON.parse(o.out)).toEqual({ name: null, version: null, files: 1, shims: ["@pm/api"] })
+})

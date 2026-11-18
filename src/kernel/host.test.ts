@@ -202,6 +202,21 @@ describe("a working kernel", () => {
     expect(k.config.plugins.disabled).toEqual([])
     expect(Object.isFrozen(k.config)).toBe(true)
   })
+
+  test("ctx.config takes no prototype from a __proto__ key", async () => {
+    let config: unknown
+    await boot({
+      env: { PM_CONFIG_JSON: '{"__proto__": {"x": 1}, "assistant": {"__proto__": {"y": 1}}}' },
+      plugins: [bare("cfg", { activate: (ctx) => void (config = ctx.config) })],
+    })
+    const c = config as Record<string, unknown>
+    expect(Object.getPrototypeOf(c)).toBe(Object.prototype)
+    expect(Object.getPrototypeOf(c.assistant)).toBe(Object.prototype)
+    expect(c.x).toBeUndefined()
+    expect((c.assistant as Record<string, unknown>).y).toBeUndefined()
+    expect(Object.isFrozen(c)).toBe(true)
+    expect(Object.isFrozen(Object.prototype)).toBe(false)
+  })
 })
 
 describe("failure isolation", () => {
