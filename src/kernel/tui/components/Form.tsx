@@ -6,8 +6,8 @@
 // - enum fields cycle with ←→; record fields autocomplete from the kernel's record type search (↑↓ pick, Tab
 //   accepts); date fields preview the parsed ISO date (`→ 2026-11-15`) or `invalid date`, with the CLI's parsing.
 // - While the form is open it holds text focus, so single-letter global keys type into the field.
-// - A failed submit keeps the form open with its values: a ValidationError naming a field shows under that field
-//   as `✗ <message>`, any other error at the bottom. While a submit is in flight (`saving…`, busy retries
+// - A failed submit keeps the form open with its values: a ValidationError naming a field (or a failed
+//   SubmitResult's `field`) shows under that field as `✗ <message>`, any other error at the bottom. While a submit is in flight (`saving…`, busy retries
 //   included) further submits and Esc are ignored, so a cancel never races a save that still lands.
 // - With `recordType`, the fields other plugins registered for it (kernel.fields, the `field` extension point) follow
 //   the form's own, starting from the values of `recordRef` read through each owning plugin's `get` operation (a
@@ -38,7 +38,9 @@ import { Field, type FieldSpec, type Suggestion } from "./Field"
 export type { FieldSpec } from "./Field"
 
 export type FormValues = Record<string, string | null>
-export type SubmitResult = { ok: true; ref?: string } | { ok: false; error: unknown }
+// A failure may name the field to show its error under (`field`), for an error that names none itself (an
+// operation's NotFoundError for one of the values, say); a ValidationError's own `field` is used otherwise.
+export type SubmitResult = { ok: true; ref?: string } | { ok: false; error: unknown; field?: string }
 
 export { ESC_WINDOW_MS }
 export const SUGGESTION_LIMIT = 8
@@ -266,7 +268,7 @@ export function Form(props: {
         return props.close(result.ref)
       }
       const e = result.error
-      const field = e instanceof ValidationError ? e.field : undefined
+      const field = result.field ?? (e instanceof ValidationError ? e.field : undefined)
       if (field !== undefined && fields().some((f) => f.name === field)) {
         setFieldErrors({ [field]: message(e).replace(OP_PREFIX, "") })
         setFormError(undefined)
