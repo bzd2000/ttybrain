@@ -8,7 +8,7 @@ Meetings are referenced as \`M-<n>\`. \`pm meeting list\` shows the planned ones
 
 - Add it with the projects to discuss: \`pm meeting add "Steering committee Q4" --date 2026-12-04 --kind steering --attendees peter,marie --projects CRM,ERP\`. Each project gets a status item on the agenda.
 - Add other items with \`pm meeting agenda M-4 add "Budget" --project CRM --ask "Release contingency"\`. The \`--ask\` is what the user wants from the room; set one wherever there is a decision to get. Change items with \`agenda … edit|move|remove\`.
-- Run \`pm report board\` for the preparation: what changed on each project since it was last covered. \`pm meeting edit M-4 --since <date>\` changes where that starts; \`--no-since\` goes back to the default.
+- Run \`pm report board M-4\` for the preparation: what changed on each project since it was last covered. \`pm meeting edit M-4 --since <date>\` changes where that starts; \`--no-since\` goes back to the default.
 - A cancelled meeting cannot be changed. Cancel with \`pm meeting cancel M-<n>\`.
 
 **After a meeting**
