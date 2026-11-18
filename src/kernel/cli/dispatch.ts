@@ -2,7 +2,7 @@
 // its arguments, enforces --yes on destructive commands, runs it inside the operation context (with the
 // --from-inbox origin) and prints the result or the error. Returns the exit code: 0, 1, 2 or 3.
 import { runWithContext, type Origin } from "../context"
-import { NotFoundError, suggest, ValidationError } from "../errors"
+import { suggest, ValidationError } from "../errors"
 import type { Kernel } from "../host"
 import { bindArgs, commandName, leading, parseCommand, wantsJson, without } from "./args"
 import type { CommandDef } from "./commands"
@@ -70,18 +70,6 @@ function originOf(fromInbox: string | undefined): Origin | undefined {
   return { type: "inbox", ref: `I-${Number(m[1])}` }
 }
 
-// An origin whose ref belongs to a registered record type must name an existing record, or provenance would
-// attach to a record created later under that ref. The hint names the owning plugin's list command when there is
-// one ("pm inbox list"); the kernel knows nothing of what the record is.
-async function checkOrigin(kernel: Kernel, origin: Origin): Promise<void> {
-  const type = kernel.records.typeOfRef(origin.ref)
-  if (!type) return
-  if (await runWithContext(kernel.context(), () => kernel.records.resolveAny(origin.ref))) return
-  const lists = kernel.commands.list().filter((c) => c.plugin === type.plugin && c.def.verb === "list")
-  const list = lists.find((c) => c.def.thing === type.plugin || type.name.split("_").includes(c.def.thing)) ?? (lists.length === 1 ? lists[0] : undefined)
-  throw new NotFoundError(`--from-inbox: no record "${origin.ref}"`, { hint: list ? `run "pm ${list.def.thing} list"` : 'run "pm help"' })
-}
-
 async function dispatch(argv: string[], kernel: Kernel, io: CliIo): Promise<{ result: CommandResult; json: boolean }> {
   const commands = new Commands(kernel)
   const { words, global } = leading(argv)
@@ -105,7 +93,7 @@ async function dispatch(argv: string[], kernel: Kernel, io: CliIo): Promise<{ re
   if (def.destructive && !parsed.global.yes)
     throw new ValidationError(`"${commandName(def)}" is destructive; add --yes`, { hint: "re-run with --yes to confirm" })
   const origin = originOf(parsed.global.fromInbox)
-  if (origin) await checkOrigin(kernel, origin)
+  if (origin) await kernel.checkOrigin(origin)
   const result = await runWithContext(kernel.context(origin), () => def.run({ args, flags: parsed.flags, readStdin: () => io.stdin() }))
   return { result, json: parsed.global.json }
 }

@@ -8,11 +8,11 @@ import { ChangeSetService } from "./changesets"
 import { CommandRegistry } from "./cli/commands"
 import { systemClock, type Clock } from "./clock"
 import { loadConfig, type Config } from "./config"
-import type { OpContext, Origin } from "./context"
+import { runWithContext, type OpContext, type Origin } from "./context"
 import { KernelDb } from "./db/kernel-db"
 import type { TableAccess } from "./db/scope"
 import { openRaw } from "./db/sqlite"
-import { IsolationError, PmError } from "./errors"
+import { IsolationError, NotFoundError, PmError, ValidationError } from "./errors"
 import { discoverPlugins, type PluginCandidate, type PluginSource } from "./loader"
 import { EventBus } from "./events"
 import { FieldRegistry } from "./fields"
@@ -59,6 +59,11 @@ export type Kernel = {
   context(origin?: Origin): OpContext
   // A loaded plugin's runtime (the same `data`, operations, records, tags as its context); undefined unless `ok`.
   runtime(pluginId: string): PluginRuntime | undefined
+  // The ids a plugin's PluginDef requires ([] when its code was not imported: disabled, or failed before boot).
+  requiresOf(pluginId: string): string[]
+  // Refuses an origin that cannot be recorded: no plugin owns its ref's record type (ValidationError, exit 1),
+  // or the type is registered but the record does not exist (NotFoundError, exit 2).
+  checkOrigin(origin: Origin): Promise<void>
   shutdown(): Promise<void>
 }
 
@@ -103,6 +108,22 @@ function withTimeout<T>(p: Promise<T>, ms: number, text: string): Promise<T> {
     timer = setTimeout(() => reject(new Error(text)), ms)
   })
   return Promise.race([p, timeout]).finally(() => clearTimeout(timer))
+}
+
+// An origin whose ref belongs to a registered record type must name an existing record, or provenance would
+// attach to a record created later under that ref. The hint names the owning plugin's list command when there is
+// one ("pm inbox list"); the kernel knows nothing of what the record is. An inbox origin whose ref no record
+// type owns means the inbox plugin is not loaded. Other origins (a change set's `CS-<id>`) are no records.
+async function checkOrigin(records: RecordTypeRegistry, commands: CommandRegistry, context: () => OpContext, origin: Origin): Promise<void> {
+  const type = records.typeOfRef(origin.ref)
+  if (!type) {
+    if (origin.type !== "inbox") return
+    throw new ValidationError("--from-inbox needs the inbox plugin, which is not loaded", { field: "from-inbox", hint: 'run "pm plugin list"' })
+  }
+  if (await runWithContext(context(), () => records.resolveAny(origin.ref))) return
+  const lists = commands.list().filter((c) => c.plugin === type.plugin && c.def.verb === "list")
+  const list = lists.find((c) => c.def.thing === type.plugin || type.name.split("_").includes(c.def.thing)) ?? (lists.length === 1 ? lists[0] : undefined)
+  throw new NotFoundError(`--from-inbox: no record "${origin.ref}"`, { hint: list ? `run "pm ${list.def.thing} list"` : 'run "pm help"' })
 }
 
 export async function bootKernel(opts: BootOptions): Promise<Kernel> {
@@ -381,6 +402,8 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     ...(s.dir !== undefined ? { dir: s.dir } : {}),
   }))
 
+  const context = (origin?: Origin): OpContext => ({ actor: "me", today: clock.today(), now: clock.now(), ...(origin ? { origin } : {}) })
+
   return {
     paths,
     config,
@@ -396,7 +419,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     changeSets,
     commands,
     events,
-    context: (origin) => ({ actor: "me", today: clock.today(), now: clock.now(), ...(origin ? { origin } : {}) }),
+    context,
     runtime: (pluginId) => {
       const s = byId.get(pluginId)
       if (s?.status !== "ok" || !s.ctx) return undefined
@@ -406,6 +429,8 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
       }
       return s.runtime
     },
+    requiresOf: (pluginId) => Object.keys(byId.get(pluginId)?.def?.requires ?? {}),
+    checkOrigin: (origin) => checkOrigin(records, commands, context, origin),
     shutdown: () => db.close(),
   }
 }

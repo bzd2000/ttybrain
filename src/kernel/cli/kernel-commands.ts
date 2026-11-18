@@ -1,7 +1,9 @@
-// The kernel's own commands: help, guide, plugin list and report. They are CommandDefs like the plugins'
+// The kernel's own commands: help, guide, plugin list|enable|disable and report. They are CommandDefs like the plugins'
 // ones, so they get the same argument parsing, --json and --help. `help` and `guide` have no verb (verb "").
 import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
+import { updateConfigFile } from "../config"
+import { NotFoundError, suggest } from "../errors"
 import type { Kernel } from "../host"
 import { renderReport, type ReportDef } from "../reports"
 import { commandName, flagSignature, GLOBAL_FLAGS, signature, usage } from "./args"
@@ -45,8 +47,83 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
         return { json: rows, text: formatTable(["id", "version", "source", "status", "error"], rows) }
       },
     },
+    {
+      thing: "plugin",
+      verb: "enable",
+      summary: "enable a disabled plugin (from the next run)",
+      args: [{ name: "id", required: true }],
+      run: async ({ args }) => {
+        const id = String(args.id)
+        updateConfigFile(kernel.paths, (cfg) => {
+          const plugins = pluginsSection(cfg)
+          const disabled = disabledList(plugins)
+          // An id that is no longer installed can still be taken off the list.
+          if (!disabled.includes(id)) knownPlugin(kernel, id)
+          plugins.disabled = disabled.filter((d) => d !== id)
+        })
+        return { json: { id, disabled: false }, text: `enabled ${id}` }
+      },
+    },
+    {
+      thing: "plugin",
+      verb: "disable",
+      summary: "disable a plugin (from the next run); the plugins that require it are skipped too; its data stays",
+      args: [{ name: "id", required: true }],
+      run: async ({ args }) => {
+        const id = knownPlugin(kernel, String(args.id))
+        updateConfigFile(kernel.paths, (cfg) => {
+          const plugins = pluginsSection(cfg)
+          const disabled = disabledList(plugins)
+          plugins.disabled = disabled.includes(id) ? disabled : [...disabled, id]
+        })
+        const skipped = dependantsOf(kernel, id)
+        const also = skipped.map(([d, on]) => `${d} (requires ${on.join(", ")})`).join(", ")
+        return {
+          json: { id, disabled: true, alsoSkipped: skipped.map(([d]) => d) },
+          text: `disabled ${id}${also ? `; also skipped: ${also}` : ""}`,
+        }
+      },
+    },
     ...kernel.reports.list().map((r) => reportCommand(kernel, r)),
   ]
+}
+
+// ---- plugin enable|disable helpers ----
+
+type Obj = Record<string, unknown>
+const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v)
+
+// The config file's `plugins` object, created when missing (its other keys, such as `allow`, stay).
+function pluginsSection(cfg: Obj): Obj {
+  if (!isObj(cfg.plugins)) cfg.plugins = {}
+  return cfg.plugins as Obj
+}
+
+const disabledList = (plugins: Obj): string[] => (Array.isArray(plugins.disabled) ? plugins.disabled.filter((d): d is string => typeof d === "string") : [])
+
+function knownPlugin(kernel: Kernel, id: string): string {
+  if (kernel.plugins.some((p) => p.id === id)) return id
+  throw new NotFoundError(`no plugin "${id}"`, { suggestions: suggest(id, kernel.plugins.map((p) => p.id)), hint: 'run "pm plugin list"' })
+}
+
+// The loaded plugins that require `id`, directly or through another one, sorted by id, each with the plugins
+// of that set (or `id`) it requires: they are skipped too once `id` is disabled.
+function dependantsOf(kernel: Kernel, id: string): Array<[string, string[]]> {
+  const off = new Set([id])
+  const loaded = kernel.plugins.filter((p) => p.status === "ok" && p.id !== id).map((p) => p.id)
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const p of loaded) {
+      if (!off.has(p) && kernel.requiresOf(p).some((r) => off.has(r))) {
+        off.add(p)
+        grew = true
+      }
+    }
+  }
+  return [...off]
+    .filter((p) => p !== id)
+    .sort()
+    .map((p) => [p, kernel.requiresOf(p).filter((r) => off.has(r)).sort()])
 }
 
 type JsonSchema = { type?: string; description?: string }
