@@ -169,6 +169,39 @@ describe("a working kernel", () => {
     const k = await boot({ plugins: [alpha(), bare("snoop", { activate: (ctx) => void (data = ctx.data) })] })
     await error(() => data.selectFrom("alpha_item").selectAll().execute(), IsolationError)
   })
+
+  test("ctx.data rejects table-valued functions in raw SQL", async () => {
+    let data: any
+    const k = await boot({ plugins: [alpha(), bare("snoop", { activate: (ctx) => void (data = ctx.data) })] })
+    const e = await error(() => inCtx(k, () => sql`SELECT * FROM pragma_table_info('alpha_item')`.execute(data)), IsolationError)
+    expect((e as Error).message).toContain("table-valued functions and virtual tables are not allowed")
+    await error(() => inCtx(k, () => sql`SELECT * FROM dbstat`.execute(data)), IsolationError)
+  })
+
+  test("ctx.config is frozen", async () => {
+    const seen: string[] = []
+    const k = await boot({
+      plugins: [
+        bare("cfg", {
+          activate: (ctx) => {
+            const c = ctx.config as any
+            for (const attempt of [() => (c.staleContactDays = 1), () => c.plugins.disabled.push("x"), () => (c.assistant.provider = "x")]) {
+              try {
+                attempt()
+                seen.push("mutated")
+              } catch (e) {
+                seen.push((e as Error).constructor.name)
+              }
+            }
+          },
+        }),
+      ],
+    })
+    expect(seen).toEqual(["TypeError", "TypeError", "TypeError"])
+    expect(k.config.staleContactDays).toBe(30)
+    expect(k.config.plugins.disabled).toEqual([])
+    expect(Object.isFrozen(k.config)).toBe(true)
+  })
 })
 
 describe("failure isolation", () => {

@@ -3,7 +3,10 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import Type from "typebox"
-import { ChangeSetService } from "./changesets"
+import { builtinPlugins } from "../../tests/builtins"
+import { makeTestKernel } from "../../tests/helpers"
+import { ChangeSetService, type ChangeSetDeps } from "./changesets"
+import { runCli } from "./cli/dispatch"
 import { fixedClock } from "./clock"
 import { runWithContext, type OpContext } from "./context"
 import { KernelDb } from "./db/kernel-db"
@@ -20,6 +23,7 @@ let dir: string
 let kdb: KernelDb
 let provenance: ProvenanceStore
 let changeSets: ChangeSetService
+let deps: ChangeSetDeps
 let changed: unknown[]
 
 const ctx: OpContext = { actor: "me", today: "2026-11-13", now: "2026-11-13T10:00:00" }
@@ -68,7 +72,9 @@ beforeEach(async () => {
   provenance = new ProvenanceStore(kdb, records)
   const ops = new OperationRegistry({ db: kdb, events, records, provenance, validateOutputs: true })
   ops.expose("fixture", { write: { add, fail, remove } })
-  changeSets = new ChangeSetService({ db: kdb, ops, records, provenance })
+  // Origins are checked by the kernel's checkOrigin (host.ts); these unit tests accept every origin.
+  deps = { db: kdb, ops, records, provenance, checkOrigin: async () => {} }
+  changeSets = new ChangeSetService(deps)
 })
 
 afterEach(async () => {
@@ -204,7 +210,7 @@ describe("ChangeSetService.apply", () => {
     const events = new EventBus()
     const ops = new OperationRegistry({ db: kdb, events, records, provenance: new ProvenanceStore(kdb, records), validateOutputs: true })
     ops.expose("fixture", { write: { add } })
-    const cs = new ChangeSetService({ db: kdb, ops, records, provenance: new ProvenanceStore(kdb, records) })
+    const cs = new ChangeSetService({ ...deps, ops, records, provenance: new ProvenanceStore(kdb, records) })
     await expect(inCtx(() => cs.apply([{ plugin: "fixture", operation: "add", input: { title: "x" } }], { type: "inbox", ref: "I-3" }))).rejects.toThrow(
       'write operation "fixture.add" returned ref "F-1", which does not resolve',
     )
@@ -221,5 +227,50 @@ describe("ChangeSetService.apply", () => {
   test("an empty change set is refused", async () => {
     await expect(inCtx(() => changeSets.apply([]))).rejects.toThrow(ValidationError)
     expect(rows("SELECT * FROM kernel_change_set")).toEqual([])
+  })
+
+  test("the set's origin is checked before anything is written", async () => {
+    const checked: unknown[] = []
+    const cs = new ChangeSetService({
+      ...deps,
+      checkOrigin: async (o) => {
+        checked.push(o)
+        throw new NotFoundError(`no record "${o.ref}"`)
+      },
+    })
+    const op = { plugin: "fixture", operation: "add", input: { title: "x" } }
+    await expect(inCtx(() => cs.apply([op], { type: "inbox", ref: "I-99" }))).rejects.toThrow('no record "I-99"')
+    expect(checked).toEqual([{ type: "inbox", ref: "I-99" }])
+    expect(titles()).toEqual([])
+    expect(rows("SELECT * FROM kernel_change_set")).toEqual([])
+    await inCtx(() => cs.apply([op]))
+    expect(checked).toHaveLength(1) // no origin, nothing to check
+  })
+})
+
+describe("origins are checked by the kernel, not only by the CLI", () => {
+  test("every origin is checked, not only the CLI's", async () => {
+    const k = await makeTestKernel({ plugins: builtinPlugins })
+    try {
+      const capture = { plugin: "inbox", operation: "capture", input: { text: "x" } }
+      const inK = <T>(fn: () => Promise<T>) => runWithContext(k.context(), fn)
+      const count = (t: string) => k.db.raw.prepare(`SELECT count(*) AS n FROM ${t}`).all([])[0]!.n
+      expect((await inK(() => k.changeSets.apply([capture]))).refs).toEqual(["I-1"])
+      const err = await inK(() => k.changeSets.apply([capture], { type: "inbox", ref: "I-99" })).catch((e) => e)
+      expect(err).toBeInstanceOf(NotFoundError)
+      expect(err.message).toBe('no record "I-99"')
+      expect(err.hint).toBe('run "pm inbox list"')
+      expect([count("kernel_change_set"), count("inbox_item")]).toEqual([1, 1])
+      // An existing item is fine, and so is an origin that is no record (a change set's CS-<id>).
+      expect((await inK(() => k.changeSets.apply([capture], { type: "inbox", ref: "I-1" }))).refs).toEqual(["I-2"])
+      expect((await inK(() => k.changeSets.apply([capture], { type: "changeset", ref: "CS-1" }))).refs).toEqual(["I-3"])
+      // The CLI keeps its own text.
+      let out = ""
+      const code = await runCli(["inbox", "add", "y", "--from-inbox", "I-99", "--json"], k, { out: (s) => void (out += s), err: () => {}, stdin: async () => "" })
+      expect(code).toBe(2)
+      expect(JSON.parse(out).error).toEqual({ code: "not_found", message: '--from-inbox: no record "I-99"', hint: 'run "pm inbox list"' })
+    } finally {
+      await k.cleanup()
+    }
   })
 })

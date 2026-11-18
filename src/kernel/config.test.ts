@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { loadConfig, updateConfigFile } from "./config"
@@ -52,6 +52,19 @@ test("updateConfigFile refuses a broken file and leaves it alone", () => {
   const { dir, env } = setup("{nope")
   expect(() => updateConfigFile(resolvePaths(env), () => {})).toThrow(ValidationError)
   expect(readFileSync(join(dir, "config.json"), "utf8")).toBe("{nope")
+})
+test("updateConfigFile writes atomically: a failing write leaves the old file intact, a success leaves no temp file", () => {
+  const { dir, env } = setup('{"staleContactDays": 14}')
+  const paths = resolvePaths(env)
+  // Block the temp file the write goes through (same directory, then renamed over the config).
+  const temp = `${paths.config}.${process.pid}.tmp`
+  mkdirSync(temp)
+  expect(() => updateConfigFile(paths, (cfg) => void (cfg.staleContactDays = 1))).toThrow()
+  expect(readFileSync(paths.config, "utf8")).toBe('{"staleContactDays": 14}')
+  rmSync(temp, { recursive: true })
+  updateConfigFile(paths, (cfg) => void (cfg.staleContactDays = 1))
+  expect(readFileSync(paths.config, "utf8")).toBe('{\n  "staleContactDays": 1\n}\n')
+  expect(readdirSync(dir)).toEqual(["config.json"])
 })
 test("fixedClock", () => {
   expect(fixedClock("2026-11-13").now()).toBe("2026-11-13T09:00:00")

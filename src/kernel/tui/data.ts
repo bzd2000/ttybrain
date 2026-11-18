@@ -167,6 +167,8 @@ export function act<T>(fn: () => Promise<T>, opts: { origin?: Origin; ok?: (r: T
   const attempt = async (): Promise<ActResult<T>> => {
     for (let n = 1; ; n++) {
       try {
+        // An origin must name an existing record (the kernel's check, as for the CLI and change sets).
+        if (opts.origin) await session.kernel.checkOrigin(opts.origin)
         const value = await runWithContext(session.kernel.context(opts.origin), () => session.kernel.db.write(run))
         if (opts.ok) notify(opts.ok(value), "info")
         return { ok: true, value }

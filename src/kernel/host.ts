@@ -114,6 +114,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, text: string): Promise<T> {
 // attach to a record created later under that ref. The hint names the owning plugin's list command when there is
 // one ("pm inbox list"); the kernel knows nothing of what the record is. An inbox origin whose ref no record
 // type owns means the inbox plugin is not loaded. Other origins (a change set's `CS-<id>`) are no records.
+// Every path that writes with an origin awaits it first: the CLI dispatcher, change sets and the TUI's act.
 async function checkOrigin(records: RecordTypeRegistry, commands: CommandRegistry, context: () => OpContext, origin: Origin): Promise<void> {
   const type = records.typeOfRef(origin.ref)
   if (!type) {
@@ -123,12 +124,21 @@ async function checkOrigin(records: RecordTypeRegistry, commands: CommandRegistr
   if (await runWithContext(context(), () => records.resolveAny(origin.ref))) return
   const lists = commands.list().filter((c) => c.plugin === type.plugin && c.def.verb === "list")
   const list = lists.find((c) => c.def.thing === type.plugin || type.name.split("_").includes(c.def.thing)) ?? (lists.length === 1 ? lists[0] : undefined)
-  throw new NotFoundError(`--from-inbox: no record "${origin.ref}"`, { hint: list ? `run "pm ${list.def.thing} list"` : 'run "pm help"' })
+  throw new NotFoundError(`no record "${origin.ref}"`, { hint: list ? `run "pm ${list.def.thing} list"` : 'run "pm help"' })
+}
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value)
+    for (const v of Object.values(value)) deepFreeze(v)
+  }
+  return value
 }
 
 export async function bootKernel(opts: BootOptions): Promise<Kernel> {
   const paths = resolvePaths(opts.env, opts.flags)
-  const config = loadConfig(paths, opts.env)
+  // Frozen all the way down: every plugin gets this same object as ctx.config, so one must not change another's.
+  const config = deepFreeze(loadConfig(paths, opts.env))
   const clock = opts.clock ?? systemClock
   mkdirSync(dirname(paths.db), { recursive: true })
   const db = new KernelDb(openRaw(paths.db))
@@ -151,7 +161,8 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const fields = new FieldRegistry()
   const commands = new CommandRegistry()
   const views = new ViewRegistry()
-  const changeSets = new ChangeSetService({ db, ops, records, provenance })
+  const originCheck = (origin: Origin) => checkOrigin(records, commands, context, origin)
+  const changeSets = new ChangeSetService({ db, ops, records, provenance, checkOrigin: originCheck })
   const runner = new MigrationRunner(db, paths, clock)
   await runner.ensureKernelTables()
 
@@ -430,7 +441,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
       return s.runtime
     },
     requiresOf: (pluginId) => Object.keys(byId.get(pluginId)?.def?.requires ?? {}),
-    checkOrigin: (origin) => checkOrigin(records, commands, context, origin),
+    checkOrigin: originCheck,
     shutdown: () => db.close(),
   }
 }

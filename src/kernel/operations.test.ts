@@ -14,7 +14,7 @@ import { OperationRegistry, type ReadOp, type WriteOp } from "./operations"
 import { resolvePaths } from "./paths"
 import { ProvenanceStore } from "./provenance"
 import { RecordTypeRegistry } from "./records"
-import { NonBlank } from "./schemas"
+import { Deleted, NonBlank } from "./schemas"
 
 let dir: string
 let kdb: KernelDb
@@ -229,12 +229,27 @@ describe("OperationRegistry: writes", () => {
     expect(await provenance.createdFrom("inbox", "I-3")).toEqual([])
   })
 
-  test("a deleted ref of a type whose refs are not numeric fails", async () => {
-    records.register({ name: "coded", plugin: "fixture", prefix: "#", resolve: async () => 1, label: async () => "x", search: async () => [], ref: async () => "#X" })
-    const api = expose({ removeCoded: { ...remove, run: async () => ({ ref: "#X", deleted: true as const }) } })
-    await expect(inCtx(() => api.write.removeCoded!({ ref: "#X" }))).rejects.toThrow(
-      'write operation "fixture.removeCoded" deleted "#X", but only records with numeric refs can be deleted',
+  test("deleting a #/@ record forgets its origins", async () => {
+    // A type with a custom ref (#CODE, @handle): the ref says nothing about the id, so the delete returns it.
+    records.register({ name: "coded", plugin: "fixture", prefix: "#", resolve: async (r) => (r === "#CRM" ? 7 : r === "#OPS" ? 8 : null), label: async () => "x", search: async () => [], ref: async (id) => (id === 7 ? "#CRM" : "#OPS") })
+    const touch: WriteOp = { ...remove, output: Type.Object({ ref: Type.String() }), run: async (i) => ({ ref: i.ref }) }
+    const api = expose({
+      touch,
+      removeCoded: { ...remove, output: Deleted, run: async (i) => ({ ref: i.ref, deleted: true as const, id: i.ref === "#CRM" ? 7 : 8 }) },
+      removeNoId: { ...remove, run: async (i) => ({ ref: i.ref, deleted: true as const }) },
+    })
+    await inCtx(() => api.write.touch!({ ref: "#CRM" }), { type: "inbox", ref: "I-3" })
+    await inCtx(() => api.write.touch!({ ref: "#OPS" }), { type: "inbox", ref: "I-3" })
+    expect(origins()).toEqual([
+      { record_type: "coded", record_id: 7, origin_ref: "I-3" },
+      { record_type: "coded", record_id: 8, origin_ref: "I-3" },
+    ])
+    expect(await inCtx(() => api.write.removeCoded!({ ref: "#CRM" }))).toEqual({ ref: "#CRM", deleted: true, id: 7 })
+    expect(origins()).toEqual([{ record_type: "coded", record_id: 8, origin_ref: "I-3" }])
+    await expect(inCtx(() => api.write.removeNoId!({ ref: "#OPS" }))).rejects.toThrow(
+      'write operation "fixture.removeNoId" deleted "#OPS" without its id: a record whose ref is not numeric must return its id ({ ref, deleted: true, id })',
     )
+    expect(origins()).toEqual([{ record_type: "coded", record_id: 8, origin_ref: "I-3" }])
   })
 
   test("a write whose ref is its own origin records no provenance", async () => {

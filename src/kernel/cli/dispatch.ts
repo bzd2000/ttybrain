@@ -2,7 +2,7 @@
 // its arguments, enforces --yes on destructive commands, runs it inside the operation context (with the
 // --from-inbox origin) and prints the result or the error. Returns the exit code: 0, 1, 2 or 3.
 import { runWithContext, type Origin } from "../context"
-import { suggest, ValidationError } from "../errors"
+import { NotFoundError, suggest, ValidationError } from "../errors"
 import type { Kernel } from "../host"
 import { bindArgs, commandName, leading, parseCommand, wantsJson, without } from "./args"
 import type { CommandDef } from "./commands"
@@ -70,6 +70,16 @@ function originOf(fromInbox: string | undefined): Origin | undefined {
   return { type: "inbox", ref: `I-${Number(m[1])}` }
 }
 
+// The kernel's origin check, its not-found error naming the flag: `--from-inbox: no record "I-99"`.
+async function checkFromInbox(kernel: Kernel, origin: Origin): Promise<void> {
+  try {
+    await kernel.checkOrigin(origin)
+  } catch (e) {
+    if (e instanceof NotFoundError) throw new NotFoundError(`--from-inbox: ${e.message}`, { hint: e.hint })
+    throw e
+  }
+}
+
 async function dispatch(argv: string[], kernel: Kernel, io: CliIo): Promise<{ result: CommandResult; json: boolean }> {
   const commands = new Commands(kernel)
   const { words, global } = leading(argv)
@@ -93,7 +103,7 @@ async function dispatch(argv: string[], kernel: Kernel, io: CliIo): Promise<{ re
   if (def.destructive && !parsed.global.yes)
     throw new ValidationError(`"${commandName(def)}" is destructive; add --yes`, { hint: "re-run with --yes to confirm" })
   const origin = originOf(parsed.global.fromInbox)
-  if (origin) await kernel.checkOrigin(origin)
+  if (origin) await checkFromInbox(kernel, origin)
   const result = await runWithContext(kernel.context(origin), () => def.run({ args, flags: parsed.flags, readStdin: () => io.stdin() }))
   return { result, json: parsed.global.json }
 }

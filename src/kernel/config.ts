@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { ValidationError } from "./errors"
 import type { Paths } from "./paths"
@@ -49,8 +49,8 @@ export function loadConfig(paths: Paths, env: Record<string, string | undefined>
 }
 
 // Edits the config file in place: reads it (missing: `{}`; invalid: the same ValidationError as loadConfig),
-// lets `change` mutate the object, and writes it back as 2-space JSON with a trailing newline. Keys `change`
-// leaves alone keep their order and values; defaults and PM_CONFIG_JSON are not written.
+// lets `change` mutate the object, and writes it back (atomically) as 2-space JSON with a trailing newline.
+// Keys `change` leaves alone keep their order and values; defaults and PM_CONFIG_JSON are not written.
 export function updateConfigFile(paths: Paths, change: (cfg: Record<string, unknown>) => void): void {
   let cfg: Obj = {}
   let text: string | undefined
@@ -62,5 +62,16 @@ export function updateConfigFile(paths: Paths, change: (cfg: Record<string, unkn
   if (text !== undefined) cfg = parse(text, paths.config)
   change(cfg)
   mkdirSync(dirname(paths.config), { recursive: true })
-  writeFileSync(paths.config, JSON.stringify(cfg, null, 2) + "\n")
+  // Atomically: a temp file in the same directory, renamed over the config, so a kill mid-write never leaves a
+  // truncated config (which would break every boot).
+  const temp = `${paths.config}.${process.pid}.tmp`
+  try {
+    writeFileSync(temp, JSON.stringify(cfg, null, 2) + "\n")
+    renameSync(temp, paths.config)
+  } catch (e) {
+    try {
+      unlinkSync(temp)
+    } catch {}
+    throw e
+  }
 }

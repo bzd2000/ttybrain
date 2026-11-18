@@ -47,7 +47,7 @@ Every feature is a plugin, built-ins included: `people`, `projects`, `meetings`,
 4. **Cross-plugin writes use exposed write operations only**: `ctx.use("projects").write.addAction({...})`, and only for plugins in `requires`.
 5. **Two checks enforce 1–4.**
    - *Layer 1* rewrites and checks the Kysely query tree: tables, aliases, views, columns, and DDL only in migrations.
-   - *Layer 2* runs `EXPLAIN` on the compiled SQL and checks the tables actually touched.
+   - *Layer 2* runs `EXPLAIN` on the compiled SQL and checks the tables actually touched. Table-valued functions and virtual tables (`pragma_table_info`, `dbstat`, `json_each`: opcodes `VOpen`/`VFilter`) are rejected, since they open no table the check can see.
    - Their state travels with each query: no shared mutable state.
    - **R15: plugin data changes (insert/update/delete/replace, also raw) are only accepted inside a write operation.** Outside one, `ctx.data` can read and nothing else. A bare kernel write that is not an operation (the TUI's `act`, a change set) is a transaction only and does not count: only the scope the operation wrapper opens does. Migrations are the exception.
 6. **Schema changes only in `ctx.migration(id, up)`.** The kernel runs each migration in its own transaction and checks the result: prefixes, no foreign objects, no triggers for external plugins.
@@ -67,13 +67,14 @@ ctx.expose({
 - Schemas use **TypeBox** (`Type` from `src/kernel/api.ts`). The kernel validates the input before `run` and reports the failing field.
 - Text inputs use `NonBlank(...)` (from `api.ts`) instead of a bare `Type.String()`, so blank strings are rejected as validation errors.
 - **Write outputs must include `ref`**, the display ref of the main record (`"A-41"`). Provenance and change sets depend on it.
-- **One delete convention:** a write that deletes its record returns `Deleted` (from `api.ts`): `{ ref, deleted: true }`. The kernel then records no provenance for it and forgets the record's provenance rows in the same transaction (ids are rowids and get reused). Only records with numeric refs (`A-12`) can be deleted; `#CODE`/`@handle` records are archived instead.
+- **One delete convention:** a write that deletes its record returns `Deleted` (from `api.ts`): `{ ref, deleted: true }`. The kernel then records no provenance for it and forgets the record's provenance rows in the same transaction (ids are rowids and get reused). A delete of a record whose type has a custom ref (`#CODE`, `@handle`) also returns the record's `id` (`{ ref, deleted: true, id }`), since the ref says nothing about it; without it the write fails.
 - `describe(input)` returns the one-line change description shown in change sets.
 - **Read operations are only for logic** (`projectStatus`, `sinceDate`, `staleStakeholders`, `getContext`). Plain lists and joins use views.
 - **Context comes from the kernel** (`currentContext()`: `today`, `now`, `origin`), never from `new Date()`. Use the injected clock everywhere, so tests can pin "today".
+- `ctx.config` is deep-frozen: every plugin shares the one object, so none can change it for the others.
 - **Extra fields on another plugin's records:** `ctx.field(recordType, { name, label, type, values?, get, set })` names two of the plugin's own operations, `get` (read, `{ ref }` → `{ value }`) and `set` (write, `{ ref, value }` → `{ ref }`); boot fails the plugin when either is missing. The value lives in the plugin's own table. The TUI shows it in the record's Summary (`<RecordFields>`) and forms (`<Form recordType recordRef>`: the kernel saves the changed extra fields itself, inside the act the form's submit runs, after the plugin's own operation and for the ref it returned); its CLI side is phase 5 (R22).
 - `ctx.records` offers `resolve(ref)`, `label(ref)`, `refOf(type, id)` and `hasType(name)`; use `hasType` to validate a soft reference to an optional plugin's records only when that plugin is loaded.
-- **Every write emits `record.changed`.** With an origin (`--from-inbox I-n`), the kernel records provenance itself (not for a delete, and not when the ref is the origin itself). Don't add `inbox_item_id` columns. The CLI refuses an origin whose ref belongs to a registered record type but does not resolve (exit 2), and an inbox origin when no plugin owns the `I-` prefix (`--from-inbox needs the inbox plugin, which is not loaded`, exit 1); both checks are `kernel.checkOrigin(origin)`.
+- **Every write emits `record.changed`.** With an origin (`--from-inbox I-n`), the kernel records provenance itself (not for a delete, and not when the ref is the origin itself). Don't add `inbox_item_id` columns. The kernel refuses an origin whose ref belongs to a registered record type but does not resolve (`no record "I-99"`, exit 2), and an inbox origin when no plugin owns the `I-` prefix (`--from-inbox needs the inbox plugin, which is not loaded`, exit 1); both checks are `kernel.checkOrigin(origin)`, which every path that writes with an origin awaits first: the CLI dispatcher (which names the flag: `--from-inbox: no record "I-99"`), `changeSets.apply` and the TUI's `act`.
 
 ## The TUI (phase 2)
 

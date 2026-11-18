@@ -6,8 +6,10 @@ import type { RecordTypeRegistry } from "./records"
 import { parseRef } from "./refs"
 
 // What a write operation returns, as far as provenance cares: its main record's ref, and `deleted: true`
-// when the operation deleted that record (the one delete convention).
-export type WriteOutput = { ref: string; deleted?: unknown }
+// when the operation deleted that record (the one delete convention). A delete of a record whose type has a
+// custom ref (`#CODE`, `@handle`) also returns the record's `id`: the ref no longer resolves, and says nothing
+// about the id.
+export type WriteOutput = { ref: string; deleted?: unknown; id?: number }
 
 export class ProvenanceStore {
   constructor(
@@ -17,14 +19,18 @@ export class ProvenanceStore {
 
   // The kernel's provenance rule for one write's output, inside its transaction. A delete (`deleted: true`)
   // records nothing and forgets the deleted record's origins: ids are rowids and get reused, and a later record
-  // must not inherit them. Otherwise, with an origin, the ref is resolved (it must resolve) and recorded,
-  // unless it is the origin itself (`pm inbox done I-2 --from-inbox I-2`). Used by operations and change sets.
+  // must not inherit them (the id comes from a numeric ref, or from `out.id` for a custom-ref type). Otherwise,
+  // with an origin, the ref is resolved (it must resolve) and recorded, unless it is the origin itself (`pm inbox done I-2 --from-inbox I-2`). Used by operations and change sets.
   async recordWrite(key: string, out: WriteOutput, origin: Origin | undefined): Promise<void> {
     const type = this.records.typeOfRef(out.ref)
     if (out.deleted === true) {
       if (!type) return // no registered type: nothing can have been recorded for it
-      const id = type.ref ? null : parseRef(out.ref, type.prefix)
-      if (id === null) throw new Error(`write operation "${key}" deleted "${out.ref}", but only records with numeric refs can be deleted`)
+      const id = type.ref ? (Number.isSafeInteger(out.id) && out.id! > 0 ? out.id! : null) : parseRef(out.ref, type.prefix)
+      if (id === null) {
+        throw new Error(
+          `write operation "${key}" deleted "${out.ref}" without its id: a record whose ref is not numeric must return its id ({ ref, deleted: true, id })`,
+        )
+      }
       await this.forget(type.name, id)
       return
     }

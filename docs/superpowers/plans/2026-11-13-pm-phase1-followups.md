@@ -8,13 +8,6 @@ Deferred findings from the phase 1 task reviews and the final review, plus the c
 - `ctx.emit` inside a write fires before commit; defer it to after-commit before plugins emit typed events. — done in phase 2 Task 1
 - Plugin-specific events are not emitted yet (R18); only `record.changed` is.
 
-## Before phase 5 (external plugins)
-
-- Table-valued functions (`pragma_table_info`, `dbstat`) are invisible to the EXPLAIN check, so other plugins' schema metadata can be read through raw SQL.
-- `ctx.config` is one shared mutable object; freeze it.
-- Kernel provenance cleanup on delete only supports numeric refs (A-12); a `#`/`@` record delete would throw.
-- The `--from-inbox` existence check is only in the CLI dispatcher.
-
 ## Deferred minors (from the task reviews)
 
 - Task 1: minor (deferred): config merge assigns __proto__ keys from JSON (config.ts:318)
@@ -37,7 +30,6 @@ Deferred findings from the phase 1 task reviews and the final review, plus the c
 - Task 5: minor (deferred): column check uses whole-tree union, not per-scope (Bun DQS parity gap remains in nested queries)
 - Task 5: minor (deferred): CTE named like an own table accepted (contradicts R9; no leak)
 - Task 5: minor (deferred): alias equal to own short name skips prefixing (fails closed)
-- Task 5: minor (deferred): table-valued functions (pragma_table_info, dbstat) invisible to EXPLAIN → schema metadata of other plugins readable via raw sql; reject VOpen/VFilter
 - Task 5: minor (deferred → T6 via R11): DDL keeps existing `<id>_*` tables → plugin foo could alter foo_bar_* if ids contained `_`
 - Task 5: minor (deferred → T6 via R11): nested inner short name `x` re-prefixed when own short names include `contracts_x` (wrong own table read)
 - Task 5: minor (deferred → T6 via R11): FK from own table to another plugin's view allowed in DDL
