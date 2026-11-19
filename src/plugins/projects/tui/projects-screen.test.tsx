@@ -336,6 +336,26 @@ describe("Projects screen", () => {
     for (const l of lines(frame)) expect(displayWidth(l)).toBeLessThanOrEqual(80)
   })
 
+  test("a 16-character code is shown whole at 80x24, and its row does not wrap", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      await write().addProject!({ code: "DATAPLATFORM2027", name: "Data platform", effortDays: 40 })
+      await write().addMilestone!({ project: "DATAPLATFORM2027", title: "Ingest live", due: "2026-11-26" })
+      await write().addProject!({ code: "CRM", name: "Customer platform" })
+    })
+    const t = await open({ width: 80, height: 24 })
+    const frame = await t.frame()
+    const long = lineWith(frame, "DATAPLATFORM2027")
+    expect(long).toContain(" DATAPLATFORM2027 Data pl") // the name column gives way, not the code
+    expect(long).toContain("Ingest live")
+    expect(long).toContain("40pd")
+    expect(frame).not.toContain("DATAPLATFORM20…")
+    for (const l of lines(frame)) expect(displayWidth(l)).toBeLessThanOrEqual(80)
+    // The column is as wide as the longest code: the names line up.
+    expect(lineWith(frame, " CRM ").indexOf("Custome")).toBe(long.indexOf("Data pl"))
+    expect(lineWith(frame, "Code").indexOf("Name")).toBe(long.indexOf("Data pl"))
+  })
+
   test("count is the active, non-archived projects", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await seed()

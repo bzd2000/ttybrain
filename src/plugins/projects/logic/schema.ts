@@ -1,6 +1,7 @@
 // The projects plugin's tables (design §4 Projects, plugin reference §2) and the TypeBox shapes of its records.
-// Migration 001 creates every table, including those whose operations come in later parts of the plugin.
-import { sql, Type, type PluginContext, type Static } from "@ttybrain/api"
+// Migration 001 creates every table, including those whose operations come in later parts of the plugin; 002 widens
+// project codes to 16 characters.
+import { sql, Type, type Kysely, type PluginContext, type Static } from "@ttybrain/api"
 
 export const PROJECT_STATUSES = ["active", "on_hold", "closed"] as const
 export const HEALTHS = ["green", "amber", "red"] as const
@@ -53,25 +54,32 @@ export type ContextRecord = Static<typeof ContextRecord>
 
 const inList = (col: string, xs: readonly string[]) => sql.raw(`${col} in (${xs.map((x) => `'${x}'`).join(", ")})`)
 
+// The project table, with codes of 2..`codeMax` characters (001: 8, 002: 16).
+function createProject(db: Kysely<any>, name: string, codeMax: number) {
+  return db.schema
+    .createTable(name)
+    .addColumn("id", "integer", (c) => c.primaryKey())
+    .addColumn("code", "text", (c) =>
+      c.notNull().unique().check(sql`length(code) between 2 and ${sql.raw(String(codeMax))} and code not glob '*[^A-Z0-9]*'`),
+    )
+    .addColumn("name", "text", (c) => c.notNull())
+    .addColumn("description", "text")
+    .addColumn("context", "text")
+    .addColumn("context_updated_at", "text")
+    .addColumn("status", "text", (c) => c.notNull().defaultTo("active").check(inList("status", PROJECT_STATUSES)))
+    .addColumn("start_date", "text")
+    .addColumn("end_date", "text")
+    .addColumn("effort_estimate_days", "real")
+    .addColumn("effort_note", "text")
+    .addColumn("archived_at", "text")
+    .addColumn("created_at", "text", (c) => c.notNull())
+    .addColumn("updated_at", "text", (c) => c.notNull())
+    .execute()
+}
+
 export function registerSchema(ctx: PluginContext): void {
   ctx.migration("001", async (db) => {
-    await db.schema
-      .createTable("project")
-      .addColumn("id", "integer", (c) => c.primaryKey())
-      .addColumn("code", "text", (c) => c.notNull().unique().check(sql`length(code) between 2 and 8 and code not glob '*[^A-Z0-9]*'`))
-      .addColumn("name", "text", (c) => c.notNull())
-      .addColumn("description", "text")
-      .addColumn("context", "text")
-      .addColumn("context_updated_at", "text")
-      .addColumn("status", "text", (c) => c.notNull().defaultTo("active").check(inList("status", PROJECT_STATUSES)))
-      .addColumn("start_date", "text")
-      .addColumn("end_date", "text")
-      .addColumn("effort_estimate_days", "real")
-      .addColumn("effort_note", "text")
-      .addColumn("archived_at", "text")
-      .addColumn("created_at", "text", (c) => c.notNull())
-      .addColumn("updated_at", "text", (c) => c.notNull())
-      .execute()
+    await createProject(db, "project", 8)
 
     await db.schema
       .createTable("health_update")
@@ -173,5 +181,18 @@ export function registerSchema(ctx: PluginContext): void {
       .addUniqueConstraint("involvement_unique", ["project_id", "person_id", "role"])
       .execute()
     await db.schema.createIndex("involvement_person").on("involvement").column("person_id").execute()
+  })
+
+  // Codes of up to 16 characters. SQLite cannot change a CHECK in place, so `project` is rebuilt: copy, drop,
+  // create, copy back. The kernel defers foreign keys in a migration, so the other tables' references to
+  // `project` hold again by the commit; nothing references the copy, and nothing is renamed (a rename would
+  // rewrite those references).
+  ctx.migration("002", async (db) => {
+    await createProject(db, "project_copy", 8)
+    await db.insertInto("project_copy").expression(db.selectFrom("project").selectAll()).execute()
+    await db.schema.dropTable("project").execute()
+    await createProject(db, "project", 16)
+    await db.insertInto("project").expression(db.selectFrom("project_copy").selectAll()).execute()
+    await db.schema.dropTable("project_copy").execute()
   })
 }

@@ -70,9 +70,9 @@ describe("projects", () => {
     const bad = await run("project", "add", "crm", "CRM replatforming", "--json")
     expect(bad.code).toBe(1)
     expect(bad.json.error.field).toBe("code")
-    expect(bad.json.error.hint).toBe("2–8 letters or digits, e.g. CRM")
+    expect(bad.json.error.hint).toBe("2–16 letters or digits, e.g. CRM")
     const text = await run("project", "add", "crm", "CRM replatforming")
-    expect(text.err).toContain("hint: 2–8 letters or digits, e.g. CRM")
+    expect(text.err).toContain("hint: 2–16 letters or digits, e.g. CRM")
 
     const a = await ok("project", "add", "CRM", "CRM replatforming", "--effort", "220", "--start", "2026-11-02", "--json")
     expect(a.json).toEqual({
@@ -99,6 +99,15 @@ describe("projects", () => {
     const again = await run("project", "add", "CRM", "Other", "--json")
     expect(again.code).toBe(3)
     expect(again.json.error.message).toBe('project "CRM" already exists')
+
+    // Up to 16 characters; a 17th is refused.
+    const long = await ok("project", "add", "#DATAPLATFORM2027", "Data platform", "--json")
+    expect([long.json.ref, long.json.code]).toEqual(["#DATAPLATFORM2027", "DATAPLATFORM2027"])
+    expect((await ok("project", "show", "#dataplatform2027", "--json")).json.code).toBe("DATAPLATFORM2027")
+    const tooLong = await run("project", "add", "DATAPLATFORM20271", "Too long", "--json")
+    expect(tooLong.code).toBe(1)
+    expect(tooLong.json.error.field).toBe("code")
+    expect(tooLong.json.error.message).toBe('invalid project code "DATAPLATFORM20271"')
   })
 
   test("project edit --health inserts a health update shown by the view", async () => {

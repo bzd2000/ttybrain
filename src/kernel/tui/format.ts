@@ -49,6 +49,12 @@ export function displayWidth(s: string): number {
   return n
 }
 
+// A column width that fits the widest of `texts`, kept between `min` and `max` cells: a column that grows with
+// what it shows (a code column), so short values keep the usual layout.
+export function fitWidth(texts: readonly string[], min: number, max: number): number {
+  return Math.min(max, Math.max(min, ...texts.map(displayWidth)))
+}
+
 // `s` cut to at most `width` cells, ending with `…` when it was cut.
 export function truncate(s: string, width: number): string {
   if (displayWidth(s) <= width) return s

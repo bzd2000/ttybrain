@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { displayWidth, dueLabel, longDate, shortDate, truncate } from "./format"
+import { displayWidth, dueLabel, fitWidth, longDate, shortDate, truncate } from "./format"
 
 describe("TUI format", () => {
   test("displayWidth counts wide characters and emoji as 2", () => {
@@ -15,6 +15,14 @@ describe("TUI format", () => {
     expect(truncate("short", 8)).toBe("short")
     expect(truncate("名前名前名前", 10)).toBe("名前名前…")
     expect(displayWidth(truncate("名前名前名前", 10))).toBeLessThanOrEqual(10)
+  })
+
+  test("fitWidth: the widest text, kept between min and max", () => {
+    expect(fitWidth(["CRM", "ERP2"], 8, 16)).toBe(8)
+    expect(fitWidth(["CRM", "DATAPLATFORM2027"], 8, 16)).toBe(16)
+    expect(fitWidth(["DATAPLATFORM2027X"], 4, 16)).toBe(16)
+    expect(fitWidth(["HRPORTAL1", "名前"], 4, 16)).toBe(9)
+    expect(fitWidth([], 6, 16)).toBe(6)
   })
 
   test("dueLabel", () => {

@@ -113,7 +113,7 @@ The portfolio, and everything you follow up per project: health, milestones, del
 
 | Table | Columns |
 |---|---|
-| `project` | `code` (unique), `name`, `description`, `context` (Markdown), `context_updated_at`, `status` (active/on_hold/closed), `start_date`, `end_date`, `effort_estimate_days`, `effort_note`, `archived_at` |
+| `project` | `code` (unique, 2–16 `A-Z`/`0-9`), `name`, `description`, `context` (Markdown), `context_updated_at`, `status` (active/on_hold/closed), `start_date`, `end_date`, `effort_estimate_days`, `effort_note`, `archived_at` |
 | `health_update` | `project_id → project`, `date`, `health` (green/amber/red), `comment` |
 | `milestone` | `project_id → project`, `title`, `due_date`, `done_date` |
 | `deliverable` | `project_id → project`, `title`, `owner_id → person` **(soft)**, `due_date`, `status` (not_started/in_progress/in_review/delivered), `milestone_id → milestone`, `delivered_date`, `status_changed_at` |

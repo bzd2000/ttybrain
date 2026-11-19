@@ -60,7 +60,7 @@ const COLUMNS = {
   effortNote: "effort_note",
 } as const
 const DATE_FIELDS = new Set(["startDate", "endDate"])
-const CODE_HINT = "2–8 letters or digits, e.g. CRM"
+const CODE_HINT = "2–16 letters or digits, e.g. CRM"
 
 export const now = () => currentContext().now
 export const today = () => currentContext().today

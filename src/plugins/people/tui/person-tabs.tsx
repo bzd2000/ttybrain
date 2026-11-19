@@ -9,6 +9,7 @@ import { createMemo, createSignal, Show } from "solid-js"
 import {
   act,
   dueLabel,
+  fitWidth,
   notify,
   Panel,
   printable,
@@ -133,11 +134,12 @@ const NOTE_HINTS: Hint[] = [
   { key: "Enter", label: "text" },
   { key: "Del", label: "delete" },
 ]
-const NOTE_COLUMNS: TableColumn[] = [
+// The project column fits the longest code shown (8 to 16): codes are never cut.
+const noteColumns = (codes: string[]): TableColumn[] => [
   { id: "ref", title: "Ref", width: 6 },
   { id: "date", title: "Date", width: 6 },
   { id: "kind", title: "Kind", width: 11 },
-  { id: "project", title: "Project", width: 8 },
+  { id: "project", title: "Project", width: fitWidth(codes, 8, 16) },
   { id: "text", title: "Note", width: "grow" },
 ]
 type NoteRow = NoteRecord & { project: string | null }
@@ -205,7 +207,7 @@ export function PersonNotes(props: { recordRef: string }) {
       <Panel title="Notes" count={q.data()?.notes.length} focused={keys.active()} grow>
         <Show when={q.data() !== undefined}>
           <Table
-            columns={NOTE_COLUMNS}
+            columns={noteColumns((q.data()?.notes ?? []).map((n) => n.project ?? ""))}
             rows={rows()}
             selectedRef={rows().some((r) => r.ref === sel.want()) ? sel.want() : undefined}
             onSelect={sel.select}

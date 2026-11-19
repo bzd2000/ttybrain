@@ -146,6 +146,18 @@ describe("meeting tabs", () => {
     ])
   })
 
+  test("agenda tab shows a 16-character project code whole", async () => {
+    const t = await open("M-2", 0, {
+      extra: async () => {
+        await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+        await write().addAgendaItem!({ meeting: "M-2", text: "Data status", project: "DATAPLATFORM2027", ask: "Go" })
+      },
+    })
+    const frame = await until(t, (f) => f.includes("Data status"))
+    expect(lineWith(frame, "Data status")).toMatch(/4\s+Data status\s+DATAPLATFORM2027 Go/)
+    expect(lineWith(frame, "CRM status")).toMatch(/2\s+CRM status\s+CRM\s+Approve/)
+  })
+
   test("prep shows the selected project's sections with marks and the ask", async () => {
     const t = await open("M-2", 1)
     await select(t, "2. CRM status")

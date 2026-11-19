@@ -137,6 +137,27 @@ describe("projects' person tabs", () => {
     expect(t.nav.route()).toMatchObject({ kind: "record", ref: "#ERP" })
   })
 
+  test("a 16-character code is shown whole in Projects & roles and Actions", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      await write("people").addPerson!({ name: "Marie Dubois", handle: "marie", is_stakeholder: true })
+      await write().addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+      await write().addInvolvement!({ project: "DATAPLATFORM2027", person: "@marie", role: "sponsor" })
+      await write().addAction!({ title: "Review contract", owner: "@marie", project: "DATAPLATFORM2027" })
+    })
+    tui = await renderTui(kernel, { width: 80, height: 24 })
+    await tui.nav.open("@marie")
+    await until(tui, (f) => tabLine(f).includes("Actions"))
+    tui.input.pressArrow("right")
+    tui.input.pressArrow("right")
+    let frame = await until(tui, (f) => f.includes("Data platform"))
+    expect(lineWith(frame, "Data platform")).toMatch(/DATAPLATFORM2027 Data platform\s+sponsor\s+active/)
+    tui.input.pressArrow("right")
+    frame = await until(tui, (f) => f.includes("Review contract"))
+    expect(lineWith(frame, "Review contract")).toMatch(/A-1\s+Review contract\s+DATAPLATFORM2027 owner/)
+    for (const l of lines(frame)) expect(l.length).toBeLessThanOrEqual(80)
+  })
+
   test("Projects & roles empty text", async () => {
     const t = await open("@bob", 3)
     const frame = await until(t, (f) => f.includes("No projects yet"))
