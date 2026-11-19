@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
@@ -68,24 +68,53 @@ describe("bin/pm.ts", () => {
     expect({ code: again.code, err: again.err }).toEqual({ code: 0, err: "" })
   })
 
-  test("a failed move is reported and ttybrain still starts", async () => {
+  test("a failed move is rolled back and stops ttybrain before boot, every run", async () => {
     if (process.getuid?.() === 0) return // root ignores the permission that makes the move fail
-    mkdirSync(join(home, ".pm"))
-    writeFileSync(join(home, ".pm", "pm.db"), "")
-    chmodSync(join(home, ".pm"), 0o555) // the folder moves, its pm.db cannot be renamed
-    // The read-only folder could not hold a new database, so --db (which does not skip the move) puts it elsewhere.
-    const db = mkdtempSync(join(tmpdir(), "pm-bin-db-"))
+    const old = join(home, ".pm")
+    mkdirSync(old)
+    writeFileSync(join(old, "pm.db"), "data")
+    chmodSync(old, 0o555) // the folder moves, its pm.db cannot be renamed: the folder is moved back
     try {
-      const r = await atHome("plugin", "list", "--json", "--db", join(db, "x.db"))
-      expect(r.code).toBe(0)
-      expect(r.err).toStartWith(`could not move ${home}/.pm to ${home}/.ttybrain: `)
-      expect(r.err).toContain("EACCES")
-      expect(r.err.split("\n")).toHaveLength(2) // the one line
-      expect(existsSync(join(db, "x.db"))).toBe(true)
+      const step = `EACCES: permission denied, rename '${home}/.ttybrain/pm.db' -> '${home}/.ttybrain/ttybrain.db'`
+      const r = await atHome("plugin", "list")
+      expect(r).toEqual({
+        code: 1,
+        out: "",
+        err: `error: could not move ${old} to ${home}/.ttybrain: ${step}\nhint: move it by hand, or set TTYBRAIN_HOME=${old}\n`,
+      })
+      const json = await atHome("plugin", "list", "--json")
+      expect({ code: json.code, err: json.err }).toEqual({ code: 1, err: "" })
+      expect(JSON.parse(json.out).error).toEqual({
+        code: "data_move",
+        message: `could not move ${old} to ${home}/.ttybrain: ${step}`,
+        hint: `move it by hand, or set TTYBRAIN_HOME=${old}`,
+      })
+      // No empty database anywhere: ~/.pm is as it was and there is no ~/.ttybrain.
+      expect(lstatSync(old).isDirectory()).toBe(true)
+      expect(existsSync(join(home, ".ttybrain"))).toBe(false)
+      expect(readdirSync(old)).toEqual(["pm.db"])
+      expect(readFileSync(join(old, "pm.db"), "utf8")).toBe("data")
     } finally {
       for (const d of [".pm", ".ttybrain"]) if (existsSync(join(home, d))) chmodSync(join(home, d), 0o755)
-      rmSync(db, { recursive: true, force: true })
     }
+  })
+
+  test("data left in ~/.pm stops ttybrain; a half-done move is finished", async () => {
+    const old = join(home, ".pm")
+    const neu = join(home, ".ttybrain")
+    mkdirSync(old)
+    writeFileSync(join(old, "pm.db"), "")
+    mkdirSync(neu)
+    const r = await atHome("plugin", "list")
+    expect(r).toEqual({ code: 1, out: "", err: `error: your data is still in ${old}; move it to ${neu} by hand, or set TTYBRAIN_HOME=${old}\n` })
+    expect(readdirSync(neu)).toEqual([])
+    // Half-done: the folder is in place with its pm.db (an empty file is a valid empty SQLite database).
+    rmSync(neu, { recursive: true })
+    renameSync(old, neu)
+    const resumed = await atHome("plugin", "list", "--json")
+    expect({ code: resumed.code, err: resumed.err }).toEqual({ code: 0, err: `moved your data from ${old} to ${neu}\n` })
+    expect(readdirSync(neu).sort()).toEqual(["pm.db", "ttybrain.db"])
+    expect(lstatSync(old).isSymbolicLink()).toBe(true)
   })
 
   test("--db is applied before boot", async () => {
