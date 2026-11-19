@@ -257,9 +257,10 @@ describe("Meetings screen", () => {
     tui = await renderTui(kernel, { width: 80, height: 24 })
     tui.input.pressKey("5")
     const frame = await until(tui, (f) => f.includes("Data sync"))
-    // In agenda order: the long code first stands alone (it and ` …` do not fit in 16 cells); after CRM it gives way.
-    expect(lineWith(frame, "Data sync")).toMatch(/planned\s+0\s+DATAPLATFORM2027 │/)
-    expect(lineWith(frame, "CRM sync")).toMatch(/planned\s+0\s+CRM …\s+│/)
+    // In agenda order, in an 18-wide column: the long code first, then ` …`; after CRM it gives way.
+    expect(lineWith(frame, "Data sync")).toMatch(/steering planned\s+0\s+DATAPLATFORM2027 … │/)
+    expect(lineWith(frame, "CRM sync")).toMatch(/steering planned\s+0\s+CRM …\s+│/)
+    expect(lineWith(frame, "CRM sync").lastIndexOf(" CRM …")).toBe(lineWith(frame, "Data sync").indexOf(" DATAPLATFORM2027 …"))
     expect(frame).not.toMatch(/DATAPLAT\w*…|CRM \w+…/)
   })
 

@@ -56,8 +56,8 @@ export function fitWidth(texts: readonly string[], min: number, max: number): nu
 }
 
 // `items` joined with spaces in at most `width` cells, never cutting an item: whole items while they fit, then ` …`
-// for the rest. The first item stands alone (without the `…`) when the two do not fit together; give a column at
-// least the width of its widest item (fitWidth) and it always fits.
+// for the rest, so hidden items are always signalled. Too narrow for the first item and ` …`, the cell is `…`
+// alone; a column sized with joinFitWidth always shows each row's first item.
 export function joinFit(items: readonly string[], width: number): string {
   const all = items.join(" ")
   if (displayWidth(all) <= width) return all
@@ -67,8 +67,17 @@ export function joinFit(items: readonly string[], width: number): string {
     if (displayWidth(`${next} ${ELLIPSIS}`) > width) break
     out = next
   }
-  if (out !== "") return `${out} ${ELLIPSIS}`
-  return displayWidth(items[0]!) <= width ? items[0]! : ELLIPSIS
+  return out === "" ? ELLIPSIS : `${out} ${ELLIPSIS}`
+}
+
+// The width of a column of joinFit cells: enough for each row's first item, plus ` …` when more follow, kept
+// between `min` and `max` cells.
+export function joinFitWidth(rows: ReadonlyArray<readonly string[]>, min: number, max: number): number {
+  return fitWidth(
+    rows.map((r) => (r.length > 1 ? `${r[0]} ${ELLIPSIS}` : (r[0] ?? ""))),
+    min,
+    max,
+  )
 }
 
 // `s` cut to at most `width` cells, ending with `…` when it was cut.

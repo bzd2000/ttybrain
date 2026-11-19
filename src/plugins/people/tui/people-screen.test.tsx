@@ -415,9 +415,12 @@ describe("People screen: the detail panel", () => {
     tui = await renderTui(kernel, { width: 80, height: 24 })
     tui.input.pressKey("3")
     const frame = await until(tui, (f) => f.includes("Marie Dubois"))
-    // Codes are sorted: CRM, then DATAPLATFORM2027, which does not fit beside it in 16 cells.
+    // Codes are sorted: CRM, then DATAPLATFORM2027, which does not fit beside it in 18 cells.
     expect(lineWith(frame, "Marie Dubois")).toMatch(/ CRM …\s+—\s+—\s+never/)
-    expect(lineWith(frame, "Luc Peeters")).toMatch(/ DATAPLATFORM2027 —\s+—\s+never/) // DATAPLATFORM2027, ERP: the first stands alone
+    expect(lineWith(frame, "Luc Peeters")).toMatch(/ DATAPLATFORM2027 … —\s+—\s+never/) // DATAPLATFORM2027, ERP
+    // The column is 18 wide; the header's next column lines up with the rows'.
+    expect(lineWith(frame, "Infl.").indexOf("Infl.")).toBe(lineWith(frame, "Luc Peeters").indexOf(" DATAPLATFORM2027 ") + 20)
+    expect(lineWith(frame, "Marie Dubois").indexOf(" CRM …")).toBe(lineWith(frame, "Luc Peeters").indexOf(" DATAPLATFORM2027 "))
     expect(frame).not.toMatch(/DATAPLAT\w*…|CRM \w+…/)
   })
 

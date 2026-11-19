@@ -10,8 +10,8 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import {
   act,
-  fitWidth,
   joinFit,
+  joinFitWidth,
   notify,
   Panel,
   printable,
@@ -55,8 +55,8 @@ const FILTER_HINTS: Hint[] = [
   { key: "Esc", label: "clear" },
 ]
 const TAB_KEYS: Record<string, PeopleTab> = { a: "all", s: "stakeholders", t: "team" }
-// The Projects column is at least as wide as the longest single code shown (9 to 16), and a cell keeps whole
-// codes (joinFit): a code is never cut; more codes than fit end in `…`.
+// The Projects column fits each row's first code, plus ` …` when more follow (9 to 18), and a cell keeps whole
+// codes (joinFit): a code is never cut, and more codes than fit always end in `…`.
 const columns = (projectsWidth: number): TableColumn[] => [
   { id: "name", title: "Name", width: 18 },
   { id: "role", title: "Role", width: "grow" },
@@ -136,7 +136,7 @@ export function PeopleScreen() {
   const all = () => q.data() ?? []
   const counts = createMemo(() => tabCounts(all()))
   const groups = createMemo(() => peopleGroups(all().filter((p) => matchesFilter(p, filter())), tab(), sort(), archived()))
-  const projectsWidth = createMemo(() => fitWidth(groups().flatMap((g) => g.rows.flatMap((p) => p.projects)), 9, 16))
+  const projectsWidth = createMemo(() => joinFitWidth(groups().flatMap((g) => g.rows.map((p) => p.projects)), 9, 18))
   const tableGroups = createMemo((): TableGroup[] =>
     groups().map((g) => ({ title: g.title, rows: g.rows.map((p) => row(p, today(), days, projectsWidth())) })),
   )

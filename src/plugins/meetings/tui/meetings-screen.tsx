@@ -8,8 +8,8 @@
 import { createMemo, createSignal, Show, untrack } from "solid-js"
 import {
   act,
-  fitWidth,
   joinFit,
+  joinFitWidth,
   KeyHints,
   longDate,
   Panel,
@@ -41,8 +41,8 @@ const HINTS: Hint[] = [
   { key: "x", label: "close" },
   { key: "Del", label: "cancel" },
 ]
-// The Projects column is at least as wide as the longest single code shown (12 to 16), and a cell keeps whole
-// codes (joinFit): a code is never cut; more codes than fit end in `…`.
+// The Projects column fits each row's first code, plus ` …` when more follow (12 to 18), and a cell keeps whole
+// codes (joinFit): a code is never cut, and more codes than fit always end in `…`.
 const columns = (projectsWidth: number): TableColumn[] => [
   { id: "ref", title: "Ref", width: 5 },
   { id: "date", title: "Date", width: 10 },
@@ -117,7 +117,7 @@ export function MeetingsScreen() {
   const [want, setWant] = createSignal<string | undefined>(params.selected)
 
   const groups = createMemo(() => meetingGroups(q.data() ?? []))
-  const projectsWidth = createMemo(() => fitWidth(groups().flatMap((g) => g.rows.flatMap(codes)), 12, 16))
+  const projectsWidth = createMemo(() => joinFitWidth(groups().flatMap((g) => g.rows.map(codes)), 12, 18))
   const tableGroups = createMemo((): TableGroup[] => groups().map((g) => ({ title: g.title, rows: g.rows.map((m) => row(m, today(), projectsWidth())) })))
   const shown = () => groups().flatMap((g) => g.rows)
   // The selected meeting, only while shown.
