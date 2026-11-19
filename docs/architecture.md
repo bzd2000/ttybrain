@@ -15,7 +15,7 @@ It runs on **Bun ≥ 1.3.14 and Node ≥ 26.4**, both always, locally or in a pe
 
 ```
 src/kernel/                 knows nothing about projects or people
-  api.ts                    the only module plugins import from the kernel (definePlugin, Type, NonBlank, errors, dates, refs …)
+  api.ts                    the only module plugins import from the kernel, as `@pm/api` (definePlugin, Type, NonBlank, errors, dates, refs …)
   plugin.ts                 PluginDef and PluginContext (what `activate(ctx)` gets)
   host.ts                   bootKernel(): load order, migrations, contexts, failure isolation, sealing
   db/sqlite.ts              the ONLY runtime-specific code (bun:sqlite / node:sqlite behind RawDb)
@@ -27,15 +27,27 @@ src/kernel/                 knows nothing about projects or people
   cli/                      args.ts, commands.ts (registry), dispatch.ts (`runCli`), kernel-commands.ts, output.ts
   shutdown.ts               clean shutdown on SIGHUP/SIGTERM
   isolation-selfcheck.ts    repeats the isolation cases on the current runtime (also run by the Node smoke test)
-src/bin/pm.ts               the `pm` entry point: boots the kernel with `src/plugins/index.ts` and runs the CLI
+  loader.ts                 discoverPlugins(): built-in folder, plugin folders, npm deps → plugin candidates (manifests)
+src/bin/pm.ts               the `pm` entry point: boots the kernel with discovered plugins (`discover: true`) and runs the CLI
+src/plugins/<id>/package.json  the plugin manifest (`main`, `pm.id`, `pm.tui`); the build copies it to dist-node with .js entries
 src/plugins/<id>/logic/     index.ts (definePlugin), schema.ts, views.ts, ops*.ts, commands*.ts, records.ts, report.ts, guide.ts: NO UI imports
                             (meetings: ops.ts, records.ts, since.ts, reports.ts, commands.ts, views.ts, guide.ts, schema.ts)
 src/kernel/tui/             the TUI kernel: frame, router, keys, overlays, data hooks, building blocks (see "The TUI")
 src/plugins/<id>/tui/       screens, record tabs, panels, forms, badges: each plugin's TUI part (`defineTui`)
-tests/helpers.ts            makeTestKernel; tests/fixtures/ fixture plugins
+tests/helpers.ts            makeTestKernel; tests/builtins.ts the built-ins as static lists (tests only); tests/fixtures/ fixture plugins
 ```
 
-Every feature is a plugin, built-ins included: `people`, `projects`, `meetings`, `inbox`, `assistant`. Built-ins use exactly the same API that external plugins will use in phase 5. If a built-in needs something the API doesn't offer, **extend the API**; never take a shortcut into the kernel.
+Every feature is a plugin, built-ins included: `people`, `projects`, `meetings`, `inbox`, `assistant`. Built-ins use exactly the same API as external plugins: they are found by the same loader, described by the same manifest, and import only `@pm/api` and `@pm/api/tui` (`tests/logic-ui-split.test.ts` and a plugin-imports test enforce it; a relative import into `src/kernel` from a plugin's non-test file fails). If a built-in needs something the API doesn't offer, **extend the API**; never take a shortcut into the kernel. There are no static plugin lists in `src/` (`src/plugins/index.ts` and `tui.ts` are gone); tests that need the built-ins import `tests/builtins.ts`.
+
+## Plugin loading
+
+- **Manifest.** A plugin is a directory with a `package.json`: `"type": "module"`, `main` (the logic entry, default export a `PluginDef`), `"pm": { "plugin": true, "id": "<id>", "tui"?: "<entry>" }` (the default export of the tui entry is a `TuiDef`). `pm.id` is required, so a disabled plugin's id is known without importing it; the loader fails a candidate whose `pm.id` differs from `PluginDef.id`, or whose `version` differs from `PluginDef.version`. Built-ins carry `"private": true`, with source entries (`logic/index.ts`, `tui/index.tsx`); the Node build copies their manifests to `dist-node/plugins/<id>/` with `.js` entries.
+- **Sources and order.** `discoverPlugins()` (`src/kernel/loader.ts`) yields candidates with source `built-in` (pm's own `plugins` folder, found from the loader's module URL), then `folder` (subdirectories of `paths.plugins`, `~/.pm/plugins` or `PM_PLUGINS`, by directory name), then `npm` (the `dependencies` of `paths.plugins/package.json`, by package name). The host then sorts by `requires`. `bootKernel({ discover: true })` boots them; `makeTestKernel({ plugins })` still passes `PluginDef`s.
+- **Failure and timeouts.** A failing import, a bad default export, a manifest mismatch, a duplicate id (`duplicate plugin id "<id>"`), or an external id equal to a built-in's (`plugin id "<id>" is taken by a built-in plugin`) makes a failed entry that `pm plugin list` and Help show; nothing it did is kept. Importing an external candidate, an external `activate` and importing an external plugin's `pm.tui` entry are each raced against 5000 ms (`<id>: timed out after 5000 ms while <importing|activating>`); built-ins have no timeout. An external migration's `up` has no timeout (an accepted gap: one that never settles hangs boot while holding the write lock). Disabled plugins (`plugins.disabled`) are never imported. External migrations run with the trigger ban; built-ins without it.
+- **Shared modules.** `globalThis.__PM_MODULES__` holds `@pm/api` (set at CLI start) and, in the TUI, `@pm/api/tui`, `solid-js`, `solid-js/store`, `@opentui/solid`, `@opentui/core` (`installTuiModules`, `src/kernel/tui/load.ts`). `pm plugin build` rewrites a plugin's imports of those names to generated shims in `dist/__pm/`. Shims are generated from what the plugin imports, so the build never loads UI modules; each shim checks at load that every imported name exists on the host module and throws `rebuild the plugin with this pm (missing export "<x>" from "<name>")` otherwise. Only named imports are allowed: `import * as x` or `export *` of a shared module fails the build (`<file>: use named imports from "<name>"`), as does importing a `@opentui/*` package other than `@opentui/solid` and `@opentui/core`, and a logic entry that reaches `solid-js`, `@opentui/*` or `@pm/api/tui`. A computed import such as ``import(`solid-${x}`)`` is not caught; a plugin's own npm dependencies that import Solid load their own copy (a known limit).
+- **TUI parts.** `loadTuiParts` imports the `pm.tui` entry of each plugin whose logic is `ok`, in load order. A part that fails to import, throws, or returns a thenable from `activate` fails alone (its registrations are removed, the rejection swallowed); its logic stays loaded.
+- **Commands.** `pm plugin list|enable|disable|build|add|remove|new`. `enable`/`disable` edit `plugins.disabled` in the config file (written atomically, through a symlinked config, keeping its mode); `disable` names the plugins that require it; `enable` notes when `PM_CONFIG_JSON` still disables the id. `add <npm-name|path|tgz>` installs into `paths.plugins` with `npm` when `npm --version` runs, else `bun add --cwd` under Bun, else `pm plugin add needs npm on the PATH` (`pm plugin remove …` for remove); an add that turns out not to be a pm plugin is undone (a package that was there before is reinstalled from its previous spec); `PM_PLUGIN_INSTALLER=npm|bun` forces one (tests use it). The first add of a package name prints the trust warning and records the name in `plugins.allow` (it only means "already warned"; it gates nothing). `remove <id>` is **destructive** (needs `--yes`: it deletes a folder or uninstalls a package), refuses a built-in (`"<id>" is built in; use "pm plugin disable <id>"`) and an id shared by more than one plugin; a symlinked folder entry is only unlinked, never its target; `--purge-data` also drops the plugin's tables and kernel rows. A disabled plugin's data stays; a built-in's data cannot be purged. `new <id>` scaffolds a buildable plugin.
+- **Kernel services for this.** `Kernel.checkOrigin(origin)` (see Operations), `Kernel.requiresOf(id)`, and a deep-frozen `ctx.config`.
 
 ## Data rules (enforced by the kernel)
 
@@ -45,7 +57,7 @@ Every feature is a plugin, built-ins included: `people`, `projects`, `meetings`,
 4. **Cross-plugin writes use exposed write operations only**: `ctx.use("projects").write.addAction({...})`, and only for plugins in `requires`.
 5. **Two checks enforce 1–4.**
    - *Layer 1* rewrites and checks the Kysely query tree: tables, aliases, views, columns, and DDL only in migrations.
-   - *Layer 2* runs `EXPLAIN` on the compiled SQL and checks the tables actually touched.
+   - *Layer 2* runs `EXPLAIN` on the compiled SQL and checks the tables actually touched. Table-valued functions and virtual tables (`pragma_table_info`, `dbstat`, `json_each`: opcodes `VOpen`/`VFilter`) are rejected, since they open no table the check can see.
    - Their state travels with each query: no shared mutable state.
    - **R15: plugin data changes (insert/update/delete/replace, also raw) are only accepted inside a write operation.** Outside one, `ctx.data` can read and nothing else. A bare kernel write that is not an operation (the TUI's `act`, a change set) is a transaction only and does not count: only the scope the operation wrapper opens does. Migrations are the exception.
 6. **Schema changes only in `ctx.migration(id, up)`.** The kernel runs each migration in its own transaction and checks the result: prefixes, no foreign objects, no triggers for external plugins.
@@ -65,13 +77,14 @@ ctx.expose({
 - Schemas use **TypeBox** (`Type` from `src/kernel/api.ts`). The kernel validates the input before `run` and reports the failing field.
 - Text inputs use `NonBlank(...)` (from `api.ts`) instead of a bare `Type.String()`, so blank strings are rejected as validation errors.
 - **Write outputs must include `ref`**, the display ref of the main record (`"A-41"`). Provenance and change sets depend on it.
-- **One delete convention:** a write that deletes its record returns `Deleted` (from `api.ts`): `{ ref, deleted: true }`. The kernel then records no provenance for it and forgets the record's provenance rows in the same transaction (ids are rowids and get reused). Only records with numeric refs (`A-12`) can be deleted; `#CODE`/`@handle` records are archived instead.
+- **One delete convention:** a write that deletes its record returns `Deleted` (from `api.ts`): `{ ref, deleted: true }`. The kernel then records no provenance for it and forgets the record's provenance rows in the same transaction (ids are rowids and get reused). A delete of a record whose type has a custom ref (`#CODE`, `@handle`) also returns the record's `id` (`{ ref, deleted: true, id }`), since the ref says nothing about it; without it the write fails. A write may only delete its own plugin's records: a delete output naming another plugin's record fails the write.
 - `describe(input)` returns the one-line change description shown in change sets.
 - **Read operations are only for logic** (`projectStatus`, `sinceDate`, `staleStakeholders`, `getContext`). Plain lists and joins use views.
 - **Context comes from the kernel** (`currentContext()`: `today`, `now`, `origin`), never from `new Date()`. Use the injected clock everywhere, so tests can pin "today".
+- `ctx.config` is deep-frozen: every plugin shares the one object, so none can change it for the others.
 - **Extra fields on another plugin's records:** `ctx.field(recordType, { name, label, type, values?, get, set })` names two of the plugin's own operations, `get` (read, `{ ref }` → `{ value }`) and `set` (write, `{ ref, value }` → `{ ref }`); boot fails the plugin when either is missing. The value lives in the plugin's own table. The TUI shows it in the record's Summary (`<RecordFields>`) and forms (`<Form recordType recordRef>`: the kernel saves the changed extra fields itself, inside the act the form's submit runs, after the plugin's own operation and for the ref it returned); its CLI side is phase 5 (R22).
 - `ctx.records` offers `resolve(ref)`, `label(ref)`, `refOf(type, id)` and `hasType(name)`; use `hasType` to validate a soft reference to an optional plugin's records only when that plugin is loaded.
-- **Every write emits `record.changed`.** With an origin (`--from-inbox I-n`), the kernel records provenance itself (not for a delete, and not when the ref is the origin itself). Don't add `inbox_item_id` columns. The CLI refuses an origin whose ref belongs to a registered record type but does not resolve (exit 2).
+- **Every write emits `record.changed`.** With an origin (`--from-inbox I-n`), the kernel records provenance itself (not for a delete, and not when the ref is the origin itself). Don't add `inbox_item_id` columns. The kernel refuses an origin whose ref belongs to a registered record type but does not resolve (`no record "I-99"`, exit 2), and an inbox origin when no plugin owns the `I-` prefix (`--from-inbox needs the inbox plugin, which is not loaded`, exit 1); both checks are `kernel.checkOrigin(origin)`, which every path that writes with an origin awaits first: the CLI dispatcher (which names the flag: `--from-inbox: no record "I-99"`), `changeSets.apply` and the TUI's `act`.
 
 ## The TUI (phase 2)
 
@@ -79,9 +92,10 @@ The TUI is a kernel part plus one `tui/` part per plugin, with the same isolatio
 
 ```
 src/kernel/tui/
-  api.ts                    the ONLY module a plugin's tui/ part imports from the kernel (defineTui, types, hooks, blocks, format, theme)
+  api.ts                    the ONLY module a plugin's tui/ part imports from the kernel, as `@pm/api/tui` (defineTui, types, hooks, blocks, format, theme)
   types.ts, registry.ts     TuiDef/TuiContext and the registry of all registrations; boot.ts: bootTui() activates each part in its plugin scope
-  run.tsx                   runTui(): creates the renderer, mounts <TuiApp>, restores the terminal on quit; selfcheck.tsx: the Node `tui ok` check
+  load.ts                   installTuiModules() (the shared UI modules for external plugins), loadTuiParts(): each ok plugin's pm.tui entry
+  run.tsx                   runTui(): loads the tui parts, creates the renderer, mounts <TuiApp>, restores the terminal on quit; selfcheck.tsx: the Node `tui ok` check
   app.tsx, frame.tsx        <TuiApp> (router, overlay stack, global keys), header and status bar
   keys.ts, escChord.ts      key dispatch layers, hints, text focus, the Esc chord; nav.ts: routes; overlay.tsx: overlays, openForm, confirm
   data.ts, refresh.ts       useQuery, act, useRuntime, useRecord; live refresh (PRAGMA data_version)
@@ -90,15 +104,14 @@ src/kernel/tui/
   components/               Table, Form, Field, Panel, Tabs, Menu, RecordView, RecordFields, OverviewScreen, Editor, DraftPrompt, Help, Switcher, KeyHints, ErrorBoundary, ReportSections
   export.ts                 writeExport(dir, fileName, text), the hooks useWriteExport() and useCopyText()
   format.ts, theme.ts, messages.ts   display width/dates, colours and tones, status-bar notices
-src/plugins/tui.ts          builtinTuiParts: the list of built-in tui parts
 src/plugins/<id>/tui/       index.tsx = defineTui({ plugin, activate(ui) }) plus the plugin's screens, forms, panels
 tests/tui.tsx               renderTui(kernel, { parts, external, width, height, refreshMs, draftMs }) -> { frame(), peek(), spans(), input, settle(), nav, renderer, destroy() }
 ```
 
-A part registers in `activate(ui)` with: `ui.screen` (built-in screens use a fixed number key: `1` Overview, `2` Projects, `4` Actions, `6` Inbox; `3` People (phase 3) and `5` Meetings (phase 4) are built; other screens get `7`, `8`, … in registration order), `recordTab`, `overviewPanel`, `listColumn`, `recordForm`, `fieldEditor`, `globalAction`, `statusBadge`. Registrations may be made only during `activate`. A part that throws is isolated and listed in Help; the rest of the app runs.
+A part registers in `activate(ui)` with: `ui.screen` (built-in screens use a fixed number key: `1` Overview, `2` Projects, `4` Actions, `6` Inbox; `3` People (phase 3) and `5` Meetings (phase 4) are built; other screens get `7`, `8`, … in registration order), `recordTab`, `overviewPanel`, `listColumn`, `recordForm`, `fieldEditor`, `globalAction`, `statusBadge`. Registrations may be made only during `activate`. A part that throws, or whose entry fails to import, is isolated and listed in Help; the rest of the app runs. `activate(ui)` must be synchronous: a part whose activate returns a promise fails with `<id>: tui activate must be synchronous`. Help's key list adds one line per registered global action, so `i capture` shows only when inbox is loaded.
 
 Rules:
-- **Imports.** A tui part imports kernel things only from `src/kernel/tui/api.ts`, and logic only from its own plugin's `logic/`, never another plugin's files. Logic and the rest of the kernel never import `solid-js` or `@opentui/*`. Only `src/kernel/tui/` and `src/plugins/*/tui/` may. Keep imports extensionless (the Node build adds `.js`).
+- **Imports.** A tui part imports kernel things only from `@pm/api/tui` (`src/kernel/tui/api.ts`), and logic only from its own plugin's `logic/`, never another plugin's files. Logic and the rest of the kernel never import `solid-js` or `@opentui/*`. Only `src/kernel/tui/` and `src/plugins/*/tui/` may. Keep imports extensionless (the Node build adds `.js`).
 - **Reading.** `useQuery(load, { key })` runs `load` in an operation context (views, `rt.self().read`), reloads on live refresh, and keeps the last data while reloading. Get your plugin's runtime with `useRuntime()` (`data`, `self()`, `use(x)`, `records`, `tags`, `provenance`, `clock`, `config`). Reading is the only thing `rt.data` is for.
 - **Writing.** Only through `act(() => rt.self().write.op(...), { origin?, ok? })`; never DML on `rt.data`. `act` runs `fn` in ONE outermost kernel write transaction: ops inside become savepoints, so several ops in one `act` are all-or-nothing, and a busy retry (`BusyError`) redoes the whole thing. It therefore holds the write lock for as long as `fn` runs: **never await user interaction (`confirm`, `openForm`, an editor) inside `act`**; await it first, then `act`. The kernel also saves a form's extra fields (the `field` extension point) inside the same `act` as the form's own op.
 - **Time.** No `new Date()`/`Date.now()`; today is `rt.clock.today()` inside a load or an action, and `useToday()` (an accessor) in memos and JSX: live refresh notices a new day and updates it (and reloads), so a TUI left open overnight follows.
@@ -147,7 +160,7 @@ Rules:
 - The Node build is `scripts/build-node.mjs` (Babel, `.js` extensions added). Keep relative imports **extensionless** in `src/`.
 - **Logic never imports `solid-js` or `@opentui/*`**, so the CLI runs on Node without `--experimental-ffi`. The TUI is imported lazily by `src/bin/pm.ts` only when there are no arguments and stdout is a TTY, and needs `--experimental-ffi` on Node (the `bin` shebang and `npm run start:node` carry it).
 - Run-as-script detection is runtime-neutral: compare `realpathSync(process.argv[1])` with `fileURLToPath(import.meta.url)`; never `import.meta.main`.
-- `bash scripts/smoke-node.sh` builds for Node and runs the savepoint, isolation and TUI self-checks (the last prints `tui ok`) plus a CLI walk-through; it needs only node/npm and ends with `smoke ok`. CI runs it in the `node-smoke` job, and `bun typecheck && bun test` in the `test` job.
+- `bash scripts/smoke-node.sh` builds for Node and runs the savepoint, isolation and TUI self-checks (the TUI one prints `tui ok`, twice: once for the built-ins and once with the built fixture plugin's screen, `--expect-screen`), a CLI walk-through, the fixture plugin walk (build, load as a folder and through `npm pack` + `pm plugin add <tgz>`) and a `pm plugin new` scaffold step; it needs only node/npm and ends with `smoke ok`. CI runs it in the `node-smoke` job, and `bun typecheck && bun test` in the `test` job.
 
 ## Testing conventions
 
@@ -162,8 +175,9 @@ Rules:
 - `kysely.transaction()`, `BEGIN` or `SAVEPOINT` in plugin code.
 - `new Date()` or `Date.now()` in plugin logic; use the context or clock instead.
 - A cross-plugin write that bypasses `ctx.use(...).write`, or a `requires` cycle.
-- An import of `solid-js` or `@opentui/*` from `logic/` or from `src/kernel/` outside `src/kernel/tui/`; a plugin `tui/` part importing anything from the kernel other than `src/kernel/tui/api.ts`, or another plugin's files.
+- An import of `solid-js` or `@opentui/*` from `logic/` or from `src/kernel/` outside `src/kernel/tui/`; a plugin `tui/` part importing anything from the kernel other than `@pm/api/tui`, a plugin's non-test file importing the kernel other than through `@pm/api` / `@pm/api/tui`, or another plugin's files.
 - `Bun.*` outside `sqlite.ts`; a relative import with an extension.
+- A static list of plugins in `src/` (use the loader); a plugin that assumes another built-in is loaded without `requires`/`hasType`.
 - A new `inbox_item_id`-style column; use provenance instead.
 - A write operation whose output lacks `ref`, or that has no `describe`.
 - A command that prompts, prints non-JSON under `--json`, or exits with a code outside 0–3.

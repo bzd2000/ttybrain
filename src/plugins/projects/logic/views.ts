@@ -2,7 +2,7 @@
 // projects.health_update, projects.involvement and one per item table (milestone, deliverable, risk, decision,
 // action). They are a versioned contract; other plugins join them,
 // never the tables. View queries take no bound parameters, so constants are literals (eb.lit / sql.lit).
-import { sql, type ExpressionBuilder, type Kysely, type PluginContext } from "../../../kernel/api"
+import { sql, type ExpressionBuilder, type Kysely, type PluginContext } from "@pm/api"
 
 // A project's columns as the view publishes them, over the plugin's own tables. The store extends it with the
 // columns that are not published (effort_note, context_updated_at), so records and the view never drift apart.

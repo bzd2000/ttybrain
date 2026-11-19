@@ -8,13 +8,6 @@ Deferred findings from the phase 1 task reviews and the final review, plus the c
 - `ctx.emit` inside a write fires before commit; defer it to after-commit before plugins emit typed events. — done in phase 2 Task 1
 - Plugin-specific events are not emitted yet (R18); only `record.changed` is.
 
-## Before phase 5 (external plugins)
-
-- Table-valued functions (`pragma_table_info`, `dbstat`) are invisible to the EXPLAIN check, so other plugins' schema metadata can be read through raw SQL.
-- `ctx.config` is one shared mutable object; freeze it.
-- Kernel provenance cleanup on delete only supports numeric refs (A-12); a `#`/`@` record delete would throw.
-- The `--from-inbox` existence check is only in the CLI dispatcher.
-
 ## Deferred minors (from the task reviews)
 
 - Task 1: minor (deferred): config merge assigns __proto__ keys from JSON (config.ts:318)
@@ -37,7 +30,6 @@ Deferred findings from the phase 1 task reviews and the final review, plus the c
 - Task 5: minor (deferred): column check uses whole-tree union, not per-scope (Bun DQS parity gap remains in nested queries)
 - Task 5: minor (deferred): CTE named like an own table accepted (contradicts R9; no leak)
 - Task 5: minor (deferred): alias equal to own short name skips prefixing (fails closed)
-- Task 5: minor (deferred): table-valued functions (pragma_table_info, dbstat) invisible to EXPLAIN → schema metadata of other plugins readable via raw sql; reject VOpen/VFilter
 - Task 5: minor (deferred → T6 via R11): DDL keeps existing `<id>_*` tables → plugin foo could alter foo_bar_* if ids contained `_`
 - Task 5: minor (deferred → T6 via R11): nested inner short name `x` re-prefixed when own short names include `contracts_x` (wrong own table read)
 - Task 5: minor (deferred → T6 via R11): FK from own table to another plugin's view allowed in DDL
@@ -261,6 +253,49 @@ Controller rulings:
 - Task 9: the tests' `until` returns quietly on timeout, so the selection-follows steps aren't asserted directly; a weak `—` assertion; `x` on a held meeting shows "already held" in the tabs while the screen ignores it; `a` / `D` on an item without a project are untested; `e` in Prep opens the full form focused on its first field.
 - Task 6 (deferred): the board pack is not fail-soft: `ctx.reports.run("project-status", …)` in the per-project loop (`src/plugins/meetings/logic/reports.ts:91`) has no try/catch, so one failing project fails the whole pack instead of showing that project's error in its block.
 - Task 10: done in the final fix wave: `RecordView` gives its outer box `minHeight 0` and the tab box a zero basis with `minHeight 0`, so a tall tab scrolls inside itself and the record header stays; Export's local `flexBasis 0` is gone. The Notes tab's Logged panel shows at most 6 lines (fewer on a short screen, the Notes panel keeps 5 rows), then `+n more`. Still open: `E` ($EDITOR) on Notes has no positive test; the export slug cut at 40 can end in `-`; after `m` the choice sticks, so a later close doesn't switch to the minutes; the Notes scroll ref is detached when the notes are empty; `Lines` is imported from `prep-tab` (better in a shared module).
+
+## Phase 5 part 1 (plugin loading)
+
+Collected from the execution ledger (`.superpowers/sdd/2026-11-18-pm-phase5-part1-plugin-loading/progress.md`). Task numbers refer to `docs/superpowers/plans/2026-11-18-pm-phase5-part1-plugin-loading.md`.
+
+### Rulings made during phase 5 part 1 (and what each costs if wrong)
+
+Plan rulings (R1 to R7, in the plan):
+- **R1.** `pm.id` is required in every manifest, so a disabled plugin's id is known without importing it; the loader fails a candidate whose `pm.id` differs from `PluginDef.id`. Cost: one more manifest field.
+- **R2.** Importing an external candidate and an external `activate` each time out after 5000 ms (`<id>: timed out after 5000 ms while <importing|activating>`); built-ins have none. Cost: a slow plugin must do its work after boot.
+- **R3.** A tui `activate` must be synchronous; a thenable fails the part (`<id>: tui activate must be synchronous`). Cost: no async tui setup.
+- **R4.** Shims are generated from what the plugin imports; the build never imports UI modules. A missing export fails at load with `rebuild the plugin with this pm`; `import * as` or `export *` of a shared module fails the build. Cost: named imports only.
+- **R5.** `pm plugin remove` is destructive (`--yes`); `--purge-data` also drops the plugin's data. Cost: one more flag.
+- **R6.** Installer: `npm` if it runs, else `bun add --cwd` under Bun, else an error; `PM_PLUGIN_INSTALLER=npm|bun` forces one. Cost: none.
+- **R7.** The test-only built-in lists moved to `tests/builtins.ts`; `src/plugins/index.ts` and `tui.ts` are deleted. Cost: none.
+
+Controller rulings:
+- Built-in load order is `inbox`, `people`, `projects`, `meetings` (directory name, then the `requires` sort). Panels sort by priority and screens use fixed slots, so nothing visible changes. Cost: none visible.
+- Task 2's minors M1 (`installApiModule` mutates `__PM_MODULES__` in place) and M4 (the disabled check comes before the installed check for an npm dependency) were folded into Task 3; Task 3's exact candidate discriminator (instead of duck-typing a `PluginDef`) into Task 4; an atomic config write (temp file and rename) into Task 6, since a truncated config would stop every boot. Cost: a few lines each.
+- Task 10 also fixed the untested "no pm sources" branch of the scaffold note (a brief requirement). Cost: one test.
+- Final review, accepted gap: an external migration's `up` has no timeout, so a migration that awaits forever hangs boot while holding the write lock. Cost if wrong: a hung boot needs the plugin disabled by hand (`PM_CONFIG_JSON` or the config file).
+- Final review, accepted gap: the Node smoke checks the external screen's title only, not its reactivity (Bun's `src/kernel/plugins/build.test.ts` covers reactivity). Cost if wrong: a Node-only reactivity break in shimmed plugins goes unnoticed by CI.
+
+### Fixed in the final-review fix wave
+
+- Task 4: the polling loops in `app.test.tsx` ("q quits") and `boot.test.ts` (Plugin problems) now wait on the frame condition for about 10 s and throw a descriptive timeout error instead of falling through.
+- Task 5: `enable` of an id that `PM_CONFIG_JSON` still disables prints `enabled <id>; note: PM_CONFIG_JSON still disables it` (JSON: `stillDisabledBy: "PM_CONFIG_JSON"`).
+- Task 6: the config merge drops `__proto__`, `constructor` and `prototype` keys; the atomic config write goes through a symlinked config (the link stays) and keeps the file's mode.
+- Task 7: `plugin build` without a name or version prints `built <dirname>: …`.
+- Task 8: removing a symlinked folder entry unlinks the link only, wherever it points (an outside-root link is now removed, not refused); `remove` with no installer says `pm plugin remove needs npm on the PATH`; a failed upgrade to a non-plugin version reinstalls the previous dependency spec.
+
+### Deferred minors and concerns
+
+- Task 1: a bare `src/kernel` path import is not flagged by the plugin-imports test; `default === named` export is not asserted.
+- Task 2: untested built-in no-timeout and disabled built-in; the EACCES message text.
+- Task 3: a disabled npm plugin is matched by package name only; a failed candidate shadows a later one with the same id.
+- Task 4: (polling bounds: fixed, see above) the "q quits" test loads zero tui parts; `withTimeout` is duplicated in `host.ts` and `loader.ts`; the Help capture hint is padded (`i         capture`) and the test uses a regex.
+- Task 5: `enable` of a non-disabled id still writes the config; (the `PM_CONFIG_JSON` note: fixed, see above) the single-plugin without-builtins cases assert only the header line; the unknown-id JSON output and suggestions are untested.
+- Task 6 (security, for the final review): (`__proto__` merge and the symlinked/mode config write: fixed, see above) the origin check runs before the write lock (an accepted, undocumented gap); the inbox-missing error names `--from-inbox` on non-CLI paths (verbatim text).
+- Task 7: a plugin's own npm dependencies that import Solid or OpenTUI load their own copies (documented as a known limit); a computed ``import(`solid-${x}`)`` is not caught (accepted, documented); logic reachability ignores a dynamic relative `import()`; (the "undefined undefined" build text: fixed, see above) the babel-options parity test misses the test-file filter and the `toJs` pattern differs; non-source files in `src/` are not copied to `dist/`.
+- Task 8 (destructive, for the final review): (the symlinked folder entry, the no-installer remove message and the non-plugin upgrade undo: fixed, see above) provenance rows with the plugin's type as origin type are left dangling by a purge; no test purges a disabled or failed external plugin; a bare npm name is treated as a path when a same-named directory exists in the cwd; the `..` prefix check refuses `..foo` (fails safe).
+- Task 9: a fixed 20 ms sleep before the unhandled-rejection check (`tests/external-plugin.test.ts` ~528); the failing-migration case doesn't assert that no `kernel_plugin_migration` row exists, and the no-tables assertion is trivial in five cases; the selfcheck's `checkExternalScreen` duplicates the `checkLoaderPath` sequence.
+- Task 10: `plugin new --json` omits the no-sources note; the scaffold test uses `process.chdir`; the README template hard-codes `~/.pm/plugins`; the scaffold's devDependencies are unproven by a real `npm install` (the test symlinks `node_modules`).
 
 ## Draft recovery (2026-11-17)
 

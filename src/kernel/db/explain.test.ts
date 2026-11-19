@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { createTableChecker, firstKeyword, isSingleStatement, isSingleTrigger } from "./explain"
+import { IsolationError } from "../errors"
 import { openRaw, type RawDb } from "./sqlite"
 
 let raw: RawDb
@@ -76,6 +77,24 @@ describe("createTableChecker", () => {
       expect(t).toHaveLength(1)
       expect(t[0]).toMatch(/^db1:page\d+$/)
     }
+  })
+  test("table-valued functions are rejected", () => {
+    // pragma_* functions and dbstat are virtual tables (EXPLAIN shows VOpen/VFilter, no OpenRead): they would read
+    // other plugins' schema metadata unseen. Rejected in every context, also nested in a sub-query.
+    const c = createTableChecker(raw)
+    for (const q of ["SELECT * FROM pragma_table_info('people_person')", "SELECT * FROM dbstat", "SELECT x FROM a_t1 WHERE x IN (SELECT name FROM pragma_table_list)"]) {
+      for (const ctx of ["view", "dml", "migration"] as const) {
+        let err: unknown
+        try {
+          c.tablesTouched(q, ctx)
+        } catch (e) {
+          err = e
+        }
+        expect(err).toBeInstanceOf(IsolationError)
+        expect((err as Error).message).toBe(`table-valued functions and virtual tables are not allowed: ${q}`)
+      }
+    }
+    expect(c.tablesTouched("SELECT * FROM a_t1", "dml")).toEqual(["a_t1"])
   })
   test("VACUUM is rejected before anything is prepared", () => {
     for (const ctx of ["view", "dml", "migration"] as const) {

@@ -20,7 +20,7 @@ import {
   useRuntime,
   useScreenKeys,
   type Hint,
-} from "../../../kernel/tui/api"
+} from "@pm/api/tui"
 import { makeStore } from "../logic/records"
 import type { MeetingRecord } from "../logic/schema"
 import { useMeetingWrites } from "./agenda-tab"

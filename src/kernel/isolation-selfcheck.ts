@@ -156,6 +156,10 @@ export async function runIsolationSelfCheck(): Promise<{ ok: boolean; results: S
       rejects(() => sql`SELECT * FROM owner_thing`.execute(probeDb), 'plugin "probe" may not use table "owner_thing"'),
     )
     await check("raw sql on a kernel table", () => rejects(() => sql`SELECT * FROM kernel_plugin_migration`.execute(probeDb)))
+    await check("raw sql with a table-valued function or virtual table", async () => {
+      await rejects(() => sql`SELECT * FROM pragma_table_info('owner_thing')`.execute(probeDb), "table-valued functions and virtual tables are not allowed")
+      await rejects(() => sql`SELECT * FROM dbstat`.execute(probeDb), "table-valued functions and virtual tables are not allowed")
+    })
     await check("a view is read-only", () =>
       rejects(() => probeDb.updateTable("owner.thing").set({ title: "X" }).execute(), "owner.thing is a published view and is read-only"),
     )

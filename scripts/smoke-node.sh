@@ -36,13 +36,55 @@ out="$(pm report overview --format text)"; echo "$out"
 expect_in "report overview" "CRM" "$out"
 out="$(pm inbox add "x #CRM")"; echo "$out"
 expect_in "inbox add" "I-1" "$out"
+# The built-ins are discovered from dist-node/plugins/*/package.json (written by the build).
 out="$(pm plugin list)"; echo "$out"
-for p in people projects inbox; do expect_in "plugin list" "$p" "$out"; done
+for p in people projects meetings inbox; do
+  echo "$out" | grep -Eq "^$p +1\.0\.0 +built-in +ok" || fail "plugin list: expected \"$p 1.0.0 built-in ok\", got: $out"
+done
 
 set +e
 pm project show NOPE
 code=$?
 set -e
 [ "$code" -eq 2 ] || fail "project show NOPE: expected exit 2, got $code"
+
+# The fixture plugin (tests/fixtures/plugin-contracts), built with `pm plugin build` and loaded on Node: first as a
+# folder in PM_PLUGINS, then packed and installed with `pm plugin add <tgz>` through npm (offline: no dependencies).
+cp -R tests/fixtures/plugin-contracts "$PM_HOME/src-contracts"
+rm -rf "$PM_HOME/src-contracts/dist" "$PM_HOME/src-contracts/node_modules"
+out="$(pm plugin build "$PM_HOME/src-contracts")"; echo "$out"
+expect_in "plugin build" "built pm-plugin-contracts 0.1.0" "$out"
+
+mkdir -p "$PM_HOME/folder-plugins"
+cp -R "$PM_HOME/src-contracts" "$PM_HOME/folder-plugins/contracts"
+out="$(PM_PLUGINS="$PM_HOME/folder-plugins" pm contract add CRM "Support")"; echo "$out"
+expect_in "contract add (folder)" "C-1 Support" "$out"
+out="$(PM_PLUGINS="$PM_HOME/folder-plugins" pm contract list)"; echo "$out"
+echo "$out" | grep -Eq "^C-1 +#CRM +Support" || fail "contract list (folder): expected \"C-1 #CRM Support\", got: $out"
+out="$(PM_PLUGINS="$PM_HOME/folder-plugins" pm plugin list)"; echo "$out"
+echo "$out" | grep -Eq "^contracts +0\.1\.0 +folder +ok" || fail "plugin list: expected \"contracts 0.1.0 folder ok\", got: $out"
+
+tgz="$(cd "$PM_HOME/src-contracts" && npm pack --silent --pack-destination "$PM_HOME")"
+out="$(PM_PLUGINS="$PM_HOME/npm-plugins" PM_PLUGIN_INSTALLER=npm pm plugin add "$PM_HOME/$tgz")"; echo "$out"
+expect_in "plugin add" "added contracts 0.1.0 (npm)" "$out"
+# Same database: the folder copy's C-1 is still there, and the npm copy adds C-2.
+out="$(PM_PLUGINS="$PM_HOME/npm-plugins" pm contract add CRM "Renewal")"; echo "$out"
+expect_in "contract add (npm)" "C-2 Renewal" "$out"
+out="$(PM_PLUGINS="$PM_HOME/npm-plugins" pm contract list)"; echo "$out"
+echo "$out" | grep -Eq "^C-2 +#CRM +Renewal" || fail "contract list (npm): expected \"C-2 #CRM Renewal\", got: $out"
+out="$(PM_PLUGINS="$PM_HOME/npm-plugins" pm plugin list)"; echo "$out"
+echo "$out" | grep -Eq "^contracts +0\.1\.0 +npm +ok" || fail "plugin list: expected \"contracts 0.1.0 npm ok\", got: $out"
+
+# pm plugin new: scaffold, build and load a plugin on Node.
+mkdir -p "$PM_HOME/new-src" "$PM_HOME/new-plugins"
+out="$(cd "$PM_HOME/new-src" && node "$OLDPWD/dist-node/bin/pm.js" plugin new demo)"; echo "$out"
+expect_in "plugin new" "next: pm plugin build demo" "$out"
+pm plugin build "$PM_HOME/new-src/demo" >/dev/null
+cp -R "$PM_HOME/new-src/demo" "$PM_HOME/new-plugins/demo"
+out="$(PM_PLUGINS="$PM_HOME/new-plugins" pm demo list)"; echo "$out"
+expect_in "demo list" "no items" "$out"
+
+out="$(PM_PLUGINS="$PM_HOME/npm-plugins" node --experimental-ffi dist-node/kernel/tui/selfcheck.js --expect-screen Contracts 2>&1)" || fail "tui self-check (contracts): $out"; echo "$out"
+expect_in "tui (contracts)" "tui ok" "$out"
 
 echo "smoke ok"

@@ -30,10 +30,21 @@ describe("bin/pm.ts", () => {
   test("runs a command and exits with its code", async () => {
     const list = await pm("plugin", "list", "--json")
     expect({ code: list.code, err: list.err }).toEqual({ code: 0, err: "" })
-    expect(JSON.parse(list.out).map((p: { id: string; status: string }) => `${p.id} ${p.status}`)).toEqual(["people ok", "projects ok", "meetings ok", "inbox ok"])
     const r = await pm("nope", "--json")
     expect(r.code).toBe(1)
     expect(JSON.parse(r.out).error.code).toBe("validation")
+  })
+
+  test("pm boots the built-ins through discovery", async () => {
+    const r = await pm("plugin", "list", "--json")
+    expect({ code: r.code, err: r.err }).toEqual({ code: 0, err: "" })
+    // Load order: built-ins by folder name (inbox, meetings, people, projects), then the requires sort.
+    expect(JSON.parse(r.out).map((p: { id: string; source: string; status: string }) => `${p.id} ${p.source} ${p.status}`)).toEqual([
+      "inbox built-in ok",
+      "people built-in ok",
+      "projects built-in ok",
+      "meetings built-in ok",
+    ])
   })
 
   test("--db is applied before boot", async () => {

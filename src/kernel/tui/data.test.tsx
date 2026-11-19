@@ -4,8 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { For } from "solid-js"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
-import { builtinPlugins } from "../../plugins"
-import { builtinTuiParts } from "../../plugins/tui"
+import { builtinPlugins, builtinTuiParts } from "../../../tests/builtins"
 import { fixedClock } from "../clock"
 import { runWithContext } from "../context"
 import { bootKernel, type Kernel } from "../host"
@@ -244,5 +243,17 @@ describe("TUI data", () => {
     // an operation inside act still writes
     expect((await act(() => rt.self().write.addAction!({ title: "Proper" }))).ok).toBe(true)
     expect(await actionCount()).toBe(1)
+  })
+
+  test("act checks its origin before it writes", async () => {
+    tui = await renderTui(kernel, { parts: builtinTuiParts })
+    const w = kernel.runtime("projects")!.self().write
+    let ran = false
+    const res = await act(async () => ((ran = true), w.addAction!({ title: "From nowhere" })), { origin: { type: "inbox", ref: "I-99" } })
+    expect(res.ok).toBe(false)
+    expect(res.ok ? "" : (res.error as Error).message).toBe('no record "I-99"')
+    expect(ran).toBe(false)
+    expect(statusLine(await tui.frame())).toContain('no record "I-99"')
+    expect(await actionCount()).toBe(0)
   })
 })

@@ -1,8 +1,13 @@
-// The kernel's own commands: help, guide, plugin list and report. They are CommandDefs like the plugins'
+// The kernel's own commands: help, guide, plugin list|add|remove|enable|disable|build and report. They are CommandDefs like the plugins'
 // ones, so they get the same argument parsing, --json and --help. `help` and `guide` have no verb (verb "").
-import { mkdirSync, writeFileSync } from "node:fs"
-import { dirname, resolve } from "node:path"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { basename, dirname, join, resolve } from "node:path"
+import { loadConfig, updateConfigFile } from "../config"
+import { NotFoundError, suggest } from "../errors"
 import type { Kernel } from "../host"
+import { buildPlugin } from "../plugins/build"
+import { addPlugin, removePlugin, TRUST_WARNING } from "../plugins/install"
+import { createdText, scaffoldPlugin } from "../plugins/scaffold"
 import { renderReport, type ReportDef } from "../reports"
 import { commandName, flagSignature, GLOBAL_FLAGS, signature, usage } from "./args"
 import type { CommandDef, FlagDef } from "./commands"
@@ -45,8 +50,142 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
         return { json: rows, text: formatTable(["id", "version", "source", "status", "error"], rows) }
       },
     },
+    {
+      thing: "plugin",
+      verb: "add",
+      summary: "install a plugin from npm, a folder or a .tgz into the plugins folder (from the next run)",
+      args: [{ name: "spec", required: true }],
+      run: async ({ args }) => {
+        // The installer choice (PM_PLUGIN_INSTALLER) comes from the process environment, which pm's entry point boots with.
+        const { name, id, version, warned } = await addPlugin(kernel.paths, String(args.spec), process.env)
+        return {
+          json: { name, id, version, source: "npm", warned },
+          text: `${warned ? `${TRUST_WARNING}\n` : ""}added ${id} ${version} (npm)`,
+        }
+      },
+    },
+    {
+      thing: "plugin",
+      verb: "remove",
+      summary: "uninstall an npm plugin or delete a folder plugin; its data stays unless --purge-data",
+      args: [{ name: "id", required: true }],
+      flags: { "purge-data": { type: "boolean", description: "also drop the plugin's tables and its kernel rows (migrations, provenance)" } },
+      destructive: true,
+      run: async ({ args, flags }) => {
+        const id = String(args.id)
+        const purged = flags["purge-data"] === true
+        await removePlugin(kernel, id, { purgeData: purged, env: process.env })
+        return { json: { id, removed: true, purged }, text: purged ? `removed ${id} and its data` : `removed ${id}` }
+      },
+    },
+    {
+      thing: "plugin",
+      verb: "enable",
+      summary: "enable a disabled plugin (from the next run)",
+      args: [{ name: "id", required: true }],
+      run: async ({ args }) => {
+        const id = String(args.id)
+        updateConfigFile(kernel.paths, (cfg) => {
+          const plugins = pluginsSection(cfg)
+          const disabled = disabledList(plugins)
+          // An id that is no longer installed can still be taken off the list.
+          if (!disabled.includes(id)) knownPlugin(kernel, id)
+          plugins.disabled = disabled.filter((d) => d !== id)
+        })
+        // The file no longer lists it, so if the merged config still does, PM_CONFIG_JSON (read from the process
+        // environment, which pm's entry point boots with) disables it.
+        if (loadConfig(kernel.paths, process.env).plugins.disabled.includes(id)) {
+          return { json: { id, disabled: false, stillDisabledBy: "PM_CONFIG_JSON" }, text: `enabled ${id}; note: PM_CONFIG_JSON still disables it` }
+        }
+        return { json: { id, disabled: false }, text: `enabled ${id}` }
+      },
+    },
+    {
+      thing: "plugin",
+      verb: "disable",
+      summary: "disable a plugin (from the next run); the plugins that require it are skipped too; its data stays",
+      args: [{ name: "id", required: true }],
+      run: async ({ args }) => {
+        const id = knownPlugin(kernel, String(args.id))
+        updateConfigFile(kernel.paths, (cfg) => {
+          const plugins = pluginsSection(cfg)
+          const disabled = disabledList(plugins)
+          plugins.disabled = disabled.includes(id) ? disabled : [...disabled, id]
+        })
+        const skipped = dependantsOf(kernel, id)
+        const also = skipped.map(([d, on]) => `${d} (requires ${on.join(", ")})`).join(", ")
+        return {
+          json: { id, disabled: true, alsoSkipped: skipped.map(([d]) => d) },
+          text: `disabled ${id}${also ? `; also skipped: ${also}` : ""}`,
+        }
+      },
+    },
+    {
+      thing: "plugin",
+      verb: "build",
+      summary: "compile a plugin's src/ to dist/ with shims for pm's shared modules (default dir: .)",
+      args: [{ name: "dir" }],
+      run: async ({ args }) => {
+        const dir = resolve(typeof args.dir === "string" ? args.dir : ".")
+        const { files, shims } = await buildPlugin(dir)
+        const { name, version } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { name?: string; version?: string }
+        return {
+          json: { name: name ?? null, version: version ?? null, files, shims },
+          text: `built ${name ?? basename(dir)}${version !== undefined ? ` ${version}` : ""}: ${files} files, shims for ${shims.length > 0 ? shims.join(", ") : "none"}`,
+        }
+      },
+    },
+    {
+      thing: "plugin",
+      verb: "new",
+      summary: "scaffold a new plugin folder <id> in the current directory (a migration, a command, a screen, a project tab, a test)",
+      args: [{ name: "id", required: true }],
+      run: async ({ args }) => {
+        const id = String(args.id)
+        const dir = scaffoldPlugin(process.cwd(), id)
+        return { json: { id, dir }, text: createdText(dir, id) }
+      },
+    },
     ...kernel.reports.list().map((r) => reportCommand(kernel, r)),
   ]
+}
+
+// ---- plugin enable|disable helpers ----
+
+type Obj = Record<string, unknown>
+const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v)
+
+// The config file's `plugins` object, created when missing (its other keys, such as `allow`, stay).
+function pluginsSection(cfg: Obj): Obj {
+  if (!isObj(cfg.plugins)) cfg.plugins = {}
+  return cfg.plugins as Obj
+}
+
+const disabledList = (plugins: Obj): string[] => (Array.isArray(plugins.disabled) ? plugins.disabled.filter((d): d is string => typeof d === "string") : [])
+
+function knownPlugin(kernel: Kernel, id: string): string {
+  if (kernel.plugins.some((p) => p.id === id)) return id
+  throw new NotFoundError(`no plugin "${id}"`, { suggestions: suggest(id, kernel.plugins.map((p) => p.id)), hint: 'run "pm plugin list"' })
+}
+
+// The loaded plugins that require `id`, directly or through another one, sorted by id, each with the plugins
+// of that set (or `id`) it requires: they are skipped too once `id` is disabled.
+function dependantsOf(kernel: Kernel, id: string): Array<[string, string[]]> {
+  const off = new Set([id])
+  const loaded = kernel.plugins.filter((p) => p.status === "ok" && p.id !== id).map((p) => p.id)
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const p of loaded) {
+      if (!off.has(p) && kernel.requiresOf(p).some((r) => off.has(r))) {
+        off.add(p)
+        grew = true
+      }
+    }
+  }
+  return [...off]
+    .filter((p) => p !== id)
+    .sort()
+    .map((p) => [p, kernel.requiresOf(p).filter((r) => off.has(r)).sort()])
 }
 
 type JsonSchema = { type?: string; description?: string }

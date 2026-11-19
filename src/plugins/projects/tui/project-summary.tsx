@@ -20,7 +20,7 @@ import {
   displayWidth,
   type Hint,
   type Tone,
-} from "../../../kernel/tui/api"
+} from "@pm/api/tui"
 import { makeItems } from "../logic/items"
 import { makeStore } from "../logic/records"
 

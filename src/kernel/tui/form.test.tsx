@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
-import { builtinPlugins } from "../../plugins"
+import { builtinPlugins } from "../../../tests/builtins"
 import { currentContext, definePlugin, NonBlank, parseDate, Type, type PluginDef } from "../api"
 import { fixedClock } from "../clock"
 import { runWithContext } from "../context"

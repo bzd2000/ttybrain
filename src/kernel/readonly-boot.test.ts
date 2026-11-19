@@ -1,7 +1,7 @@
 // Boot is read-only when nothing changed (I4/R20): no write transaction when the kernel tables exist, no
 // migration is pending and every published view is current. And `ctx.emit` inside a write fires after commit.
 import { afterEach, describe, expect, test } from "bun:test"
-import { builtinPlugins } from "../plugins/index"
+import { builtinPlugins } from "../../tests/builtins"
 import { makeTestKernel, type TestKernel } from "../../tests/helpers"
 import { definePlugin, Type, type PluginDef } from "./api"
 import { fixedClock } from "./clock"

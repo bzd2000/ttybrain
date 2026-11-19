@@ -1,5 +1,5 @@
 // The "Stakeholders to contact" section of the overview report (registered by projects; sections may come first).
-import type { PluginContext } from "../../../kernel/api"
+import type { PluginContext } from "@pm/api"
 import type { StaleRow } from "./ops"
 
 export function registerReport(ctx: PluginContext): void {

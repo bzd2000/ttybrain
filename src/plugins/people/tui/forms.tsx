@@ -3,7 +3,7 @@
 // and `origin` (provenance) come from whoever opens the form: a person's tab, or the inbox turning an item into a
 // note. An edit sends only the fields that changed, and closes without a write when nothing did.
 import { createEffect, Show, untrack, type JSX } from "solid-js"
-import { act, Form, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "../../../kernel/tui/api"
+import { act, Form, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "@pm/api/tui"
 import { makeStore } from "../logic/records"
 import type { GoalRecord, NoteRecord, PersonRecord } from "../logic/schema"
 

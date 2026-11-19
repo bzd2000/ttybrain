@@ -1,5 +1,5 @@
 // Lookups shared by the operations and the commands, and the record type `inbox_item` (I-).
-import { formatRef, NotFoundError, parseRef, type PluginContext } from "../../../kernel/api"
+import { formatRef, NotFoundError, parseRef, type PluginContext } from "@pm/api"
 import type { ItemRecord } from "./schema"
 
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))

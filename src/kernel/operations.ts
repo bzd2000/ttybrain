@@ -146,7 +146,7 @@ export class OperationRegistry {
       const key = `${e.plugin}.${e.name}`
       if (typeof out?.ref !== "string") throw new Error(`write operation "${key}" must return { ref: string }`)
       this.checkOutput(e, out)
-      await this.deps.provenance.recordWrite(key, out, ctx.origin)
+      await this.deps.provenance.recordWrite(e.plugin, e.name, out, ctx.origin)
       const payload = { plugin: e.plugin, op: e.name, ref: out.ref }
       // Handlers run in the same actor/today/now but without the origin, so their own writes are not
       // recorded as created from it.

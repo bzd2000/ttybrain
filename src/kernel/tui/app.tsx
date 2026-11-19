@@ -119,7 +119,7 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
       quit: () => renderer.destroy(),
       help: () => {
         const shown = hints()
-        openOverlay("help", (close) => <Help hints={shown} problems={problems()} close={close} />)
+        openOverlay("help", (close) => <Help hints={shown} actions={registry.globalActions().map((a) => ({ key: a.key, label: a.label }))} problems={problems()} close={close} />)
       },
       switcher: () =>
         openOverlay("switcher", (close) => (

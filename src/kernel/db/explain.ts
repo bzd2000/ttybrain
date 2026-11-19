@@ -1,4 +1,5 @@
-// Layer 2 of data isolation: ask SQLite which tables a statement would open (EXPLAIN OpenRead/OpenWrite).
+// Layer 2 of data isolation: ask SQLite which tables a statement would open (EXPLAIN OpenRead/OpenWrite), and
+// reject virtual tables and table-valued functions (VOpen/VFilter).
 // Views and indexes resolve to their underlying tables because root pages map to sqlite_schema.tbl_name.
 import { IsolationError } from "../errors"
 import type { RawDb } from "./sqlite"
@@ -153,6 +154,11 @@ export function createTableChecker(raw: RawDb): TableChecker {
       const map = rootPages()
       const out = new Set<string>()
       for (const op of ops) {
+        // A table-valued function (pragma_table_info, pragma_table_list, json_each …) or a virtual table (dbstat)
+        // opens no b-tree by root page, so it would read the schema metadata of other plugins unseen: reject it.
+        if (op.opcode === "VOpen" || op.opcode === "VFilter") {
+          throw new IsolationError(`table-valued functions and virtual tables are not allowed: ${sql}`)
+        }
         // Opcodes that address an existing b-tree by root page: [root page, database index].
         // Clear is what `DELETE FROM t` (no WHERE) compiles to, with no OpenWrite at all; Destroy is DROP.
         let root: number, db: number

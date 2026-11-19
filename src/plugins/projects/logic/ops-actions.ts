@@ -1,7 +1,7 @@
 // The exposed write operations on actions. An action's owner is a soft person reference where empty (or `me`)
 // means me; `forPerson` is the stakeholder it is for; the project and meeting are optional. Each write returns
 // the action record with its `ref`; `describe` gives the change-set line (plugin reference §2).
-import { Deleted, NonBlank, Type, ValidationError, type PluginContext, type Static } from "../../../kernel/api"
+import { Deleted, NonBlank, Type, ValidationError, type PluginContext, type Static } from "@pm/api"
 import { ActionRecord, type Items } from "./items"
 import { clean, date, now, today } from "./ops-project"
 import type { Store } from "./records"

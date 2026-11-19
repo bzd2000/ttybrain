@@ -1,17 +1,19 @@
 // The plugin host: boots the kernel services, orders the plugins by `requires`, activates each one with its
 // own PluginContext, runs its migrations, then creates the published views. A plugin that fails anywhere on
 // the way is isolated: everything it registered is removed, it is marked failed, and so are its dependants.
+// Plugins come as PluginDefs (built-in) or as candidates from the loader (`discover`), which carry a source.
 import { mkdirSync } from "node:fs"
 import { dirname } from "node:path"
 import { ChangeSetService } from "./changesets"
 import { CommandRegistry } from "./cli/commands"
 import { systemClock, type Clock } from "./clock"
 import { loadConfig, type Config } from "./config"
-import type { OpContext, Origin } from "./context"
+import { runWithContext, type OpContext, type Origin } from "./context"
 import { KernelDb } from "./db/kernel-db"
 import type { TableAccess } from "./db/scope"
 import { openRaw } from "./db/sqlite"
-import { IsolationError, PmError } from "./errors"
+import { IsolationError, NotFoundError, PmError, ValidationError } from "./errors"
+import { discoverPlugins, type PluginCandidate, type PluginSource } from "./loader"
 import { EventBus } from "./events"
 import { FieldRegistry } from "./fields"
 import { GuideRegistry } from "./guide"
@@ -31,10 +33,12 @@ export const API_VERSION = 1
 
 export type PluginStatus = {
   id: string
-  version: string
-  source: "built-in"
+  version: string // "" when a failed candidate's version is unknown
+  source: PluginSource
   status: "ok" | "failed" | "disabled"
   error?: string
+  tui?: string // file URL of the plugin's tui entry (pm.tui)
+  dir?: string // the plugin's directory, for discovered plugins
 }
 
 export type Kernel = {
@@ -55,18 +59,32 @@ export type Kernel = {
   context(origin?: Origin): OpContext
   // A loaded plugin's runtime (the same `data`, operations, records, tags as its context); undefined unless `ok`.
   runtime(pluginId: string): PluginRuntime | undefined
+  // The ids a plugin's PluginDef requires ([] when its code was not imported: disabled, or failed before boot).
+  requiresOf(pluginId: string): string[]
+  // Refuses an origin that cannot be recorded: no plugin owns its ref's record type (ValidationError, exit 1),
+  // or the type is registered but the record does not exist (NotFoundError, exit 2).
+  checkOrigin(origin: Origin): Promise<void>
   shutdown(): Promise<void>
 }
 
 export type BootOptions = {
   env: Record<string, string | undefined>
   flags?: { db?: string }
-  plugins: PluginDef[]
+  // A bare PluginDef is a built-in. With `discover`, the discovered candidates are appended after these.
+  plugins?: Array<PluginDef | PluginCandidate>
+  discover?: boolean | { builtinDir?: string; timeoutMs?: number }
   clock?: Clock
 }
 
+const DEFAULT_ACTIVATE_TIMEOUT_MS = 5000
+
 type Slot = {
-  def: PluginDef
+  id: string
+  version: string
+  source: PluginSource
+  dir?: string
+  tui?: string
+  def?: PluginDef // missing for a candidate that failed before boot or is disabled
   status: "pending" | "ok" | "failed" | "disabled"
   error?: string
   migrations: Migration[]
@@ -80,9 +98,47 @@ const RUNTIME_KEYS: Array<keyof PluginRuntime> = ["id", "data", "config", "clock
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
+// A candidate (from the loader) always carries `source`; a bare PluginDef never does.
+const isDef = (p: PluginDef | PluginCandidate): p is PluginDef => !Object.hasOwn(p, "source")
+
+// Races an external plugin's activate against the timeout (R2).
+function withTimeout<T>(p: Promise<T>, ms: number, text: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(text)), ms)
+  })
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer))
+}
+
+// An origin whose ref belongs to a registered record type must name an existing record, or provenance would
+// attach to a record created later under that ref. The hint names the owning plugin's list command when there is
+// one ("pm inbox list"); the kernel knows nothing of what the record is. An inbox origin whose ref no record
+// type owns means the inbox plugin is not loaded. Other origins (a change set's `CS-<id>`) are no records.
+// Every path that writes with an origin awaits it first: the CLI dispatcher, change sets and the TUI's act.
+async function checkOrigin(records: RecordTypeRegistry, commands: CommandRegistry, context: () => OpContext, origin: Origin): Promise<void> {
+  const type = records.typeOfRef(origin.ref)
+  if (!type) {
+    if (origin.type !== "inbox") return
+    throw new ValidationError("--from-inbox needs the inbox plugin, which is not loaded", { field: "from-inbox", hint: 'run "pm plugin list"' })
+  }
+  if (await runWithContext(context(), () => records.resolveAny(origin.ref))) return
+  const lists = commands.list().filter((c) => c.plugin === type.plugin && c.def.verb === "list")
+  const list = lists.find((c) => c.def.thing === type.plugin || type.name.split("_").includes(c.def.thing)) ?? (lists.length === 1 ? lists[0] : undefined)
+  throw new NotFoundError(`no record "${origin.ref}"`, { hint: list ? `run "pm ${list.def.thing} list"` : 'run "pm help"' })
+}
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value)
+    for (const v of Object.values(value)) deepFreeze(v)
+  }
+  return value
+}
+
 export async function bootKernel(opts: BootOptions): Promise<Kernel> {
   const paths = resolvePaths(opts.env, opts.flags)
-  const config = loadConfig(paths, opts.env)
+  // Frozen all the way down: every plugin gets this same object as ctx.config, so one must not change another's.
+  const config = deepFreeze(loadConfig(paths, opts.env))
   const clock = opts.clock ?? systemClock
   mkdirSync(dirname(paths.db), { recursive: true })
   const db = new KernelDb(openRaw(paths.db))
@@ -105,21 +161,43 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const fields = new FieldRegistry()
   const commands = new CommandRegistry()
   const views = new ViewRegistry()
-  const changeSets = new ChangeSetService({ db, ops, records, provenance })
+  const originCheck = (origin: Origin) => checkOrigin(records, commands, context, origin)
+  const changeSets = new ChangeSetService({ db, ops, records, provenance, checkOrigin: originCheck })
   const runner = new MigrationRunner(db, paths, clock)
   await runner.ensureKernelTables()
 
   let sealed = false // set once boot is done: from then on a context registers nothing
 
-  // 1. Structural checks: id, duplicates, apiVersion, disabled.
+  // 1. Structural checks: candidates that failed before boot or are disabled, id, duplicates, apiVersion, disabled.
   const disabled = new Set<string>(Array.isArray(config.plugins?.disabled) ? config.plugins.disabled : [])
-  const slots: Slot[] = opts.plugins.map((def) => ({ def, status: "pending", migrations: [], off: [] }))
+  const discover = opts.discover === true ? {} : opts.discover || undefined
+  const given = opts.plugins ?? []
+  const all = discover ? [...given, ...(await discoverPlugins(paths, config, discover))] : given
+  const activateTimeoutMs = discover?.timeoutMs ?? DEFAULT_ACTIVATE_TIMEOUT_MS
+  const slots: Slot[] = all.map((p): Slot => {
+    const base = { status: "pending" as Slot["status"], migrations: [], off: [] }
+    if (isDef(p)) return { ...base, id: p.id, version: p.version, source: "built-in", def: p }
+    const slot: Slot = { ...base, id: p.def?.id ?? p.id, version: p.def?.version ?? p.version ?? "", source: p.source, dir: p.dir }
+    if (p.tui !== undefined) slot.tui = p.tui
+    if (p.def !== undefined) slot.def = p.def
+    if (p.error !== undefined) {
+      slot.status = "failed"
+      slot.error = p.error
+    } else if (p.disabled) slot.status = "disabled"
+    return slot
+  })
   const byId = new Map<string, Slot>()
   const fail = (s: Slot, error: string) => {
     s.status = "failed"
     s.error = error
   }
   for (const s of slots) {
+    if (s.status !== "pending" || !s.def) {
+      // Failed before boot (keeps its error) or disabled: listed, and known to its dependants by id.
+      if (s.status === "pending") fail(s, "the plugin was not loaded")
+      if (!byId.has(s.id)) byId.set(s.id, s)
+      continue
+    }
     const { id, apiVersion } = s.def
     try {
       assertPluginId(id)
@@ -144,12 +222,12 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     if (done.has(s)) return
     if (visiting.has(s)) {
       const cycle = path.slice(path.indexOf(s))
-      const text = `requires cycle: ${[...cycle, s].map((c) => c.def.id).join(" → ")}`
+      const text = `requires cycle: ${[...cycle, s].map((c) => c.id).join(" → ")}`
       for (const c of cycle) if (c.status === "pending") fail(c, text)
       return
     }
     visiting.add(s)
-    for (const dep of Object.keys(s.def.requires ?? {})) {
+    for (const dep of Object.keys(s.def?.requires ?? {})) {
       const d = byId.get(dep)
       if (d) visit(d, [...path, s])
     }
@@ -158,13 +236,13 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     order.push(s)
   }
   for (const s of slots) {
-    if (byId.get(s.def.id) === s) visit(s, [])
+    if (byId.get(s.id) === s) visit(s, [])
     else order.push(s) // invalid or duplicate: already failed, kept in place for the listing
   }
 
   // Removes everything a plugin registered, marks it failed, and fails the plugins that require it.
   const isolate = (s: Slot, error: string) => {
-    const id = s.def.id
+    const id = s.id
     fail(s, error)
     for (const off of s.off.splice(0)) off()
     ops.remove(id)
@@ -176,23 +254,23 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     views.remove(id)
     commands.remove(id)
     for (const t of byId.values()) {
-      if ((t.status === "ok" || t.status === "pending") && Object.hasOwn(t.def.requires ?? {}, id)) isolate(t, `requires "${id}" which failed`)
+      if ((t.status === "ok" || t.status === "pending") && Object.hasOwn(t.def?.requires ?? {}, id)) isolate(t, `requires "${id}" which failed`)
     }
   }
 
   const requirementProblem = (s: Slot): string | undefined => {
-    for (const [dep, range] of Object.entries(s.def.requires ?? {})) {
+    for (const [dep, range] of Object.entries(s.def?.requires ?? {})) {
       const d = byId.get(dep)
       if (!d) return `requires "${dep}" ${range}, which is not installed`
       if (d.status === "disabled") return `requires "${dep}", which is disabled`
       if (d.status !== "ok") return `requires "${dep}" which failed`
-      if (!satisfies(d.def.version, range)) return `requires "${dep}" ${range}, but ${dep} is ${d.def.version}`
+      if (!satisfies(d.version, range)) return `requires "${dep}" ${range}, but ${dep} is ${d.version}`
     }
     return undefined
   }
 
-  const contextFor = (s: Slot): PluginContext => {
-    const id = s.def.id
+  const contextFor = (s: Slot, def: PluginDef): PluginContext => {
+    const id = s.id
     // A plugin that failed (say, a registration left running after activate threw) can register nothing more.
     const live = () => {
       if (s.status === "failed") throw new Error(`plugin "${id}" failed and can no longer register anything`)
@@ -205,7 +283,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
       migrating: () => false,
       ownerOf: (name) => ownerOf(db, name),
     }
-    const required = new Set(Object.keys(s.def.requires ?? {}))
+    const required = new Set(Object.keys(def.requires ?? {}))
     return {
       id,
       data: db.pluginDb(id, access),
@@ -277,17 +355,19 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
 
   // 3. Activate, then migrate (MigrationRunner.run backs up the database first when something is pending).
   for (const s of order) {
-    if (s.status !== "pending") continue
+    if (s.status !== "pending" || !s.def) continue
     const problem = requirementProblem(s)
     if (problem) {
       fail(s, problem)
       continue
     }
+    const external = s.source !== "built-in"
     try {
-      s.ctx = contextFor(s)
-      await s.def.activate(s.ctx)
-      fields.check(s.def.id, ops)
-      await runner.run(s.def.id, s.migrations, false)
+      s.ctx = contextFor(s, s.def)
+      const activating = Promise.resolve(s.def.activate(s.ctx))
+      await (external ? withTimeout(activating, activateTimeoutMs, `${s.id}: timed out after ${activateTimeoutMs} ms while activating`) : activating)
+      fields.check(s.id, ops)
+      await runner.run(s.id, s.migrations, external)
       s.status = "ok"
     } catch (e) {
       isolate(s, message(e))
@@ -310,26 +390,30 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   // 5. Reads: a publisher outside the reader's range is unavailable to it, like one that is not loaded.
   for (const s of byId.values()) {
     if (s.status !== "ok") continue
-    const reads = s.def.reads ?? {}
+    const reads = s.def?.reads ?? {}
     const unavailable = Object.entries(reads)
       .filter(([p, range]) => {
         const d = byId.get(p)
-        return d?.status === "ok" && !satisfies(d.def.version, range)
+        return d?.status === "ok" && !satisfies(d.version, range)
       })
       .map(([p]) => p)
-    views.declareReads(s.def.id, Object.keys(reads), unavailable)
+    views.declareReads(s.id, Object.keys(reads), unavailable)
   }
 
   // Registrations made later (a timer left by activate) would be half-applied: a view would never be created.
   sealed = true
 
   const plugins: PluginStatus[] = order.map((s) => ({
-    id: s.def.id,
-    version: s.def.version,
-    source: "built-in",
+    id: s.id,
+    version: s.version,
+    source: s.source,
     status: s.status === "pending" ? "failed" : s.status,
     ...(s.error !== undefined ? { error: s.error } : {}),
+    ...(s.tui !== undefined ? { tui: s.tui } : {}),
+    ...(s.dir !== undefined ? { dir: s.dir } : {}),
   }))
+
+  const context = (origin?: Origin): OpContext => ({ actor: "me", today: clock.today(), now: clock.now(), ...(origin ? { origin } : {}) })
 
   return {
     paths,
@@ -346,7 +430,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     changeSets,
     commands,
     events,
-    context: (origin) => ({ actor: "me", today: clock.today(), now: clock.now(), ...(origin ? { origin } : {}) }),
+    context,
     runtime: (pluginId) => {
       const s = byId.get(pluginId)
       if (s?.status !== "ok" || !s.ctx) return undefined
@@ -356,6 +440,8 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
       }
       return s.runtime
     },
+    requiresOf: (pluginId) => Object.keys(byId.get(pluginId)?.def?.requires ?? {}),
+    checkOrigin: originCheck,
     shutdown: () => db.close(),
   }
 }

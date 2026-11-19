@@ -18,7 +18,7 @@ import {
   type Hint,
   type TableColumn,
   type TableRow,
-} from "../../../kernel/tui/api"
+} from "@pm/api/tui"
 import { makeItems, type ActionRecord } from "../logic/items"
 import { makeStore } from "../logic/records"
 import { ITEM_KINDS } from "./item-tab"

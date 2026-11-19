@@ -1,6 +1,6 @@
 // The projects plugin's tui part: the Projects screen (slot 2), the project's record forms (project, health) and
 // tabs, and the person's Projects & roles and Actions tabs.
-import { defineTui } from "../../../kernel/tui/api"
+import { defineTui } from "@pm/api/tui"
 import { ActionsScreen } from "./actions-screen"
 import { DueForm } from "./due-form"
 import { HealthForm, InvolvementForm, ProjectForm } from "./forms"
@@ -114,3 +114,5 @@ export const projectsTui = defineTui({
     })
   },
 })
+
+export default projectsTui

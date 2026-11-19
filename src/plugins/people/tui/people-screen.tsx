@@ -27,7 +27,7 @@ import {
   type TableColumn,
   type TableGroup,
   type TableRow,
-} from "../../../kernel/tui/api"
+} from "@pm/api/tui"
 import { makeStore } from "../logic/records"
 import { PANEL_MIN_WIDTH, PersonDetail } from "./person-detail"
 import { lastText, lastTone, matchesFilter, peopleGroups, roleText, SORT_LABELS, SORTS, tabCounts, type PeopleTab, type PersonRow, type SortMode } from "./people-list"

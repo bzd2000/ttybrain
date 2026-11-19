@@ -1,5 +1,5 @@
 // The agent guide's section on people: which note kind to use, and where stakeholder concerns go.
-import type { PluginContext } from "../../../kernel/api"
+import type { PluginContext } from "@pm/api"
 
 const MARKDOWN = `
 People are referenced by handle (\`anna\` or \`@anna\`). \`pm person list --stakeholders\` shows stakeholders by influence, then oldest contact first; \`pm person show <handle>\` shows one person with their notes and goals.

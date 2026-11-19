@@ -8,7 +8,7 @@ import {
   ValidationError,
   type PluginContext,
   type PluginRuntime,
-} from "../../../kernel/api"
+} from "@pm/api"
 import type { ProjectRecord } from "./schema"
 import { projectQuery } from "./views"
 

@@ -62,6 +62,11 @@ export class RecordTypeRegistry {
     return def.ref ? def.ref(id) : formatRef(def.prefix, id)
   }
 
+  // The names of the record types a plugin registered, sorted.
+  typesOf(pluginId: string): string[] {
+    return [...this.defs.values()].filter((d) => d.plugin === pluginId).map((d) => d.name).sort()
+  }
+
   remove(pluginId: string): void {
     for (const [name, d] of this.defs) if (d.plugin === pluginId) this.defs.delete(name)
     this.sort()

@@ -11,7 +11,7 @@ import {
   normalizeCode,
   type PluginContext,
   type PluginRuntime,
-} from "../../../kernel/api"
+} from "@pm/api"
 import type { GoalRecord, NoteRecord, PersonRecord } from "./schema"
 
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))

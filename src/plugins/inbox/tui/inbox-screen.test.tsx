@@ -6,7 +6,7 @@ import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { rgbToHex } from "@opentui/core"
 import { runWithContext, type Origin } from "../../../kernel/context"
 import { theme } from "../../../kernel/tui/theme"
-import { builtinPlugins } from "../../index"
+import { builtinPlugins } from "../../../../tests/builtins"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 

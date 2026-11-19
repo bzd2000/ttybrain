@@ -24,7 +24,7 @@ function resolveRelative(from: string, spec: string): string | undefined {
 }
 
 const isUi = (from: string, spec: string) => {
-  if (spec === "solid-js" || spec.startsWith("solid-js/") || spec.startsWith("@opentui/")) return true
+  if (spec === "@pm/api/tui" || spec === "solid-js" || spec.startsWith("solid-js/") || spec.startsWith("@opentui/")) return true
   if (!spec.startsWith(".")) return false
   const target = resolveRelative(from, spec) ?? resolve(dirname(from), spec)
   return target.startsWith(tuiDir)
@@ -59,7 +59,8 @@ describe("logic/UI split", () => {
       }
     }
     expect(offenders).toEqual([])
-    expect([...seen].map(rel)).toContain("src/plugins/index.ts")
+    // Plugins' logic entries are imported dynamically by the loader; the next test covers their files.
+    expect([...seen].map(rel)).toContain("src/kernel/loader.ts")
     expect([...seen].map(rel)).toContain("src/kernel/host.ts")
   })
 

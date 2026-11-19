@@ -15,6 +15,8 @@ export type ChangeSetDeps = {
   ops: OperationRegistry
   records: RecordTypeRegistry
   provenance: ProvenanceStore
+  // The kernel's origin check (Kernel.checkOrigin): refuses an origin that names no existing record.
+  checkOrigin: (origin: Origin) => Promise<void>
 }
 
 // The error of op `index`: a PmError keeps its class, code, hint and details, plus `index`; anything else
@@ -45,9 +47,10 @@ export class ChangeSetService {
 
   // Runs in the caller's operation context. Every op runs with origin `{ type: "changeset", ref: "CS-<id>" }`,
   // so its record's provenance names the set; the set's own `origin` (an inbox item, say) is logged on the set
-  // and recorded as provenance of each result too.
+  // and recorded as provenance of each result too, so it is checked first, before the write starts.
   async apply(ops: ChangeOp[], origin?: Origin): Promise<{ id: number; refs: string[] }> {
     if (ops.length === 0) throw new ValidationError("a change set needs at least one operation")
+    if (origin) await this.deps.checkOrigin(origin)
     const ctx = currentContext()
     const { db, provenance } = this.deps
     return db.write(async () => {
@@ -66,7 +69,7 @@ export class ChangeSetService {
             const out = await call(op.input)
             const ref: string = out.ref
             // The set's own origin follows the same rule as any write's (operations.ts): deletes record nothing.
-            await provenance.recordWrite(`${op.plugin}.${op.operation}`, out, origin)
+            await provenance.recordWrite(op.plugin, op.operation, out, origin)
             await db.kysely
               .insertInto("kernel_change_set_op")
               .values({

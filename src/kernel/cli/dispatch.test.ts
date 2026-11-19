@@ -244,6 +244,18 @@ describe("runCli: plugin commands", () => {
   })
 
   test("--from-inbox I-2 sets the origin seen inside run", async () => {
+    // An origin needs a plugin that owns the I- prefix (else: "needs the inbox plugin"); this one has every ref.
+    const items = definePlugin({
+      id: "items",
+      name: "Items",
+      version: "1.0.0",
+      apiVersion: 1,
+      activate(ctx) {
+        ctx.recordType({ name: "item", prefix: "I-", resolve: async () => 1, label: async () => "one", search: async () => [] })
+      },
+    })
+    await k.cleanup()
+    k = await makeTestKernel({ plugins: [widgets, items] })
     expect(JSON.parse((await cli(["widget", "origin", "--from-inbox", "I-2", "--json"])).out)).toEqual({
       origin: { type: "inbox", ref: "I-2" },
       today: "2026-11-13",

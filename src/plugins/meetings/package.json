@@ -1,0 +1,8 @@
+{
+  "name": "@pm/plugin-meetings",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "logic/index.ts",
+  "pm": { "plugin": true, "id": "meetings", "tui": "tui/index.tsx" }
+}

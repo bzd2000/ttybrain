@@ -16,7 +16,7 @@ import {
   useScreenKeys,
   useWriteExport,
   type Hint,
-} from "../../../kernel/tui/api"
+} from "@pm/api/tui"
 import { makeStore } from "../logic/records"
 import { Lines } from "./prep-tab"
 

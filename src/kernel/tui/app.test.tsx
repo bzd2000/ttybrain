@@ -3,8 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { createSignal, onCleanup, onMount } from "solid-js"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
-import { builtinPlugins } from "../../plugins"
-import { builtinTuiParts } from "../../plugins/tui"
+import { builtinPlugins, builtinTuiParts } from "../../../tests/builtins"
 import { fitHints } from "./frame"
 import { useKeys, useScreenKeys } from "./keys"
 import { runTui } from "./run"
@@ -188,9 +187,18 @@ describe("TUI shell", () => {
     const setup = await createTestRenderer({ width: 100, height: 30 })
     try {
       let resolved = false
-      const done = runTui(kernel, builtinTuiParts, { renderer: setup.renderer }).then(() => (resolved = true))
-      await setup.renderOnce()
-      expect(firstLine(setup.captureCharFrame())).toContain("pm · 1 Overview ▾")
+      const done = runTui(kernel, { renderer: setup.renderer }).then(() => (resolved = true))
+      // runTui loads the tui entries before it renders.
+      // Up to 400 rounds of 25 ms (about 10 s).
+      let first = ""
+      for (let i = 0; i < 400; i++) {
+        await setup.renderOnce()
+        first = firstLine(setup.captureCharFrame())
+        if (first.includes("pm · 1 Overview")) break
+        await new Promise((r) => setTimeout(r, 25))
+      }
+      if (!first.includes("pm · 1 Overview")) throw new Error(`timed out after about 10 s waiting for "pm · 1 Overview"; first line: ${first}`)
+      expect(first).toContain("pm · 1 Overview ▾")
       expect(resolved).toBe(false)
       setup.mockInput.pressKey("q")
       await done
@@ -199,7 +207,7 @@ describe("TUI shell", () => {
     } finally {
       if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     }
-  })
+  }, 15_000)
 
   test("too small message", async () => {
     tui = await renderTui(kernel, { parts: [testPart()], width: 50, height: 12 })
