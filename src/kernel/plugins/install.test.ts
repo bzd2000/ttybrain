@@ -78,7 +78,7 @@ function io() {
 
 // A kernel with no built-ins and `plugins` as its plugins folder.
 async function boot(plugins: string, o: { builtins?: boolean } = {}): Promise<TestKernel> {
-  const k = await makeTestKernel({ env: { PM_PLUGINS: plugins }, discover: o.builtins ? true : { builtinDir: tmp() } })
+  const k = await makeTestKernel({ env: { TTYBRAIN_PLUGINS: plugins }, discover: o.builtins ? true : { builtinDir: tmp() } })
   kernels.push(k)
   return k
 }
@@ -91,15 +91,15 @@ const deps = (plugins: string): Record<string, string> =>
 const allow = (k: TestKernel): string[] =>
   existsSync(k.paths.config) ? ((JSON.parse(readFileSync(k.paths.config, "utf8")) as { plugins?: { allow?: string[] } }).plugins?.allow ?? []) : []
 
-// Runs `fn` with PM_PLUGIN_INSTALLER set (the CLI commands read process.env, as pm's entry point passes it).
+// Runs `fn` with TTYBRAIN_PLUGIN_INSTALLER set (the CLI commands read process.env, as pm's entry point passes it).
 async function withInstaller<T>(installer: string, fn: () => Promise<T>): Promise<T> {
-  const before = process.env.PM_PLUGIN_INSTALLER
-  process.env.PM_PLUGIN_INSTALLER = installer
+  const before = process.env.TTYBRAIN_PLUGIN_INSTALLER
+  process.env.TTYBRAIN_PLUGIN_INSTALLER = installer
   try {
     return await fn()
   } finally {
-    if (before === undefined) delete process.env.PM_PLUGIN_INSTALLER
-    else process.env.PM_PLUGIN_INSTALLER = before
+    if (before === undefined) delete process.env.TTYBRAIN_PLUGIN_INSTALLER
+    else process.env.TTYBRAIN_PLUGIN_INSTALLER = before
   }
 }
 
@@ -109,8 +109,8 @@ for (const installer of installers) {
   test.skipIf(installer === "npm" && !hasNpm)(`add <tgz> with ${installer} installs into the plugins prefix`, async () => {
     const tgz = pack(await builtPlugin("demo"))
     const plugins = join(tmp(), "plugins")
-    const paths = resolvePaths({ PM_HOME: tmp(), PM_PLUGINS: plugins })
-    const added = await addPlugin(paths, tgz, { PM_PLUGIN_INSTALLER: installer })
+    const paths = resolvePaths({ TTYBRAIN_HOME: tmp(), TTYBRAIN_PLUGINS: plugins })
+    const added = await addPlugin(paths, tgz, { TTYBRAIN_PLUGIN_INSTALLER: installer })
     expect(added).toEqual({ name: "pm-plugin-demo", id: "demo", version: "1.0.0", warned: true })
     const pkg = JSON.parse(readFileSync(join(plugins, "package.json"), "utf8")) as { private: boolean; type: string }
     expect(pkg.private).toBe(true)
@@ -124,8 +124,8 @@ for (const installer of installers) {
 test.skipIf(!hasNpm)("add <folder> installs it as a file: dependency", async () => {
   const dir = await builtPlugin("demo")
   const plugins = join(tmp(), "plugins")
-  const paths = resolvePaths({ PM_HOME: tmp(), PM_PLUGINS: plugins })
-  await addPlugin(paths, dir, { PM_PLUGIN_INSTALLER: "npm" })
+  const paths = resolvePaths({ TTYBRAIN_HOME: tmp(), TTYBRAIN_PLUGINS: plugins })
+  await addPlugin(paths, dir, { TTYBRAIN_PLUGIN_INSTALLER: "npm" })
   expect(deps(plugins)["pm-plugin-demo"]).toStartWith("file:")
   expect(lstatSync(join(plugins, "node_modules", "pm-plugin-demo")).isSymbolicLink()).toBe(true)
   const k = await boot(plugins)
@@ -192,11 +192,11 @@ for (const installer of installers) {
 }
 
 test("add with no installer", async () => {
-  const paths = resolvePaths({ PM_HOME: tmp(), PM_PLUGINS: join(tmp(), "plugins") })
+  const paths = resolvePaths({ TTYBRAIN_HOME: tmp(), TTYBRAIN_PLUGINS: join(tmp(), "plugins") })
   const failing = addPlugin(paths, "pm-plugin-demo", {}, { which: () => false, underBun: false })
   await expect(failing).rejects.toThrow("pm plugin add needs npm on the PATH")
-  const forced = addPlugin(paths, "pm-plugin-demo", { PM_PLUGIN_INSTALLER: "yarn" })
-  await expect(forced).rejects.toThrow("PM_PLUGIN_INSTALLER must be npm or bun")
+  const forced = addPlugin(paths, "pm-plugin-demo", { TTYBRAIN_PLUGIN_INSTALLER: "yarn" })
+  await expect(forced).rejects.toThrow("TTYBRAIN_PLUGIN_INSTALLER must be npm or bun")
 })
 
 test("remove of an npm plugin with no installer names the remove command", async () => {
@@ -339,7 +339,7 @@ test("remove --purge-data drops its tables and kernel rows", async () => {
   expect(objects(k, "keep")).toEqual(keepBefore)
   expect(migrationRows(k, "keep")).toEqual(["001"])
   // The next boot no longer lists it and still runs the other plugin.
-  const next = await makeTestKernel({ env: { PM_PLUGINS: plugins, PM_HOME: k.home }, discover: { builtinDir: tmp() } })
+  const next = await makeTestKernel({ env: { TTYBRAIN_PLUGINS: plugins, TTYBRAIN_HOME: k.home }, discover: { builtinDir: tmp() } })
   kernels.push(next)
   expect(listed(next)).toEqual([{ id: "keep", source: "folder", status: "ok", error: null }])
 })

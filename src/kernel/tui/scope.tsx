@@ -15,7 +15,7 @@ export type TuiAppContext = {
   track<T>(p: Promise<T>): Promise<T>
   // The live-refresh version (refresh.ts): bumps when the data changed.
   version: Accessor<number>
-  // The drafts of unsaved forms, capture and editor text (drafts.ts), under PM_HOME/drafts.
+  // The drafts of unsaved forms, capture and editor text (drafts.ts), under TTYBRAIN_HOME/drafts.
   drafts: DraftStore
 }
 

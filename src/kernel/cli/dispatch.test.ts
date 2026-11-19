@@ -270,7 +270,7 @@ describe("runCli: plugin commands", () => {
   })
 
   test("--db is accepted (it is applied before boot)", async () => {
-    expect((await cli(["widget", "add", "x", "--db", join(k.home, "pm.db")])).code).toBe(0)
+    expect((await cli(["widget", "add", "x", "--db", join(k.home, "ttybrain.db")])).code).toBe(0)
   })
 })
 

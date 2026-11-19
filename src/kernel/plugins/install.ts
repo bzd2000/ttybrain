@@ -23,15 +23,15 @@ type Installer = { kind: "npm" | "bun"; cmd: string }
 
 const runs = (cmd: string) => spawnSync(cmd, ["--version"], { stdio: "ignore" }).status === 0
 
-// R6: PM_PLUGIN_INSTALLER forces one; else npm when it runs; else bun when pm runs on Bun. `command` names the
+// R6: TTYBRAIN_PLUGIN_INSTALLER forces one; else npm when it runs; else bun when pm runs on Bun. `command` names the
 // `pm plugin` command that needs it, in the error.
 export function chooseInstaller(env: Env, opts: InstallerOptions = {}, command: "add" | "remove" = "add"): Installer {
   const underBun = opts.underBun ?? process.versions.bun !== undefined
   const bun: Installer = { kind: "bun", cmd: underBun ? process.execPath : "bun" }
-  const forced = env.PM_PLUGIN_INSTALLER
+  const forced = env.TTYBRAIN_PLUGIN_INSTALLER
   if (forced === "npm") return { kind: "npm", cmd: "npm" }
   if (forced === "bun") return bun
-  if (forced !== undefined && forced !== "") throw new ValidationError(`PM_PLUGIN_INSTALLER must be npm or bun, not "${forced}"`)
+  if (forced !== undefined && forced !== "") throw new ValidationError(`TTYBRAIN_PLUGIN_INSTALLER must be npm or bun, not "${forced}"`)
   if ((opts.which ?? runs)("npm")) return { kind: "npm", cmd: "npm" }
   if (underBun) return bun
   throw new ValidationError(`pm plugin ${command} needs npm on the PATH`, { hint: "install Node.js (it comes with npm), or run pm with Bun" })

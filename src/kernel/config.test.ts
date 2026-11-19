@@ -10,7 +10,7 @@ import { fixedClock } from "./clock"
 function setup(file?: string) {
   const dir = mkdtempSync(join(tmpdir(), "pm-cfg-"))
   if (file !== undefined) writeFileSync(join(dir, "config.json"), file)
-  return { dir, env: { HOME: "/h", PM_HOME: dir } }
+  return { dir, env: { HOME: "/h", TTYBRAIN_HOME: dir } }
 }
 test("defaults", () => {
   const { dir, env } = setup()
@@ -23,7 +23,7 @@ test("file", () => {
 })
 test("env merge", () => {
   const { env } = setup()
-  const e = { ...env, PM_CONFIG_JSON: '{"plugins":{"disabled":["inbox"]}}' }
+  const e = { ...env, TTYBRAIN_CONFIG_JSON: '{"plugins":{"disabled":["inbox"]}}' }
   const c = loadConfig(resolvePaths(e), e)
   expect(c.plugins).toEqual({ disabled: ["inbox"], allow: [] })
   expect(c.staleContactDays).toBe(30)
@@ -42,7 +42,7 @@ test("updateConfigFile keeps other keys, writes 2-space JSON with a trailing new
 })
 test("updateConfigFile starts from {} when the file is missing, creating its directory", () => {
   const { dir } = setup()
-  const env = { HOME: "/h", PM_HOME: dir, PM_CONFIG: join(dir, "sub", "config.json") }
+  const env = { HOME: "/h", TTYBRAIN_HOME: dir, TTYBRAIN_CONFIG: join(dir, "sub", "config.json") }
   updateConfigFile(resolvePaths(env), (cfg) => {
     cfg.a = 1
   })
@@ -91,7 +91,7 @@ test("updateConfigFile keeps a regular file's mode", () => {
 })
 test("config keys __proto__, constructor and prototype are ignored", () => {
   const { env } = setup('{"__proto__": {"x": 1}, "constructor": {"y": 2}, "prototype": 3, "plugins": {"__proto__": {"z": 1}}}')
-  const e = { ...env, PM_CONFIG_JSON: '{"__proto__": {"w": 1}}' }
+  const e = { ...env, TTYBRAIN_CONFIG_JSON: '{"__proto__": {"w": 1}}' }
   const c = loadConfig(resolvePaths(e), e) as unknown as Record<string, unknown>
   expect(Object.getPrototypeOf(c)).toBe(Object.prototype)
   expect(Object.getPrototypeOf(c.plugins)).toBe(Object.prototype)

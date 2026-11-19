@@ -30,7 +30,7 @@ afterEach(async () => {
 
 async function boot(disabled: string[]): Promise<Kernel> {
   home = mkdtempSync(join(tmpdir(), "pm-without-"))
-  const env = { PM_HOME: home, PM_TEST: "1", PM_CONFIG_JSON: JSON.stringify({ plugins: { disabled } }) }
+  const env = { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1", TTYBRAIN_CONFIG_JSON: JSON.stringify({ plugins: { disabled } }) }
   kernel = await bootKernel({ env, discover: true, clock: fixedClock("2026-11-13") })
   return kernel
 }

@@ -8,11 +8,21 @@ import { fileURLToPath } from "node:url"
 import { leading } from "../kernel/cli/args"
 import { runCli } from "../kernel/cli/dispatch"
 import { printError, type CliIo } from "../kernel/cli/output"
+import { legacyHomes, moveLegacyHome } from "../kernel/home-move"
 import { bootKernel } from "../kernel/host"
 import { installShutdownHandlers } from "../kernel/shutdown"
 
 export async function main(argv: string[], env: Record<string, string | undefined>, io: CliIo): Promise<number> {
   const { global } = leading(argv)
+  // The one-time move of ~/.pm (before the rename) to ~/.ttybrain. A failed move is reported, not fatal: it
+  // starts on the new folder.
+  try {
+    const notice = moveLegacyHome(env)
+    if (notice !== undefined) io.err(`${notice}\n`)
+  } catch (e) {
+    const { from, to } = legacyHomes(env)
+    io.err(`could not move ${from} to ${to}: ${e instanceof Error ? e.message : String(e)}\n`)
+  }
   let kernel
   try {
     kernel = await bootKernel({ env, flags: global.db !== undefined ? { db: global.db } : {}, discover: true })

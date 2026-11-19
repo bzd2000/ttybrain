@@ -22,7 +22,7 @@ async function first(plugins: PluginDef[]): Promise<TestKernel> {
 }
 
 async function again(home: string, plugins: PluginDef[]): Promise<Kernel> {
-  const k = await bootKernel({ env: { PM_HOME: home, PM_TEST: "1" }, plugins, clock: fixedClock("2026-11-13") })
+  const k = await bootKernel({ env: { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1" }, plugins, clock: fixedClock("2026-11-13") })
   cleanups.push(() => k.shutdown())
   return k
 }

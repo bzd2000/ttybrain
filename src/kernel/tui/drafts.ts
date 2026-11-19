@@ -1,5 +1,5 @@
 // Drafts: the unsaved values of a form, the quick-capture overlay or the editor, kept on disk so a cancel, a quit
-// or a crash loses nothing (spec §9). One JSON file per key under PM_HOME/drafts (`{ key, savedAt, values }`,
+// or a crash loses nothing (spec §9). One JSON file per key under TTYBRAIN_HOME/drafts (`{ key, savedAt, values }`,
 // the file name is the key URI-encoded), written atomically (a temp file renamed over it). Not in the database:
 // typing takes no write lock, bumps no data_version and leaves no history.
 // - A writer (one per open form/editor) writes DRAFT_MS after the last change, at once on flush (Esc, quit), and

@@ -145,7 +145,7 @@ export class MigrationRunner {
     return migrations.filter((m) => !done.has(m.id))
   }
 
-  // Copies the database to `pm.db.bak-v<N>` (N = migrations applied so far, all plugins) once per boot, before
+  // Copies the database to `ttybrain.db.bak-v<N>` (N = migrations applied so far, all plugins) once per boot, before
   // the first migration is applied to a database that existed with some applied. Called by run() itself; with a
   // plugin and its migrations it backs up only if one is pending, without them the caller states that something is.
   backupIfNeeded(pluginId?: string, migrations?: Migration[]): void {

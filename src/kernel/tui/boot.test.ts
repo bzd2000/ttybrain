@@ -55,7 +55,7 @@ function folderPlugin(pluginsDir: string, id: string, o: { logic?: string; tui?:
 
 // Boots a kernel over `pluginsDir`, with the real built-ins or an empty built-in folder.
 async function discovered(pluginsDir: string, builtins: boolean): Promise<TestKernel> {
-  kernel = await makeTestKernel({ env: { PM_PLUGINS: pluginsDir }, discover: builtins ? true : { builtinDir: tmp() } })
+  kernel = await makeTestKernel({ env: { TTYBRAIN_PLUGINS: pluginsDir }, discover: builtins ? true : { builtinDir: tmp() } })
   return kernel
 }
 
@@ -120,7 +120,7 @@ test("the tui entry of a plugin whose logic failed or is disabled is not importe
   folderPlugin(pluginsDir, "bad", { logic: `throw new Error("logic boom")\n`, tui: throwing })
   folderPlugin(pluginsDir, "off", { tui: throwing })
   kernel = await makeTestKernel({
-    env: { PM_PLUGINS: pluginsDir, PM_CONFIG_JSON: JSON.stringify({ plugins: { disabled: ["off"] } }) },
+    env: { TTYBRAIN_PLUGINS: pluginsDir, TTYBRAIN_CONFIG_JSON: JSON.stringify({ plugins: { disabled: ["off"] } }) },
     discover: { builtinDir: tmp() },
   })
   expect(kernel.plugins.map((p) => p.status)).toEqual(["failed", "disabled"])
@@ -206,7 +206,7 @@ test("Help lists the capture key only when inbox is loaded", async () => {
   tui = undefined
   await kernel.cleanup()
 
-  kernel = await makeTestKernel({ plugins: builtinPlugins, env: { PM_CONFIG_JSON: JSON.stringify({ plugins: { disabled: ["inbox"] } }) } })
+  kernel = await makeTestKernel({ plugins: builtinPlugins, env: { TTYBRAIN_CONFIG_JSON: JSON.stringify({ plugins: { disabled: ["inbox"] } }) } })
   expect(kernel.plugins.find((p) => p.id === "inbox")?.status).toBe("disabled")
   tui = await renderTui(kernel, { parts: builtinTuiParts.filter((p) => p.plugin !== "inbox") })
   tui.input.pressKey("?")

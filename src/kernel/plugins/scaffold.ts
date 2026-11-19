@@ -164,7 +164,7 @@ This compiles \`src/\` to \`dist/\`, pointing the imports of pm's shared modules
 
 ## Add to pm
 
-Copy this folder, built, into pm's plugins folder (\`~/.pm/plugins/${id}\`), or install it from a package:
+Copy this folder, built, into pm's plugins folder (\`~/.ttybrain/plugins/${id}\`), or install it from a package:
 
 \`\`\`
 pm plugin add <folder-or-tgz>

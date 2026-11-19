@@ -51,13 +51,13 @@ export function loadConfig(paths: Paths, env: Record<string, string | undefined>
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e
   }
   if (text !== undefined) cfg = merge(cfg, parse(text, paths.config))
-  if (env.PM_CONFIG_JSON) cfg = merge(cfg, parse(env.PM_CONFIG_JSON, "PM_CONFIG_JSON"))
+  if (env.TTYBRAIN_CONFIG_JSON) cfg = merge(cfg, parse(env.TTYBRAIN_CONFIG_JSON, "TTYBRAIN_CONFIG_JSON"))
   return cfg as Config
 }
 
 // Edits the config file in place: reads it (missing: `{}`; invalid: the same ValidationError as loadConfig),
 // lets `change` mutate the object, and writes it back (atomically) as 2-space JSON with a trailing newline.
-// Keys `change` leaves alone keep their order and values; defaults and PM_CONFIG_JSON are not written.
+// Keys `change` leaves alone keep their order and values; defaults and TTYBRAIN_CONFIG_JSON are not written.
 export function updateConfigFile(paths: Paths, change: (cfg: Record<string, unknown>) => void): void {
   let cfg: Obj = {}
   let text: string | undefined

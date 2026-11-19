@@ -175,7 +175,7 @@ test("a built plugin loads in pm and its UI is reactive", async () => {
   installTuiModules()
   const logic = (await import(join(dir, "dist/logic/index.js"))) as { default: { id: string } }
   expect(logic.default.id).toBe("demo")
-  kernel = await makeTestKernel({ env: { PM_PLUGINS: pluginsDir }, discover: { builtinDir: tmp() } })
+  kernel = await makeTestKernel({ env: { TTYBRAIN_PLUGINS: pluginsDir }, discover: { builtinDir: tmp() } })
   expect(kernel.plugins.map((p) => [p.id, p.status, p.error])).toEqual([["demo", "ok", undefined]])
   const parts = await loadTuiParts(kernel)
   expect(parts.errors).toEqual([])

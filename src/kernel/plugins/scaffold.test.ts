@@ -49,7 +49,7 @@ test("new → build → load", async () => {
   await buildPlugin(dir)
   expect(existsSync(join(dir, "dist/logic/index.test.js"))).toBe(false) // test files are not built
 
-  const k = await makeTestKernel({ env: { PM_PLUGINS: parent }, discover: true })
+  const k = await makeTestKernel({ env: { TTYBRAIN_PLUGINS: parent }, discover: true })
   kernels.push(k)
   expect(await cli(k, ["demo", "list"])).toEqual({ code: 0, out: "no items\n", err: "" })
   const row = (await cli(k, ["plugin", "list", "--json"])).out

@@ -1,4 +1,4 @@
-// Child process for the `concurrent first boot` test: boots against PM_HOME=<dir> at time <start> (ms) and
+// Child process for the `concurrent first boot` test: boots against TTYBRAIN_HOME=<dir> at time <start> (ms) and
 // applies the contracts migrations. 001 holds its transaction for a while so the other process overlaps it.
 import { KernelDb } from "../../src/kernel/db/kernel-db"
 import { openRaw } from "../../src/kernel/db/sqlite"
@@ -6,7 +6,7 @@ import { MigrationRunner, type Migration } from "../../src/kernel/migrations"
 import { resolvePaths } from "../../src/kernel/paths"
 
 const [dir, start] = process.argv.slice(2)
-const paths = resolvePaths({ PM_HOME: dir })
+const paths = resolvePaths({ TTYBRAIN_HOME: dir })
 
 const migrations: Migration[] = [
   {

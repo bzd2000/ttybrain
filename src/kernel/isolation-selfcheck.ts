@@ -113,7 +113,7 @@ export async function runIsolationSelfCheck(): Promise<{ ok: boolean; results: S
 
   let kernel: Awaited<ReturnType<typeof bootKernel>> | undefined
   try {
-    kernel = await bootKernel({ env: { PM_HOME: dir, PM_TEST: "1" }, plugins: [owner, probe], clock: fixedClock("2026-11-13") })
+    kernel = await bootKernel({ env: { TTYBRAIN_HOME: dir, TTYBRAIN_TEST: "1" }, plugins: [owner, probe], clock: fixedClock("2026-11-13") })
     const k = kernel
     const bad = k.plugins.filter((p) => p.status !== "ok")
     assert(bad.length === 0, `fixture plugins failed to load: ${bad.map((p) => `${p.id}: ${p.error}`).join("; ")}`)

@@ -1,4 +1,4 @@
-// Child process for the shutdown test: boots against PM_HOME=<dir> with a plugin whose write operation inserts
+// Child process for the shutdown test: boots against TTYBRAIN_HOME=<dir> with a plugin whose write operation inserts
 // a row, prints "ready" and then never finishes, so its kernel transaction stays open until a signal arrives.
 import { bootKernel } from "../../src/kernel/host"
 import { definePlugin, Type } from "../../src/kernel/api"
@@ -46,7 +46,7 @@ const holder = definePlugin({
   },
 })
 
-const kernel = await bootKernel({ env: { PM_HOME: process.argv[2] }, plugins: [holder] })
+const kernel = await bootKernel({ env: { TTYBRAIN_HOME: process.argv[2] }, plugins: [holder] })
 installShutdownHandlers(kernel)
 setInterval(() => {}, 1 << 30) // keep the event loop alive while the command waits
 await runCli(["row", "hold"], kernel, { out: (s) => process.stdout.write(s), err: (s) => process.stderr.write(s), stdin: async () => "" })

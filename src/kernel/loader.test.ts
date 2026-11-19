@@ -27,7 +27,7 @@ function setup(pluginsName = "plugins"): { root: string; paths: Paths; builtinDi
   const root = tmp()
   const builtinDir = join(root, "builtin")
   mkdirSync(builtinDir)
-  const paths = resolvePaths({ PM_HOME: root, PM_PLUGINS: join(root, pluginsName) })
+  const paths = resolvePaths({ TTYBRAIN_HOME: root, TTYBRAIN_PLUGINS: join(root, pluginsName) })
   mkdirSync(paths.plugins)
   return { root, paths, builtinDir }
 }

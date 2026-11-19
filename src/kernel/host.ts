@@ -154,7 +154,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const events = new EventBus()
   const records = new RecordTypeRegistry()
   const provenance = new ProvenanceStore(db, records)
-  const ops = new OperationRegistry({ db, events, records, provenance, validateOutputs: opts.env.PM_TEST === "1" })
+  const ops = new OperationRegistry({ db, events, records, provenance, validateOutputs: opts.env.TTYBRAIN_TEST === "1" })
   const tags = new TagRegistry(records)
   const reports = new ReportRegistry()
   const guide = new GuideRegistry()

@@ -1,5 +1,5 @@
 // The `contracts` fixture plugin (tests/fixtures/plugin-contracts) end to end as an external plugin: built with
-// `pm plugin build` into a temp copy, loaded as a folder in PM_PLUGINS and from npm through `pm plugin add <tgz>`
+// `pm plugin build` into a temp copy, loaded as a folder in TTYBRAIN_PLUGINS and from npm through `pm plugin add <tgz>`
 // (npm, and bun), in the CLI and the TUI; and the failure cases, each with pm still starting (design §3.11, the
 // permanent version of the spec's 2026-11-13 spike). `bash scripts/smoke-node.sh` repeats the build-and-load on Node.
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test"
@@ -76,7 +76,7 @@ function pack(dir: string): string {
 
 // pm with its built-ins (discovered from src/plugins) and `plugins` as its plugins folder.
 async function boot(plugins: string, extra: Parameters<typeof makeTestKernel>[0] = {}): Promise<TestKernel> {
-  const k = await makeTestKernel({ ...extra, env: { PM_PLUGINS: plugins, ...extra.env }, discover: true })
+  const k = await makeTestKernel({ ...extra, env: { TTYBRAIN_PLUGINS: plugins, ...extra.env }, discover: true })
   kernels.push(k)
   return k
 }
@@ -88,15 +88,15 @@ async function listed(k: TestKernel): Promise<Row[]> {
   return (JSON.parse(r.out) as Row[]).filter((p) => !["people", "projects", "meetings", "inbox"].includes(p.id)).sort((a, b) => (a.id < b.id ? -1 : 1))
 }
 
-// Runs `fn` with PM_PLUGIN_INSTALLER set (`pm plugin add` reads process.env, as pm's entry point passes it).
+// Runs `fn` with TTYBRAIN_PLUGIN_INSTALLER set (`pm plugin add` reads process.env, as pm's entry point passes it).
 async function withInstaller<T>(installer: string, fn: () => Promise<T>): Promise<T> {
-  const before = process.env.PM_PLUGIN_INSTALLER
-  process.env.PM_PLUGIN_INSTALLER = installer
+  const before = process.env.TTYBRAIN_PLUGIN_INSTALLER
+  process.env.TTYBRAIN_PLUGIN_INSTALLER = installer
   try {
     return await fn()
   } finally {
-    if (before === undefined) delete process.env.PM_PLUGIN_INSTALLER
-    else process.env.PM_PLUGIN_INSTALLER = before
+    if (before === undefined) delete process.env.TTYBRAIN_PLUGIN_INSTALLER
+    else process.env.TTYBRAIN_PLUGIN_INSTALLER = before
   }
 }
 
@@ -330,7 +330,7 @@ test("disabling projects skips contracts", async () => {
   const first = await boot(plugins)
   expect((await cli(first, ["plugin", "disable", "projects"])).code).toBe(0)
   const home = first.home
-  const k = await makeTestKernel({ env: { PM_PLUGINS: plugins, PM_HOME: home }, discover: true })
+  const k = await makeTestKernel({ env: { TTYBRAIN_PLUGINS: plugins, TTYBRAIN_HOME: home }, discover: true })
   kernels.push(k)
   expect(await listed(k)).toEqual([{ id: "contracts", version: "0.1.0", source: "folder", status: "failed", error: 'requires "projects", which is disabled' }])
   expect((await cli(k, ["contract", "list"])).code).toBe(1)

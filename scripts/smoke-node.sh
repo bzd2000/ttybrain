@@ -4,9 +4,9 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-PM_HOME="$(mktemp -d)"
-export PM_HOME
-trap 'rm -rf "$PM_HOME"' EXIT
+TTYBRAIN_HOME="$(mktemp -d)"
+export TTYBRAIN_HOME
+trap 'rm -rf "$TTYBRAIN_HOME"' EXIT
 
 fail() { echo "smoke FAILED: $*" >&2; exit 1; }
 expect_in() { # expect_in <name> <needle> <haystack>
@@ -49,42 +49,52 @@ set -e
 [ "$code" -eq 2 ] || fail "project show NOPE: expected exit 2, got $code"
 
 # The fixture plugin (tests/fixtures/plugin-contracts), built with `pm plugin build` and loaded on Node: first as a
-# folder in PM_PLUGINS, then packed and installed with `pm plugin add <tgz>` through npm (offline: no dependencies).
-cp -R tests/fixtures/plugin-contracts "$PM_HOME/src-contracts"
-rm -rf "$PM_HOME/src-contracts/dist" "$PM_HOME/src-contracts/node_modules"
-out="$(pm plugin build "$PM_HOME/src-contracts")"; echo "$out"
+# folder in TTYBRAIN_PLUGINS, then packed and installed with `pm plugin add <tgz>` through npm (offline: no dependencies).
+cp -R tests/fixtures/plugin-contracts "$TTYBRAIN_HOME/src-contracts"
+rm -rf "$TTYBRAIN_HOME/src-contracts/dist" "$TTYBRAIN_HOME/src-contracts/node_modules"
+out="$(pm plugin build "$TTYBRAIN_HOME/src-contracts")"; echo "$out"
 expect_in "plugin build" "built pm-plugin-contracts 0.1.0" "$out"
 
-mkdir -p "$PM_HOME/folder-plugins"
-cp -R "$PM_HOME/src-contracts" "$PM_HOME/folder-plugins/contracts"
-out="$(PM_PLUGINS="$PM_HOME/folder-plugins" pm contract add CRM "Support")"; echo "$out"
+mkdir -p "$TTYBRAIN_HOME/folder-plugins"
+cp -R "$TTYBRAIN_HOME/src-contracts" "$TTYBRAIN_HOME/folder-plugins/contracts"
+out="$(TTYBRAIN_PLUGINS="$TTYBRAIN_HOME/folder-plugins" pm contract add CRM "Support")"; echo "$out"
 expect_in "contract add (folder)" "C-1 Support" "$out"
-out="$(PM_PLUGINS="$PM_HOME/folder-plugins" pm contract list)"; echo "$out"
+out="$(TTYBRAIN_PLUGINS="$TTYBRAIN_HOME/folder-plugins" pm contract list)"; echo "$out"
 echo "$out" | grep -Eq "^C-1 +#CRM +Support" || fail "contract list (folder): expected \"C-1 #CRM Support\", got: $out"
-out="$(PM_PLUGINS="$PM_HOME/folder-plugins" pm plugin list)"; echo "$out"
+out="$(TTYBRAIN_PLUGINS="$TTYBRAIN_HOME/folder-plugins" pm plugin list)"; echo "$out"
 echo "$out" | grep -Eq "^contracts +0\.1\.0 +folder +ok" || fail "plugin list: expected \"contracts 0.1.0 folder ok\", got: $out"
 
-tgz="$(cd "$PM_HOME/src-contracts" && npm pack --silent --pack-destination "$PM_HOME")"
-out="$(PM_PLUGINS="$PM_HOME/npm-plugins" PM_PLUGIN_INSTALLER=npm pm plugin add "$PM_HOME/$tgz")"; echo "$out"
+tgz="$(cd "$TTYBRAIN_HOME/src-contracts" && npm pack --silent --pack-destination "$TTYBRAIN_HOME")"
+out="$(TTYBRAIN_PLUGINS="$TTYBRAIN_HOME/npm-plugins" TTYBRAIN_PLUGIN_INSTALLER=npm pm plugin add "$TTYBRAIN_HOME/$tgz")"; echo "$out"
 expect_in "plugin add" "added contracts 0.1.0 (npm)" "$out"
 # Same database: the folder copy's C-1 is still there, and the npm copy adds C-2.
-out="$(PM_PLUGINS="$PM_HOME/npm-plugins" pm contract add CRM "Renewal")"; echo "$out"
+out="$(TTYBRAIN_PLUGINS="$TTYBRAIN_HOME/npm-plugins" pm contract add CRM "Renewal")"; echo "$out"
 expect_in "contract add (npm)" "C-2 Renewal" "$out"
-out="$(PM_PLUGINS="$PM_HOME/npm-plugins" pm contract list)"; echo "$out"
+out="$(TTYBRAIN_PLUGINS="$TTYBRAIN_HOME/npm-plugins" pm contract list)"; echo "$out"
 echo "$out" | grep -Eq "^C-2 +#CRM +Renewal" || fail "contract list (npm): expected \"C-2 #CRM Renewal\", got: $out"
-out="$(PM_PLUGINS="$PM_HOME/npm-plugins" pm plugin list)"; echo "$out"
+out="$(TTYBRAIN_PLUGINS="$TTYBRAIN_HOME/npm-plugins" pm plugin list)"; echo "$out"
 echo "$out" | grep -Eq "^contracts +0\.1\.0 +npm +ok" || fail "plugin list: expected \"contracts 0.1.0 npm ok\", got: $out"
 
 # pm plugin new: scaffold, build and load a plugin on Node.
-mkdir -p "$PM_HOME/new-src" "$PM_HOME/new-plugins"
-out="$(cd "$PM_HOME/new-src" && node "$OLDPWD/dist-node/bin/pm.js" plugin new demo)"; echo "$out"
+mkdir -p "$TTYBRAIN_HOME/new-src" "$TTYBRAIN_HOME/new-plugins"
+out="$(cd "$TTYBRAIN_HOME/new-src" && node "$OLDPWD/dist-node/bin/pm.js" plugin new demo)"; echo "$out"
 expect_in "plugin new" "next: pm plugin build demo" "$out"
-pm plugin build "$PM_HOME/new-src/demo" >/dev/null
-cp -R "$PM_HOME/new-src/demo" "$PM_HOME/new-plugins/demo"
-out="$(PM_PLUGINS="$PM_HOME/new-plugins" pm demo list)"; echo "$out"
+pm plugin build "$TTYBRAIN_HOME/new-src/demo" >/dev/null
+cp -R "$TTYBRAIN_HOME/new-src/demo" "$TTYBRAIN_HOME/new-plugins/demo"
+out="$(TTYBRAIN_PLUGINS="$TTYBRAIN_HOME/new-plugins" pm demo list)"; echo "$out"
 expect_in "demo list" "no items" "$out"
 
-out="$(PM_PLUGINS="$PM_HOME/npm-plugins" node --experimental-ffi dist-node/kernel/tui/selfcheck.js --expect-screen Contracts 2>&1)" || fail "tui self-check (contracts): $out"; echo "$out"
+out="$(TTYBRAIN_PLUGINS="$TTYBRAIN_HOME/npm-plugins" node --experimental-ffi dist-node/kernel/tui/selfcheck.js --expect-screen Contracts 2>&1)" || fail "tui self-check (contracts): $out"; echo "$out"
 expect_in "tui (contracts)" "tui ok" "$out"
+
+# The one-time move of ~/.pm to ~/.ttybrain on Node: a HOME with this run's database as .pm/pm.db.
+legacy="$TTYBRAIN_HOME/legacy-home"
+mkdir -p "$legacy/.pm"
+cp "$TTYBRAIN_HOME/ttybrain.db" "$legacy/.pm/pm.db"
+err="$(env -u TTYBRAIN_HOME HOME="$legacy" node dist-node/bin/pm.js person list 2>&1 >"$legacy/out")" || fail "move: $err"
+cat "$legacy/out"; echo "$err"
+[ "$err" = "moved your data from $legacy/.pm to $legacy/.ttybrain" ] || fail "move: expected the notice, got: $err"
+expect_in "person list (moved)" "Anna Peeters" "$(cat "$legacy/out")"
+[ -L "$legacy/.pm" ] && [ -L "$legacy/.ttybrain/pm.db" ] && [ -f "$legacy/.ttybrain/ttybrain.db" ] || fail "move: links or ttybrain.db missing"
 
 echo "smoke ok"

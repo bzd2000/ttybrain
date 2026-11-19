@@ -8,7 +8,7 @@ import type { CommandDef, FlagDef } from "./commands"
 
 export const GLOBAL_FLAGS: Record<string, FlagDef> = {
   json: { type: "boolean", description: "print machine-readable JSON (errors too, on stdout)" },
-  db: { type: "string", placeholder: "path", description: "use this database file instead of $PM_HOME/pm.db" },
+  db: { type: "string", placeholder: "path", description: "use this database file instead of $TTYBRAIN_HOME/ttybrain.db" },
   "from-inbox": { type: "string", placeholder: "I-n", description: "record that this change comes from inbox item I-n" },
   yes: { type: "boolean", description: "confirm a destructive command" },
   help: { type: "boolean", short: "h", description: "show help for this command" },

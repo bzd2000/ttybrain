@@ -1,4 +1,4 @@
-// The draft store (drafts.ts): one JSON file per key under PM_HOME/drafts, written atomically, read back,
+// The draft store (drafts.ts): one JSON file per key under TTYBRAIN_HOME/drafts, written atomically, read back,
 // deleted, pruned after 30 days, and a debounced writer that flushes on demand.
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"

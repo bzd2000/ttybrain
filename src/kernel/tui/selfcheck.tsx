@@ -2,7 +2,7 @@
 // and checks that a second boot on the same database writes nothing (read-only boot, also on node:sqlite), that a
 // useQuery screen reloads after another connection's commit (data_version) and that an error boundary holds; then
 // the loader path: the built-ins discovered from their manifests and their tui entries imported and booted.
-// With `--expect-screen <title>` it then boots with discovery (the plugins folder from PM_PLUGINS in the
+// With `--expect-screen <title>` it then boots with discovery (the plugins folder from TTYBRAIN_PLUGINS in the
 // environment), renders, presses `7` (the first external screen) and requires `7 <title>` in the header.
 // Run: `bun src/kernel/tui/selfcheck.tsx` or, after the Node build,
 // `node --experimental-ffi dist-node/kernel/tui/selfcheck.js`. Prints `tui ok` on success.
@@ -73,7 +73,7 @@ function check(cond: boolean, what: string): void {
 
 export async function runTuiSelfCheck(opts: { expectScreen?: string } = {}): Promise<void> {
   const home = mkdtempSync(join(tmpdir(), "pm-tui-selfcheck-"))
-  const env = { PM_HOME: home, PM_TEST: "1" }
+  const env = { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1" }
   const clock = fixedClock("2026-11-13")
   try {
     const kernel = await bootKernel({ env, plugins: [fixture], clock })
@@ -147,7 +147,7 @@ export async function runTuiSelfCheck(opts: { expectScreen?: string } = {}): Pro
 async function checkLoaderPath(clock: ReturnType<typeof fixedClock>): Promise<void> {
   const home = mkdtempSync(join(tmpdir(), "pm-tui-selfcheck-"))
   try {
-    const kernel = await bootKernel({ env: { PM_HOME: home, PM_TEST: "1" }, clock, discover: true })
+    const kernel = await bootKernel({ env: { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1" }, clock, discover: true })
     try {
       installTuiModules()
       const parts = await loadTuiParts(kernel)
@@ -165,12 +165,12 @@ async function checkLoaderPath(clock: ReturnType<typeof fixedClock>): Promise<vo
   }
 }
 
-// An external plugin from PM_PLUGINS: its tui entry is loaded through the shared modules and its screen gets key 7.
+// An external plugin from TTYBRAIN_PLUGINS: its tui entry is loaded through the shared modules and its screen gets key 7.
 async function checkExternalScreen(clock: ReturnType<typeof fixedClock>, title: string): Promise<void> {
   const home = mkdtempSync(join(tmpdir(), "pm-tui-selfcheck-"))
-  const plugins = process.env.PM_PLUGINS
+  const plugins = process.env.TTYBRAIN_PLUGINS
   try {
-    const kernel = await bootKernel({ env: { PM_HOME: home, PM_TEST: "1", ...(plugins !== undefined && { PM_PLUGINS: plugins }) }, clock, discover: true })
+    const kernel = await bootKernel({ env: { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1", ...(plugins !== undefined && { TTYBRAIN_PLUGINS: plugins }) }, clock, discover: true })
     try {
       const failed = kernel.plugins.filter((p) => p.status !== "ok")
       check(failed.length === 0, `plugins failed to load: ${failed.map((p) => `${p.id}: ${p.error ?? p.status}`).join("; ")}`)

@@ -206,7 +206,7 @@ describe("a working kernel", () => {
   test("ctx.config takes no prototype from a __proto__ key", async () => {
     let config: unknown
     await boot({
-      env: { PM_CONFIG_JSON: '{"__proto__": {"x": 1}, "assistant": {"__proto__": {"y": 1}}}' },
+      env: { TTYBRAIN_CONFIG_JSON: '{"__proto__": {"x": 1}, "assistant": {"__proto__": {"y": 1}}}' },
       plugins: [bare("cfg", { activate: (ctx) => void (config = ctx.config) })],
     })
     const c = config as Record<string, unknown>
@@ -286,7 +286,7 @@ describe("failure isolation", () => {
     })
     try {
       for (let i = 0; i < 2; i++) {
-        const k = await bootKernel({ env: { PM_HOME: home, PM_TEST: "1" }, plugins: [priv, alpha()], clock: fixedClock("2026-11-13") })
+        const k = await bootKernel({ env: { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1" }, plugins: [priv, alpha()], clock: fixedClock("2026-11-13") })
         expect(k.plugins.map((p) => p.status)).toEqual(["ok", "ok"])
         expect(k.db.raw.prepare("SELECT name FROM sqlite_schema WHERE type = 'view' ORDER BY name").all([])).toEqual([
           { name: "alpha__pub_item" },
@@ -360,8 +360,8 @@ describe("failure isolation", () => {
 test("the database directory is created on first boot", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pm-host-"))
   try {
-    const k = await bootKernel({ env: { PM_HOME: join(dir, "a", "b") }, plugins: [], clock: fixedClock("2026-11-13") })
-    expect(k.paths.db).toBe(join(dir, "a", "b", "pm.db"))
+    const k = await bootKernel({ env: { TTYBRAIN_HOME: join(dir, "a", "b") }, plugins: [], clock: fixedClock("2026-11-13") })
+    expect(k.paths.db).toBe(join(dir, "a", "b", "ttybrain.db"))
     expect(k.db.raw.prepare("SELECT count(*) AS n FROM kernel_plugin_migration").all([])).toEqual([{ n: 0 }])
     await k.shutdown()
   } finally {
@@ -374,10 +374,10 @@ describe("disabled plugins and reads", () => {
     const home = mkdtempSync(join(tmpdir(), "pm-host-"))
     const clock = fixedClock("2026-11-13")
     try {
-      const first = await bootKernel({ env: { PM_HOME: home, PM_TEST: "1" }, plugins: [alpha()], clock })
+      const first = await bootKernel({ env: { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1" }, plugins: [alpha()], clock })
       await runWithContext(first.context(), () => first.ops.api("alpha")!.write.add!({ title: "x" }))
       await first.shutdown()
-      const env = { PM_HOME: home, PM_TEST: "1", PM_CONFIG_JSON: JSON.stringify({ plugins: { disabled: ["alpha"] } }) }
+      const env = { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1", TTYBRAIN_CONFIG_JSON: JSON.stringify({ plugins: { disabled: ["alpha"] } }) }
       const k = await bootKernel({ env, plugins: [alpha(), reader({ alpha: "^1" }), beta()], clock })
       try {
         expect(Object.fromEntries(k.plugins.map((p) => [p.id, p.error ? `${p.status}: ${p.error}` : p.status]))).toEqual({
@@ -431,7 +431,7 @@ describe("plugin candidates and sources", () => {
   // discover over `pluginsDir` with an empty built-in folder.
   const discovering = (pluginsDir: string, timeoutMs?: number) => {
     const builtinDir = tmp()
-    return { env: { PM_PLUGINS: pluginsDir }, discover: { builtinDir, ...(timeoutMs !== undefined && { timeoutMs }) } }
+    return { env: { TTYBRAIN_PLUGINS: pluginsDir }, discover: { builtinDir, ...(timeoutMs !== undefined && { timeoutMs }) } }
   }
 
   test("a candidate with an error is listed failed, others boot", async () => {

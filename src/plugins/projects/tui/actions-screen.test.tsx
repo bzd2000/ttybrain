@@ -208,7 +208,7 @@ describe("actions screen", () => {
     t.input.pressArrow("down")
     t.input.pressArrow("down")
     expect(lineWith(await t.frame(), "›")).toContain("Review plan")
-    other = await bootKernel({ env: { PM_HOME: kernel!.home, PM_TEST: "1" }, plugins: builtinPlugins, clock: fixedClock("2026-11-13") })
+    other = await bootKernel({ env: { TTYBRAIN_HOME: kernel!.home, TTYBRAIN_TEST: "1" }, plugins: builtinPlugins, clock: fixedClock("2026-11-13") })
     let out = ""
     const io = { out: (s: string) => void (out += s), err: (s: string) => void (out += s), stdin: async () => "" }
     expect(await runCli(["action", "done", "A-3"], other, io)).toBe(0)
