@@ -73,7 +73,7 @@ describe("renaming a project's code", () => {
     expect(taken.code).toBe(3)
     expect(taken.json.error).toMatchObject({ message: 'project "ERP" already exists', hint: "choose another code" })
 
-    const bad = await cli("project", "edit", "CRM", "--code", "C-1", "--json")
+    const bad = await cli("project", "edit", "CRM", "--code", "#C-1", "--json") // quoted as the op checks it, without `#`
     expect(bad.code).toBe(1)
     expect(bad.json.error).toMatchObject({ message: 'invalid project code "C-1"', field: "code", hint: "2–16 letters or digits, e.g. CRM" })
     // The same casing rule as add: lower case is refused, as `project add crm` is.

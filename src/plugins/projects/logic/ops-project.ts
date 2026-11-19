@@ -104,7 +104,7 @@ export function registerProjectOps(ctx: PluginContext, store: Store): void {
 
   function code(input: string): string {
     const c = codeInput(input)
-    if (!isValidCode(c)) throw new ValidationError(`invalid project code "${input.trim()}"`, { field: "code", hint: CODE_HINT })
+    if (!isValidCode(c)) throw new ValidationError(`invalid project code "${c}"`, { field: "code", hint: CODE_HINT })
     return c
   }
 

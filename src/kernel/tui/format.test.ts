@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { displayWidth, dueLabel, fitWidth, longDate, shortDate, truncate } from "./format"
+import { displayWidth, dueLabel, fitWidth, joinFit, longDate, shortDate, truncate } from "./format"
 
 describe("TUI format", () => {
   test("displayWidth counts wide characters and emoji as 2", () => {
@@ -23,6 +23,23 @@ describe("TUI format", () => {
     expect(fitWidth(["DATAPLATFORM2027X"], 4, 16)).toBe(16)
     expect(fitWidth(["HRPORTAL1", "名前"], 4, 16)).toBe(9)
     expect(fitWidth([], 6, 16)).toBe(6)
+  })
+
+  test("joinFit keeps whole items while they fit, then ends with …", () => {
+    expect(joinFit(["CRM", "ERP"], 9)).toBe("CRM ERP")
+    expect(joinFit(["CRM", "ERP", "HRP"], 9)).toBe("CRM ERP …")
+    expect(joinFit(["CRM", "ERP", "HRP"], 8)).toBe("CRM …")
+    expect(joinFit(["CRM", "DATAPLATFORM2027"], 16)).toBe("CRM …")
+    expect(joinFit(["CRM", "ERP2", "DATAPLATFORM2027"], 16)).toBe("CRM ERP2 …")
+    // The first item is never dropped for the …: alone it fits (a column is at least as wide as its widest item).
+    expect(joinFit(["DATAPLATFORM2027", "CRM"], 16)).toBe("DATAPLATFORM2027")
+    expect(joinFit(["名前名前", "AB"], 8)).toBe("名前名前")
+    expect(joinFit([], 9)).toBe("")
+    for (const [items, w] of [[["CRM", "DATAPLATFORM2027", "ERP"], 16], [["AB", "CD", "EF", "GH"], 7]] as const) {
+      const out = joinFit([...items], w)
+      expect(displayWidth(out)).toBeLessThanOrEqual(w)
+      for (const part of out.split(" ")) expect(part === "…" || items.includes(part as never)).toBe(true) // never a cut item
+    }
   })
 
   test("dueLabel", () => {

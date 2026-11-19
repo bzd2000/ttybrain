@@ -11,6 +11,7 @@ import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from
 import {
   act,
   fitWidth,
+  joinFit,
   notify,
   Panel,
   printable,
@@ -54,12 +55,12 @@ const FILTER_HINTS: Hint[] = [
   { key: "Esc", label: "clear" },
 ]
 const TAB_KEYS: Record<string, PeopleTab> = { a: "all", s: "stakeholders", t: "team" }
-// The Projects column is at least as wide as the longest single code shown (9 to 16), so a code is never cut;
-// more codes than fit still end in `…`.
-const columns = (codes: string[]): TableColumn[] => [
+// The Projects column is at least as wide as the longest single code shown (9 to 16), and a cell keeps whole
+// codes (joinFit): a code is never cut; more codes than fit end in `…`.
+const columns = (projectsWidth: number): TableColumn[] => [
   { id: "name", title: "Name", width: 18 },
   { id: "role", title: "Role", width: "grow" },
-  { id: "projects", title: "Projects", width: fitWidth(codes, 9, 16) },
+  { id: "projects", title: "Projects", width: projectsWidth },
   { id: "infl", title: "Infl.", width: 5 },
   { id: "int", title: "Int.", width: 5 },
   { id: "last", title: "Last", width: 6 },
@@ -67,13 +68,13 @@ const columns = (codes: string[]): TableColumn[] => [
 
 const level = (v: string | null) => (v === null ? { text: "—" } : { text: v, tone: v === "low" ? ("muted" as const) : undefined })
 
-function row(p: PersonRow, today: string, days: number): TableRow {
+function row(p: PersonRow, today: string, days: number, projectsWidth: number): TableRow {
   return {
     ref: p.ref,
     cells: {
       name: p.name,
       role: roleText(p),
-      projects: p.projects.join(" "),
+      projects: joinFit(p.projects, projectsWidth),
       infl: level(p.influence),
       int: level(p.interest),
       last: { text: lastText(p, today), tone: lastTone(p, today, days) },
@@ -135,8 +136,9 @@ export function PeopleScreen() {
   const all = () => q.data() ?? []
   const counts = createMemo(() => tabCounts(all()))
   const groups = createMemo(() => peopleGroups(all().filter((p) => matchesFilter(p, filter())), tab(), sort(), archived()))
+  const projectsWidth = createMemo(() => fitWidth(groups().flatMap((g) => g.rows.flatMap((p) => p.projects)), 9, 16))
   const tableGroups = createMemo((): TableGroup[] =>
-    groups().map((g) => ({ title: g.title, rows: g.rows.map((p) => row(p, today(), days)) })),
+    groups().map((g) => ({ title: g.title, rows: g.rows.map((p) => row(p, today(), days, projectsWidth())) })),
   )
   // The people the current tab shows, archived excluded.
   const shownCount = () => groups().filter((g) => g.title !== "Archived").reduce((n, g) => n + g.rows.length, 0)
@@ -248,7 +250,7 @@ export function PeopleScreen() {
             </Show>
             <Show when={q.data() !== undefined}>
               <Table
-                columns={columns(groups().flatMap((g) => g.rows.flatMap((p) => p.projects)))}
+                columns={columns(projectsWidth())}
                 groups={tableGroups()}
                 selectedRef={loaded(want()) ? want() : undefined}
                 onSelect={select}
