@@ -1,5 +1,5 @@
 // The published view inbox.item (a versioned contract; other plugins join it, never the tables).
-import type { PluginContext } from "@pm/api"
+import type { PluginContext } from "@ttybrain/api"
 
 export function registerViews(ctx: PluginContext): void {
   ctx.publish("item", {

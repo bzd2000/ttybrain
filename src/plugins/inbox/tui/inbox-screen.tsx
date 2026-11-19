@@ -26,7 +26,7 @@ import {
   type SubmitResult,
   type TableGroup,
   type TableRow,
-} from "@pm/api/tui"
+} from "@ttybrain/api/tui"
 import type { ItemDetail } from "../logic/ops"
 import { makeStore } from "../logic/records"
 import type { ItemRecord } from "../logic/schema"

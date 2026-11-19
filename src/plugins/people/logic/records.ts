@@ -11,7 +11,7 @@ import {
   normalizeCode,
   type PluginContext,
   type PluginRuntime,
-} from "@pm/api"
+} from "@ttybrain/api"
 import type { GoalRecord, NoteRecord, PersonRecord } from "./schema"
 
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))

@@ -424,7 +424,7 @@ describe("plugin candidates and sources", () => {
   const folderPlugin = (pluginsDir: string, id: string, main: string) => {
     const dir = join(pluginsDir, id)
     mkdirSync(dir, { recursive: true })
-    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: `pm-plugin-${id}`, version: "1.0.0", type: "module", main: "index.js", pm: { plugin: true, id } }))
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: `ttybrain-plugin-${id}`, version: "1.0.0", type: "module", main: "index.js", ttybrain: { plugin: true, id } }))
     writeFileSync(join(dir, "index.js"), main)
     return dir
   }

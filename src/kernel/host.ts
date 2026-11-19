@@ -37,7 +37,7 @@ export type PluginStatus = {
   source: PluginSource
   status: "ok" | "failed" | "disabled"
   error?: string
-  tui?: string // file URL of the plugin's tui entry (pm.tui)
+  tui?: string // file URL of the plugin's tui entry (ttybrain.tui)
   dir?: string // the plugin's directory, for discovered plugins
 }
 

@@ -2,7 +2,7 @@
 // through ctx.self().write.*, so they are validated, transactional and recorded like any other caller's.
 // The dispatcher has no nested verbs, so `agenda` is one command: first positional the meeting, second the verb.
 import { readFile } from "node:fs/promises"
-import { addDays, currentContext, formatRef, formatTable, ValidationError, type FlagDef, type PluginContext } from "@pm/api"
+import { addDays, currentContext, formatRef, formatTable, ValidationError, type FlagDef, type PluginContext } from "@ttybrain/api"
 import type { Store } from "./records"
 import { MEETING_KINDS, type MeetingRecord } from "./schema"
 

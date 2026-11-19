@@ -32,15 +32,15 @@ function setup(pluginsName = "plugins"): { root: string; paths: Paths; builtinDi
   return { root, paths, builtinDir }
 }
 
-type PluginOpts = { id?: string; pmId?: string | null; version?: string; defVersion?: string; defId?: string; main?: string; pkg?: Record<string, unknown> }
+type PluginOpts = { id?: string; manifestId?: string | null; version?: string; defVersion?: string; defId?: string; main?: string; pkg?: Record<string, unknown> }
 
 // A tiny hand-written ESM plugin in `dir`.
 function plugin(dir: string, o: PluginOpts = {}): void {
   const id = o.id ?? "x"
   mkdirSync(dir, { recursive: true })
-  const pm: Record<string, unknown> = { plugin: true }
-  if (o.pmId !== null) pm.id = o.pmId ?? id
-  const pkg = { name: `pm-plugin-${id}`, version: o.version ?? "1.0.0", type: "module", main: "index.js", pm, ...o.pkg }
+  const ttybrain: Record<string, unknown> = { plugin: true }
+  if (o.manifestId !== null) ttybrain.id = o.manifestId ?? id
+  const pkg = { name: `ttybrain-plugin-${id}`, version: o.version ?? "1.0.0", type: "module", main: "index.js", ttybrain, ...o.pkg }
   writeFileSync(join(dir, "package.json"), JSON.stringify(pkg))
   const main =
     o.main ??
@@ -60,15 +60,15 @@ describe("discoverPlugins", () => {
     plugin(join(builtinDir, "a"), { id: "a" })
     plugin(join(paths.plugins, "zeta"), { id: "zeta" })
     plugin(join(paths.plugins, "alpha"), { id: "alpha" })
-    npmDeps(paths, { "pm-plugin-b": "1.0.0" })
-    plugin(join(paths.plugins, "node_modules", "pm-plugin-b"), { id: "b" })
+    npmDeps(paths, { "ttybrain-plugin-b": "1.0.0" })
+    plugin(join(paths.plugins, "node_modules", "ttybrain-plugin-b"), { id: "b" })
     const cs = await discoverPlugins(paths, config(), { builtinDir })
     expect(cs.map((c) => c.id)).toEqual(["a", "alpha", "zeta", "b"])
     expect(cs.map((c) => c.source)).toEqual(["built-in", "folder", "folder", "npm"])
     expect(cs.every((c) => c.error === undefined && c.def !== undefined)).toBe(true)
     expect(cs[0]!.dir).toBe(join(builtinDir, "a"))
     expect(cs[0]!.version).toBe("1.0.0")
-    expect(cs[3]!.dir).toBe(join(paths.plugins, "node_modules", "pm-plugin-b"))
+    expect(cs[3]!.dir).toBe(join(paths.plugins, "node_modules", "ttybrain-plugin-b"))
   })
 
   test("the real built-in folder yields the four built-ins", async () => {
@@ -81,8 +81,8 @@ describe("discoverPlugins", () => {
       expect(c.def?.id).toBe(c.id)
       expect(c.tui).toBe(pathToFileURL(join(builtinPluginDir(), c.id, "tui", "index.tsx")).href)
     }
-    const modules = (globalThis as { __PM_MODULES__?: Record<string, Record<string, unknown>> }).__PM_MODULES__
-    expect(typeof modules?.["@pm/api"]?.definePlugin).toBe("function")
+    const modules = (globalThis as { __TTYBRAIN_MODULES__?: Record<string, Record<string, unknown>> }).__TTYBRAIN_MODULES__
+    expect(typeof modules?.["@ttybrain/api"]?.definePlugin).toBe("function")
   })
 
   test("non-plugins are ignored", async () => {
@@ -107,23 +107,23 @@ describe("discoverPlugins", () => {
     const p = paths.plugins
     mkdirSync(join(p, "badjson"))
     writeFileSync(join(p, "badjson", "package.json"), "{ not json")
-    plugin(join(p, "noid"), { id: "noid", pmId: null })
+    plugin(join(p, "noid"), { id: "noid", manifestId: null })
     plugin(join(p, "throws"), { id: "throws", main: `throw new Error("boom on import")\n` })
     plugin(join(p, "nodefault"), { id: "nodefault", main: `export const x = 1\n` })
     plugin(join(p, "mismatch"), { id: "x", defId: "y" })
     plugin(join(p, "version"), { id: "ver", version: "1.0.1", defVersion: "1.0.0" })
-    npmDeps(paths, { "pm-plugin-missing": "1.0.0" })
+    npmDeps(paths, { "ttybrain-plugin-missing": "1.0.0" })
     const cs = await discoverPlugins(paths, config(), { builtinDir })
-    expect(cs.map((c) => c.id)).toEqual(["badjson", "x", "nodefault", "noid", "throws", "ver", "pm-plugin-missing"])
+    expect(cs.map((c) => c.id)).toEqual(["badjson", "x", "nodefault", "noid", "throws", "ver", "ttybrain-plugin-missing"])
     expect(cs.every((c) => c.def === undefined)).toBe(true)
     expect(byId(cs, "badjson")!.error).toContain("invalid package.json")
-    expect(byId(cs, "noid")!.error).toContain("package.json has no pm.id")
+    expect(byId(cs, "noid")!.error).toContain("package.json has no ttybrain.id")
     expect(byId(cs, "throws")!.error).toContain("boom on import")
     expect(byId(cs, "nodefault")!.error).toContain("main has no default export")
-    expect(byId(cs, "x")!.error).toContain('pm.id "x" does not match the plugin id "y"')
+    expect(byId(cs, "x")!.error).toContain('ttybrain.id "x" does not match the plugin id "y"')
     expect(byId(cs, "ver")!.error).toContain("package.json version 1.0.1 does not match the plugin version 1.0.0")
-    expect(byId(cs, "pm-plugin-missing")!.error).toContain(`not installed; run npm install in ${p}`)
-    expect(byId(cs, "pm-plugin-missing")!.source).toBe("npm")
+    expect(byId(cs, "ttybrain-plugin-missing")!.error).toContain(`not installed; run npm install in ${p}`)
+    expect(byId(cs, "ttybrain-plugin-missing")!.source).toBe("npm")
   })
 
   test("an external id taken by a built-in fails", async () => {
@@ -155,9 +155,9 @@ describe("discoverPlugins", () => {
 
   test("a disabled npm dependency that is not installed is listed disabled, not failed", async () => {
     const { paths, builtinDir } = setup()
-    npmDeps(paths, { "pm-plugin-gone": "1.0.0" })
-    const cs = await discoverPlugins(paths, config(["pm-plugin-gone"]), { builtinDir })
-    expect(cs).toEqual([{ id: "pm-plugin-gone", source: "npm", dir: join(paths.plugins, "node_modules", "pm-plugin-gone"), disabled: true }])
+    npmDeps(paths, { "ttybrain-plugin-gone": "1.0.0" })
+    const cs = await discoverPlugins(paths, config(["ttybrain-plugin-gone"]), { builtinDir })
+    expect(cs).toEqual([{ id: "ttybrain-plugin-gone", source: "npm", dir: join(paths.plugins, "node_modules", "ttybrain-plugin-gone"), disabled: true }])
   })
 
   test("a hanging import times out", async () => {
@@ -179,25 +179,25 @@ describe("discoverPlugins", () => {
     const { root, paths, builtinDir } = setup()
     const real = join(root, "elsewhere", "s")
     plugin(real, { id: "s" })
-    npmDeps(paths, { "pm-plugin-s": "file:../elsewhere/s" })
+    npmDeps(paths, { "ttybrain-plugin-s": "file:../elsewhere/s" })
     mkdirSync(join(paths.plugins, "node_modules"))
-    symlinkSync(real, join(paths.plugins, "node_modules", "pm-plugin-s"), "dir")
+    symlinkSync(real, join(paths.plugins, "node_modules", "ttybrain-plugin-s"), "dir")
     const cs = await discoverPlugins(paths, config(), { builtinDir })
     expect(cs.map((c) => [c.id, c.source, c.error, c.def?.id])).toEqual([["s", "npm", undefined, "s"]])
     expect(cs[0]!.dir).toBe(real)
   })
 })
 
-test("installApiModule adds @pm/api to the existing shared-module object in place", () => {
-  const g = globalThis as { __PM_MODULES__?: Record<string, unknown> }
-  const before = g.__PM_MODULES__
+test("installApiModule adds @ttybrain/api to the existing shared-module object in place", () => {
+  const g = globalThis as { __TTYBRAIN_MODULES__?: Record<string, unknown> }
+  const before = g.__TTYBRAIN_MODULES__
   const shared: Record<string, unknown> = { other: 1 }
-  g.__PM_MODULES__ = shared
+  g.__TTYBRAIN_MODULES__ = shared
   try {
     installApiModule()
-    expect(g.__PM_MODULES__).toBe(shared)
-    expect(shared).toEqual({ other: 1, "@pm/api": api })
+    expect(g.__TTYBRAIN_MODULES__).toBe(shared)
+    expect(shared).toEqual({ other: 1, "@ttybrain/api": api })
   } finally {
-    g.__PM_MODULES__ = before
+    g.__TTYBRAIN_MODULES__ = before
   }
 })

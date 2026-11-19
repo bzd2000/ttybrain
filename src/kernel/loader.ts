@@ -1,4 +1,4 @@
-// Plugin discovery: turns pm's built-in plugin folder, the plugin folders under `paths.plugins` and the npm
+// Plugin discovery: turns ttybrain's built-in plugin folder, the plugin folders under `paths.plugins` and the npm
 // dependencies installed there into plugin candidates, importing each enabled one's logic entry (`main`).
 // A candidate that fails before boot carries `error`; the host decides what to do with the rest (requires sort,
 // duplicate ids, activation). Disabled plugins are listed but never imported.
@@ -13,17 +13,19 @@ import type { PluginDef } from "./plugin"
 export type PluginSource = "built-in" | "folder" | "npm"
 
 export type PluginCandidate = {
-  id: string // pm.id, else the directory / package name when the manifest is unreadable
+  id: string // ttybrain.id, else the directory / package name when the manifest is unreadable
   source: PluginSource
   dir: string // absolute plugin directory (realpath for npm symlinks)
   version?: string // package.json version, when readable
   def?: PluginDef // set when imported
-  tui?: string // absolute file URL of the pm.tui entry, when declared
+  tui?: string // absolute file URL of the ttybrain.tui entry, when declared
   error?: string // set when the candidate failed before boot
   disabled?: boolean // in config.plugins.disabled: not imported
 }
 
 export const DEFAULT_TIMEOUT_MS = 5000
+
+const LEGACY_MANIFEST = 'built for pm; rebuild it with "ttybrain plugin build"'
 
 export function builtinPluginDir(): string {
   return fileURLToPath(new URL("../plugins/", import.meta.url))
@@ -31,8 +33,8 @@ export function builtinPluginDir(): string {
 
 // Shared modules an external plugin's built shims read (`ttybrain plugin build`).
 export function installApiModule(): void {
-  const g = globalThis as { __PM_MODULES__?: Record<string, unknown> }
-  ;(g.__PM_MODULES__ ??= {})["@pm/api"] = api // in place: the TUI adds its modules to the same object
+  const g = globalThis as { __TTYBRAIN_MODULES__?: Record<string, unknown> }
+  ;(g.__TTYBRAIN_MODULES__ ??= {})["@ttybrain/api"] = api // in place: the TUI adds its modules to the same object
 }
 
 type Obj = Record<string, unknown>
@@ -96,13 +98,20 @@ async function candidate(dir: string, fallbackId: string, source: PluginSource, 
   if (m.kind === "none") return undefined
   if (m.kind === "invalid") return { id: fallbackId, source, dir, error: m.reason }
   const { pkg } = m
-  const pm = pkg.pm
-  if (!isObj(pm) || pm.plugin !== true) return undefined
   const version = typeof pkg.version === "string" ? pkg.version : undefined
-  const tui = typeof pm.tui === "string" ? pathToFileURL(resolve(dir, pm.tui)).href : undefined
+  const manifest = pkg.ttybrain
+  if (manifest === undefined) {
+    // A plugin built before the rename (the old manifest key): reported, never imported.
+    const legacy = pkg.pm
+    if (!isObj(legacy) || legacy.plugin !== true) return undefined
+    const id = typeof legacy.id === "string" && legacy.id !== "" ? legacy.id : fallbackId
+    return { id, source, dir, ...(version !== undefined && { version }), error: LEGACY_MANIFEST }
+  }
+  if (!isObj(manifest) || manifest.plugin !== true) return undefined
+  const tui = typeof manifest.tui === "string" ? pathToFileURL(resolve(dir, manifest.tui)).href : undefined
   const base = { source, dir, ...(version !== undefined && { version }), ...(tui !== undefined && { tui }) }
-  if (typeof pm.id !== "string" || pm.id === "") return { id: fallbackId, ...base, error: "package.json has no pm.id" }
-  const id = pm.id
+  if (typeof manifest.id !== "string" || manifest.id === "") return { id: fallbackId, ...base, error: "package.json has no ttybrain.id" }
+  const id = manifest.id
   if (source !== "built-in" && ctx.builtinIds.has(id)) return { id, ...base, error: `plugin id "${id}" is taken by a built-in plugin` }
   if (ctx.config.plugins.disabled.includes(id)) return { id, ...base, disabled: true }
   if (typeof pkg.main !== "string" || pkg.main === "") return { id, ...base, error: "package.json has no main" }
@@ -119,7 +128,7 @@ async function candidate(dir: string, fallbackId: string, source: PluginSource, 
   if (!isObj(def) || typeof def.id !== "string" || typeof def.version !== "string") {
     return { id, ...base, error: "main's default export is not a plugin definition" }
   }
-  if (def.id !== id) return { id, ...base, error: `pm.id "${id}" does not match the plugin id "${def.id}"` }
+  if (def.id !== id) return { id, ...base, error: `ttybrain.id "${id}" does not match the plugin id "${def.id}"` }
   if (version !== def.version) {
     return { id, ...base, error: `package.json version ${version ?? "(missing)"} does not match the plugin version ${def.version}` }
   }
@@ -165,7 +174,7 @@ export async function discoverPlugins(
       installed = false
     }
     if (!installed) {
-      // No manifest to read pm.id from: the id is the package name, and a disabled one is just disabled.
+      // No manifest to read ttybrain.id from: the id is the package name, and a disabled one is just disabled.
       const disabled = config.plugins.disabled.includes(name)
       out.push({ id: name, source: "npm", dir, ...(disabled ? { disabled: true } : { error: `not installed; run npm install in ${paths.plugins}` }) })
       continue

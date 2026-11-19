@@ -1,4 +1,4 @@
-// What plugins' tui parts import from the kernel (the future `@pm/api/tui`): defineTui, the extension-point
+// What plugins' tui parts import from the kernel (the future `@ttybrain/api/tui`): defineTui, the extension-point
 // types, the hooks, the building blocks, the format helpers and the theme.
 export { defineTui } from "./types"
 export type {

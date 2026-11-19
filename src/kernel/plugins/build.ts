@@ -1,6 +1,6 @@
-// `ttybrain plugin build [dir]`: compiles an external plugin's src/ to dist/ with pm's Babel setup and points its imports
-// of pm's shared modules at generated shims in dist/__pm/, which hand the plugin pm's own module instances from
-// globalThis.__PM_MODULES__ at runtime (one Solid, one OpenTUI, one API). Design §3.4, plan ruling R4.
+// `ttybrain plugin build [dir]`: compiles an external plugin's src/ to dist/ with ttybrain's Babel setup and points its imports
+// of ttybrain's shared modules at generated shims in dist/__pm/, which hand the plugin ttybrain's own module instances from
+// globalThis.__TTYBRAIN_MODULES__ at runtime (one Solid, one OpenTUI, one API). Design §3.4, plan ruling R4.
 //
 // Pass 1 compiles each file (TypeScript; Solid's JSX transform for .jsx/.tsx; `.js` on relative imports). Pass 2
 // runs on pass 1's output, so the imports the JSX transform adds are seen too: it collects the names each file
@@ -12,12 +12,12 @@ import { dirname, join, posix, relative, resolve, sep } from "node:path"
 import { ValidationError } from "../errors"
 import { isJsxFile, isSourceFile, relativeJs, SOLID_OPTIONS, toJs } from "./babel-options"
 
-// The modules pm shares with plugins (constraints: exactly these), in the order results list them.
-export const SHARED_MODULES = ["@pm/api", "@pm/api/tui", "solid-js", "solid-js/store", "@opentui/solid", "@opentui/core"] as const
+// The modules ttybrain shares with plugins (constraints: exactly these), in the order results list them.
+export const SHARED_MODULES = ["@ttybrain/api", "@ttybrain/api/tui", "solid-js", "solid-js/store", "@opentui/solid", "@opentui/core"] as const
 const SHARED: readonly string[] = SHARED_MODULES
 // A deeper path into a shared package ("solid-js/web") is not shared: it would load a second instance.
-const SHARED_PACKAGES = ["@pm/api", "solid-js", "@opentui/solid", "@opentui/core"]
-const isUi = (spec: string) => spec === "@pm/api/tui" || spec === "solid-js" || spec.startsWith("solid-js/") || spec.startsWith("@opentui/")
+const SHARED_PACKAGES = ["@ttybrain/api", "solid-js", "@opentui/solid", "@opentui/core"]
+const isUi = (spec: string) => spec === "@ttybrain/api/tui" || spec === "solid-js" || spec.startsWith("solid-js/") || spec.startsWith("@opentui/")
 
 // "@opentui/solid" -> "opentui-solid.js"
 export const shimFileName = (name: string) => name.replace(/^@/, "").replaceAll("/", "-") + ".js"
@@ -37,7 +37,7 @@ type Babel = {
 }
 type BabelPath = { node: any }
 
-// `import(name)` through a variable: the CLI path never loads Babel, and pm ships no Babel typings.
+// `import(name)` through a variable: the CLI path never loads Babel, and ttybrain ships no Babel typings.
 async function loadBabel() {
   const load = async (name: string) => ((await import(name)) as { default: any }).default
   const core = (await import("@babel/core" as string)) as Babel & { default?: Babel }
@@ -112,7 +112,7 @@ export async function buildPlugin(dir: string): Promise<{ files: number; shims: 
         source.value = shim.startsWith(".") ? shim : "./" + shim
       } else if (spec.startsWith("@opentui/") || SHARED_PACKAGES.some((p) => spec.startsWith(p + "/"))) {
         // Any other OpenTUI package would bring its own @opentui/core: a second copy.
-        errors.push(`${src}: "${spec}" is not shared by pm; use ${SHARED.slice(0, -1).join(", ")} or ${SHARED.at(-1)}`)
+        errors.push(`${src}: "${spec}" is not shared by ttybrain; use ${SHARED.slice(0, -1).join(", ")} or ${SHARED.at(-1)}`)
       }
     }
     const nameOf = (n: { type: string; name?: string; value?: string }) => (n.type === "Identifier" ? n.name! : n.value!)
@@ -183,15 +183,15 @@ const RESERVED = new Set(
 // `m` and `__pm<n>` are the shim's own locals, so they take the aliased path too.
 const plainName = (n: string) => /^[A-Za-z_$][\w$]*$/.test(n) && !RESERVED.has(n) && n !== "m" && !/^__pm\d+$/.test(n)
 
-// A shim: the host's module from globalThis.__PM_MODULES__, checked at load for every name the plugin imports.
+// A shim: the host's module from globalThis.__TTYBRAIN_MODULES__, checked at load for every name the plugin imports.
 export function shimSource(name: string, names: string[]): string {
   const lines = [
-    `const m = globalThis.__PM_MODULES__?.[${JSON.stringify(name)}]`,
-    `if (!m) throw new Error('"${name}" is provided by pm; load this plugin from pm')`,
+    `const m = globalThis.__TTYBRAIN_MODULES__?.[${JSON.stringify(name)}]`,
+    `if (!m) throw new Error('"${name}" is provided by ttybrain; load this plugin from ttybrain')`,
   ]
   if (names.length > 0) {
     lines.push(
-      `for (const n of [${names.map((n) => JSON.stringify(n)).join(", ")}]) if (!(n in m)) throw new Error(\`rebuild the plugin with this pm (missing export "\${n}" from "${name}")\`)`,
+      `for (const n of [${names.map((n) => JSON.stringify(n)).join(", ")}]) if (!(n in m)) throw new Error(\`rebuild the plugin with this ttybrain (missing export "\${n}" from "${name}")\`)`,
     )
   }
   const plain = names.filter(plainName)

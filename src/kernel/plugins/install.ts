@@ -12,7 +12,7 @@ import type { Paths } from "../paths"
 
 export type Env = Record<string, string | undefined>
 
-// `which(cmd)`: whether `cmd` runs (default: `<cmd> --version` exits 0). `underBun`: whether pm runs on Bun
+// `which(cmd)`: whether `cmd` runs (default: `<cmd> --version` exits 0). `underBun`: whether ttybrain runs on Bun
 // (default: process.versions.bun). Both are injectable for tests.
 export type InstallerOptions = { which?: (cmd: string) => boolean; underBun?: boolean }
 
@@ -23,7 +23,7 @@ type Installer = { kind: "npm" | "bun"; cmd: string }
 
 const runs = (cmd: string) => spawnSync(cmd, ["--version"], { stdio: "ignore" }).status === 0
 
-// R6: TTYBRAIN_PLUGIN_INSTALLER forces one; else npm when it runs; else bun when pm runs on Bun. `command` names the
+// R6: TTYBRAIN_PLUGIN_INSTALLER forces one; else npm when it runs; else bun when ttybrain runs on Bun. `command` names the
 // `ttybrain plugin` command that needs it, in the error.
 export function chooseInstaller(env: Env, opts: InstallerOptions = {}, command: "add" | "remove" = "add"): Installer {
   const underBun = opts.underBun ?? process.versions.bun !== undefined
@@ -143,7 +143,7 @@ export async function addPlugin(
     const previous = before[name]
     const args = previous === undefined ? uninstallArgs(installer, dir, name) : installArgs(installer, dir, reinstallSpec(name, previous))
     await runInstaller(installer, args, dir, previous === undefined ? "uninstall" : "install").catch(() => {})
-    throw new ValidationError(message, { hint: "only packages with pm.plugin in their package.json can be added" })
+    throw new ValidationError(message, { hint: "only packages with ttybrain.plugin in their package.json can be added" })
   }
   let pkg: Obj
   try {
@@ -151,9 +151,9 @@ export async function addPlugin(
   } catch (e) {
     return undo(`"${name}" could not be read after installing: ${(e as Error).message}`)
   }
-  const pm = pkg.pm
-  if (!isObj(pm) || pm.plugin !== true) return undo(`"${name}" is not a pm plugin (package.json has no pm.plugin)`)
-  if (typeof pm.id !== "string" || pm.id === "") return undo(`"${name}" is not a pm plugin (package.json has no pm.id)`)
+  const manifest = pkg.ttybrain
+  if (!isObj(manifest) || manifest.plugin !== true) return undo(`"${name}" is not a ttybrain plugin (package.json has no ttybrain.plugin)`)
+  if (typeof manifest.id !== "string" || manifest.id === "") return undo(`"${name}" is not a ttybrain plugin (package.json has no ttybrain.id)`)
 
   const allow = loadConfig(paths, env).plugins.allow
   const warned = !(Array.isArray(allow) && allow.includes(name))
@@ -165,10 +165,10 @@ export async function addPlugin(
       plugins.allow = list.includes(name) ? list : [...list, name]
     })
   }
-  return { name, id: pm.id, version: typeof pkg.version === "string" ? pkg.version : "", warned }
+  return { name, id: manifest.id, version: typeof pkg.version === "string" ? pkg.version : "", warned }
 }
 
-// The dependency name an npm plugin was installed under (its pm.id may differ).
+// The dependency name an npm plugin was installed under (its ttybrain.id may differ).
 function packageNameOf(paths: Paths, p: PluginStatus): string | undefined {
   const deps = Object.keys(dependencies(paths.plugins))
   return deps.find((name) => {

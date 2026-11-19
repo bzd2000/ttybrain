@@ -19,7 +19,7 @@ import {
   type Hint,
   type TableColumn,
   type TableRow,
-} from "@pm/api/tui"
+} from "@ttybrain/api/tui"
 import { makeItems, type Kind } from "../logic/items"
 import { makeStore } from "../logic/records"
 

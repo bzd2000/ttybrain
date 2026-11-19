@@ -8,7 +8,7 @@ import {
   ValidationError,
   type PluginContext,
   type PluginRuntime,
-} from "@pm/api"
+} from "@ttybrain/api"
 import type { ProjectRecord } from "./schema"
 import { projectQuery } from "./views"
 

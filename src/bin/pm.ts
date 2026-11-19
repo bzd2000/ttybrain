@@ -32,7 +32,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
   try {
     if (argv.length === 0 && process.stdout.isTTY) {
       const { runTui } = await import("../kernel/tui/run")
-      // runTui loads each loaded plugin's tui entry (pm.tui) itself.
+      // runTui loads each loaded plugin's tui entry (ttybrain.tui) itself.
       await runTui(kernel, {
         onRenderer: (renderer) => {
           stopTui = async () => {

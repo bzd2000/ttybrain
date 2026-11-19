@@ -27,7 +27,7 @@ import {
   type Hint,
   type TableColumn,
   type TableRow,
-} from "@pm/api/tui"
+} from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
 import type { GoalRecord, NoteRecord, PersonRecord } from "../logic/schema"
 import { archiveQuestion } from "./people-screen"

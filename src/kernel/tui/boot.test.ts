@@ -40,15 +40,15 @@ function tmp(): string {
 const LOGIC = (id: string) => `export default { id: ${JSON.stringify(id)}, name: "Ext", version: "1.0.0", apiVersion: 1, activate() {} }\n`
 // A hand-written tui entry that reaches the kernel only through the shared modules, as a built plugin's shims do.
 const TUI = (id: string) =>
-  `const { defineTui } = globalThis.__PM_MODULES__["@pm/api/tui"]\n` +
+  `const { defineTui } = globalThis.__TTYBRAIN_MODULES__["@ttybrain/api/tui"]\n` +
   `export default defineTui({ plugin: ${JSON.stringify(id)}, activate() {} })\n`
 
 // A folder plugin `<pluginsDir>/<id>` with a logic entry and, when given, a tui entry.
 function folderPlugin(pluginsDir: string, id: string, o: { logic?: string; tui?: string } = {}): void {
   const dir = join(pluginsDir, id)
   mkdirSync(dir, { recursive: true })
-  const pm: Record<string, unknown> = { plugin: true, id, ...(o.tui !== undefined && { tui: "tui.js" }) }
-  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: `pm-plugin-${id}`, version: "1.0.0", type: "module", main: "index.js", pm }))
+  const ttybrain: Record<string, unknown> = { plugin: true, id, ...(o.tui !== undefined && { tui: "tui.js" }) }
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: `ttybrain-plugin-${id}`, version: "1.0.0", type: "module", main: "index.js", ttybrain }))
   writeFileSync(join(dir, "index.js"), o.logic ?? LOGIC(id))
   if (o.tui !== undefined) writeFileSync(join(dir, "tui.js"), o.tui)
 }
@@ -59,11 +59,11 @@ async function discovered(pluginsDir: string, builtins: boolean): Promise<TestKe
   return kernel
 }
 
-test("installTuiModules installs pm's shared modules", () => {
+test("installTuiModules installs ttybrain's shared modules", () => {
   installTuiModules()
-  const modules = (globalThis as { __PM_MODULES__?: Record<string, unknown> }).__PM_MODULES__!
-  expect(modules["@pm/api"]).toBe(api)
-  expect(modules["@pm/api/tui"]).toBe(tuiApi)
+  const modules = (globalThis as { __TTYBRAIN_MODULES__?: Record<string, unknown> }).__TTYBRAIN_MODULES__!
+  expect(modules["@ttybrain/api"]).toBe(api)
+  expect(modules["@ttybrain/api/tui"]).toBe(tuiApi)
   expect(modules["solid-js"]).toBe(solid)
   expect(modules["solid-js/store"]).toBe(solidStore)
   expect(modules["@opentui/solid"]).toBe(opentuiSolid)

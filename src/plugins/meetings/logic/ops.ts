@@ -14,7 +14,7 @@ import {
   ValidationError,
   type PluginContext,
   type Static,
-} from "@pm/api"
+} from "@ttybrain/api"
 import type { Store } from "./records"
 import { MeetingKind, MeetingRecord, type MeetingRecord as Meeting } from "./schema"
 import { sinceFor, type SinceResult } from "./since"

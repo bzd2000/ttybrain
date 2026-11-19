@@ -41,10 +41,10 @@ test("new → build → load", async () => {
   const dir = scaffoldPlugin(parent, "demo")
   expect(dir).toBe(join(parent, "demo"))
   const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"))
-  expect(pkg.name).toBe("pm-plugin-demo")
+  expect(pkg.name).toBe("ttybrain-plugin-demo")
   expect(pkg.version).toBe("0.1.0")
-  expect(pkg.pm).toEqual({ plugin: true, id: "demo", tui: "dist/tui/index.js" })
-  expect(Object.keys(pkg.peerDependenciesMeta).sort()).toEqual(["@opentui/core", "@opentui/solid", "@pm/api", "solid-js"])
+  expect(pkg.ttybrain).toEqual({ plugin: true, id: "demo", tui: "dist/tui/index.js" })
+  expect(Object.keys(pkg.peerDependenciesMeta).sort()).toEqual(["@opentui/core", "@opentui/solid", "@ttybrain/api", "solid-js"])
 
   await buildPlugin(dir)
   expect(existsSync(join(dir, "dist/logic/index.test.js"))).toBe(false) // test files are not built
@@ -81,7 +81,7 @@ test("invalid or taken id, existing dir", () => {
   expect(() => scaffoldPlugin(parent, "once")).toThrow(`already exists: ${dir}`)
 })
 
-test("tsconfig paths point at this pm's API sources", () => {
+test("tsconfig paths point at this ttybrain's API sources", () => {
   const sources = pmApiSources()
   expect(sources).toBeDefined()
   expect(existsSync(sources!.api)).toBe(true)
@@ -90,10 +90,10 @@ test("tsconfig paths point at this pm's API sources", () => {
   const ts = JSON.parse(readFileSync(join(dir, "tsconfig.json"), "utf8"))
   expect(ts.compilerOptions.jsx).toBe("preserve")
   expect(ts.compilerOptions.jsxImportSource).toBe("@opentui/solid")
-  expect(ts.compilerOptions.paths).toEqual({ "@pm/api": [sources!.api], "@pm/api/tui": [sources!.tui] })
+  expect(ts.compilerOptions.paths).toEqual({ "@ttybrain/api": [sources!.api], "@ttybrain/api/tui": [sources!.tui] })
 })
 
-test("no pm sources found: no tsconfig paths, and a note", () => {
+test("no ttybrain sources found: no tsconfig paths, and a note", () => {
   const empty = tmp()
   expect(pmApiSources(empty)).toBeUndefined()
   const dir = scaffoldPlugin(tmp(), "nopaths", { pmRoot: empty })
@@ -103,7 +103,7 @@ test("no pm sources found: no tsconfig paths, and a note", () => {
 
 test("a fresh scaffold type-checks with zero errors", () => {
   const dir = scaffoldPlugin(tmp(), "typed")
-  // Stands in for `npm install` of its devDependencies: pm's own node_modules has the same packages.
+  // Stands in for `npm install` of its devDependencies: ttybrain's own node_modules has the same packages.
   symlinkSync(join(import.meta.dir, "../../../node_modules"), join(dir, "node_modules"))
   const r = spawnSync(process.execPath, ["check"], { cwd: dir, encoding: "utf8" })
   expect(r.stdout + r.stderr).toContain("No type errors")

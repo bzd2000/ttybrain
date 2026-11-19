@@ -1,5 +1,5 @@
 // The people plugin: your team and your stakeholders, notes on them, and team members' goals (plugin reference §1).
-import { definePlugin } from "@pm/api"
+import { definePlugin } from "@ttybrain/api"
 import { registerCommands } from "./commands"
 import { registerGuide } from "./guide"
 import { registerOps } from "./ops"

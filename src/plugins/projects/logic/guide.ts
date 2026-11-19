@@ -1,6 +1,6 @@
 // The agent guide's sections on projects (codes, health updates, the project context) and on turning notes into
 // records (the inbox rules of spec §6).
-import type { PluginContext } from "@pm/api"
+import type { PluginContext } from "@ttybrain/api"
 
 const MARKDOWN = `
 Projects are referenced by code (\`CRM\` or \`#CRM\`): 2–8 upper-case letters or digits. \`ttybrain project list\` shows every active project with its health, next milestone and open actions and risks; \`ttybrain project show <code>\` shows one, with the people involved.

@@ -85,7 +85,7 @@ async function dispatch(argv: string[], kernel: Kernel, io: CliIo): Promise<{ re
   const { words, global } = leading(argv)
   const [first, second] = words
   if (!first) {
-    // `pm` alone, or `ttybrain --json`: the help. Anything else (`ttybrain --yes`) still goes through the help command.
+    // `ttybrain` alone, or `ttybrain --json`: the help. Anything else (`ttybrain --yes`) still goes through the help command.
     const def = commands.verbless("help")!
     const parsed = parseCommand(argv, def, kernel.context().today)
     return { result: helpAll(commands.all), json: parsed.global.json }

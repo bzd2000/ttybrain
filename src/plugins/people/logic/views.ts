@@ -1,6 +1,6 @@
 // The published views: people.person (with the computed last_contact), people.note and people.goal.
 // They are a versioned contract; other plugins join them, never the tables.
-import type { PluginContext } from "@pm/api"
+import type { PluginContext } from "@ttybrain/api"
 
 export function registerViews(ctx: PluginContext): void {
   ctx.publish("person", {

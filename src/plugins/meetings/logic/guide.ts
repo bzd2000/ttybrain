@@ -1,5 +1,5 @@
 // The agent guide's section on meetings: preparing one, and turning its notes into actions and decisions.
-import type { PluginContext } from "@pm/api"
+import type { PluginContext } from "@ttybrain/api"
 
 const MARKDOWN = `
 Meetings are referenced as \`M-<n>\`. \`ttybrain meeting list\` shows the planned ones and those held or cancelled in the last 30 days; \`ttybrain meeting show M-<n>\` shows one with its attendees, agenda and notes. An agenda item is addressed by its meeting and its position (\`ttybrain meeting agenda M-4 remove 2\`).

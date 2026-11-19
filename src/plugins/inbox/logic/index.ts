@@ -1,6 +1,6 @@
 // The inbox plugin: quick notes with #project and @person tags, processed by an agent (plugin reference §4).
 // It knows nothing about other plugins: tags, labels and provenance all come through the kernel.
-import { definePlugin } from "@pm/api"
+import { definePlugin } from "@ttybrain/api"
 import { registerCommands } from "./commands"
 import { registerGuide } from "./guide"
 import { registerOps } from "./ops"

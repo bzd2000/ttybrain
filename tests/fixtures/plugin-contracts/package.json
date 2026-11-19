@@ -1,8 +1,8 @@
 {
-  "name": "pm-plugin-contracts",
+  "name": "ttybrain-plugin-contracts",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/logic/index.js",
   "files": ["dist"],
-  "pm": { "plugin": true, "id": "contracts", "tui": "dist/tui/index.js" }
+  "ttybrain": { "plugin": true, "id": "contracts", "tui": "dist/tui/index.js" }
 }

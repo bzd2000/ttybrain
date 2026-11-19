@@ -1,8 +1,8 @@
 {
-  "name": "@pm/plugin-inbox",
+  "name": "@ttybrain/plugin-inbox",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "logic/index.ts",
-  "pm": { "plugin": true, "id": "inbox", "tui": "tui/index.tsx" }
+  "ttybrain": { "plugin": true, "id": "inbox", "tui": "tui/index.tsx" }
 }

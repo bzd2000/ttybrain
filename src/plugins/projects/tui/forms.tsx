@@ -4,7 +4,7 @@
 // The project form also shows the extra project fields of other plugins (<Form recordType>); the kernel saves them
 // in the same act as the project's own operation.
 import { createEffect, Show, untrack, type JSX } from "solid-js"
-import { act, Form, numberValue, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "@pm/api/tui"
+import { act, Form, numberValue, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
 import type { ProjectRecord } from "../logic/schema"
 

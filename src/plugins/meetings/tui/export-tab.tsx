@@ -16,7 +16,7 @@ import {
   useScreenKeys,
   useWriteExport,
   type Hint,
-} from "@pm/api/tui"
+} from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
 import { Lines } from "./prep-tab"
 

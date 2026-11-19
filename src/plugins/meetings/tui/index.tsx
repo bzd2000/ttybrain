@@ -1,6 +1,6 @@
 // The meetings plugin's tui part: the Meetings screen (slot 5), the meeting record view's Agenda, Prep, Notes and
 // Export tabs, and the meeting, agenda item and attendees forms.
-import { defineTui } from "@pm/api/tui"
+import { defineTui } from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
 import { AgendaTab } from "./agenda-tab"
 import { ExportTab } from "./export-tab"

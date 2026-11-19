@@ -23,7 +23,7 @@ afterEach(async () => {
   for (const d of temps.splice(0)) rmSync(d, { recursive: true, force: true })
 })
 
-function tmp(prefix = "pm-plugin-install-"): string {
+function tmp(prefix = "ttybrain-plugin-install-"): string {
   const d = realpathSync(mkdtempSync(join(tmpdir(), prefix)))
   temps.push(d)
   return d
@@ -35,16 +35,16 @@ function write(dir: string, path: string, text: string): void {
 }
 
 // A built plugin folder `<parent>/<id>`: a table with an index, a published view and a record type `<id>-thing`.
-// `plugin: false` writes a package without pm.plugin.
+// `plugin: false` writes a package without ttybrain.plugin.
 async function builtPlugin(id: string, o: { parent?: string; plugin?: boolean; version?: string } = {}): Promise<string> {
   const dir = join(o.parent ?? tmp(), id)
   const version = o.version ?? "1.0.0"
-  const pm = o.plugin === false ? {} : { pm: { plugin: true, id } }
-  write(dir, "package.json", JSON.stringify({ name: `pm-plugin-${id}`, version, type: "module", main: "dist/logic/index.js", ...pm }))
+  const pm = o.plugin === false ? {} : { ttybrain: { plugin: true, id } }
+  write(dir, "package.json", JSON.stringify({ name: `ttybrain-plugin-${id}`, version, type: "module", main: "dist/logic/index.js", ...pm }))
   write(
     dir,
     "src/logic/index.ts",
-    `import { definePlugin } from "@pm/api"\n` +
+    `import { definePlugin } from "@ttybrain/api"\n` +
       `export default definePlugin({ id: ${JSON.stringify(id)}, name: "T", version: ${JSON.stringify(version)}, apiVersion: 1, activate(ctx) {\n` +
       `  ctx.migration("001", async (db) => {\n` +
       `    await db.schema.createTable("thing").addColumn("id", "integer", (c) => c.primaryKey()).addColumn("name", "text").execute()\n` +
@@ -63,7 +63,7 @@ async function builtPlugin(id: string, o: { parent?: string; plugin?: boolean; v
 
 // `bun pm pack` of a plugin folder into a fresh directory; returns the tarball's path.
 function pack(dir: string): string {
-  const dest = tmp("pm-plugin-tgz-")
+  const dest = tmp("ttybrain-plugin-tgz-")
   const tgz = join(dest, "plugin.tgz")
   const r = spawnSync(process.execPath, ["pm", "pack", "--filename", tgz, "--quiet"], { cwd: dir, encoding: "utf8" })
   if (r.status !== 0) throw new Error(`bun pm pack failed: ${r.stderr}`)
@@ -91,7 +91,7 @@ const deps = (plugins: string): Record<string, string> =>
 const allow = (k: TestKernel): string[] =>
   existsSync(k.paths.config) ? ((JSON.parse(readFileSync(k.paths.config, "utf8")) as { plugins?: { allow?: string[] } }).plugins?.allow ?? []) : []
 
-// Runs `fn` with TTYBRAIN_PLUGIN_INSTALLER set (the CLI commands read process.env, as pm's entry point passes it).
+// Runs `fn` with TTYBRAIN_PLUGIN_INSTALLER set (the CLI commands read process.env, as ttybrain's entry point passes it).
 async function withInstaller<T>(installer: string, fn: () => Promise<T>): Promise<T> {
   const before = process.env.TTYBRAIN_PLUGIN_INSTALLER
   process.env.TTYBRAIN_PLUGIN_INSTALLER = installer
@@ -111,11 +111,11 @@ for (const installer of installers) {
     const plugins = join(tmp(), "plugins")
     const paths = resolvePaths({ TTYBRAIN_HOME: tmp(), TTYBRAIN_PLUGINS: plugins })
     const added = await addPlugin(paths, tgz, { TTYBRAIN_PLUGIN_INSTALLER: installer })
-    expect(added).toEqual({ name: "pm-plugin-demo", id: "demo", version: "1.0.0", warned: true })
+    expect(added).toEqual({ name: "ttybrain-plugin-demo", id: "demo", version: "1.0.0", warned: true })
     const pkg = JSON.parse(readFileSync(join(plugins, "package.json"), "utf8")) as { private: boolean; type: string }
     expect(pkg.private).toBe(true)
     expect(pkg.type).toBe("module")
-    expect(Object.keys(deps(plugins))).toEqual(["pm-plugin-demo"])
+    expect(Object.keys(deps(plugins))).toEqual(["ttybrain-plugin-demo"])
     const k = await boot(plugins)
     expect(listed(k)).toEqual([{ id: "demo", source: "npm", status: "ok", error: null }])
   }, 60_000)
@@ -126,8 +126,8 @@ test.skipIf(!hasNpm)("add <folder> installs it as a file: dependency", async () 
   const plugins = join(tmp(), "plugins")
   const paths = resolvePaths({ TTYBRAIN_HOME: tmp(), TTYBRAIN_PLUGINS: plugins })
   await addPlugin(paths, dir, { TTYBRAIN_PLUGIN_INSTALLER: "npm" })
-  expect(deps(plugins)["pm-plugin-demo"]).toStartWith("file:")
-  expect(lstatSync(join(plugins, "node_modules", "pm-plugin-demo")).isSymbolicLink()).toBe(true)
+  expect(deps(plugins)["ttybrain-plugin-demo"]).toStartWith("file:")
+  expect(lstatSync(join(plugins, "node_modules", "ttybrain-plugin-demo")).isSymbolicLink()).toBe(true)
   const k = await boot(plugins)
   expect(listed(k)).toEqual([{ id: "demo", source: "npm", status: "ok", error: null }])
   expect(k.plugins[0]!.dir).toBe(dir)
@@ -140,7 +140,7 @@ test("the trust warning is printed once per package name", async () => {
   const a = io()
   expect(await runCli(["plugin", "add", tgz], k, a.io)).toBe(0)
   expect(a.out.join("")).toBe(`${WARNING}\nadded demo 1.0.0 (npm)\n`)
-  expect(allow(k)).toEqual(["pm-plugin-demo"])
+  expect(allow(k)).toEqual(["ttybrain-plugin-demo"])
 
   // The running kernel did not load it (it was added after boot): the next one does.
   const next = await boot(plugins)
@@ -151,25 +151,25 @@ test("the trust warning is printed once per package name", async () => {
 
   const b = io()
   expect(await runCli(["plugin", "add", tgz, "--json"], k, b.io)).toBe(0)
-  expect(JSON.parse(b.out.join(""))).toEqual({ name: "pm-plugin-demo", id: "demo", version: "1.0.0", source: "npm", warned: false })
-  expect(allow(k)).toEqual(["pm-plugin-demo"])
+  expect(JSON.parse(b.out.join(""))).toEqual({ name: "ttybrain-plugin-demo", id: "demo", version: "1.0.0", source: "npm", warned: false })
+  expect(allow(k)).toEqual(["ttybrain-plugin-demo"])
 }, 60_000)
 
-test("add of a package that is not a pm plugin is undone", async () => {
+test("add of a package that is not a ttybrain plugin is undone", async () => {
   const tgz = pack(await builtPlugin("plain", { plugin: false }))
   const plugins = join(tmp(), "plugins")
   const k = await boot(plugins)
   const a = io()
   expect(await runCli(["plugin", "add", tgz], k, a.io)).toBe(1)
-  expect(a.err.join("")).toContain('"pm-plugin-plain" is not a pm plugin (package.json has no pm.plugin)')
+  expect(a.err.join("")).toContain('"ttybrain-plugin-plain" is not a ttybrain plugin (package.json has no ttybrain.plugin)')
   expect(a.out).toEqual([])
   expect(deps(plugins)).toEqual({})
-  expect(existsSync(join(plugins, "node_modules", "pm-plugin-plain"))).toBe(false)
+  expect(existsSync(join(plugins, "node_modules", "ttybrain-plugin-plain"))).toBe(false)
   expect(allow(k)).toEqual([])
 }, 60_000)
 
 for (const installer of installers) {
-  test.skipIf(installer === "npm" && !hasNpm)(`a failed upgrade to a version that is not a pm plugin puts the old one back (${installer})`, async () => {
+  test.skipIf(installer === "npm" && !hasNpm)(`a failed upgrade to a version that is not a ttybrain plugin puts the old one back (${installer})`, async () => {
     const v1 = pack(await builtPlugin("demo"))
     const v2 = pack(await builtPlugin("demo", { plugin: false, version: "2.0.0" }))
     const plugins = join(tmp(), "plugins")
@@ -179,9 +179,9 @@ for (const installer of installers) {
       const before = deps(plugins)
       const a = io()
       expect(await runCli(["plugin", "add", v2], k, a.io)).toBe(1)
-      expect(a.err.join("")).toContain('"pm-plugin-demo" is not a pm plugin (package.json has no pm.plugin)')
+      expect(a.err.join("")).toContain('"ttybrain-plugin-demo" is not a ttybrain plugin (package.json has no ttybrain.plugin)')
       expect(deps(plugins)).toEqual(before)
-      const installed = JSON.parse(readFileSync(join(plugins, "node_modules", "pm-plugin-demo", "package.json"), "utf8")) as { version: string }
+      const installed = JSON.parse(readFileSync(join(plugins, "node_modules", "ttybrain-plugin-demo", "package.json"), "utf8")) as { version: string }
       expect(installed.version).toBe("1.0.0")
       const next = await boot(plugins)
       const l = io()
@@ -193,22 +193,22 @@ for (const installer of installers) {
 
 test("add with no installer", async () => {
   const paths = resolvePaths({ TTYBRAIN_HOME: tmp(), TTYBRAIN_PLUGINS: join(tmp(), "plugins") })
-  const failing = addPlugin(paths, "pm-plugin-demo", {}, { which: () => false, underBun: false })
+  const failing = addPlugin(paths, "ttybrain-plugin-demo", {}, { which: () => false, underBun: false })
   await expect(failing).rejects.toThrow("ttybrain plugin add needs npm on the PATH")
-  const forced = addPlugin(paths, "pm-plugin-demo", { TTYBRAIN_PLUGIN_INSTALLER: "yarn" })
+  const forced = addPlugin(paths, "ttybrain-plugin-demo", { TTYBRAIN_PLUGIN_INSTALLER: "yarn" })
   await expect(forced).rejects.toThrow("TTYBRAIN_PLUGIN_INSTALLER must be npm or bun")
 })
 
 test("remove of an npm plugin with no installer names the remove command", async () => {
   const plugins = tmp()
   // Installed by hand, so no installer runs: a dependency and its folder under node_modules.
-  cpSync(await builtPlugin("demo"), join(plugins, "node_modules", "pm-plugin-demo"), { recursive: true })
-  writeFileSync(join(plugins, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "pm-plugin-demo": "1.0.0" } }))
+  cpSync(await builtPlugin("demo"), join(plugins, "node_modules", "ttybrain-plugin-demo"), { recursive: true })
+  writeFileSync(join(plugins, "package.json"), JSON.stringify({ private: true, type: "module", dependencies: { "ttybrain-plugin-demo": "1.0.0" } }))
   const k = await boot(plugins)
   expect(listed(k)).toEqual([{ id: "demo", source: "npm", status: "ok", error: null }])
   const failing = removePlugin(k, "demo", { purgeData: false, env: {}, which: () => false, underBun: false })
   await expect(failing).rejects.toThrow(new ValidationError("ttybrain plugin remove needs npm on the PATH"))
-  expect(existsSync(join(plugins, "node_modules", "pm-plugin-demo", "package.json"))).toBe(true)
+  expect(existsSync(join(plugins, "node_modules", "ttybrain-plugin-demo", "package.json"))).toBe(true)
 })
 
 test("add of a local path that does not exist fails before the installer runs", async () => {
@@ -297,7 +297,7 @@ test("remove of a symlinked folder plugin removes the link, not its target, outs
 
 test("remove refuses an id that more than one plugin uses", async () => {
   const plugins = tmp()
-  // plugins/a is a working plugin with pm.id "keep"; plugins/keep has a broken manifest, so its id falls back to "keep".
+  // plugins/a is a working plugin with ttybrain.id "keep"; plugins/keep has a broken manifest, so its id falls back to "keep".
   const working = join(plugins, "a")
   cpSync(await builtPlugin("keep"), working, { recursive: true })
   const broken = join(plugins, "keep")
@@ -359,6 +359,6 @@ for (const installer of installers) {
       expect(objects(next, "demo")).toEqual([])
     })
     expect(deps(plugins)).toEqual({})
-    expect(existsSync(join(plugins, "node_modules", "pm-plugin-demo"))).toBe(false)
+    expect(existsSync(join(plugins, "node_modules", "ttybrain-plugin-demo"))).toBe(false)
   }, 60_000)
 }

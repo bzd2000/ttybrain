@@ -53,7 +53,7 @@ set -e
 cp -R tests/fixtures/plugin-contracts "$TTYBRAIN_HOME/src-contracts"
 rm -rf "$TTYBRAIN_HOME/src-contracts/dist" "$TTYBRAIN_HOME/src-contracts/node_modules"
 out="$(ttybrain plugin build "$TTYBRAIN_HOME/src-contracts")"; echo "$out"
-expect_in "plugin build" "built pm-plugin-contracts 0.1.0" "$out"
+expect_in "plugin build" "built ttybrain-plugin-contracts 0.1.0" "$out"
 
 mkdir -p "$TTYBRAIN_HOME/folder-plugins"
 cp -R "$TTYBRAIN_HOME/src-contracts" "$TTYBRAIN_HOME/folder-plugins/contracts"

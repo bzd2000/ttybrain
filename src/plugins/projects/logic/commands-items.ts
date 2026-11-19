@@ -1,6 +1,6 @@
 // `pm milestone|deliverable|risk|decision …` (plugin reference §2). Reads go through ctx.data (own tables, people
 // names through people.person); writes only through ctx.self().write.*.
-import { currentContext, formatTable, type FlagDef, type PluginContext } from "@pm/api"
+import { currentContext, formatTable, type FlagDef, type PluginContext } from "@ttybrain/api"
 import type { Items } from "./items"
 import type { DecisionRecord, DeliverableRecord, MilestoneRecord, RiskRecord } from "./items"
 import type { Store } from "./records"

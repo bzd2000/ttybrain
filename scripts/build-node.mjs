@@ -25,7 +25,7 @@ const solidRuntime = {
 }
 
 // The plugin API names (tsconfig `paths`) map to the kernel files; the output mirrors src/.
-const hostModules = { "@pm/api": "kernel/api", "@pm/api/tui": "kernel/tui/api" }
+const hostModules = { "@ttybrain/api": "kernel/api", "@ttybrain/api/tui": "kernel/tui/api" }
 
 // Node ESM needs explicit extensions: "./App" -> "./App.js", "./dir" -> "./dir/index.js".
 function resolvePath(specifier, currentFile) {
@@ -77,7 +77,7 @@ for (const entry of await readdir(path.join(srcDir, "plugins"), { withFileTypes:
   if (!entry.isDirectory() || !existsSync(manifest)) continue
   const pkg = JSON.parse(await readFile(manifest, "utf8"))
   if (typeof pkg.main === "string") pkg.main = toJs(pkg.main)
-  if (typeof pkg.pm?.tui === "string") pkg.pm.tui = toJs(pkg.pm.tui)
+  if (typeof pkg.ttybrain?.tui === "string") pkg.ttybrain.tui = toJs(pkg.ttybrain.tui)
   await mkdir(path.join(outDir, "plugins", entry.name), { recursive: true })
   await writeFile(path.join(outDir, "plugins", entry.name, "package.json"), JSON.stringify(pkg, null, 2) + "\n")
 }

@@ -250,8 +250,8 @@ const failureCases: Array<[string, FailureCase]> = [
   [
     "a missing shim export",
     {
-      patch: (d) => edit(d, "src/logic/index.ts", "// FAILURE: import\n", 'import { retiredHelper } from "@pm/api"\nexport const legacy = retiredHelper\n'),
-      rows: [failed('rebuild the plugin with this pm (missing export "retiredHelper" from "@pm/api")')],
+      patch: (d) => edit(d, "src/logic/index.ts", "// FAILURE: import\n", 'import { retiredHelper } from "@ttybrain/api"\nexport const legacy = retiredHelper\n'),
+      rows: [failed('rebuild the plugin with this ttybrain (missing export "retiredHelper" from "@ttybrain/api")')],
     },
   ],
   [
@@ -334,4 +334,33 @@ test("disabling projects skips contracts", async () => {
   kernels.push(k)
   expect(await listed(k)).toEqual([{ id: "contracts", version: "0.1.0", source: "folder", status: "failed", error: 'requires "projects", which is disabled' }])
   expect((await cli(k, ["contract", "list"])).code).toBe(1)
+})
+
+test("a plugin built before the rename is reported, not fatal", async () => {
+  const plugins = tmp()
+  // A manifest from before the rename (the old key, no "ttybrain" key), as a folder and as an npm dependency. Its
+  // code is never imported: importing it would set the marker.
+  const legacy = (dir: string, id: string) => {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: `ttybrain-plugin-${id}`, version: "1.0.0", type: "module", main: "index.js", pm: { plugin: true, id } }))
+    writeFileSync(join(dir, "index.js"), `globalThis.__legacyImported = true\nexport default {}\n`)
+  }
+  legacy(join(plugins, "old"), "old")
+  writeFileSync(join(plugins, "package.json"), JSON.stringify({ name: "plugins", private: true, dependencies: { "ttybrain-plugin-older": "1.0.0" } }))
+  legacy(join(plugins, "node_modules", "ttybrain-plugin-older"), "older")
+  const k = await boot(plugins)
+  const all = JSON.parse((await cli(k, ["plugin", "list", "--json"])).out) as Row[]
+  expect(all.filter((p) => p.source === "built-in").map((p) => [p.id, p.status])).toEqual([
+    ["inbox", "ok"],
+    ["people", "ok"],
+    ["projects", "ok"],
+    ["meetings", "ok"],
+  ])
+  const message = 'built for pm; rebuild it with "ttybrain plugin build"'
+  expect(all.filter((p) => p.source !== "built-in")).toEqual([
+    { id: "old", version: "1.0.0", source: "folder", status: "failed", error: message },
+    { id: "older", version: "1.0.0", source: "npm", status: "failed", error: message },
+  ])
+  expect((globalThis as { __legacyImported?: boolean }).__legacyImported).toBeUndefined()
+  expect((await cli(k, ["project", "add", "CRM", "CRM"])).code).toBe(0)
 })

@@ -5,7 +5,7 @@
 // (no field; the title names it); a new record's other fields start from `prefill` by name. `origin` goes to act(),
 // so the kernel records provenance. An edit sends only the changed fields.
 import { createEffect, Show, untrack } from "solid-js"
-import { act, Form, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "@pm/api/tui"
+import { act, Form, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "@ttybrain/api/tui"
 import { makeItems, type Kind } from "../logic/items"
 import { makeStore } from "../logic/records"
 

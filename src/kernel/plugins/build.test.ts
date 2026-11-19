@@ -1,4 +1,4 @@
-// `ttybrain plugin build`: compiling a plugin's src/ to dist/ and the shims that hand it pm's own shared modules.
+// `ttybrain plugin build`: compiling a plugin's src/ to dist/ and the shims that hand it ttybrain's own shared modules.
 // This file is kernel code outside src/kernel/tui/, so it loads the UI side (installTuiModules, renderTui) with
 // dynamic imports only (tests/logic-ui-split.test.ts).
 import { afterEach, expect, test } from "bun:test"
@@ -21,7 +21,7 @@ afterEach(async () => {
 })
 
 function tmp(): string {
-  const d = realpathSync(mkdtempSync(join(tmpdir(), "pm-plugin-build-")))
+  const d = realpathSync(mkdtempSync(join(tmpdir(), "ttybrain-plugin-build-")))
   temps.push(d)
   return d
 }
@@ -30,8 +30,8 @@ function tmp(): string {
 function pluginDir(files: Record<string, string>, o: { id?: string; parent?: string; tui?: boolean } = {}): string {
   const id = o.id ?? "demo"
   const dir = join(o.parent ?? tmp(), id)
-  const pm = { plugin: true, id, ...(o.tui !== false && { tui: "dist/tui/index.js" }) }
-  write(dir, "package.json", JSON.stringify({ name: `pm-plugin-${id}`, version: "1.0.0", type: "module", main: "dist/logic/index.js", pm }))
+  const ttybrain = { plugin: true, id, ...(o.tui !== false && { tui: "dist/tui/index.js" }) }
+  write(dir, "package.json", JSON.stringify({ name: `ttybrain-plugin-${id}`, version: "1.0.0", type: "module", main: "dist/logic/index.js", ttybrain }))
   for (const [path, text] of Object.entries(files)) write(dir, path, text)
   return dir
 }
@@ -46,15 +46,15 @@ function walk(dir: string): string[] {
 }
 
 const LOGIC = (id = "demo") =>
-  `import { definePlugin } from "@pm/api"\n` +
-  `import type { PluginDef } from "@pm/api"\n` +
+  `import { definePlugin } from "@ttybrain/api"\n` +
+  `import type { PluginDef } from "@ttybrain/api"\n` +
   `const def: PluginDef = definePlugin({ id: ${JSON.stringify(id)}, name: "Demo", version: "1.0.0", apiVersion: 1, activate() {} })\n` +
   `export default def\n`
 
 // A screen whose text follows a signal; "+" bumps it.
 const TUI = (id = "demo") =>
   `import { createSignal } from "solid-js"\n` +
-  `import { defineTui, printable, useScreenKeys } from "@pm/api/tui"\n` +
+  `import { defineTui, printable, useScreenKeys } from "@ttybrain/api/tui"\n` +
   `export { For } from "solid-js"\n` +
   `function Counter() {\n` +
   `  const [n, setN] = createSignal<number>(0)\n` +
@@ -85,20 +85,20 @@ test("babel-options.ts and scripts/build-node.mjs use the same Babel values", ()
 test("compiles src/ to dist/ and shims shared imports", async () => {
   const dir = pluginDir({ "src/logic/index.ts": LOGIC(), "src/tui/index.tsx": TUI() })
   const result = await buildPlugin(dir)
-  expect(result).toEqual({ files: 2, shims: ["@pm/api", "@pm/api/tui", "solid-js", "@opentui/solid"] })
+  expect(result).toEqual({ files: 2, shims: ["@ttybrain/api", "@ttybrain/api/tui", "solid-js", "@opentui/solid"] })
   expect(existsSync(join(dir, "dist/logic/index.js"))).toBe(true)
   expect(existsSync(join(dir, "dist/tui/index.js"))).toBe(true)
   const shims = readdirSync(join(dir, "dist/__pm")).sort()
-  expect(shims).toEqual(["opentui-solid.js", "pm-api-tui.js", "pm-api.js", "solid-js.js"])
+  expect(shims).toEqual(["opentui-solid.js", "solid-js.js", "ttybrain-api-tui.js", "ttybrain-api.js"])
   for (const f of walk(join(dir, "dist"))) expect({ f, bare: bare(readFileSync(f, "utf8")) }).toEqual({ f, bare: [] })
   const tui = readFileSync(join(dir, "dist/tui/index.js"), "utf8")
   expect(tui).toContain('from "../__pm/opentui-solid.js"') // the JSX-generated import, shimmed too
   expect(tui).toContain('from "../__pm/solid-js.js"')
-  expect(readFileSync(join(dir, "dist/logic/index.js"), "utf8")).toContain('from "../__pm/pm-api.js"')
+  expect(readFileSync(join(dir, "dist/logic/index.js"), "utf8")).toContain('from "../__pm/ttybrain-api.js"')
   expect(readFileSync(join(dir, "dist/__pm/solid-js.js"), "utf8")).toBe(
-    `const m = globalThis.__PM_MODULES__?.["solid-js"]\n` +
-      `if (!m) throw new Error('"solid-js" is provided by pm; load this plugin from pm')\n` +
-      'for (const n of ["createSignal", "For"]) if (!(n in m)) throw new Error(`rebuild the plugin with this pm (missing export "${n}" from "solid-js")`)\n' +
+    `const m = globalThis.__TTYBRAIN_MODULES__?.["solid-js"]\n` +
+      `if (!m) throw new Error('"solid-js" is provided by ttybrain; load this plugin from ttybrain')\n` +
+      'for (const n of ["createSignal", "For"]) if (!(n in m)) throw new Error(`rebuild the plugin with this ttybrain (missing export "${n}" from "solid-js")`)\n' +
       `export const createSignal = m.createSignal, For = m.For\n`,
   )
 })
@@ -157,15 +157,15 @@ test("namespace imports of shared modules fail", async () => {
   for (const [code, spec] of notShared) {
     const dir = pluginDir({ "src/logic/index.ts": LOGIC(), "src/tui/index.tsx": code })
     expect(((await buildPlugin(dir).catch((e: unknown) => e)) as Error).message).toBe(
-      `src/tui/index.tsx: "${spec}" is not shared by pm; use @pm/api, @pm/api/tui, solid-js, solid-js/store, @opentui/solid or @opentui/core`,
+      `src/tui/index.tsx: "${spec}" is not shared by ttybrain; use @ttybrain/api, @ttybrain/api/tui, solid-js, solid-js/store, @opentui/solid or @opentui/core`,
     )
   }
   // A computed specifier can't be checked statically: it is left alone.
   const computed = pluginDir({ "src/logic/index.ts": LOGIC(), "src/tui/index.tsx": "const n = \"x\"\nexport const w = () => import(`./${n}`)\n" })
-  expect(await buildPlugin(computed)).toEqual({ files: 2, shims: ["@pm/api"] })
+  expect(await buildPlugin(computed)).toEqual({ files: 2, shims: ["@ttybrain/api"] })
 })
 
-test("a built plugin loads in pm and its UI is reactive", async () => {
+test("a built plugin loads in ttybrain and its UI is reactive", async () => {
   const pluginsDir = tmp()
   const dir = pluginDir({ "src/logic/index.ts": LOGIC(), "src/tui/index.tsx": TUI() }, { parent: pluginsDir })
   await buildPlugin(dir)
@@ -192,38 +192,38 @@ test("a built plugin loads in pm and its UI is reactive", async () => {
   }
 })
 
-test("a shim outside pm and a missing export", async () => {
-  const g = globalThis as { __PM_MODULES__?: Record<string, unknown> }
-  const before = g.__PM_MODULES__
+test("a shim outside ttybrain and a missing export", async () => {
+  const g = globalThis as { __TTYBRAIN_MODULES__?: Record<string, unknown> }
+  const before = g.__TTYBRAIN_MODULES__
   const outside = pluginDir({ "src/logic/index.ts": LOGIC() }, { tui: false })
-  const missing = pluginDir({ "src/logic/index.ts": `import { definePlugin, x } from "@pm/api"\nexport const y = x\nexport default definePlugin\n` }, { tui: false })
+  const missing = pluginDir({ "src/logic/index.ts": `import { definePlugin, x } from "@ttybrain/api"\nexport const y = x\nexport default definePlugin\n` }, { tui: false })
   await buildPlugin(outside)
   await buildPlugin(missing)
   try {
-    delete g.__PM_MODULES__
-    await expect(import(join(outside, "dist/logic/index.js"))).rejects.toThrow('"@pm/api" is provided by pm; load this plugin from pm')
+    delete g.__TTYBRAIN_MODULES__
+    await expect(import(join(outside, "dist/logic/index.js"))).rejects.toThrow('"@ttybrain/api" is provided by ttybrain; load this plugin from ttybrain')
     installApiModule()
-    await expect(import(join(missing, "dist/logic/index.js"))).rejects.toThrow('rebuild the plugin with this pm (missing export "x" from "@pm/api")')
+    await expect(import(join(missing, "dist/logic/index.js"))).rejects.toThrow('rebuild the plugin with this ttybrain (missing export "x" from "@ttybrain/api")')
   } finally {
-    g.__PM_MODULES__ = before
+    g.__TTYBRAIN_MODULES__ = before
     if (before) installApiModule()
   }
 })
 
 test("a shim exports names that clash with its own locals", async () => {
   const dir = pluginDir(
-    { "src/logic/index.ts": `import { m, __pm0, definePlugin } from "@pm/api"\nexport const got = [m, __pm0]\nexport default definePlugin\n` },
+    { "src/logic/index.ts": `import { m, __pm0, definePlugin } from "@ttybrain/api"\nexport const got = [m, __pm0]\nexport default definePlugin\n` },
     { tui: false },
   )
   await buildPlugin(dir)
-  const g = globalThis as { __PM_MODULES__?: Record<string, unknown> }
-  const before = g.__PM_MODULES__
+  const g = globalThis as { __TTYBRAIN_MODULES__?: Record<string, unknown> }
+  const before = g.__TTYBRAIN_MODULES__
   try {
-    g.__PM_MODULES__ = { "@pm/api": { m: "the m", __pm0: "the __pm0", definePlugin: () => null } }
+    g.__TTYBRAIN_MODULES__ = { "@ttybrain/api": { m: "the m", __pm0: "the __pm0", definePlugin: () => null } }
     const mod = (await import(join(dir, "dist/logic/index.js"))) as { got: unknown[] }
     expect(mod.got).toEqual(["the m", "the __pm0"])
   } finally {
-    g.__PM_MODULES__ = before
+    g.__TTYBRAIN_MODULES__ = before
   }
 })
 
@@ -242,10 +242,10 @@ test("ttybrain plugin build [dir] prints what it built", async () => {
   const o = { out: "", err: "" }
   const io = { out: (s: string) => void (o.out += s), err: (s: string) => void (o.err += s), stdin: async () => "" }
   expect(await runCli(["plugin", "build", dir], kernel, io)).toBe(0)
-  expect(o).toEqual({ out: "built pm-plugin-demo 1.0.0: 2 files, shims for @pm/api, @pm/api/tui, solid-js, @opentui/solid\n", err: "" })
+  expect(o).toEqual({ out: "built ttybrain-plugin-demo 1.0.0: 2 files, shims for @ttybrain/api, @ttybrain/api/tui, solid-js, @opentui/solid\n", err: "" })
   o.out = ""
   expect(await runCli(["plugin", "build", dir, "--json"], kernel, io)).toBe(0)
-  expect(JSON.parse(o.out)).toEqual({ name: "pm-plugin-demo", version: "1.0.0", files: 2, shims: ["@pm/api", "@pm/api/tui", "solid-js", "@opentui/solid"] })
+  expect(JSON.parse(o.out)).toEqual({ name: "ttybrain-plugin-demo", version: "1.0.0", files: 2, shims: ["@ttybrain/api", "@ttybrain/api/tui", "solid-js", "@opentui/solid"] })
   o.out = ""
   expect(await runCli(["plugin", "build", join(dir, "nope")], kernel, io)).toBe(1)
   expect(o.err).toContain(`no package.json in ${join(dir, "nope")}`)
@@ -261,8 +261,8 @@ test("ttybrain plugin build names a package without name or version by its folde
   const o = { out: "", err: "" }
   const io = { out: (s: string) => void (o.out += s), err: (s: string) => void (o.err += s), stdin: async () => "" }
   expect(await runCli(["plugin", "build", dir], kernel, io)).toBe(0)
-  expect(o).toEqual({ out: "built demo: 1 files, shims for @pm/api\n", err: "" })
+  expect(o).toEqual({ out: "built demo: 1 files, shims for @ttybrain/api\n", err: "" })
   o.out = ""
   expect(await runCli(["plugin", "build", dir, "--json"], kernel, io)).toBe(0)
-  expect(JSON.parse(o.out)).toEqual({ name: null, version: null, files: 1, shims: ["@pm/api"] })
+  expect(JSON.parse(o.out)).toEqual({ name: null, version: null, files: 1, shims: ["@ttybrain/api"] })
 })
