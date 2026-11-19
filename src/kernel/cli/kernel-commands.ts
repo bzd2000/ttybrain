@@ -56,7 +56,7 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
       summary: "install a plugin from npm, a folder or a .tgz into the plugins folder (from the next run)",
       args: [{ name: "spec", required: true }],
       run: async ({ args }) => {
-        // The installer choice (TTYBRAIN_PLUGIN_INSTALLER) comes from the process environment, which pm's entry point boots with.
+        // The installer choice (TTYBRAIN_PLUGIN_INSTALLER) comes from the process environment, which ttybrain's entry point boots with.
         const { name, id, version, warned } = await addPlugin(kernel.paths, String(args.spec), process.env)
         return {
           json: { name, id, version, source: "npm", warned },
@@ -93,7 +93,7 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
           plugins.disabled = disabled.filter((d) => d !== id)
         })
         // The file no longer lists it, so if the merged config still does, TTYBRAIN_CONFIG_JSON (read from the process
-        // environment, which pm's entry point boots with) disables it.
+        // environment, which ttybrain's entry point boots with) disables it.
         if (loadConfig(kernel.paths, process.env).plugins.disabled.includes(id)) {
           return { json: { id, disabled: false, stillDisabledBy: "TTYBRAIN_CONFIG_JSON" }, text: `enabled ${id}; note: TTYBRAIN_CONFIG_JSON still disables it` }
         }

@@ -81,7 +81,7 @@ test("enable of an id that is no longer installed still removes it", async () =>
 test("enable notes that TTYBRAIN_CONFIG_JSON still disables the plugin", async () => {
   writeFileSync(configFile(), JSON.stringify({ plugins: { disabled: ["meetings"] } }))
   const envJson = '{"plugins":{"disabled":["meetings"]}}'
-  // The command reads TTYBRAIN_CONFIG_JSON from the process environment, which pm's entry point boots with.
+  // The command reads TTYBRAIN_CONFIG_JSON from the process environment, which ttybrain's entry point boots with.
   const before = process.env.TTYBRAIN_CONFIG_JSON
   process.env.TTYBRAIN_CONFIG_JSON = envJson
   try {

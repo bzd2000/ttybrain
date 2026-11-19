@@ -297,6 +297,27 @@ Controller rulings:
 - Task 9: a fixed 20 ms sleep before the unhandled-rejection check (`tests/external-plugin.test.ts` ~528); the failing-migration case doesn't assert that no `kernel_plugin_migration` row exists, and the no-tables assertion is trivial in five cases; the selfcheck's `checkExternalScreen` duplicates the `checkLoaderPath` sequence.
 - Task 10: `plugin new --json` omits the no-sources note; the scaffold test uses `process.chdir`; the README template hard-codes `~/.pm/plugins`; the scaffold's devDependencies are unproven by a real `npm install` (the test symlinks `node_modules`).
 
+## Rename to ttybrain (2026-11-19)
+
+Collected from the execution ledger (`.superpowers/sdd/2026-11-19-ttybrain-rename/progress.md`). Plan: `docs/superpowers/plans/2026-11-19-ttybrain-rename.md`. The command is `ttybrain` (alias `tb`), the data folder `~/.ttybrain` with `ttybrain.db`, the environment variables `TTYBRAIN_*` (the old `PM_*` names are not read: a clean break), the plugin API `@ttybrain/api` and `@ttybrain/api/tui`, the manifest key `"ttybrain"` and `globalThis.__TTYBRAIN_MODULES__`. A plugin manifest with the old `"pm"` key fails with `built for pm; rebuild it with "ttybrain plugin build"`. Source file and directory names (`src/bin/pm.ts`) and older plans and specs keep their names; `tests/name.test.ts` keeps old names out of `src/`, `tests/`, `scripts/` and CI.
+
+### Rulings made during the rename (and what each costs if wrong)
+
+- The data move (`src/kernel/home-move.ts`) never starts ttybrain on an empty database while the data sits under the old name. This overturns the plan's "EXDEV: return silently" and the controller's "continue on failure": a failed or incomplete move stops with `could not move <from> to <to>: <reason>` and a hint (exit 1), a half-done move is resumed on the next run, and `~/.pm` with `pm.db` but no `~/.ttybrain/ttybrain.db` is reported on every run (`your data is still in <from>; move it to <to> by hand, or set TTYBRAIN_HOME=<from>`). Cost if wrong: ttybrain refuses to start until the user moves the folder by hand or sets `TTYBRAIN_HOME`.
+- The move renames and never copies; `pm.db`, `-wal` and `-shm` move as one set, and only a real directory is moved. `~/.pm` and `pm.db` are left as symlinks so an old build still opens the same file. When both folders hold a database, ttybrain uses the new one and prints a note. Nothing moves when `TTYBRAIN_HOME` or `TTYBRAIN_DB` is set.
+- Task 3 owns the remaining app-name prose in `build.ts`, `install.ts`, `dispatch.ts`, `scaffold.ts` and `babel-options.ts`, because it sits next to the manifest and module names Task 3 changes. Cost: none.
+
+### Deferred minors and concerns
+
+- Task 1: two simultaneous first runs print a spurious `could not move` line.
+- Task 1 (data): a double failure in the rollback of the db set can split `pm.db` from its `-wal`; the next run then moves without the WAL (renaming `-wal` and `-shm` before `pm.db` would fix it).
+- Task 1: `readdirSync` for the backups in `renameDb` is outside the `try`, so the rollback is incomplete on that path.
+- Task 1 (data): a `~/.pm/pm.db` that is itself a symlink makes a fresh move skip the db set, so the first run starts empty.
+- Task 1: a blocked move state also makes `--help` exit 1 (documented in the README).
+- Task 3: the old-name scan's allow-list is per file, not per line, has no stale-exemption check, and misses `pkg["pm"]` and `pm: {plugin`.
+- Task 3: a disabled legacy plugin is listed as `failed (rebuild)`, not `disabled`.
+- Task 3: the `dist/__pm/` shim folder and the `__pm<n>` shim locals keep the old internal names.
+
 ## Draft recovery (2026-11-17)
 
 Forms, quick capture and the Context editor keep unsaved values as drafts in `PM_HOME/drafts/` (`src/kernel/tui/drafts.ts`). Deferred minors:
