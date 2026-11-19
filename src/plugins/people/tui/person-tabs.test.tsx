@@ -186,6 +186,18 @@ describe("person record view", () => {
     expect(tabLine(frame)).toContain("Notes 3")
   })
 
+  test("notes tab shows a 16-character project code whole", async () => {
+    const t = await open("@marie", {
+      tabs: 1,
+      extra: async () => {
+        await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+        await write().addNote!({ person: "@marie", kind: "interaction", date: "2026-11-05", project: "DATAPLATFORM2027", text: "Kickoff" })
+      },
+    })
+    const frame = await until(t, (f) => f.includes("Kickoff"))
+    expect(lineWith(frame, "Kickoff")).toMatch(/N-3\s+5 Nov\s+interaction\s+DATAPLATFORM2027 Kickoff/)
+  })
+
   test("notes tab empty text", async () => {
     const t = await open("@luc", { tabs: 1 })
     const frame = await until(t, (f) => f.includes("No notes yet"))

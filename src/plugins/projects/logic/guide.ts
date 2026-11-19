@@ -3,7 +3,7 @@
 import type { PluginContext } from "@ttybrain/api"
 
 const MARKDOWN = `
-Projects are referenced by code (\`CRM\` or \`#CRM\`): 2–8 upper-case letters or digits. \`ttybrain project list\` shows every active project with its health, next milestone and open actions and risks; \`ttybrain project show <code>\` shows one, with the people involved.
+Projects are referenced by code (\`CRM\` or \`#CRM\`): 2–16 upper-case letters or digits. \`ttybrain project list\` shows every active project with its health, next milestone and open actions and risks; \`ttybrain project show <code>\` shows one, with the people involved. A code can be changed with \`ttybrain project edit <code> --code <new>\`; text that mentioned the old code (notes, inbox items, meeting notes, exports) is not rewritten.
 
 - Add a project with \`ttybrain project add <CODE> "<name>" [--effort <days>] [--start <date>] [--end <date>]\`. Check \`ttybrain project list\` first so you don't add it twice.
 - Record a health signal ("the design is slipping", "budget overrun") as a health update: \`ttybrain project edit CRM --health amber --health-comment "Design slipping 2 weeks"\`. Health is \`green\`, \`amber\` or \`red\`; every update is kept, and the latest one is the project's current health.

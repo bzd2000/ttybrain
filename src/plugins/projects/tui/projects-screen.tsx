@@ -7,8 +7,8 @@
 //   on code or name plus `status:<s>` and `health:<h>`; Enter applies it, Esc clears it.
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import {
-  displayWidth,
   dueLabel,
+  fitWidth,
   Panel,
   printable,
   Table,
@@ -43,7 +43,7 @@ const FILTER_HINTS: Hint[] = [
   { key: "Esc", label: "clear" },
 ]
 const HEALTH_RANK: Record<string, number> = { red: 0, amber: 1, green: 2 }
-const CODE_MAX = 8
+const CODE_MAX = 16 // codes are 2–16 characters and never cut
 
 const byCode = (a: ProjectRecord, b: ProjectRecord) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0)
 // Health (not set last), then the next milestone's due date (none last), then code.
@@ -139,7 +139,7 @@ export function ProjectsScreen() {
 
   const columns = (): TableColumn[] => [
     { id: "health", title: " ", width: 1 },
-    { id: "code", title: "Code", width: Math.min(CODE_MAX, Math.max(4, ...shown().map((p) => displayWidth(p.code)))) },
+    { id: "code", title: "Code", width: fitWidth(shown().map((p) => p.code), 4, CODE_MAX) },
     { id: "name", title: "Name", width: "grow" },
     { id: "next", title: "Next milestone", width: 20 },
     { id: "due", title: "Due", width: 6 },

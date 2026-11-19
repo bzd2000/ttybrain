@@ -229,6 +229,41 @@ describe("Meetings screen", () => {
     expect(lineWith(frame, "Board December")).toContain("›")
   })
 
+  test("the Projects column shows a 16-character code whole at 80x24", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+      await write("projects").addProject!({ code: "CRM", name: "CRM" })
+      await write().addMeeting!({ title: "Data sync", date: "2026-11-20", kind: "steering", projects: ["DATAPLATFORM2027"] })
+      await write().addMeeting!({ title: "CRM sync", date: "2026-11-21", kind: "steering", projects: ["CRM"] })
+    })
+    tui = await renderTui(kernel, { width: 80, height: 24 })
+    tui.input.pressKey("5")
+    const frame = await until(tui, (f) => f.includes("Data sync"))
+    expect(lineWith(frame, "Data sync")).toContain(" DATAPLATFORM2027 ")
+    expect(lineWith(frame, "CRM sync").lastIndexOf(" CRM ")).toBe(lineWith(frame, "Data sync").indexOf(" DATAPLATFORM2027 "))
+    // The columns before it are still whole: kind, status and the attendee count.
+    expect(lineWith(frame, "Data sync")).toMatch(/steering planned\s+0\s+DATAPLATFORM2027 │/)
+  })
+
+  test("a row with two codes keeps whole codes and ends with … at 80x24", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+      await write("projects").addProject!({ code: "CRM", name: "CRM" })
+      await write().addMeeting!({ title: "Data sync", date: "2026-11-20", kind: "steering", projects: ["DATAPLATFORM2027", "CRM"] })
+      await write().addMeeting!({ title: "CRM sync", date: "2026-11-21", kind: "steering", projects: ["CRM", "DATAPLATFORM2027"] })
+    })
+    tui = await renderTui(kernel, { width: 80, height: 24 })
+    tui.input.pressKey("5")
+    const frame = await until(tui, (f) => f.includes("Data sync"))
+    // In agenda order, in an 18-wide column: the long code first, then ` …`; after CRM it gives way.
+    expect(lineWith(frame, "Data sync")).toMatch(/steering planned\s+0\s+DATAPLATFORM2027 … │/)
+    expect(lineWith(frame, "CRM sync")).toMatch(/steering planned\s+0\s+CRM …\s+│/)
+    expect(lineWith(frame, "CRM sync").lastIndexOf(" CRM …")).toBe(lineWith(frame, "Data sync").indexOf(" DATAPLATFORM2027 …"))
+    expect(frame).not.toMatch(/DATAPLAT\w*…|CRM \w+…/)
+  })
+
   test("empty state", async () => {
     const t = await open({ seed: false })
     expect(await t.frame()).toContain("No meetings yet. Press n to add one.")

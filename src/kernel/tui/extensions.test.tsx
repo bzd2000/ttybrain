@@ -122,7 +122,7 @@ describe("listColumn and field extension points", () => {
     let frame = await until(t, (f) => f.includes("Edit CRM") && budgetLine(f) !== "")
     expect(frame).toContain("Edit CRM")
     expect(budgetLine(frame)).toContain("12000")
-    for (let i = 0; i < 7; i++) t.input.pressTab() // past the project's own fields to Budget
+    for (let i = 0; i < 8; i++) t.input.pressTab() // past the project's own fields to Budget
     frame = await t.frame()
     expect(budgetLine(frame)).toContain("›")
     for (let i = 0; i < 5; i++) t.input.pressBackspace()
@@ -156,7 +156,7 @@ describe("listColumn and field extension points", () => {
     t.input.pressKey("e")
     await until(t, (f) => f.includes("Edit CRM") && budgetLine(f) !== "")
     await t.input.typeText(" 2") // Name has focus
-    for (let i = 0; i < 7; i++) t.input.pressTab()
+    for (let i = 0; i < 8; i++) t.input.pressTab()
     await t.input.typeText("x") // 12000x: no number
     t.input.pressKey("s", { ctrl: true })
     const frame = await until(t, (f) => f.includes("✗"))
@@ -186,7 +186,7 @@ describe("listColumn and field extension points", () => {
     t.input.pressKey("e")
     let frame = await until(t, (f) => f.includes("[budget editor"))
     expect(frame).toContain("[budget editor 12000]")
-    for (let i = 0; i < 7; i++) t.input.pressTab()
+    for (let i = 0; i < 8; i++) t.input.pressTab()
     frame = await t.frame()
     expect(frame).toContain("[budget editor 12000 *]")
     change!("20000")
@@ -238,7 +238,7 @@ describe("listColumn and field extension points", () => {
     await projects(t)
     t.input.pressKey("e")
     await until(t, (f) => f.includes("Edit CRM") && budgetLine(f).includes("12000"))
-    for (let i = 0; i < 7; i++) t.input.pressTab()
+    for (let i = 0; i < 8; i++) t.input.pressTab()
     for (let i = 0; i < 5; i++) t.input.pressBackspace()
     await t.input.typeText("15000")
     t.input.pressEscape()
@@ -270,7 +270,7 @@ describe("listColumn and field extension points", () => {
     await projects(t)
     t.input.pressKey("e")
     await until(t, (f) => f.includes("Edit CRM") && budgetLine(f).includes("12000"))
-    for (let i = 0; i < 7; i++) t.input.pressTab()
+    for (let i = 0; i < 8; i++) t.input.pressTab()
     for (let i = 0; i < 5; i++) t.input.pressBackspace()
     await t.input.typeText("  ")
     t.input.pressKey("s", { ctrl: true })
@@ -283,7 +283,7 @@ describe("listColumn and field extension points", () => {
     await projects(t)
     t.input.pressKey("e")
     await until(t, (f) => f.includes("Edit CRM") && budgetLine(f).includes("12000"))
-    for (let i = 0; i < 7; i++) t.input.pressTab()
+    for (let i = 0; i < 8; i++) t.input.pressTab()
     for (let i = 0; i < 5; i++) t.input.pressBackspace()
     await t.input.typeText("0x10")
     t.input.pressKey("s", { ctrl: true })

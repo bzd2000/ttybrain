@@ -107,6 +107,30 @@ export async function purgePluginData(kernel: Kernel, id: string): Promise<void>
   }
 }
 
+// An own foreign key whose ON DELETE action changes the child rows (CASCADE, SET NULL, SET DEFAULT), by the
+// root pages of both tables: a DROP TABLE of the parent runs an implicit DELETE that fires it, and deferring foreign
+// keys does not stop that.
+type DeleteAction = { parent: string; parentRoot: number; child: string; childRoot: number; action: string }
+
+function deleteActions(kdb: KernelDb, pluginId: string): DeleteAction[] {
+  const tables = kdb.raw
+    .prepare("SELECT name, rootpage FROM sqlite_schema WHERE type = 'table' AND rootpage > 0")
+    .all([])
+    .map((r) => ({ name: String(r.name), root: Number(r.rootpage) }))
+    .filter((t) => isOwnName(pluginId, t.name))
+  const rootOf = new Map(tables.map((t) => [t.name.toLowerCase(), t]))
+  const out: DeleteAction[] = []
+  for (const child of tables) {
+    for (const fk of kdb.raw.prepare(`PRAGMA foreign_key_list(${quote(child.name)})`).all([])) {
+      const action = String(fk.on_delete).toUpperCase()
+      const parent = rootOf.get(String(fk.table).toLowerCase())
+      if (action === "NO ACTION" || action === "RESTRICT" || parent === undefined) continue
+      out.push({ parent: parent.name, parentRoot: parent.root, child: child.name, childRoot: child.root, action })
+    }
+  }
+  return out
+}
+
 export class MigrationRunner {
   private backedUp = false
   private appliedAtBoot?: number // migrations applied before this boot applied any: 0 means a new database
@@ -197,7 +221,16 @@ export class MigrationRunner {
     let before = new Map<string, SchemaObject>()
     let beforeTemp = new Map<string, SchemaObject>()
     let violation: string | undefined // sticky: a plugin that catches the error still gets rolled back
+    let actions: DeleteAction[] = [] // as of the last schema statement
     const fail = (problem: string) => new IsolationError(`migration "${m.id}" of plugin "${pluginId}" rolled back: ${problem}`)
+    // After each schema statement: was a parent of such a key dropped while its child was still there? (Dropped
+    // and recreated, the parent may even get its root page back, so this is checked statement by statement.)
+    const droppedParent = (): string | undefined => {
+      const roots = new Set(rootOwners(this.kdb).keys())
+      const hit = actions.find((a) => !roots.has(a.parentRoot) && roots.has(a.childRoot))
+      actions = deleteActions(this.kdb, pluginId)
+      return hit && `it drops "${hit.parent}", which "${hit.child}" references with ON DELETE ${hit.action}; rebuild "${hit.child}" too, or drop it first`
+    }
     const access: TableAccess = {
       ownTables: () => ownTablesOf(this.kdb, pluginId, roots),
       views: () => new Map(), // published views are created after migrations
@@ -207,7 +240,7 @@ export class MigrationRunner {
       // Every schema statement is checked at once, so no intermediate state (a foreign table renamed into the
       // plugin's namespace, a trigger created and dropped again) can be used before the final diff.
       afterSchemaChange: () => {
-        const problem = this.checkRoots(pluginId, roots) ?? this.check(pluginId, external, before, beforeTemp)
+        const problem = droppedParent() ?? this.checkRoots(pluginId, roots) ?? this.check(pluginId, external, before, beforeTemp)
         if (problem) {
           violation ??= problem
           throw fail(problem)
@@ -219,13 +252,18 @@ export class MigrationRunner {
         this.kdb.transaction(async () => {
           this.kdb.invalidateSchema() // another process may have migrated while we waited for the lock
           if (this.appliedIds(pluginId).has(m.id)) return // ...and applied this one
+          // Foreign keys are checked once, at commit (SQLite resets this at the transaction's end), so a migration
+          // can rebuild an own table that its other tables reference (copy, drop, create, copy back): a violation
+          // left at commit fails the commit, and the migration is rolled back.
+          this.kdb.raw.exec("PRAGMA defer_foreign_keys = ON")
           roots = rootOwners(this.kdb)
+          actions = deleteActions(this.kdb, pluginId)
           before = this.snapshot("sqlite_schema")
           beforeTemp = this.snapshot("sqlite_temp_schema")
           await m.up(this.kdb.pluginDb(pluginId, access))
           active = false
           this.kdb.invalidateSchema()
-          const problem = violation ?? this.checkRoots(pluginId, roots) ?? this.check(pluginId, external, before, beforeTemp)
+          const problem = violation ?? droppedParent() ?? this.checkRoots(pluginId, roots) ?? this.check(pluginId, external, before, beforeTemp)
           if (problem) throw fail(problem)
           this.kdb.raw
             .prepare("INSERT INTO kernel_plugin_migration (plugin, id, applied_at) VALUES (?, ?, ?)")

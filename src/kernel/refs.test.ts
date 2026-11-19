@@ -26,7 +26,10 @@ describe("codes", () => {
   test("valid/normalize", () => {
     expect(isValidCode("AB")).toBe(true)
     expect(isValidCode("A")).toBe(false)
-    expect(isValidCode("ABCDEFGHI")).toBe(false)
+    expect(isValidCode("ABCDEFGHI")).toBe(true)
+    expect(isValidCode("ABCDEFGHIJKLMN16")).toBe(true)
+    expect(isValidCode("ABCDEFGHIJKLMNO17")).toBe(false)
+    expect(isValidCode("AB-C")).toBe(false)
     expect(isValidCode("ab")).toBe(false)
     expect(normalizeCode("#abc")).toBe("ABC")
   })

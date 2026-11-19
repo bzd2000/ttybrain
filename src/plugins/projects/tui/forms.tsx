@@ -47,8 +47,10 @@ export function ProjectForm(props: RecordFormProps) {
     <WithProject recordRef={props.recordRef} close={props.close}>
       {(p) => {
         const fields: FieldSpec[] = [
+          // Code first on add; on an edit after the name (which keeps the focus), and a new code renames the project.
           ...(p === null ? [{ name: "code", label: "Code", kind: "text" as const, required: true }] : []),
           { name: "name", label: "Name", kind: "text", required: true, initial: p?.name },
+          ...(p === null ? [] : [{ name: "code", label: "Code", kind: "text" as const, required: true, initial: p.code }]),
           { name: "description", label: "Description", kind: "longtext", initial: p?.description },
           { name: "status", label: "Status", kind: "enum", values: STATUSES, required: true, initial: p?.status },
           { name: "startDate", label: "Start", kind: "date", initial: p?.start_date },
@@ -80,7 +82,7 @@ export function ProjectForm(props: RecordFormProps) {
           const changed = fields.filter((f) => (v[f.name] ?? null) !== (f.initial ?? null)).map((f) => f.name)
           if (changed.length === 0) return Promise.resolve({ ok: true, ref: project.ref })
           const input: Record<string, unknown> = { project: project.ref }
-          for (const name of changed) input[name] = name === "effortDays" ? numberValue(v[name]) : name === "name" ? (v.name ?? "") : v[name]
+          for (const name of changed) input[name] = name === "effortDays" ? numberValue(v[name]) : name === "name" || name === "code" ? (v[name] ?? "") : v[name]
           return save(() => write("editProject")(input), props, "saved")
         }
         const submit = (v: FormValues) => (p === null ? add(v) : edit(p, v))

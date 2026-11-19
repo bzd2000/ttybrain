@@ -261,6 +261,31 @@ describe("project detail", () => {
     expect(await t.frame()).toContain("Edit CRM")
   })
 
+  test("a code edit from Summary follows the rename, and Esc selects the renamed project", async () => {
+    const t = await open()
+    await until(t, "› CRM CRM replatforming")
+    t.input.pressKey("e")
+    await until(t, "Edit CRM")
+    t.input.pressTab() // Name → Code (prefilled)
+    await t.input.typeText("2027")
+    t.input.pressKey("s", { ctrl: true })
+    const frame = await until(t, "› CRM2027 CRM replatforming")
+    expect(frame).toContain("› CRM2027 CRM replatforming")
+    expect(frame).toContain("Design slipping") // the Summary of the same project, not "not found"
+    expect(t.nav.stack().length).toBe(3) // Overview, Projects, #CRM2027: the old route was replaced, not stacked on
+    const codes = await inCtx(async () => (await kernel!.runtime("projects")!.data.selectFrom("project").select("code").execute()).map((r: any) => r.code))
+    expect(codes).toEqual(["CRM2027"])
+
+    t.input.pressEscape()
+    let list = await t.frame()
+    for (let i = 0; i < 60 && !(t.nav.route().kind === "screen" && list.includes(" CRM2027 ")); i++) {
+      await sleep(25)
+      list = await t.frame()
+    }
+    expect(t.nav.route()).toEqual({ kind: "screen", screen: "projects", params: { selected: "#CRM2027" } })
+    expect(lineWith(list, " CRM2027 ")).toContain("›")
+  })
+
   test("people tab adds and removes involvement", async () => {
     const t = await open()
     let frame = await right(t, 6)

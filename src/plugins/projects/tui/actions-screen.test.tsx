@@ -246,4 +246,22 @@ describe("actions screen", () => {
     expect(lineWith(frame, "Send the minutes")).toContain("SteerCo Q4")
     expect(lineWith(frame, "Prepare budget")).toContain("—")
   })
+
+  test("a 16-character project code is shown whole at 80x24", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      await write().addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+      await write().addProject!({ code: "CRM", name: "Customer platform" })
+      await write().addAction!({ title: "Kickoff", due: "2026-11-16", project: "DATAPLATFORM2027" })
+      await write().addAction!({ title: "Reply to vendor", due: "2026-11-16", project: "CRM" })
+    })
+    tui = await renderTui(kernel, { width: 80, height: 24 })
+    tui.input.pressKey("4")
+    const frame = await untilThat(tui, (f) => f.includes("Kickoff"))
+    const long = lineWith(frame, "Kickoff")
+    expect(long).toContain(" DATAPLATFORM2027 ")
+    expect(long).toContain("16 Nov")
+    for (const l of lines(frame)) expect(l.length).toBeLessThanOrEqual(80)
+    expect(lineWith(frame, "Reply to vendor").indexOf(" CRM ")).toBe(long.indexOf(" DATAPLATFORM2027 "))
+  })
 })

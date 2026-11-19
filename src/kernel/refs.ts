@@ -25,7 +25,7 @@ export function normalizeHandle(input: string): string {
 }
 
 export function isValidCode(s: string): boolean {
-  return /^[A-Z0-9]{2,8}$/.test(s)
+  return /^[A-Z0-9]{2,16}$/.test(s)
 }
 
 export function normalizeCode(input: string): string {

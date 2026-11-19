@@ -5,6 +5,7 @@
 import { createMemo, createSignal, Show } from "solid-js"
 import {
   act,
+  fitWidth,
   longDate,
   notify,
   Panel,
@@ -34,10 +35,11 @@ const HINTS: Hint[] = [
   { key: "p", label: "attendees" },
   { key: "x", label: "close" },
 ]
-const COLUMNS: TableColumn[] = [
+// The project column fits the longest code shown (8 to 16): codes are never cut.
+const columns = (codes: string[]): TableColumn[] => [
   { id: "pos", title: "#", width: 3 },
   { id: "text", title: "Item", width: "grow" },
-  { id: "project", title: "Project", width: 8 },
+  { id: "project", title: "Project", width: fitWidth(codes, 8, 16) },
   { id: "ask", title: "Ask", width: "grow" },
 ]
 
@@ -146,7 +148,7 @@ export function AgendaTab(props: { recordRef: string }) {
       <Panel title="Agenda" count={meeting()?.agenda.length} focused={keys.active()} grow>
         <Show when={q.data() !== undefined}>
           <Table
-            columns={COLUMNS}
+            columns={columns((meeting()?.agenda ?? []).map((a) => a.project?.slice(1) ?? ""))}
             rows={rows()}
             selectedRef={rows().some((r) => r.ref === want()) ? want() : undefined}
             onSelect={select}

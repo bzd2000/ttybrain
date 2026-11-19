@@ -8,6 +8,8 @@
 import { createMemo, createSignal, Show, untrack } from "solid-js"
 import {
   act,
+  joinFit,
+  joinFitWidth,
   KeyHints,
   longDate,
   Panel,
@@ -39,14 +41,16 @@ const HINTS: Hint[] = [
   { key: "x", label: "close" },
   { key: "Del", label: "cancel" },
 ]
-const COLUMNS: TableColumn[] = [
+// The Projects column fits each row's first code, plus ` …` when more follow (12 to 18), and a cell keeps whole
+// codes (joinFit): a code is never cut, and more codes than fit always end in `…`.
+const columns = (projectsWidth: number): TableColumn[] => [
   { id: "ref", title: "Ref", width: 5 },
   { id: "date", title: "Date", width: 10 },
   { id: "title", title: "Title", width: "grow" },
   { id: "kind", title: "Kind", width: 8 },
   { id: "status", title: "Status", width: 9 },
   { id: "att", title: "Att.", width: 4 },
-  { id: "projects", title: "Projects", width: 12 },
+  { id: "projects", title: "Projects", width: projectsWidth },
 ]
 
 // `Thu 4 Dec`: the long date without its year.
@@ -60,7 +64,7 @@ export const closedMessage = (ref: string, out: unknown) => {
 // The project codes of the agenda, in agenda order, without `#`.
 const codes = (m: MeetingRecord) => [...new Set(m.agenda.flatMap((a) => (a.project === null ? [] : [a.project.slice(1)])))]
 
-function row(m: MeetingRecord, today: string): TableRow {
+function row(m: MeetingRecord, today: string, projectsWidth: number): TableRow {
   const muted: Tone = m.status === "cancelled" ? "muted" : undefined
   const cell = (text: string, tone: Tone = muted) => ({ text, tone })
   return {
@@ -72,7 +76,7 @@ function row(m: MeetingRecord, today: string): TableRow {
       kind: cell(m.kind),
       status: cell(m.status),
       att: cell(String(m.attendees.length)),
-      projects: cell(codes(m).join(" ")),
+      projects: cell(joinFit(codes(m), projectsWidth)),
     },
   }
 }
@@ -113,7 +117,8 @@ export function MeetingsScreen() {
   const [want, setWant] = createSignal<string | undefined>(params.selected)
 
   const groups = createMemo(() => meetingGroups(q.data() ?? []))
-  const tableGroups = createMemo((): TableGroup[] => groups().map((g) => ({ title: g.title, rows: g.rows.map((m) => row(m, today())) })))
+  const projectsWidth = createMemo(() => joinFitWidth(groups().flatMap((g) => g.rows.map(codes)), 12, 18))
+  const tableGroups = createMemo((): TableGroup[] => groups().map((g) => ({ title: g.title, rows: g.rows.map((m) => row(m, today(), projectsWidth())) })))
   const shown = () => groups().flatMap((g) => g.rows)
   // The selected meeting, only while shown.
   const selected = (): MeetingRecord | undefined => {
@@ -162,7 +167,7 @@ export function MeetingsScreen() {
       <Panel title="Meetings" count={q.data() === undefined ? undefined : shown().length} focused={keys.active()} grow>
         <Show when={q.data() !== undefined}>
           <Table
-            columns={COLUMNS}
+            columns={columns(projectsWidth())}
             groups={tableGroups()}
             selectedRef={loaded(want()) ? want() : undefined}
             onSelect={select}

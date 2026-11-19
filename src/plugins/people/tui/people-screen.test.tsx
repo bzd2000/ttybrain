@@ -379,6 +379,51 @@ describe("People screen: the detail panel", () => {
     expect(indexOf(frame, "1:1 notes")).toBeLessThan(indexOf(frame, "Goals"))
   })
 
+  test("the Projects column shows a 16-character code whole at 80x24", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      await write().addPerson!({ name: "Marie Dubois", handle: "marie", is_stakeholder: true })
+      await write().addPerson!({ name: "Luc Peeters", handle: "luc", is_stakeholder: true })
+      await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+      await write("projects").addProject!({ code: "CRM", name: "CRM" })
+      await write("projects").addInvolvement!({ project: "DATAPLATFORM2027", person: "@marie", role: "sponsor" })
+      await write("projects").addInvolvement!({ project: "CRM", person: "@luc", role: "sponsor" })
+    })
+    tui = await renderTui(kernel, { width: 80, height: 24 })
+    tui.input.pressKey("3")
+    const frame = await until(tui, (f) => f.includes("Marie Dubois"))
+    expect(lineWith(frame, "Marie Dubois")).toContain(" DATAPLATFORM2027 ")
+    expect(lineWith(frame, "Luc Peeters").indexOf(" CRM ")).toBe(lineWith(frame, "Marie Dubois").indexOf(" DATAPLATFORM2027 "))
+    // The columns after it are still there, in line with the header.
+    expect(lineWith(frame, "Marie Dubois")).toMatch(/ DATAPLATFORM2027 —\s+—\s+never/)
+    expect(lineWith(frame, "Infl.").indexOf("Infl.")).toBe(lineWith(frame, "Marie Dubois").indexOf(" DATAPLATFORM2027 ") + 18)
+  })
+
+  test("a row with two codes keeps whole codes and ends with … at 80x24", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      await write().addPerson!({ name: "Marie Dubois", handle: "marie", is_stakeholder: true })
+      await write().addPerson!({ name: "Luc Peeters", handle: "luc", is_stakeholder: true })
+      await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+      await write("projects").addProject!({ code: "CRM", name: "CRM" })
+      await write("projects").addProject!({ code: "ERP", name: "ERP" })
+      await write("projects").addInvolvement!({ project: "DATAPLATFORM2027", person: "@marie", role: "sponsor" })
+      await write("projects").addInvolvement!({ project: "CRM", person: "@marie", role: "sponsor" })
+      await write("projects").addInvolvement!({ project: "DATAPLATFORM2027", person: "@luc", role: "sponsor" })
+      await write("projects").addInvolvement!({ project: "ERP", person: "@luc", role: "sponsor" })
+    })
+    tui = await renderTui(kernel, { width: 80, height: 24 })
+    tui.input.pressKey("3")
+    const frame = await until(tui, (f) => f.includes("Marie Dubois"))
+    // Codes are sorted: CRM, then DATAPLATFORM2027, which does not fit beside it in 18 cells.
+    expect(lineWith(frame, "Marie Dubois")).toMatch(/ CRM …\s+—\s+—\s+never/)
+    expect(lineWith(frame, "Luc Peeters")).toMatch(/ DATAPLATFORM2027 … —\s+—\s+never/) // DATAPLATFORM2027, ERP
+    // The column is 18 wide; the header's next column lines up with the rows'.
+    expect(lineWith(frame, "Infl.").indexOf("Infl.")).toBe(lineWith(frame, "Luc Peeters").indexOf(" DATAPLATFORM2027 ") + 20)
+    expect(lineWith(frame, "Marie Dubois").indexOf(" CRM …")).toBe(lineWith(frame, "Luc Peeters").indexOf(" DATAPLATFORM2027 "))
+    expect(frame).not.toMatch(/DATAPLAT\w*…|CRM \w+…/)
+  })
+
   test("panel hidden below 110 columns", async () => {
     const long = "Maximiliaan Vandenbroucke-De Smet-Claess"
     expect(long.length).toBe(40)

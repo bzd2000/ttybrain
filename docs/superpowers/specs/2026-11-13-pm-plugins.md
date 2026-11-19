@@ -113,7 +113,7 @@ The portfolio, and everything you follow up per project: health, milestones, del
 
 | Table | Columns |
 |---|---|
-| `project` | `code` (unique), `name`, `description`, `context` (Markdown), `context_updated_at`, `status` (active/on_hold/closed), `start_date`, `end_date`, `effort_estimate_days`, `effort_note`, `archived_at` |
+| `project` | `code` (unique, 2–16 `A-Z`/`0-9`), `name`, `description`, `context` (Markdown), `context_updated_at`, `status` (active/on_hold/closed), `start_date`, `end_date`, `effort_estimate_days`, `effort_note`, `archived_at` |
 | `health_update` | `project_id → project`, `date`, `health` (green/amber/red), `comment` |
 | `milestone` | `project_id → project`, `title`, `due_date`, `done_date` |
 | `deliverable` | `project_id → project`, `title`, `owner_id → person` **(soft)**, `due_date`, `status` (not_started/in_progress/in_review/delivered), `milestone_id → milestone`, `delivered_date`, `status_changed_at` |
@@ -152,7 +152,7 @@ It reads `people.person`, for owner, `for` and involvement names and for validat
 
 | Write | Input | Change-set line |
 |---|---|---|
-| `addProject` / `editProject` / `archiveProject` | … | `+ project CRM "CRM replatforming"` |
+| `addProject` / `editProject` / `archiveProject` | … (`editProject`'s optional `code` renames the project: same rules as add, a taken code is a conflict, the output `ref` is the new one) | `+ project CRM "CRM replatforming"`, `~ CRM code → CRM2027` |
 | `setContext` | `project`, `markdown` | `~ CRM context (2.4 kB → 3.1 kB)` |
 | `setHealth` | `project`, `health`, `comment?`, `date?` | `~ CRM health amber → red: "Budget overrun"` |
 | `addMilestone` / `editMilestone` / `completeMilestone` / `deleteMilestone` | … | `~ MS-2 due 26 Nov → 10 Dec` |

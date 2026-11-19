@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { displayWidth, dueLabel, longDate, shortDate, truncate } from "./format"
+import { displayWidth, dueLabel, fitWidth, joinFit, joinFitWidth, longDate, shortDate, truncate } from "./format"
 
 describe("TUI format", () => {
   test("displayWidth counts wide characters and emoji as 2", () => {
@@ -15,6 +15,46 @@ describe("TUI format", () => {
     expect(truncate("short", 8)).toBe("short")
     expect(truncate("名前名前名前", 10)).toBe("名前名前…")
     expect(displayWidth(truncate("名前名前名前", 10))).toBeLessThanOrEqual(10)
+  })
+
+  test("fitWidth: the widest text, kept between min and max", () => {
+    expect(fitWidth(["CRM", "ERP2"], 8, 16)).toBe(8)
+    expect(fitWidth(["CRM", "DATAPLATFORM2027"], 8, 16)).toBe(16)
+    expect(fitWidth(["DATAPLATFORM2027X"], 4, 16)).toBe(16)
+    expect(fitWidth(["HRPORTAL1", "名前"], 4, 16)).toBe(9)
+    expect(fitWidth([], 6, 16)).toBe(6)
+  })
+
+  test("joinFit keeps whole items while they fit, then ends with …", () => {
+    expect(joinFit(["CRM", "ERP"], 9)).toBe("CRM ERP")
+    expect(joinFit(["CRM", "ERP", "HRP"], 9)).toBe("CRM ERP …")
+    expect(joinFit(["CRM", "ERP", "HRP"], 8)).toBe("CRM …")
+    expect(joinFit(["CRM", "DATAPLATFORM2027"], 16)).toBe("CRM …")
+    expect(joinFit(["CRM", "ERP2", "DATAPLATFORM2027"], 16)).toBe("CRM ERP2 …")
+    expect(joinFit(["DATAPLATFORM2027", "CRM"], 18)).toBe("DATAPLATFORM2027 …")
+    expect(joinFit(["CRM", "DATAPLATFORM2027"], 18)).toBe("CRM …")
+    expect(joinFit(["CRM", "DATAPLATFORM2027"], 20)).toBe("CRM DATAPLATFORM2027")
+    // Hidden items are always signalled: too narrow for the first item and ` …`, the cell is `…` alone.
+    expect(joinFit(["DATAPLATFORM2027", "CRM"], 16)).toBe("…")
+    expect(joinFit(["名前名前", "AB"], 8)).toBe("…")
+    expect(joinFit([], 9)).toBe("")
+    for (const [items, w] of [[["CRM", "DATAPLATFORM2027", "ERP"], 16], [["AB", "CD", "EF", "GH"], 7]] as const) {
+      const out = joinFit([...items], w)
+      expect(displayWidth(out)).toBeLessThanOrEqual(w)
+      for (const part of out.split(" ")) expect(part === "…" || items.includes(part as never)).toBe(true) // never a cut item
+    }
+  })
+
+  test("joinFitWidth: wide enough for each row's first item and its ` …`", () => {
+    expect(joinFitWidth([["CRM"], ["ERP2"]], 9, 18)).toBe(9)
+    expect(joinFitWidth([["DATAPLATFORM2027"]], 9, 18)).toBe(16)
+    expect(joinFitWidth([["DATAPLATFORM2027", "CRM"], ["CRM"]], 9, 18)).toBe(18)
+    expect(joinFitWidth([["CRM", "DATAPLATFORM2027"]], 12, 18)).toBe(12) // `CRM …` fits; the long code gives way
+    expect(joinFitWidth([[], ["AB", "CD"]], 4, 18)).toBe(4)
+    for (const rows of [[["DATAPLATFORM2027", "CRM"]], [["CRM", "ERP", "DATAPLATFORM2027"], ["X1"]]]) {
+      const w = joinFitWidth(rows, 4, 18)
+      for (const r of rows) expect(joinFit(r, w).startsWith(r[0]!)).toBe(true) // the first code always shows
+    }
   })
 
   test("dueLabel", () => {

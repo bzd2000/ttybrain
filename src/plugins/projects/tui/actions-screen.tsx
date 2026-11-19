@@ -9,6 +9,7 @@ import {
   act,
   addDays,
   dueLabel,
+  fitWidth,
   Panel,
   printable,
   shortDate,
@@ -163,10 +164,11 @@ export function ActionsScreen() {
     if (ref !== undefined && here.kind === "screen" && here.params?.selected !== ref) nav.replaceParams({ ...here.params, selected: ref })
   }
 
-  const columns: TableColumn[] = [
+  // The project column fits the longest code shown (6 to 16): codes are never cut.
+  const columns = (): TableColumn[] => [
     { id: "id", title: "ID", width: 5 },
     { id: "title", title: "Action", width: "grow" },
-    { id: "project", title: "Proj.", width: 6 },
+    { id: "project", title: "Proj.", width: fitWidth(shown().map((r) => r.rec.project?.replace(/^#/, "") ?? ""), 6, 16) },
     { id: "owner", title: "Owner", width: 9 },
     { id: "from", title: "For / from", width: 16 },
     { id: "due", title: "Due", width: 6 },
@@ -238,7 +240,7 @@ export function ActionsScreen() {
         </Show>
         <Show when={q.data() !== undefined}>
           <Table
-            columns={columns}
+            columns={columns()}
             groups={groups()}
             selectedRef={loaded(want()) ? want() : undefined}
             onSelect={select}

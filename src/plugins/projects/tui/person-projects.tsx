@@ -5,6 +5,7 @@
 import { createMemo, createSignal, Show } from "solid-js"
 import {
   act,
+  fitWidth,
   Panel,
   printable,
   Table,
@@ -26,8 +27,9 @@ const HINTS: Hint[] = [
   { key: "n", label: "add" },
   { key: "Del", label: "remove" },
 ]
-const COLUMNS: TableColumn[] = [
-  { id: "code", title: "Project", width: 8 },
+// The project column fits the longest code shown (8 to 16): codes are never cut.
+const columns = (codes: string[]): TableColumn[] => [
+  { id: "code", title: "Project", width: fitWidth(codes, 8, 16) },
   { id: "name", title: "Name", width: "grow" },
   { id: "role", title: "Role", width: 20 },
   { id: "status", title: "Status", width: 8 },
@@ -96,7 +98,7 @@ export function PersonProjects(props: { recordRef: string }) {
       <Panel title="Projects & roles" count={q.data()?.roles.length} focused={keys.active()} grow>
         <Show when={q.data() !== undefined}>
           <Table
-            columns={COLUMNS}
+            columns={columns((q.data()?.roles ?? []).map((r) => r.code))}
             rows={rows()}
             onSelect={setCurrent}
             onOpen={(ref) => void nav.open(ref.split("\n")[0]!)}
