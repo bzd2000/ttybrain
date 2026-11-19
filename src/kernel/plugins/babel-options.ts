@@ -1,4 +1,4 @@
-// The Babel setup pm compiles with, shared by `pm plugin build` (build.ts) and pm's own Node build
+// The Babel setup pm compiles with, shared by `ttybrain plugin build` (build.ts) and pm's own Node build
 // (scripts/build-node.mjs keeps a copy of these values; build.test.ts checks they match).
 import { existsSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"

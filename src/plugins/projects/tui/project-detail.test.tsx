@@ -312,7 +312,7 @@ describe("project detail", () => {
     await inCtx(() => write().setHealth!({ project: "AAA", health: "red" }))
     t.input.pressEscape()
     let frame = await until(t, "Projects · 2 active")
-    expect(frame.split("\n")[0]).toContain("pm · 2 Projects")
+    expect(frame.split("\n")[0]).toContain("ttybrain · 2 Projects")
     expect(lineWith(frame, " AAA ")).not.toContain("›")
     for (let i = 0; i < 40 && !lineWith(frame, " CRM ").includes("›"); i++) {
       await sleep(25)

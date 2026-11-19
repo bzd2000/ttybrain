@@ -1,4 +1,4 @@
-// `pm plugin add` / `pm plugin remove`: external plugins installed as npm dependencies of `paths.plugins`
+// `ttybrain plugin add` / `ttybrain plugin remove`: external plugins installed as npm dependencies of `paths.plugins`
 // (a private package.json there), with npm or, without npm, `bun add --cwd` (R6). Folder plugins are removed
 // by deleting their folder; built-ins cannot be removed, only disabled.
 import { spawn, spawnSync } from "node:child_process"
@@ -17,14 +17,14 @@ export type Env = Record<string, string | undefined>
 export type InstallerOptions = { which?: (cmd: string) => boolean; underBun?: boolean }
 
 export const TRUST_WARNING =
-  "warning: plugins run inside pm with full access to your files and data, like any npm package. Only add plugins you trust."
+  "warning: plugins run inside ttybrain with full access to your files and data, like any npm package. Only add plugins you trust."
 
 type Installer = { kind: "npm" | "bun"; cmd: string }
 
 const runs = (cmd: string) => spawnSync(cmd, ["--version"], { stdio: "ignore" }).status === 0
 
 // R6: TTYBRAIN_PLUGIN_INSTALLER forces one; else npm when it runs; else bun when pm runs on Bun. `command` names the
-// `pm plugin` command that needs it, in the error.
+// `ttybrain plugin` command that needs it, in the error.
 export function chooseInstaller(env: Env, opts: InstallerOptions = {}, command: "add" | "remove" = "add"): Installer {
   const underBun = opts.underBun ?? process.versions.bun !== undefined
   const bun: Installer = { kind: "bun", cmd: underBun ? process.execPath : "bun" }
@@ -34,7 +34,7 @@ export function chooseInstaller(env: Env, opts: InstallerOptions = {}, command: 
   if (forced !== undefined && forced !== "") throw new ValidationError(`TTYBRAIN_PLUGIN_INSTALLER must be npm or bun, not "${forced}"`)
   if ((opts.which ?? runs)("npm")) return { kind: "npm", cmd: "npm" }
   if (underBun) return bun
-  throw new ValidationError(`pm plugin ${command} needs npm on the PATH`, { hint: "install Node.js (it comes with npm), or run pm with Bun" })
+  throw new ValidationError(`ttybrain plugin ${command} needs npm on the PATH`, { hint: "install Node.js (it comes with npm), or run ttybrain with Bun" })
 }
 
 // Runs the installer in `dir` without a shell. Its output is kept back and written to stderr only on failure.
@@ -208,8 +208,8 @@ export async function removePlugin(
     throw new ValidationError(`plugin id "${id}" is used by more than one plugin (${dirs}); remove the folder or package by hand`)
   }
   const p = matches[0]
-  if (!p) throw new NotFoundError(`no plugin "${id}"`, { suggestions: suggest(id, kernel.plugins.map((x) => x.id)), hint: 'run "pm plugin list"' })
-  if (p.source === "built-in") throw new ValidationError(`"${id}" is built in; use "pm plugin disable ${id}"`)
+  if (!p) throw new NotFoundError(`no plugin "${id}"`, { suggestions: suggest(id, kernel.plugins.map((x) => x.id)), hint: 'run "ttybrain plugin list"' })
+  if (p.source === "built-in") throw new ValidationError(`"${id}" is built in; use "ttybrain plugin disable ${id}"`)
   const paths = kernel.paths
   // Everything that can refuse is checked before the data goes.
   let remove: () => Promise<void>

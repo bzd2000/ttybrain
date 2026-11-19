@@ -284,7 +284,7 @@ describe("forms", () => {
     expect(t.renderer.isDestroyed).toBe(false)
     expect(frame).toContain("New thing")
     expect(lineWith(frame, "Title")).toContain("q2g?")
-    expect(frame.split("\n")[0]).toContain("pm · 2 Todo ▾")
+    expect(frame.split("\n")[0]).toContain("ttybrain · 2 Todo ▾")
   })
 
   test("Esc cancels without saving", async () => {

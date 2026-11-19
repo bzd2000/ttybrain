@@ -1,4 +1,4 @@
-// `pm plugin enable|disable <id>`: they edit `plugins.disabled` in the config file; the change applies on the
+// `ttybrain plugin enable|disable <id>`: they edit `plugins.disabled` in the config file; the change applies on the
 // next run. Boots discover the real built-in folder, on one TTYBRAIN_HOME per test, so a fresh boot sees the change.
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -103,9 +103,9 @@ test("enable notes that TTYBRAIN_CONFIG_JSON still disables the plugin", async (
 test("unknown id", async () => {
   const k = await boot()
   const r = await run(k, "plugin", "disable", "nope")
-  expect(r).toEqual({ code: 2, out: "", err: 'error: no plugin "nope"\nhint: run "pm plugin list"\n' })
+  expect(r).toEqual({ code: 2, out: "", err: 'error: no plugin "nope"\nhint: run "ttybrain plugin list"\n' })
   const e = await run(k, "plugin", "enable", "nope")
-  expect(e).toEqual({ code: 2, out: "", err: 'error: no plugin "nope"\nhint: run "pm plugin list"\n' })
+  expect(e).toEqual({ code: 2, out: "", err: 'error: no plugin "nope"\nhint: run "ttybrain plugin list"\n' })
 })
 
 test("data survives disable and enable", async () => {

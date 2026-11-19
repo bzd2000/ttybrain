@@ -23,7 +23,7 @@ async function cli(...argv: string[]): Promise<{ code: number; out: string; err:
 
 async function ok(...argv: string[]) {
   const r = await cli(...argv)
-  if (r.code !== 0) throw new Error(`pm ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
+  if (r.code !== 0) throw new Error(`ttybrain ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
   return r
 }
 
@@ -145,7 +145,7 @@ describe("inbox", () => {
     await ok("inbox", "add", "first")
     const r = await cli("action", "add", "typo", "--for", "peter", "--from-inbox", "I-99", "--json")
     expect(r.code).toBe(2)
-    expect(r.json).toEqual({ error: { code: "not_found", message: '--from-inbox: no record "I-99"', hint: 'run "pm inbox list"' } })
+    expect(r.json).toEqual({ error: { code: "not_found", message: '--from-inbox: no record "I-99"', hint: 'run "ttybrain inbox list"' } })
     expect((await ok("action", "add", "real", "--for", "peter", "--from-inbox", "I-1", "--json")).json.ref).toBe("A-1")
     expect((await ok("inbox", "show", "I-1", "--json")).json.created.map((c: any) => c.ref)).toEqual(["A-1"])
   })
@@ -213,9 +213,9 @@ describe("inbox", () => {
     expect(at("People and stakeholders")).toBeGreaterThan(-1)
     expect(at("Projects")).toBeGreaterThan(at("People and stakeholders"))
     expect(at("Processing the inbox")).toBeGreaterThan(at("Projects"))
-    expect(g).toContain("pm inbox list --new --json")
+    expect(g).toContain("ttybrain inbox list --new --json")
     expect(g).toContain("ask the user when something is ambiguous instead of guessing")
-    expect(g).toContain("on the commands that create or change records for that item (not on `pm inbox done`)")
+    expect(g).toContain("on the commands that create or change records for that item (not on `ttybrain inbox done`)")
     expect(g).not.toContain("on every command")
   })
 })

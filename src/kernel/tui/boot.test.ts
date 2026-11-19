@@ -147,7 +147,7 @@ test("runTui loads the tui entries and lists a failed import under Plugin proble
   const setup = await createTestRenderer({ width: 100, height: 30 })
   try {
     const done = runTui(k, { renderer: setup.renderer })
-    await untilFrame(setup, "pm · 1 Overview")
+    await untilFrame(setup, "ttybrain · 1 Overview")
     setup.mockInput.pressKey("?")
     const frame = await untilFrame(setup, "Plugin problems")
     expect(frame).toContain("ext: tui boom")
@@ -219,7 +219,7 @@ test("the TUI runs with no plugins", async () => {
   kernel = await makeTestKernel({ plugins: [] })
   tui = await renderTui(kernel, { parts: [] })
   const frame = await tui.frame()
-  expect(frame.split("\n")[0]).toContain("pm · 1 Overview")
+  expect(frame.split("\n")[0]).toContain("ttybrain · 1 Overview")
   expect(frame).toContain("No panels yet: plugins add them here.")
   tui.input.pressKey("?")
   const help = await tui.frame()

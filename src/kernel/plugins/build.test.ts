@@ -1,4 +1,4 @@
-// `pm plugin build`: compiling a plugin's src/ to dist/ and the shims that hand it pm's own shared modules.
+// `ttybrain plugin build`: compiling a plugin's src/ to dist/ and the shims that hand it pm's own shared modules.
 // This file is kernel code outside src/kernel/tui/, so it loads the UI side (installTuiModules, renderTui) with
 // dynamic imports only (tests/logic-ui-split.test.ts).
 import { afterEach, expect, test } from "bun:test"
@@ -236,7 +236,7 @@ test("no src/ or no package.json", async () => {
   expect(err).toBeInstanceOf(ValidationError)
 })
 
-test("pm plugin build [dir] prints what it built", async () => {
+test("ttybrain plugin build [dir] prints what it built", async () => {
   const dir = pluginDir({ "src/logic/index.ts": LOGIC(), "src/tui/index.tsx": TUI() })
   kernel = await makeTestKernel({ plugins: [] })
   const o = { out: "", err: "" }
@@ -251,7 +251,7 @@ test("pm plugin build [dir] prints what it built", async () => {
   expect(o.err).toContain(`no package.json in ${join(dir, "nope")}`)
 })
 
-test("pm plugin build names a package without name or version by its folder", async () => {
+test("ttybrain plugin build names a package without name or version by its folder", async () => {
   const dir = pluginDir({ "src/logic/index.ts": LOGIC() }, { tui: false })
   const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as Record<string, unknown>
   delete pkg.name

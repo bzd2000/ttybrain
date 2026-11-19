@@ -1,5 +1,5 @@
 {
-  "name": "opentui-app",
+  "name": "ttybrain",
   "module": "src/bin/pm.ts",
   "type": "module",
   "private": true,
@@ -30,6 +30,7 @@
     "babel-preset-solid": "1.9.16"
   },
   "bin": {
-    "pm": "dist-node/bin/pm.js"
+    "ttybrain": "dist-node/bin/pm.js",
+    "tb": "dist-node/bin/pm.js"
   }
 }

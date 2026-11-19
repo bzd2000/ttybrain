@@ -77,7 +77,7 @@ export function ownerOf(kdb: KernelDb, name: string): string | undefined {
   return undefined
 }
 
-// `pm plugin remove <id> --purge-data`: drops everything in the plugin's namespace (`<id>_*`: its tables,
+// `ttybrain plugin remove <id> --purge-data`: drops everything in the plugin's namespace (`<id>_*`: its tables,
 // indexes, triggers, its own views and its published `<id>__pub_*` views), its applied-migration rows and the
 // provenance rows of the record types it registered (known only when it was loaded this run), in one kernel
 // write transaction. Ids have no `_`, so the prefix never reaches another plugin's namespace.

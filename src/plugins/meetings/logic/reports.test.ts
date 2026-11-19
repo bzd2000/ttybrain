@@ -25,7 +25,7 @@ async function cli(...argv: string[]): Promise<Res> {
 }
 async function ok(...argv: string[]) {
   const r = await cli(...argv)
-  if (r.code !== 0) throw new Error(`pm ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
+  if (r.code !== 0) throw new Error(`ttybrain ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
   return r
 }
 const inCtx = <T>(fn: () => Promise<T>) => runWithContext(k!.context(), fn)

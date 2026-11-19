@@ -69,7 +69,7 @@ test("new → build → load", async () => {
     await new Promise((r) => setTimeout(r, 20))
     frame = await tui.frame()
   }
-  expect(frame.split("\n")[0]).toContain("pm · 7 Demo")
+  expect(frame.split("\n")[0]).toContain("ttybrain · 7 Demo")
   expect(frame).toContain("1 First")
 })
 
@@ -98,7 +98,7 @@ test("no pm sources found: no tsconfig paths, and a note", () => {
   expect(pmApiSources(empty)).toBeUndefined()
   const dir = scaffoldPlugin(tmp(), "nopaths", { pmRoot: empty })
   expect(JSON.parse(readFileSync(join(dir, "tsconfig.json"), "utf8")).compilerOptions.paths).toBeUndefined()
-  expect(createdText(dir, "nopaths", empty)).toBe(`created ${dir}; next: pm plugin build nopaths\nnote: no pm sources found; type-checking needs a git checkout of pm`)
+  expect(createdText(dir, "nopaths", empty)).toBe(`created ${dir}; next: ttybrain plugin build nopaths\nnote: no ttybrain sources found; type-checking needs a git checkout of ttybrain`)
 })
 
 test("a fresh scaffold type-checks with zero errors", () => {
@@ -110,14 +110,14 @@ test("a fresh scaffold type-checks with zero errors", () => {
   expect(r.status).toBe(0)
 }, 60_000)
 
-test("pm plugin new <id> creates <cwd>/<id>", async () => {
+test("ttybrain plugin new <id> creates <cwd>/<id>", async () => {
   const k = await makeTestKernel()
   kernels.push(k)
   const cwd = process.cwd()
   const parent = tmp()
   process.chdir(parent)
   try {
-    expect(await cli(k, ["plugin", "new", "demo"])).toEqual({ code: 0, out: `created ${join(parent, "demo")}; next: pm plugin build demo\n`, err: "" })
+    expect(await cli(k, ["plugin", "new", "demo"])).toEqual({ code: 0, out: `created ${join(parent, "demo")}; next: ttybrain plugin build demo\n`, err: "" })
   } finally {
     process.chdir(cwd)
   }

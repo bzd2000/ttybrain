@@ -29,7 +29,7 @@ export function builtinPluginDir(): string {
   return fileURLToPath(new URL("../plugins/", import.meta.url))
 }
 
-// Shared modules an external plugin's built shims read (`pm plugin build`).
+// Shared modules an external plugin's built shims read (`ttybrain plugin build`).
 export function installApiModule(): void {
   const g = globalThis as { __PM_MODULES__?: Record<string, unknown> }
   ;(g.__PM_MODULES__ ??= {})["@pm/api"] = api // in place: the TUI adds its modules to the same object

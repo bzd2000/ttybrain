@@ -1,5 +1,5 @@
 // The `contracts` fixture plugin (tests/fixtures/plugin-contracts) end to end as an external plugin: built with
-// `pm plugin build` into a temp copy, loaded as a folder in TTYBRAIN_PLUGINS and from npm through `pm plugin add <tgz>`
+// `ttybrain plugin build` into a temp copy, loaded as a folder in TTYBRAIN_PLUGINS and from npm through `ttybrain plugin add <tgz>`
 // (npm, and bun), in the CLI and the TUI; and the failure cases, each with pm still starting (design §3.11, the
 // permanent version of the spec's 2026-11-13 spike). `bash scripts/smoke-node.sh` repeats the build-and-load on Node.
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test"
@@ -21,7 +21,7 @@ const hasNpm = spawnSync("npm", ["--version"], { stdio: "ignore" }).status === 0
 const temps: string[] = []
 const kernels: TestKernel[] = []
 let tui: RenderedTui | undefined
-let builder: TestKernel // a kernel with no plugins, to run `pm plugin build`
+let builder: TestKernel // a kernel with no plugins, to run `ttybrain plugin build`
 let built: string // the fixture, copied and built once
 
 function tmp(prefix = "pm-external-"): string {
@@ -42,13 +42,13 @@ async function cli(k: TestKernel, args: string[]): Promise<{ code: number; out: 
   return { code, out: o.out.join(""), err: o.err.join("") }
 }
 
-// Copies the fixture's source to <parent>/<name>, applies `patch` to it, and builds it with `pm plugin build`.
+// Copies the fixture's source to <parent>/<name>, applies `patch` to it, and builds it with `ttybrain plugin build`.
 async function buildCopy(parent: string, patch?: (dir: string) => void, name = "contracts"): Promise<string> {
   const dir = join(parent, name)
   cpSync(FIXTURE, dir, { recursive: true, filter: (src) => !/[/\\](dist|node_modules)$/.test(src) })
   patch?.(dir)
   const r = await cli(builder, ["plugin", "build", dir])
-  if (r.code !== 0) throw new Error(`pm plugin build failed: ${r.err}`)
+  if (r.code !== 0) throw new Error(`ttybrain plugin build failed: ${r.err}`)
   return dir
 }
 
@@ -88,7 +88,7 @@ async function listed(k: TestKernel): Promise<Row[]> {
   return (JSON.parse(r.out) as Row[]).filter((p) => !["people", "projects", "meetings", "inbox"].includes(p.id)).sort((a, b) => (a.id < b.id ? -1 : 1))
 }
 
-// Runs `fn` with TTYBRAIN_PLUGIN_INSTALLER set (`pm plugin add` reads process.env, as pm's entry point passes it).
+// Runs `fn` with TTYBRAIN_PLUGIN_INSTALLER set (`ttybrain plugin add` reads process.env, as pm's entry point passes it).
 async function withInstaller<T>(installer: string, fn: () => Promise<T>): Promise<T> {
   const before = process.env.TTYBRAIN_PLUGIN_INSTALLER
   process.env.TTYBRAIN_PLUGIN_INSTALLER = installer
@@ -170,7 +170,7 @@ test("loaded as a folder: command, migration, view", async () => {
 })
 
 for (const installer of ["npm", "bun"] as const) {
-  test.skipIf(installer === "npm" && !hasNpm)(`loaded from npm via pm plugin add <tgz> (${installer})`, async () => {
+  test.skipIf(installer === "npm" && !hasNpm)(`loaded from npm via ttybrain plugin add <tgz> (${installer})`, async () => {
     const plugins = join(tmp(), "plugins")
     await addTgz(plugins, pack(built), installer)
     const k = await boot(plugins, { plugins: [probe] })
@@ -206,11 +206,11 @@ test("TUI: screen 7 and the project tab", async () => {
   const t = await renderLoaded(k)
   t.input.pressKey("7")
   let frame = await until(t, (f) => f.includes("C-1 Support"))
-  expect(frame.split("\n")[0]).toContain("pm · 7 Contracts")
+  expect(frame.split("\n")[0]).toContain("ttybrain · 7 Contracts")
   expect(frame).toContain("C-1 Support · #CRM")
 
   t.input.pressKey("2")
-  await until(t, (f) => (f.split("\n")[0] ?? "").includes("pm · 2 Projects"))
+  await until(t, (f) => (f.split("\n")[0] ?? "").includes("ttybrain · 2 Projects"))
   await t.nav.open("#CRM", "contracts")
   frame = await until(t, (f) => f.includes("› CRM CRM") && f.includes("1 contract"))
   expect(frame.split("\n")[2]).toMatch(/\bPeople +Context +Contracts 1\b/) // the tab bar, scrolled to the new tab
@@ -245,7 +245,7 @@ const failureCases: Array<[string, FailureCase]> = [
   ],
   [
     "apiVersion 2",
-    { patch: (d) => edit(d, "src/logic/index.ts", "apiVersion: 1,", "apiVersion: 2,"), rows: [failed("apiVersion 2 is not supported (this pm supports 1)")] },
+    { patch: (d) => edit(d, "src/logic/index.ts", "apiVersion: 1,", "apiVersion: 2,"), rows: [failed("apiVersion 2 is not supported (this ttybrain supports 1)")] },
   ],
   [
     "a missing shim export",
@@ -312,7 +312,7 @@ test("failure: an async tui activate rejecting — pm still starts", async () =>
     installTuiModules()
     const parts = await loadTuiParts(k)
     tui = await renderTui(k, { parts: parts.builtin, external: parts.external })
-    expect((await tui.frame()).split("\n")[0]).toContain("pm · 1 Overview")
+    expect((await tui.frame()).split("\n")[0]).toContain("ttybrain · 1 Overview")
     tui.input.pressKey("?")
     expect(await until(tui, (f) => f.includes("Plugin problems"))).toContain("contracts: tui activate must be synchronous")
     tui.input.pressKey("?")

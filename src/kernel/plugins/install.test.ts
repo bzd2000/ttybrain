@@ -1,4 +1,4 @@
-// `pm plugin add` / `pm plugin remove`: installing external plugins into `paths.plugins` with npm or bun, the
+// `ttybrain plugin add` / `ttybrain plugin remove`: installing external plugins into `paths.plugins` with npm or bun, the
 // one-time trust warning, and removing them (with or without their data). Tarballs are packed in the test from
 // a tiny built plugin with no dependencies, so everything works offline.
 import { afterEach, expect, test } from "bun:test"
@@ -14,7 +14,7 @@ import { addPlugin, removePlugin } from "./install"
 import { ValidationError } from "../errors"
 
 const hasNpm = spawnSync("npm", ["--version"], { stdio: "ignore" }).status === 0
-const WARNING = "warning: plugins run inside pm with full access to your files and data, like any npm package. Only add plugins you trust."
+const WARNING = "warning: plugins run inside ttybrain with full access to your files and data, like any npm package. Only add plugins you trust."
 
 const temps: string[] = []
 const kernels: TestKernel[] = []
@@ -194,7 +194,7 @@ for (const installer of installers) {
 test("add with no installer", async () => {
   const paths = resolvePaths({ TTYBRAIN_HOME: tmp(), TTYBRAIN_PLUGINS: join(tmp(), "plugins") })
   const failing = addPlugin(paths, "pm-plugin-demo", {}, { which: () => false, underBun: false })
-  await expect(failing).rejects.toThrow("pm plugin add needs npm on the PATH")
+  await expect(failing).rejects.toThrow("ttybrain plugin add needs npm on the PATH")
   const forced = addPlugin(paths, "pm-plugin-demo", { TTYBRAIN_PLUGIN_INSTALLER: "yarn" })
   await expect(forced).rejects.toThrow("TTYBRAIN_PLUGIN_INSTALLER must be npm or bun")
 })
@@ -207,7 +207,7 @@ test("remove of an npm plugin with no installer names the remove command", async
   const k = await boot(plugins)
   expect(listed(k)).toEqual([{ id: "demo", source: "npm", status: "ok", error: null }])
   const failing = removePlugin(k, "demo", { purgeData: false, env: {}, which: () => false, underBun: false })
-  await expect(failing).rejects.toThrow(new ValidationError("pm plugin remove needs npm on the PATH"))
+  await expect(failing).rejects.toThrow(new ValidationError("ttybrain plugin remove needs npm on the PATH"))
   expect(existsSync(join(plugins, "node_modules", "pm-plugin-demo", "package.json"))).toBe(true)
 })
 
@@ -228,10 +228,10 @@ test("remove needs --yes and refuses built-ins", async () => {
   expect(a.err.join("")).toContain('"plugin remove" is destructive; add --yes')
   const b = io()
   expect(await runCli(["plugin", "remove", "projects", "--yes"], k, b.io)).toBe(1)
-  expect(b.err.join("")).toContain('"projects" is built in; use "pm plugin disable projects"')
+  expect(b.err.join("")).toContain('"projects" is built in; use "ttybrain plugin disable projects"')
   const c = io()
   expect(await runCli(["plugin", "remove", "projects", "--yes", "--purge-data"], k, c.io)).toBe(1)
-  expect(c.err.join("")).toContain('"projects" is built in; use "pm plugin disable projects"')
+  expect(c.err.join("")).toContain('"projects" is built in; use "ttybrain plugin disable projects"')
   expect(k.db.raw.prepare("SELECT count(*) AS n FROM sqlite_schema WHERE name LIKE 'projects\\_%' ESCAPE '\\'").all([])[0]!.n).not.toBe(0)
   const d = io()
   expect(await runCli(["plugin", "remove", "projcts", "--yes"], k, d.io)).toBe(2)
@@ -240,7 +240,7 @@ test("remove needs --yes and refuses built-ins", async () => {
   const e = io()
   expect(await runCli(["plugin", "remove", "zzz", "--yes"], k, e.io)).toBe(2)
   expect(e.err.join("")).toContain('no plugin "zzz"')
-  expect(e.err.join("")).toContain('run "pm plugin list"')
+  expect(e.err.join("")).toContain('run "ttybrain plugin list"')
 }, 60_000)
 
 const objects = (k: TestKernel, id: string) =>

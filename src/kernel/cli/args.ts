@@ -1,4 +1,4 @@
-// Argument parsing for `pm <thing> <verb> [args] [--flags]`, on `node:util` parseArgs (both runtimes).
+// Argument parsing for `ttybrain <thing> <verb> [args] [--flags]`, on `node:util` parseArgs (both runtimes).
 // Two passes: `leading` finds the command words knowing only the global flags; `parseCommand` then parses the
 // rest against that command's own args and flags, strictly (an unknown flag is a ValidationError).
 import { parseArgs } from "node:util"
@@ -78,13 +78,13 @@ export function signature(def: CommandDef): string {
   return [commandName(def), ...args].join(" ")
 }
 
-// `pm widget add <title> [--due <date>]`
+// `ttybrain widget add <title> [--due <date>]`
 export function usage(def: CommandDef): string {
   const flags = Object.entries(def.flags ?? {}).map(([name, f]) => {
     const s = f.type === "boolean" ? `--${name}` : `--${name} ${placeholder(f)}`
     return f.required ? s : `[${s}]`
   })
-  return ["pm", signature(def), ...flags].join(" ")
+  return ["ttybrain", signature(def), ...flags].join(" ")
 }
 
 export const joinOr = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`)
@@ -131,7 +131,7 @@ export function parseCommand(argv: string[], def: CommandDef, today: string): Pa
     if (t.kind === "positional") positionals.push(t.value)
     if (t.kind !== "option") continue
     const f = all[t.name]
-    if (!f) throw new ValidationError(`unknown flag ${t.rawName}`, { field: t.name.replace(/^-+/, ""), hint: `run "pm ${commandName(def)} --help" for its flags` })
+    if (!f) throw new ValidationError(`unknown flag ${t.rawName}`, { field: t.name.replace(/^-+/, ""), hint: `run "ttybrain ${commandName(def)} --help" for its flags` })
     if (f.type === "boolean") {
       if (t.value !== undefined) throw new ValidationError(`${t.rawName} takes no value`, { field: t.name })
       raw[t.name] = true

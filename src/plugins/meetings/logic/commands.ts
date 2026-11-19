@@ -1,4 +1,4 @@
-// `pm meeting …` and `pm meeting agenda <M-n> <verb> …`. Reads go through the plugin's own store; writes only
+// `ttybrain meeting …` and `ttybrain meeting agenda <M-n> <verb> …`. Reads go through the plugin's own store; writes only
 // through ctx.self().write.*, so they are validated, transactional and recorded like any other caller's.
 // The dispatcher has no nested verbs, so `agenda` is one command: first positional the meeting, second the verb.
 import { readFile } from "node:fs/promises"
@@ -199,7 +199,7 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
   ctx.command({
     thing: "meeting",
     verb: "agenda",
-    summary: "change a meeting's agenda: pm meeting agenda <M-n> add|edit|move|remove …",
+    summary: "change a meeting's agenda: ttybrain meeting agenda <M-n> add|edit|move|remove …",
     args: [
       { name: "meeting", required: true },
       { name: "verb", required: true },
@@ -224,7 +224,7 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
           if (flags[f] !== undefined && flags[f] !== false && !allowed.includes(f)) throw new ValidationError(`--${f} does not apply to "agenda ${verb}"`, { field: f })
       }
       const arity = (names: string[]) => {
-        if (rest.length < names.length) throw new ValidationError(`missing argument <${names[rest.length]}>`, { field: names[rest.length]!, hint: `usage: pm meeting agenda <meeting> ${verb} ${names.map((n) => `<${n}>`).join(" ")}` })
+        if (rest.length < names.length) throw new ValidationError(`missing argument <${names[rest.length]}>`, { field: names[rest.length]!, hint: `usage: ttybrain meeting agenda <meeting> ${verb} ${names.map((n) => `<${n}>`).join(" ")}` })
         if (rest.length > names.length) throw new ValidationError(`unexpected argument "${rest[names.length]}"`)
       }
       let m: MeetingRecord

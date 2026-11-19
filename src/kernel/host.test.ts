@@ -75,7 +75,7 @@ describe("load order and requirements", () => {
   test("an unsupported apiVersion, an invalid id or a duplicate id fails that plugin only", async () => {
     const k = await boot({ plugins: [bare("future", { apiVersion: 2 }), bare("Bad_id"), bare("a"), bare("a", { version: "2.0.0" })] })
     expect(k.plugins).toEqual([
-      { id: "future", version: "1.0.0", source: "built-in", status: "failed", error: "apiVersion 2 is not supported (this pm supports 1)" },
+      { id: "future", version: "1.0.0", source: "built-in", status: "failed", error: "apiVersion 2 is not supported (this ttybrain supports 1)" },
       { id: "Bad_id", version: "1.0.0", source: "built-in", status: "failed", error: 'plugin id "Bad_id" must match [a-z][a-z0-9-]*' },
       { id: "a", version: "1.0.0", source: "built-in", status: "ok" },
       { id: "a", version: "2.0.0", source: "built-in", status: "failed", error: 'duplicate plugin id "a"' },

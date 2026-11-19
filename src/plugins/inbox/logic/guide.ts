@@ -4,9 +4,9 @@ import type { PluginContext } from "@pm/api"
 const MARKDOWN = `
 The user captures quick notes in the inbox, with \`#project\` and \`@person\` tags. Process them like this:
 
-1. \`pm inbox list --new --json\` lists the new items. \`pm inbox show I-n --json\` shows one with the records its tags link to and any unresolved tags.
-2. Create the records the note calls for, passing \`--from-inbox I-n\` on the commands that create or change records for that item (not on \`pm inbox done\`), so pm records what the item became.
-3. \`pm inbox done I-n --summary "…"\` closes the item with a one-line summary of what you did. Use \`pm inbox dismiss I-n\` for an item that needs nothing, and \`pm inbox reopen I-n\` to undo.
+1. \`ttybrain inbox list --new --json\` lists the new items. \`ttybrain inbox show I-n --json\` shows one with the records its tags link to and any unresolved tags.
+2. Create the records the note calls for, passing \`--from-inbox I-n\` on the commands that create or change records for that item (not on \`ttybrain inbox done\`), so ttybrain records what the item became.
+3. \`ttybrain inbox done I-n --summary "…"\` closes the item with a one-line summary of what you did. Use \`ttybrain inbox dismiss I-n\` for an item that needs nothing, and \`ttybrain inbox reopen I-n\` to undo.
 
 What a note becomes:
 

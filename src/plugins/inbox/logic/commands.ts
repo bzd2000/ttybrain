@@ -1,4 +1,4 @@
-// `pm inbox …`. Reads go through ctx.data and the exposed getItem; writes only through ctx.self().write.*.
+// `ttybrain inbox …`. Reads go through ctx.data and the exposed getItem; writes only through ctx.self().write.*.
 import { formatTable, ValidationError, type PluginContext } from "@pm/api"
 import type { ItemDetail } from "./ops"
 import type { Store } from "./records"

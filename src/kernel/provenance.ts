@@ -20,7 +20,7 @@ export class ProvenanceStore {
   // The kernel's provenance rule for one write's output, inside its transaction. A delete (`deleted: true`)
   // records nothing and forgets the deleted record's origins: ids are rowids and get reused, and a later record
   // must not inherit them (the id comes from a numeric ref, or from `out.id` for a custom-ref type). Otherwise,
-  // with an origin, the ref is resolved (it must resolve) and recorded, unless it is the origin itself (`pm inbox done I-2 --from-inbox I-2`). Used by operations and change sets.
+  // with an origin, the ref is resolved (it must resolve) and recorded, unless it is the origin itself (`ttybrain inbox done I-2 --from-inbox I-2`). Used by operations and change sets.
   // `plugin` is the plugin whose operation returned `out`: a write may only delete its own plugin's records, or a
   // forged delete output (`{ ref: "#CRM", deleted: true, id }` from another plugin) would erase their origins.
   // A non-delete may name another plugin's record (a `field` set op returns the record's ref).

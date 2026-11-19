@@ -1,4 +1,4 @@
-// `pm plugin build [dir]`: compiles an external plugin's src/ to dist/ with pm's Babel setup and points its imports
+// `ttybrain plugin build [dir]`: compiles an external plugin's src/ to dist/ with pm's Babel setup and points its imports
 // of pm's shared modules at generated shims in dist/__pm/, which hand the plugin pm's own module instances from
 // globalThis.__PM_MODULES__ at runtime (one Solid, one OpenTUI, one API). Design §3.4, plan ruling R4.
 //

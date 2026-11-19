@@ -1,6 +1,6 @@
-// The meetings reports (spec §8): `board` (`pm report board <M-n>`: attendees, agenda, then one block per covered
+// The meetings reports (spec §8): `board` (`ttybrain report board <M-n>`: attendees, agenda, then one block per covered
 // project, made of projects' `project-status` sections run through ctx.reports, plus the asks) and `minutes`
-// (`pm report minutes <M-n>`: attendees, notes, and the decisions and actions linked to the meeting). The reads
+// (`ttybrain report minutes <M-n>`: attendees, notes, and the decisions and actions linked to the meeting). The reads
 // `prep` (per agenda item: its project's status sections and the since) and `report` (a rendered report) serve the TUI.
 import { NonBlank, Type, type Cell, type PluginContext, type ReportSectionResult, type Static } from "@pm/api"
 import type { Store } from "./records"

@@ -40,7 +40,7 @@ export class ConflictError extends PmError {
 
 export class BusyError extends PmError {
   constructor(message: string) {
-    super(message, "busy", 3, { hint: "another pm process is writing; try again" })
+    super(message, "busy", 3, { hint: "another ttybrain process is writing; try again" })
   }
 }
 

@@ -1,4 +1,4 @@
-// `pm plugin new <id>`: writes a new external plugin folder that `pm plugin build` can build and pm can load as it is
+// `ttybrain plugin new <id>`: writes a new external plugin folder that `ttybrain plugin build` can build and pm can load as it is
 // (a migration, a `<id> list` command, a screen, a project tab, a test). The template files are string constants
 // here so the Node build carries them. Design §3.5.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
@@ -32,7 +32,7 @@ export function pmApiSources(root = resolve(dirname(fileURLToPath(import.meta.ur
   return existsSync(api) && existsSync(tui) ? { api, tui } : undefined
 }
 
-export const NO_SOURCES_NOTE = "note: no pm sources found; type-checking needs a git checkout of pm"
+export const NO_SOURCES_NOTE = "note: no ttybrain sources found; type-checking needs a git checkout of ttybrain"
 
 // Template lines that start with the keyword stay out of the static-import scan (tests/logic-ui-split.test.ts).
 const IMPORT = "import"
@@ -140,7 +140,7 @@ export default defineTui({
 })
 `
 
-const test = (id: string) => `// Run with \`bun test\`. It checks the plugin's definition; \`pm plugin build\` skips test files.
+const test = (id: string) => `// Run with \`bun test\`. It checks the plugin's definition; \`ttybrain plugin build\` skips test files.
 ${IMPORT} { expect, test } from "bun:test"
 ${IMPORT} plugin from "./index"
 
@@ -152,32 +152,32 @@ test("the plugin's id and api version", () => {
 
 const readme = (id: string) => `# ${title(id)}
 
-A pm plugin (\`${id}\`).
+A ttybrain plugin (\`${id}\`).
 
 ## Build
 
 \`\`\`
-pm plugin build
+ttybrain plugin build
 \`\`\`
 
-This compiles \`src/\` to \`dist/\`, pointing the imports of pm's shared modules at pm's own copies.
+This compiles \`src/\` to \`dist/\`, pointing the imports of ttybrain's shared modules at ttybrain's own copies.
 
-## Add to pm
+## Add to ttybrain
 
-Copy this folder, built, into pm's plugins folder (\`~/.ttybrain/plugins/${id}\`), or install it from a package:
+Copy this folder, built, into ttybrain's plugins folder (\`~/.ttybrain/plugins/${id}\`), or install it from a package:
 
 \`\`\`
-pm plugin add <folder-or-tgz>
+ttybrain plugin add <folder-or-tgz>
 \`\`\`
 
 ## List and remove
 
 \`\`\`
-pm plugin list
-pm plugin remove ${id} --yes
+ttybrain plugin list
+ttybrain plugin remove ${id} --yes
 \`\`\`
 
-Type-checking needs a git checkout of pm: \`tsconfig.json\` points \`@pm/api\` and \`@pm/api/tui\` at its sources.
+Type-checking needs a git checkout of ttybrain: \`tsconfig.json\` points \`@pm/api\` and \`@pm/api/tui\` at its sources.
 `
 
 // Creates <parent>/<id> with the template files and returns its path. Throws a ValidationError for an id that is
@@ -203,7 +203,7 @@ export function scaffoldPlugin(parent: string, id: string, opts: { pmRoot?: stri
   return dir
 }
 
-// The text `pm plugin new` prints, with the note when pm's API sources can't be found.
+// The text `ttybrain plugin new` prints, with the note when pm's API sources can't be found.
 export function createdText(dir: string, id: string, pmRoot?: string): string {
-  return `created ${dir}; next: pm plugin build ${id}${pmApiSources(pmRoot) ? "" : `\n${NO_SOURCES_NOTE}`}`
+  return `created ${dir}; next: ttybrain plugin build ${id}${pmApiSources(pmRoot) ? "" : `\n${NO_SOURCES_NOTE}`}`
 }

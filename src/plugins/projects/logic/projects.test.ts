@@ -25,7 +25,7 @@ async function cli(argv: string[], stdin = ""): Promise<{ code: number; out: str
 const run = (...argv: string[]) => cli(argv)
 async function ok(...argv: string[]) {
   const r = await cli(argv)
-  if (r.code !== 0) throw new Error(`pm ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
+  if (r.code !== 0) throw new Error(`ttybrain ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
   return r
 }
 
@@ -287,6 +287,6 @@ describe("projects", () => {
   test("the guide has a Projects section", async () => {
     const g = await ok("guide")
     expect(g.out).toContain("## Projects")
-    expect(g.out).toContain("pm project edit CRM --health amber")
+    expect(g.out).toContain("ttybrain project edit CRM --health amber")
   })
 })

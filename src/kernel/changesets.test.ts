@@ -292,7 +292,7 @@ describe("origins are checked by the kernel, not only by the CLI", () => {
       const err = await inK(() => k.changeSets.apply([capture], { type: "inbox", ref: "I-99" })).catch((e) => e)
       expect(err).toBeInstanceOf(NotFoundError)
       expect(err.message).toBe('no record "I-99"')
-      expect(err.hint).toBe('run "pm inbox list"')
+      expect(err.hint).toBe('run "ttybrain inbox list"')
       expect([count("kernel_change_set"), count("inbox_item")]).toEqual([1, 1])
       // An existing item is fine, and so is an origin that is no record (a change set's CS-<id>).
       expect((await inK(() => k.changeSets.apply([capture], { type: "inbox", ref: "I-1" }))).refs).toEqual(["I-2"])
@@ -301,7 +301,7 @@ describe("origins are checked by the kernel, not only by the CLI", () => {
       let out = ""
       const code = await runCli(["inbox", "add", "y", "--from-inbox", "I-99", "--json"], k, { out: (s) => void (out += s), err: () => {}, stdin: async () => "" })
       expect(code).toBe(2)
-      expect(JSON.parse(out).error).toEqual({ code: "not_found", message: '--from-inbox: no record "I-99"', hint: 'run "pm inbox list"' })
+      expect(JSON.parse(out).error).toEqual({ code: "not_found", message: '--from-inbox: no record "I-99"', hint: 'run "ttybrain inbox list"' })
     } finally {
       await k.cleanup()
     }

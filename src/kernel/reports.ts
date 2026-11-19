@@ -36,7 +36,7 @@ export type ReportResult = { title: string; sections: ReportSectionResult[] }
 
 type Section = { reportId: string; plugin: string; def: ReportSectionDef }
 
-// `pm report <cliName>` turns params into flags, so they must not shadow the global flags or the report's --format.
+// `ttybrain report <cliName>` turns params into flags, so they must not shadow the global flags or the report's --format.
 const RESERVED_PARAMS = new Set(["json", "db", "from-inbox", "yes", "help", "format"])
 
 export class ReportRegistry {

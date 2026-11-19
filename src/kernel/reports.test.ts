@@ -413,17 +413,17 @@ Watch the vendor.
 describe("GuideRegistry", () => {
   test("header, kernel conventions, then sections in plugin load order and then order", () => {
     const guide = new GuideRegistry()
-    guide.section("people", { title: "People", markdown: "Use `pm person list`.\n", order: 20 })
-    guide.section("projects", { title: "Projects", markdown: "Use `pm project list`.", order: 1 })
+    guide.section("people", { title: "People", markdown: "Use `ttybrain person list`.\n", order: 20 })
+    guide.section("projects", { title: "Projects", markdown: "Use `ttybrain project list`.", order: 1 })
     guide.section("people", { title: "Notes", markdown: "Concern → stakeholder note.", order: 10 })
     const out = guide.render("0.1.0")
-    expect(out.startsWith("# pm: guide for agents\n\nThis is pm 0.1.0, a personal tool")).toBe(true)
+    expect(out.startsWith("# ttybrain: guide for agents\n\nThis is ttybrain 0.1.0, a personal tool")).toBe(true)
     for (const s of ["`--json`", "Exit codes", "`YYYY-MM-DD`", "`#CRM`", "`@anna`", "`A-12`", "`--from-inbox I-<n>`", "ask the user"])
       expect(out).toContain(s)
     const headings = out.split("\n").filter((l) => l.startsWith("## "))
     expect(headings).toEqual(["## Conventions", "## Notes", "## People", "## Projects"])
-    expect(out).toContain("## Notes\n\nConcern → stakeholder note.\n\n## People\n\nUse `pm person list`.\n\n## Projects\n\nUse `pm project list`.\n")
-    expect(out.endsWith("Use `pm project list`.\n")).toBe(true)
+    expect(out).toContain("## Notes\n\nConcern → stakeholder note.\n\n## People\n\nUse `ttybrain person list`.\n\n## Projects\n\nUse `ttybrain project list`.\n")
+    expect(out.endsWith("Use `ttybrain project list`.\n")).toBe(true)
   })
 
   test("remove(plugin) drops its sections", () => {

@@ -1,4 +1,4 @@
-// `pm <thing> <verb> [args] [--flags]`: resolves the command (kernel commands first, then plugins'), parses
+// `ttybrain <thing> <verb> [args] [--flags]`: resolves the command (kernel commands first, then plugins'), parses
 // its arguments, enforces --yes on destructive commands, runs it inside the operation context (with the
 // --from-inbox origin) and prints the result or the error. Returns the exit code: 0, 1, 2 or 3.
 import { runWithContext, type Origin } from "../context"
@@ -27,7 +27,7 @@ class Commands {
     const defs = this.all.filter((d) => d.thing === thing)
     if (!defs.length) {
       const s = suggest(thing, this.things())
-      throw new ValidationError(`unknown command "${thing}"`, { hint: s.length ? `did you mean ${quoted(s)}?` : 'run "pm help" to list the commands' })
+      throw new ValidationError(`unknown command "${thing}"`, { hint: s.length ? `did you mean ${quoted(s)}?` : 'run "ttybrain help" to list the commands' })
     }
     return defs
   }
@@ -45,7 +45,7 @@ class Commands {
       defs.map((d) => d.verb),
     ).map((v) => `${thing} ${v}`)
     throw new ValidationError(`unknown command "${thing} ${verb}"`, {
-      hint: s.length ? `did you mean ${quoted(s)}?` : `run "pm ${thing} --help" to list its commands`,
+      hint: s.length ? `did you mean ${quoted(s)}?` : `run "ttybrain ${thing} --help" to list its commands`,
     })
   }
 
@@ -85,7 +85,7 @@ async function dispatch(argv: string[], kernel: Kernel, io: CliIo): Promise<{ re
   const { words, global } = leading(argv)
   const [first, second] = words
   if (!first) {
-    // `pm` alone, or `pm --json`: the help. Anything else (`pm --yes`) still goes through the help command.
+    // `pm` alone, or `ttybrain --json`: the help. Anything else (`ttybrain --yes`) still goes through the help command.
     const def = commands.verbless("help")!
     const parsed = parseCommand(argv, def, kernel.context().today)
     return { result: helpAll(commands.all), json: parsed.global.json }
