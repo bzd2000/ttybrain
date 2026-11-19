@@ -39,11 +39,11 @@ External plugins live in `~/.ttybrain/plugins` (`TTYBRAIN_PLUGINS`): plugin fold
 
 ## Upgrading from pm
 
-pm was renamed ttybrain (2026-11-19). On the first run, ttybrain moves `~/.pm` to `~/.ttybrain` and `pm.db` (with its `-wal`, `-shm` and `.bak-v<N>` files) to `ttybrain.db`, then leaves symlinks (`~/.pm`, `pm.db`) so an old build still finds the data. It renames and never copies. Nothing is moved when `TTYBRAIN_HOME` or `TTYBRAIN_DB` is set.
+pm was renamed ttybrain (2026-11-19). On the first run, ttybrain moves `~/.pm` to `~/.ttybrain` and `pm.db` (with its `-wal`, `-shm` and `.bak-v<N>` files) to `ttybrain.db`, then leaves symlinks (`~/.pm`, `pm.db`) so an old build still finds the data. It renames and never copies or overwrites; a `pm.db` that is a symlink is renamed as a symlink. When `TTYBRAIN_HOME` is set, nothing is moved, but a `pm.db` in that folder with no `ttybrain.db` beside it is renamed the same way (`renamed …/pm.db to …/ttybrain.db`); the same goes for a `~/.ttybrain` you moved there by hand (also a symlinked one). Nothing is touched when `TTYBRAIN_DB` or `--db` names the database file.
 
-- If the move fails, ttybrain stops with `could not move …` and a hint (exit 1; so does `--help`) instead of starting on an empty database. A half-done move is finished on the next run. If `~/.pm` still holds a database and `~/.ttybrain` has none, it stops with `your data is still in …`. Move the folder by hand, or set `TTYBRAIN_HOME` to the old one.
+- If the move fails, ttybrain stops with `could not move …` and a hint (exit 1; so does `--help`) instead of starting on an empty database. A half-done move is finished on the next run. If `~/.pm` still holds a database (also when `~/.pm` is a symlink, which is never moved) and `~/.ttybrain` has none, it stops with `your data is still in …`. Move the files by hand, or follow the hint: `set TTYBRAIN_DB=~/.pm/pm.db` (the exact path is printed) uses the old database where it is.
 - The environment variables are renamed `PM_<X>` to `TTYBRAIN_<X>` (a clean break: the old names are not read). Update your shell profile, containers and scripts.
-- External plugins must be rebuilt (`ttybrain plugin build`): the API is now `@ttybrain/api`, the manifest key is `"ttybrain"`. A plugin built for pm fails with `built for pm; rebuild it with "ttybrain plugin build"`.
+- External plugins must be rebuilt (`ttybrain plugin build`): the API is now `@ttybrain/api`, the manifest key is `"ttybrain"`. A plugin built for pm fails with `built for pm; rename "pm" to "ttybrain" in package.json and @pm/ imports to @ttybrain/, then run "ttybrain plugin build" (or update the plugin)`; `ttybrain plugin build` refuses it until both edits are made.
 - The command is `ttybrain`, with `tb` as a short alias.
 
 ## Development
