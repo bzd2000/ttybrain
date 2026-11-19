@@ -62,6 +62,9 @@ const COLUMNS = {
 } as const
 const DATE_FIELDS = new Set(["startDate", "endDate"])
 const CODE_HINT = "2–16 letters or digits, e.g. CRM"
+// A code as given (`#CRM` → `CRM`): what addProject and editProject validate and store, and what their change
+// lines show, so a line names exactly the code the op will store or refuse.
+const codeInput = (input: string) => input.trim().replace(/^#/, "")
 
 export const now = () => currentContext().now
 export const today = () => currentContext().today
@@ -100,7 +103,7 @@ export function registerProjectOps(ctx: PluginContext, store: Store): void {
   }
 
   function code(input: string): string {
-    const c = input.trim().replace(/^#/, "")
+    const c = codeInput(input)
     if (!isValidCode(c)) throw new ValidationError(`invalid project code "${input.trim()}"`, { field: "code", hint: CODE_HINT })
     return c
   }
@@ -141,7 +144,7 @@ export function registerProjectOps(ctx: PluginContext, store: Store): void {
       addProject: {
         input: AddProject,
         output: ProjectRecord,
-        describe: (i: Static<typeof AddProject>) => `+ project ${i.code.trim().replace(/^#/, "")} "${i.name.trim()}"`,
+        describe: (i: Static<typeof AddProject>) => `+ project ${codeInput(i.code)} "${i.name.trim()}"`,
         run: async (i: Static<typeof AddProject>) => {
           const c = code(i.code)
           if ((await store.codeId(c)) !== null) throw new ConflictError(`project "${c}" already exists`, { hint: "choose another code" })
@@ -158,7 +161,7 @@ export function registerProjectOps(ctx: PluginContext, store: Store): void {
         output: ProjectRecord,
         describe: async (i: EditInput) => {
           const current = await store.codeLabel(i.project)
-          const renamed = i.code === undefined ? undefined : i.code.trim().replace(/^#/, "")
+          const renamed = i.code === undefined ? undefined : codeInput(i.code)
           const fields = [
             ...(renamed !== undefined && renamed !== current ? [`code → ${renamed}`] : []),
             ...Object.keys(COLUMNS).filter((f) => i[f as keyof typeof COLUMNS] !== undefined),

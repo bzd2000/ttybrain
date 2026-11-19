@@ -8,6 +8,7 @@
 import { createMemo, createSignal, Show, untrack } from "solid-js"
 import {
   act,
+  fitWidth,
   KeyHints,
   longDate,
   Panel,
@@ -39,14 +40,16 @@ const HINTS: Hint[] = [
   { key: "x", label: "close" },
   { key: "Del", label: "cancel" },
 ]
-const COLUMNS: TableColumn[] = [
+// The Projects column is at least as wide as the longest single code shown (12 to 16), so a code is never cut;
+// more codes than fit still end in `…`.
+const columns = (codes: string[]): TableColumn[] => [
   { id: "ref", title: "Ref", width: 5 },
   { id: "date", title: "Date", width: 10 },
   { id: "title", title: "Title", width: "grow" },
   { id: "kind", title: "Kind", width: 8 },
   { id: "status", title: "Status", width: 9 },
   { id: "att", title: "Att.", width: 4 },
-  { id: "projects", title: "Projects", width: 12 },
+  { id: "projects", title: "Projects", width: fitWidth(codes, 12, 16) },
 ]
 
 // `Thu 4 Dec`: the long date without its year.
@@ -162,7 +165,7 @@ export function MeetingsScreen() {
       <Panel title="Meetings" count={q.data() === undefined ? undefined : shown().length} focused={keys.active()} grow>
         <Show when={q.data() !== undefined}>
           <Table
-            columns={COLUMNS}
+            columns={columns(shown().flatMap(codes))}
             groups={tableGroups()}
             selectedRef={loaded(want()) ? want() : undefined}
             onSelect={select}

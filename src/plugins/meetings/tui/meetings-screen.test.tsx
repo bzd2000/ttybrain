@@ -229,6 +229,22 @@ describe("Meetings screen", () => {
     expect(lineWith(frame, "Board December")).toContain("›")
   })
 
+  test("the Projects column shows a 16-character code whole at 80x24", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+      await write("projects").addProject!({ code: "CRM", name: "CRM" })
+      await write().addMeeting!({ title: "Data sync", date: "2026-11-20", kind: "steering", projects: ["DATAPLATFORM2027"] })
+      await write().addMeeting!({ title: "CRM sync", date: "2026-11-21", kind: "steering", projects: ["CRM"] })
+    })
+    tui = await renderTui(kernel, { width: 80, height: 24 })
+    tui.input.pressKey("5")
+    const frame = await until(tui, (f) => f.includes("Data sync"))
+    expect(lineWith(frame, "Data sync")).toContain(" DATAPLATFORM2027 ")
+    expect(lineWith(frame, "CRM sync").lastIndexOf(" CRM ")).toBe(lineWith(frame, "Data sync").indexOf(" DATAPLATFORM2027 "))
+    for (const l of lines(frame)) expect(l.length).toBeLessThanOrEqual(80)
+  })
+
   test("empty state", async () => {
     const t = await open({ seed: false })
     expect(await t.frame()).toContain("No meetings yet. Press n to add one.")

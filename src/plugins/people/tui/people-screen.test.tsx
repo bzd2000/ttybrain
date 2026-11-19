@@ -379,6 +379,24 @@ describe("People screen: the detail panel", () => {
     expect(indexOf(frame, "1:1 notes")).toBeLessThan(indexOf(frame, "Goals"))
   })
 
+  test("the Projects column shows a 16-character code whole at 80x24", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      await write().addPerson!({ name: "Marie Dubois", handle: "marie", is_stakeholder: true })
+      await write().addPerson!({ name: "Luc Peeters", handle: "luc", is_stakeholder: true })
+      await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+      await write("projects").addProject!({ code: "CRM", name: "CRM" })
+      await write("projects").addInvolvement!({ project: "DATAPLATFORM2027", person: "@marie", role: "sponsor" })
+      await write("projects").addInvolvement!({ project: "CRM", person: "@luc", role: "sponsor" })
+    })
+    tui = await renderTui(kernel, { width: 80, height: 24 })
+    tui.input.pressKey("3")
+    const frame = await until(tui, (f) => f.includes("Marie Dubois"))
+    expect(lineWith(frame, "Marie Dubois")).toContain(" DATAPLATFORM2027 ")
+    expect(lineWith(frame, "Luc Peeters").indexOf(" CRM ")).toBe(lineWith(frame, "Marie Dubois").indexOf(" DATAPLATFORM2027 "))
+    for (const l of lines(frame)) expect(l.length).toBeLessThanOrEqual(80)
+  })
+
   test("panel hidden below 110 columns", async () => {
     const long = "Maximiliaan Vandenbroucke-De Smet-Claess"
     expect(long.length).toBe(40)

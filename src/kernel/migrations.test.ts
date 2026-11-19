@@ -255,6 +255,102 @@ describe("applying", () => {
     expect(kdb.raw.inTransaction()).toBe(false)
   })
 
+  // Deferring foreign keys does not stop ON DELETE actions: DROP TABLE's implicit DELETE would cascade into (or
+  // null) the child rows, and the commit would pass. So dropping a parent of such a key is refused.
+  for (const action of ["CASCADE", "SET NULL", "SET DEFAULT"]) {
+    test(`dropping a table that an own key references with ON DELETE ${action} is refused, and nothing changes`, async () => {
+      const child = raw(
+        "003",
+        `CREATE TABLE contracts_clause (id INTEGER PRIMARY KEY, contract_id INTEGER DEFAULT 1 REFERENCES contracts_contract(id) ON DELETE ${action})`,
+        "INSERT INTO contracts_contract (id, title) VALUES (1, 'a'), (2, 'b')",
+        "INSERT INTO contracts_clause (id, contract_id) VALUES (10, 1), (11, 2)",
+      )
+      await runner.run("contracts", [...contracts, child], false)
+      const before = schema()
+      const e = await rejects(runner.run("contracts", [...contracts, child, rebuild("1,2")], false))
+      expect(e.message).toBe(
+        `migration "004" of plugin "contracts" rolled back: it drops "contracts_contract", which "contracts_clause" references with ON DELETE ${action}; rebuild "contracts_clause" too, or drop it first`,
+      )
+      expect(applied().map((r) => r.id)).toEqual(["001", "002", "003"])
+      expect(schema()).toEqual(before)
+      expect(rows("SELECT id, contract_id FROM contracts_clause ORDER BY id")).toEqual([
+        { id: 10, contract_id: 1 },
+        { id: 11, contract_id: 2 },
+      ])
+    })
+  }
+
+  test("a raw DROP TABLE of such a parent is refused too", async () => {
+    const child = raw("003", "CREATE TABLE contracts_clause (id INTEGER PRIMARY KEY, contract_id INTEGER REFERENCES contracts_contract(id) ON DELETE CASCADE)")
+    const e = await rejects(runner.run("contracts", [...contracts, child, raw("004", "DROP TABLE contracts_contract")], false))
+    expect(e.message).toContain('it drops "contracts_contract", which "contracts_clause" references with ON DELETE CASCADE')
+  })
+
+  test("with the child dropped first (kept in a copy), the parent can be rebuilt and the child recreated", async () => {
+    const child = raw(
+      "003",
+      "CREATE TABLE contracts_clause (id INTEGER PRIMARY KEY, contract_id INTEGER NOT NULL REFERENCES contracts_contract(id) ON DELETE CASCADE)",
+      "INSERT INTO contracts_contract (id, title) VALUES (1, 'a'), (2, 'b')",
+      "INSERT INTO contracts_clause (id, contract_id) VALUES (10, 1), (11, 2)",
+    )
+    const both = raw(
+      "004",
+      "CREATE TABLE contracts_clause_copy (id INTEGER, contract_id INTEGER)",
+      "INSERT INTO contracts_clause_copy SELECT * FROM contracts_clause",
+      "DROP TABLE contracts_clause",
+      "CREATE TABLE contracts_contract_copy (id INTEGER, title TEXT)",
+      "INSERT INTO contracts_contract_copy SELECT * FROM contracts_contract",
+      "DROP TABLE contracts_contract",
+      "CREATE TABLE contracts_contract (id INTEGER PRIMARY KEY, title TEXT NOT NULL)",
+      "INSERT INTO contracts_contract SELECT * FROM contracts_contract_copy",
+      "DROP TABLE contracts_contract_copy",
+      "CREATE TABLE contracts_clause (id INTEGER PRIMARY KEY, contract_id INTEGER NOT NULL REFERENCES contracts_contract(id) ON DELETE CASCADE)",
+      "INSERT INTO contracts_clause SELECT * FROM contracts_clause_copy",
+      "DROP TABLE contracts_clause_copy",
+    )
+    await runner.run("contracts", [...contracts, child, both], false)
+    expect(applied().map((r) => r.id)).toEqual(["001", "002", "003", "004"])
+    expect(rows("SELECT id, contract_id FROM contracts_clause ORDER BY id")).toEqual([
+      { id: 10, contract_id: 1 },
+      { id: 11, contract_id: 2 },
+    ])
+    expect(rows("PRAGMA foreign_key_check")).toEqual([])
+  })
+
+  test("a child recreated with ON DELETE CASCADE before its parent is dropped is refused (its rows would go)", async () => {
+    const child = raw("003", "CREATE TABLE contracts_clause (id INTEGER PRIMARY KEY, contract_id INTEGER REFERENCES contracts_contract(id) ON DELETE CASCADE)")
+    const e = await rejects(
+      runner.run(
+        "contracts",
+        [
+          ...contracts,
+          child,
+          raw(
+            "004",
+            "DROP TABLE contracts_clause",
+            "CREATE TABLE contracts_clause (id INTEGER PRIMARY KEY, contract_id INTEGER REFERENCES contracts_contract(id) ON DELETE CASCADE)",
+            "DROP TABLE contracts_contract",
+          ),
+        ],
+        false,
+      ),
+    )
+    expect(e.message).toContain('it drops "contracts_contract", which "contracts_clause" references with ON DELETE CASCADE')
+  })
+
+  test("a self-referencing table with ON DELETE CASCADE can be dropped", async () => {
+    await runner.run(
+      "contracts",
+      [
+        ...contracts,
+        raw("003", "CREATE TABLE contracts_node (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES contracts_node(id) ON DELETE CASCADE)"),
+        raw("004", "DROP TABLE contracts_node"),
+      ],
+      false,
+    )
+    expect(applied().map((r) => r.id)).toEqual(["001", "002", "003", "004"])
+  })
+
   test("own triggers and views are allowed for built-in plugins", async () => {
     await runner.run(
       "contracts",

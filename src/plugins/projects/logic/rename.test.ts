@@ -45,6 +45,10 @@ describe("renaming a project's code", () => {
   test("editProject({ code }) renames; links follow by id; the old code no longer resolves", async () => {
     expect(await k.ops.describe("projects", "editProject", { project: "CRM", code: "CRM2027" })).toBe("~ CRM code → CRM2027")
     expect(await k.ops.describe("projects", "editProject", { project: "CRM", code: "#CRM2027", name: "CRM 2027" })).toBe("~ CRM code → CRM2027, name")
+    // The line names the code as the op checks it: trimmed, without `#`; a lower-case one is shown as given (the op
+    // refuses it, as addProject does).
+    expect(await k.ops.describe("projects", "editProject", { project: "#crm", code: "  #CRM2027 " })).toBe("~ CRM code → CRM2027")
+    expect(await k.ops.describe("projects", "editProject", { project: "CRM", code: "#crm2027" })).toBe("~ CRM code → crm2027")
     const out = await inCtx(() => write().editProject!({ project: "#CRM", code: "#CRM2027" }))
     expect([out.ref, out.id, out.code, out.open_actions, out.open_risks]).toEqual(["#CRM2027", 1, "CRM2027", 1, 1])
 

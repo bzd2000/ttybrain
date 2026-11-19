@@ -10,6 +10,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import {
   act,
+  fitWidth,
   notify,
   Panel,
   printable,
@@ -53,10 +54,12 @@ const FILTER_HINTS: Hint[] = [
   { key: "Esc", label: "clear" },
 ]
 const TAB_KEYS: Record<string, PeopleTab> = { a: "all", s: "stakeholders", t: "team" }
-const COLUMNS: TableColumn[] = [
+// The Projects column is at least as wide as the longest single code shown (9 to 16), so a code is never cut;
+// more codes than fit still end in `…`.
+const columns = (codes: string[]): TableColumn[] => [
   { id: "name", title: "Name", width: 18 },
   { id: "role", title: "Role", width: "grow" },
-  { id: "projects", title: "Projects", width: 9 },
+  { id: "projects", title: "Projects", width: fitWidth(codes, 9, 16) },
   { id: "infl", title: "Infl.", width: 5 },
   { id: "int", title: "Int.", width: 5 },
   { id: "last", title: "Last", width: 6 },
@@ -245,7 +248,7 @@ export function PeopleScreen() {
             </Show>
             <Show when={q.data() !== undefined}>
               <Table
-                columns={COLUMNS}
+                columns={columns(groups().flatMap((g) => g.rows.flatMap((p) => p.projects)))}
                 groups={tableGroups()}
                 selectedRef={loaded(want()) ? want() : undefined}
                 onSelect={select}
