@@ -7,6 +7,7 @@
 # See https://docs.gitlab.com/ci/variables/#cicd-variable-precedence
 stages:
 - test
+- mirror
 sast:
   stage: test
 include:
@@ -24,3 +25,17 @@ node-smoke:
   script:
   - npm ci
   - bash scripts/smoke-node.sh
+# Pushes main to the public GitHub copy after the tests pass. Needs the masked, protected CI/CD variable
+# GITHUB_TOKEN (a GitHub fine-grained token with Contents: read and write on bzd2000/ttybrain); without it the
+# job is skipped. A plain push, not --force: if GitHub's main has commits GitLab doesn't, the job fails instead of
+# overwriting them.
+mirror-github:
+  stage: mirror
+  image: alpine:3.21
+  rules:
+  - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $GITHUB_TOKEN
+  variables:
+    GIT_DEPTH: 0
+  script:
+  - apk add --no-cache git
+  - git push "https://x-access-token:${GITHUB_TOKEN}@github.com/bzd2000/ttybrain.git" "HEAD:refs/heads/main"
