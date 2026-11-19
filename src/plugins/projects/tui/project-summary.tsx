@@ -10,6 +10,7 @@ import {
   toneColor,
   truncate,
   useKeys,
+  useNav,
   useOverlay,
   useQuery,
   useRuntime,
@@ -83,9 +84,23 @@ export function ProjectSummary(props: { recordRef: string }) {
   const store = makeStore(rt)
   const items = makeItems(rt, store)
   const overlay = useOverlay()
+  const nav = useNav()
   const keys = useKeys()
   const today = useToday()
   keys.hints(HINTS)
+
+  // A code edit changes the ref: the record view moves to the new one (as a person's handle edit does), and when
+  // it was opened from the Projects screen, that screen selects the renamed project after Esc.
+  const edit = async (ref: string) => {
+    const saved = await overlay.openForm("project", "project", { recordRef: ref })
+    if (saved === undefined || saved === ref) return
+    const top = nav.route()
+    if (top.kind !== "record" || top.ref !== ref) return
+    nav.back()
+    const below = nav.route()
+    if (below.kind === "screen" && below.screen === "projects") nav.replaceParams({ ...below.params, selected: saved })
+    await nav.open(saved)
+  }
 
   const q = useQuery(
     async () => {
@@ -127,7 +142,7 @@ export function ProjectSummary(props: { recordRef: string }) {
   useScreenKeys((key) => {
     const ch = printable(key)
     if (ch === "h") void overlay.openForm("project", "health", { recordRef: props.recordRef })
-    else if (ch === "e") void overlay.openForm("project", "project", { recordRef: props.recordRef })
+    else if (ch === "e") void edit(props.recordRef)
     else return
     key.preventDefault()
   })

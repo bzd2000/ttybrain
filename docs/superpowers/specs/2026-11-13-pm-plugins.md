@@ -152,7 +152,7 @@ It reads `people.person`, for owner, `for` and involvement names and for validat
 
 | Write | Input | Change-set line |
 |---|---|---|
-| `addProject` / `editProject` / `archiveProject` | … | `+ project CRM "CRM replatforming"` |
+| `addProject` / `editProject` / `archiveProject` | … (`editProject`'s optional `code` renames the project: same rules as add, a taken code is a conflict, the output `ref` is the new one) | `+ project CRM "CRM replatforming"`, `~ CRM code → CRM2027` |
 | `setContext` | `project`, `markdown` | `~ CRM context (2.4 kB → 3.1 kB)` |
 | `setHealth` | `project`, `health`, `comment?`, `date?` | `~ CRM health amber → red: "Budget overrun"` |
 | `addMilestone` / `editMilestone` / `completeMilestone` / `deleteMilestone` | … | `~ MS-2 due 26 Nov → 10 Dec` |

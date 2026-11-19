@@ -33,6 +33,7 @@ const AddProject = Type.Object({
 })
 const EditProject = Type.Object({
   project: Ref,
+  code: Type.Optional(NonBlank()), // a new code: the project is renamed (everything links by id)
   name: Type.Optional(NonBlank()),
   description: Clearable,
   status: Type.Optional(ProjectStatus),
@@ -156,14 +157,22 @@ export function registerProjectOps(ctx: PluginContext, store: Store): void {
         input: EditProject,
         output: ProjectRecord,
         describe: async (i: EditInput) => {
-          const fields = Object.keys(COLUMNS).filter((f) => i[f as keyof typeof COLUMNS] !== undefined)
-          return `~ ${await store.codeLabel(i.project)} ${fields.length ? fields.join(", ") : "(no change)"}`
+          const current = await store.codeLabel(i.project)
+          const renamed = i.code === undefined ? undefined : i.code.trim().replace(/^#/, "")
+          const fields = [
+            ...(renamed !== undefined && renamed !== current ? [`code → ${renamed}`] : []),
+            ...Object.keys(COLUMNS).filter((f) => i[f as keyof typeof COLUMNS] !== undefined),
+          ]
+          return `~ ${current} ${fields.length ? fields.join(", ") : "(no change)"}`
         },
         run: async (i: EditInput) => {
           const p = await store.activeProject(i.project)
+          // The same rules as addProject; the current code is no change.
+          const c = i.code === undefined ? p.code : code(i.code)
+          if (c !== p.code && (await store.codeId(c)) !== null) throw new ConflictError(`project "${c}" already exists`, { hint: "choose another code" })
           await db
             .updateTable("project")
-            .set({ ...columns(i), updated_at: now() })
+            .set({ ...columns(i), ...(c !== p.code ? { code: c } : {}), updated_at: now() })
             .where("id", "=", p.id)
             .execute()
           return store.projectById(p.id)

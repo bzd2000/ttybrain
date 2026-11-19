@@ -115,10 +115,11 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
   ctx.command({
     thing: "project",
     verb: "edit",
-    summary: "change a project's fields; --health records a health update",
+    summary: "change a project's fields; --code renames it; --health records a health update",
     args: [{ name: "project", required: true }],
     flags: {
       name: text("the project name", "name"),
+      code: text("a new code (2–16 letters or digits); text that mentions the old one is not rewritten", "code"),
       ...projectFlags,
       health: { type: "string", values: [...HEALTHS], description: "record a health update (today)" },
       "health-comment": text("the comment on the health update", "text"),
@@ -126,12 +127,16 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
     run: async ({ args, flags }) => {
       if (flags["health-comment"] !== undefined && flags.health === undefined)
         throw new ValidationError("--health-comment needs --health", { field: "health" })
-      const fields = { ...projectInput(flags), ...(flags.name !== undefined ? { name: flags.name } : {}) }
+      const fields = {
+        ...projectInput(flags),
+        ...(flags.name !== undefined ? { name: flags.name } : {}),
+        ...(flags.code !== undefined ? { code: flags.code } : {}),
+      }
       let p: ProjectRecord | undefined
       if (Object.keys(fields).length > 0 || flags.health === undefined) p = await write().editProject!({ project: args.project, ...fields })
       if (flags.health !== undefined)
         p = await write().setHealth!({
-          project: args.project,
+          project: p?.ref ?? args.project, // the new code after a rename
           health: flags.health,
           ...(flags["health-comment"] !== undefined ? { comment: flags["health-comment"] } : {}),
         })
