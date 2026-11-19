@@ -1,4 +1,4 @@
-// Draft recovery in forms and the editor (drafts.ts): a draft of the unsaved values under PM_HOME/drafts, written
+// Draft recovery in forms and the editor (drafts.ts): a draft of the unsaved values under TTYBRAIN_HOME/drafts, written
 // after a pause in typing and at once on Esc or quit, deleted by a save, offered on reopen
 // (`Unsaved draft from HH:MM · r restore · x discard`). Against a fixture plugin `todo` (table `thing`, record
 // type `thing` with prefix `TH-`, write ops `addThing` and `editThing`).

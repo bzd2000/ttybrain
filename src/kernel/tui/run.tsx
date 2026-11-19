@@ -9,7 +9,7 @@ import { TuiApp } from "./app"
 import { bootTui } from "./boot"
 import { installTuiModules, loadTuiParts } from "./load"
 
-// OpenTUI's default exit signals minus SIGHUP and SIGTERM (pm's shutdown handler owns those).
+// OpenTUI's default exit signals minus SIGHUP and SIGTERM (ttybrain's shutdown handler owns those).
 const EXIT_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGQUIT", "SIGABRT", "SIGPIPE", "SIGBUS"]
 
 export async function runTui(

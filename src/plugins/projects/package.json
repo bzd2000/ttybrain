@@ -1,8 +1,8 @@
 {
-  "name": "@pm/plugin-projects",
+  "name": "@ttybrain/plugin-projects",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "logic/index.ts",
-  "pm": { "plugin": true, "id": "projects", "tui": "tui/index.tsx" }
+  "ttybrain": { "plugin": true, "id": "projects", "tui": "tui/index.tsx" }
 }

@@ -1,5 +1,5 @@
 // pm works with any built-in switched off, and with all four off (design §3.6): the CLI lists only what is
-// loaded, `pm plugin list` shows the disabled and skipped plugins, and the TUI renders Overview. Boots discover
+// loaded, `ttybrain plugin list` shows the disabled and skipped plugins, and the TUI renders Overview. Boots discover
 // the real built-in folder; the config disables the plugins.
 import { afterEach, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
@@ -30,7 +30,7 @@ afterEach(async () => {
 
 async function boot(disabled: string[]): Promise<Kernel> {
   home = mkdtempSync(join(tmpdir(), "pm-without-"))
-  const env = { PM_HOME: home, PM_TEST: "1", PM_CONFIG_JSON: JSON.stringify({ plugins: { disabled } }) }
+  const env = { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1", TTYBRAIN_CONFIG_JSON: JSON.stringify({ plugins: { disabled } }) }
   kernel = await bootKernel({ env, discover: true, clock: fixedClock("2026-11-13") })
   return kernel
 }
@@ -96,7 +96,7 @@ test.each(cases)("pm works with %s disabled", async (_name, disabled) => {
   expect(parts.builtin.map((p) => p.plugin).sort()).toEqual(BUILTINS.filter((id) => !off.has(id)).sort())
   tui = await renderTui(k, { parts: parts.builtin, external: parts.external })
   const frame = await tui.frame()
-  expect(frame.split("\n")[0]).toContain("pm · 1 Overview")
+  expect(frame.split("\n")[0]).toContain("ttybrain · 1 Overview")
   if (off.size === BUILTINS.length) expect(frame).toContain("No panels yet: plugins add them here.")
 })
 
@@ -105,7 +105,7 @@ test("--from-inbox without the inbox plugin", async () => {
   expect(await run(k, "project", "add", "CRM", "CRM system", "--from-inbox", "I-1")).toEqual({
     code: 1,
     out: "",
-    err: 'error: --from-inbox needs the inbox plugin, which is not loaded\nhint: run "pm plugin list"\n',
+    err: 'error: --from-inbox needs the inbox plugin, which is not loaded\nhint: run "ttybrain plugin list"\n',
   })
   const json = await run(k, "project", "add", "CRM", "CRM system", "--from-inbox", "I-1", "--json")
   expect(JSON.parse(json.out).error).toMatchObject({ code: "validation", message: "--from-inbox needs the inbox plugin, which is not loaded" })

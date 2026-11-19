@@ -8,7 +8,7 @@ import {
   ValidationError,
   type PluginContext,
   type PluginRuntime,
-} from "@pm/api"
+} from "@ttybrain/api"
 import type { ProjectRecord } from "./schema"
 import { projectQuery } from "./views"
 
@@ -79,7 +79,7 @@ export function makeStore(ctx: PluginRuntime) {
   // A project that may be written to (or have records written on it): not archived.
   async function activeProject(input: string): Promise<ProjectRecord> {
     const p = await project(input)
-    if (p.archived) throw new ValidationError(`${p.ref} is archived`, { hint: `restore it first: pm project restore ${p.code}` })
+    if (p.archived) throw new ValidationError(`${p.ref} is archived`, { hint: `restore it first: ttybrain project restore ${p.code}` })
     return p
   }
 
@@ -110,7 +110,7 @@ export function makeStore(ctx: PluginRuntime) {
   // A person who may be given a role: not archived.
   async function activePerson(input: string): Promise<PersonRef> {
     const p = await person(input)
-    if (p.archived) throw new ValidationError(`${p.ref} is archived`, { hint: `restore it first: pm person restore ${p.ref}` })
+    if (p.archived) throw new ValidationError(`${p.ref} is archived`, { hint: `restore it first: ttybrain person restore ${p.ref}` })
     return p
   }
 

@@ -34,7 +34,7 @@ describe("shutdown", () => {
       proc.kill(signal)
       const code = await proc.exited
       expect({ code, stderr: await new Response(proc.stderr).text() }).toEqual({ code: 0, stderr: "" })
-      const raw = openRaw(join(home, "pm.db"))
+      const raw = openRaw(join(home, "ttybrain.db"))
       try {
         expect(raw.prepare("SELECT count(*) AS n FROM holder_row").all([])).toEqual([{ n: 0 }])
         expect(raw.prepare("PRAGMA integrity_check").all([])).toEqual([{ integrity_check: "ok" }])

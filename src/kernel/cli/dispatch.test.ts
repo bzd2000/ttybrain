@@ -89,7 +89,7 @@ const widgets: PluginDef = definePlugin({
         empty: "none",
       }),
     })
-    ctx.guideSection({ title: "Widgets", markdown: "Use `pm widget add`." })
+    ctx.guideSection({ title: "Widgets", markdown: "Use `ttybrain widget add`." })
   },
 })
 
@@ -147,7 +147,7 @@ describe("runCli: plugin commands", () => {
   test("busy maps to exit 3", async () => {
     const r = await cli(["widget", "busy", "--json"])
     expect(r.code).toBe(3)
-    expect(JSON.parse(r.out)).toEqual({ error: { code: "busy", message: "database is busy", hint: "another pm process is writing; try again" } })
+    expect(JSON.parse(r.out)).toEqual({ error: { code: "busy", message: "database is busy", hint: "another ttybrain process is writing; try again" } })
   })
 
   test("a ValidationError carries its field", async () => {
@@ -176,7 +176,7 @@ describe("runCli: plugin commands", () => {
     const r = await cli(["widget", "addd"])
     expect(r.code).toBe(1)
     expect(r.err).toBe('error: unknown command "widget addd"\nhint: did you mean "widget add"?\n')
-    expect((await cli(["widget", "zzzzzz"])).err).toBe('error: unknown command "widget zzzzzz"\nhint: run "pm widget --help" to list its commands\n')
+    expect((await cli(["widget", "zzzzzz"])).err).toBe('error: unknown command "widget zzzzzz"\nhint: run "ttybrain widget --help" to list its commands\n')
   })
 
   test("a thing without a verb lists its verbs", async () => {
@@ -192,7 +192,7 @@ describe("runCli: plugin commands", () => {
     }
     expect(await errs("widget", "add", "x", "--colour", "red")).toEqual({
       code: 1,
-      error: { code: "validation", message: "unknown flag --colour", hint: 'run "pm widget add --help" for its flags', field: "colour" },
+      error: { code: "validation", message: "unknown flag --colour", hint: 'run "ttybrain widget add --help" for its flags', field: "colour" },
     })
     expect(await errs("widget", "add", "x", "--due")).toEqual({
       code: 1,
@@ -208,11 +208,11 @@ describe("runCli: plugin commands", () => {
     })
     expect(await errs("widget", "add")).toEqual({
       code: 1,
-      error: { code: "validation", message: "missing argument <title>", hint: "usage: pm widget add <title> [--due <date>] [--size <number>] [--tags <a,b>]", field: "title" },
+      error: { code: "validation", message: "missing argument <title>", hint: "usage: ttybrain widget add <title> [--due <date>] [--size <number>] [--tags <a,b>]", field: "title" },
     })
     expect(await errs("widget", "add", "x", "y")).toEqual({
       code: 1,
-      error: { code: "validation", message: 'unexpected argument "y"', hint: "usage: pm widget add <title> [--due <date>] [--size <number>] [--tags <a,b>]" },
+      error: { code: "validation", message: 'unexpected argument "y"', hint: "usage: ttybrain widget add <title> [--due <date>] [--size <number>] [--tags <a,b>]" },
     })
     expect(await errs("widget", "add", "x", "--json=yes")).toEqual({
       code: 1,
@@ -239,7 +239,7 @@ describe("runCli: plugin commands", () => {
     k = await makeTestKernel({ plugins: [widgets, tickets] })
     const r = await cli(["widget", "origin", "--from-inbox", "I-9", "--json"])
     expect(r.code).toBe(2)
-    expect(JSON.parse(r.out)).toEqual({ error: { code: "not_found", message: '--from-inbox: no record "I-9"', hint: 'run "pm help"' } })
+    expect(JSON.parse(r.out)).toEqual({ error: { code: "not_found", message: '--from-inbox: no record "I-9"', hint: 'run "ttybrain help"' } })
     expect(JSON.parse((await cli(["widget", "origin", "--from-inbox", "I-1", "--json"])).out).origin).toEqual({ type: "inbox", ref: "I-1" })
   })
 
@@ -270,12 +270,12 @@ describe("runCli: plugin commands", () => {
   })
 
   test("--db is accepted (it is applied before boot)", async () => {
-    expect((await cli(["widget", "add", "x", "--db", join(k.home, "pm.db")])).code).toBe(0)
+    expect((await cli(["widget", "add", "x", "--db", join(k.home, "ttybrain.db")])).code).toBe(0)
   })
 })
 
 describe("runCli: help", () => {
-  test("pm help lists every command with its flags, the kernel commands and the global flags", async () => {
+  test("ttybrain help lists every command with its flags, the kernel commands and the global flags", async () => {
     const r = await cli(["help"])
     expect(r.code).toBe(0)
     expect(r.out).toContain("  widget add <title>")
@@ -287,12 +287,12 @@ describe("runCli: help", () => {
     expect(await cli([])).toEqual(r)
   })
 
-  test("pm help --json is structured", async () => {
+  test("ttybrain help --json is structured", async () => {
     const r = await cli(["help", "--json"])
     const add = JSON.parse(r.out).commands.find((c: { command: string }) => c.command === "widget add")
     expect(add).toEqual({
       command: "widget add",
-      usage: "pm widget add <title> [--due <date>] [--size <number>] [--tags <a,b>]",
+      usage: "ttybrain widget add <title> [--due <date>] [--size <number>] [--tags <a,b>]",
       summary: "add a widget",
       destructive: false,
       args: [{ name: "title", required: true, rest: false }],
@@ -304,7 +304,7 @@ describe("runCli: help", () => {
     })
   })
 
-  test("pm <thing> --help lists that thing's verbs; pm <thing> <verb> --help one command", async () => {
+  test("ttybrain <thing> --help lists that thing's verbs; ttybrain <thing> <verb> --help one command", async () => {
     const t = await cli(["widget", "--help"])
     expect(t.code).toBe(0)
     expect(t.out).toContain("  widget add <title>")
@@ -312,11 +312,11 @@ describe("runCli: help", () => {
     expect(t.out).not.toContain("plugin list")
     const c = await cli(["widget", "add", "--help"])
     expect(c.code).toBe(0)
-    expect(c.out).toStartWith("usage: pm widget add <title> [--due <date>] [--size <number>] [--tags <a,b>]\n\nadd a widget\n")
+    expect(c.out).toStartWith("usage: ttybrain widget add <title> [--due <date>] [--size <number>] [--tags <a,b>]\n\nadd a widget\n")
     expect(c.out).toContain("  --due <date>")
     expect(c.out).not.toContain("widget delete")
     expect(await cli(["help", "widget", "add"])).toEqual(c)
-    expect((await cli(["report", "status", "--help"])).out).toStartWith("usage: pm report status <project> [--since <value>] [--format <md|text|json>]\n")
+    expect((await cli(["report", "status", "--help"])).out).toStartWith("usage: ttybrain report status <project> [--since <value>] [--format <md|text|json>]\n")
   })
 })
 
@@ -331,8 +331,8 @@ describe("runCli: kernel commands", () => {
   test("guide prints the markdown, and --write writes it to a file", async () => {
     const r = await cli(["guide"])
     expect(r.code).toBe(0)
-    expect(r.out).toStartWith("# pm: guide for agents\n")
-    expect(r.out).toContain("## Widgets\n\nUse `pm widget add`.")
+    expect(r.out).toStartWith("# ttybrain: guide for agents\n")
+    expect(r.out).toContain("## Widgets\n\nUse `ttybrain widget add`.")
     const path = join(k.home, "out", "guide.md")
     const w = await cli(["guide", "--write", path, "--json"])
     expect(JSON.parse(w.out)).toEqual({ path })

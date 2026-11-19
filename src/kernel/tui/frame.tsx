@@ -22,7 +22,7 @@ export function Header(props: { chip: string; crumbs: string[]; badges: Array<Re
   return (
     <box height={1} flexShrink={0} flexDirection="row" justifyContent="space-between" paddingLeft={1} paddingRight={1} backgroundColor={theme.panel}>
       <box flexDirection="row" flexShrink={1} overflow="hidden">
-        <text fg={theme.muted}>{"pm · "}</text>
+        <text fg={theme.muted}>{"ttybrain · "}</text>
         <text fg={theme.accent}>{props.chip}</text>
         <For each={props.crumbs}>{(c) => <text fg={theme.text}>{` › ${c}`}</text>}</For>
       </box>

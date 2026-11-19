@@ -87,7 +87,7 @@ describe("People screen", () => {
   test("opens on 3 and lists stakeholders then team", async () => {
     const t = await open()
     const frame = await t.frame()
-    expect(lines(frame)[0]).toContain("pm · 3 People ▾")
+    expect(lines(frame)[0]).toContain("ttybrain · 3 People ▾")
     expect(frame).toContain("All 5")
     expect(frame).toContain("Stakeholders 4")
     expect(frame).toContain("Team 2")
@@ -165,7 +165,7 @@ describe("People screen", () => {
     for (const n of ["Nadia Benali", "Anna Smit", "Bob Maes"]) expect(frame).not.toContain(n)
     await escape(t)
     frame = await until(t, (f) => !f.includes("filter:"))
-    expect(lines(frame)[0]).toContain("pm · 3 People ▾") // Esc cleared the filter; it did not go back
+    expect(lines(frame)[0]).toContain("ttybrain · 3 People ▾") // Esc cleared the filter; it did not go back
     expect(order(frame, ALL)).toEqual(ALL)
     t.input.pressKey("/")
     await t.input.typeText("zzz")
@@ -267,14 +267,14 @@ describe("People screen", () => {
     t.input.pressEnter()
     let frame = await until(t, (f) => f.includes("› @marie Marie Dubois"))
     expect(frame).toContain("› @marie Marie Dubois")
-    expect(lines(frame)[0]).toContain("pm · 3 People")
+    expect(lines(frame)[0]).toContain("ttybrain · 3 People")
     expect(frame).toContain("Summary")
     expect(frame).toContain("@marie · Stakeholder")
     // A person sorting above marie: she would be row 0 if the selection had been reset.
     await inCtx(() => write().addPerson!({ name: "Aaron Aerts", handle: "aaron", is_stakeholder: true, influence: "high" }))
     t.input.pressEscape()
     frame = await until(t, (f) => f.includes("Aaron Aerts") && lineWith(f, "Marie Dubois").includes("›"))
-    expect(lines(frame)[0]).toContain("pm · 3 People")
+    expect(lines(frame)[0]).toContain("ttybrain · 3 People")
     expect(lineWith(frame, "Marie Dubois")).toContain("›")
     expect(lineWith(frame, "Aaron Aerts")).not.toContain("›")
   })

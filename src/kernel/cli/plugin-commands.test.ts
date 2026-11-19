@@ -1,5 +1,5 @@
-// `pm plugin enable|disable <id>`: they edit `plugins.disabled` in the config file; the change applies on the
-// next run. Boots discover the real built-in folder, on one PM_HOME per test, so a fresh boot sees the change.
+// `ttybrain plugin enable|disable <id>`: they edit `plugins.disabled` in the config file; the change applies on the
+// next run. Boots discover the real built-in folder, on one TTYBRAIN_HOME per test, so a fresh boot sees the change.
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -20,7 +20,7 @@ afterEach(async () => {
 })
 
 async function boot(): Promise<Kernel> {
-  const k = await bootKernel({ env: { PM_HOME: home, PM_TEST: "1" }, discover: true, clock: fixedClock("2026-11-13") })
+  const k = await bootKernel({ env: { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1" }, discover: true, clock: fixedClock("2026-11-13") })
   kernels.push(k)
   return k
 }
@@ -78,34 +78,34 @@ test("enable of an id that is no longer installed still removes it", async () =>
   expect(config()).toEqual({ plugins: { disabled: [] } })
 })
 
-test("enable notes that PM_CONFIG_JSON still disables the plugin", async () => {
+test("enable notes that TTYBRAIN_CONFIG_JSON still disables the plugin", async () => {
   writeFileSync(configFile(), JSON.stringify({ plugins: { disabled: ["meetings"] } }))
   const envJson = '{"plugins":{"disabled":["meetings"]}}'
-  // The command reads PM_CONFIG_JSON from the process environment, which pm's entry point boots with.
-  const before = process.env.PM_CONFIG_JSON
-  process.env.PM_CONFIG_JSON = envJson
+  // The command reads TTYBRAIN_CONFIG_JSON from the process environment, which ttybrain's entry point boots with.
+  const before = process.env.TTYBRAIN_CONFIG_JSON
+  process.env.TTYBRAIN_CONFIG_JSON = envJson
   try {
-    const k = await bootKernel({ env: { PM_HOME: home, PM_TEST: "1", PM_CONFIG_JSON: envJson }, discover: true, clock: fixedClock("2026-11-13") })
+    const k = await bootKernel({ env: { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1", TTYBRAIN_CONFIG_JSON: envJson }, discover: true, clock: fixedClock("2026-11-13") })
     kernels.push(k)
-    expect(await run(k, "plugin", "enable", "meetings")).toEqual({ code: 0, out: "enabled meetings; note: PM_CONFIG_JSON still disables it\n", err: "" })
+    expect(await run(k, "plugin", "enable", "meetings")).toEqual({ code: 0, out: "enabled meetings; note: TTYBRAIN_CONFIG_JSON still disables it\n", err: "" })
     expect(config()).toEqual({ plugins: { disabled: [] } })
     const json = await run(k, "plugin", "enable", "meetings", "--json")
-    expect(JSON.parse(json.out)).toEqual({ id: "meetings", disabled: false, stillDisabledBy: "PM_CONFIG_JSON" })
-    // PM_CONFIG_JSON that does not disable it: no note.
-    process.env.PM_CONFIG_JSON = '{"staleContactDays": 3}'
+    expect(JSON.parse(json.out)).toEqual({ id: "meetings", disabled: false, stillDisabledBy: "TTYBRAIN_CONFIG_JSON" })
+    // TTYBRAIN_CONFIG_JSON that does not disable it: no note.
+    process.env.TTYBRAIN_CONFIG_JSON = '{"staleContactDays": 3}'
     expect(await run(k, "plugin", "enable", "meetings")).toEqual({ code: 0, out: "enabled meetings\n", err: "" })
   } finally {
-    if (before === undefined) delete process.env.PM_CONFIG_JSON
-    else process.env.PM_CONFIG_JSON = before
+    if (before === undefined) delete process.env.TTYBRAIN_CONFIG_JSON
+    else process.env.TTYBRAIN_CONFIG_JSON = before
   }
 })
 
 test("unknown id", async () => {
   const k = await boot()
   const r = await run(k, "plugin", "disable", "nope")
-  expect(r).toEqual({ code: 2, out: "", err: 'error: no plugin "nope"\nhint: run "pm plugin list"\n' })
+  expect(r).toEqual({ code: 2, out: "", err: 'error: no plugin "nope"\nhint: run "ttybrain plugin list"\n' })
   const e = await run(k, "plugin", "enable", "nope")
-  expect(e).toEqual({ code: 2, out: "", err: 'error: no plugin "nope"\nhint: run "pm plugin list"\n' })
+  expect(e).toEqual({ code: 2, out: "", err: 'error: no plugin "nope"\nhint: run "ttybrain plugin list"\n' })
 })
 
 test("data survives disable and enable", async () => {

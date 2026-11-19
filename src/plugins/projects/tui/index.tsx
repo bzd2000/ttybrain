@@ -1,6 +1,6 @@
 // The projects plugin's tui part: the Projects screen (slot 2), the project's record forms (project, health) and
 // tabs, and the person's Projects & roles and Actions tabs.
-import { defineTui } from "@pm/api/tui"
+import { defineTui } from "@ttybrain/api/tui"
 import { ActionsScreen } from "./actions-screen"
 import { DueForm } from "./due-form"
 import { HealthForm, InvolvementForm, ProjectForm } from "./forms"

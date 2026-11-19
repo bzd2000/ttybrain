@@ -1,6 +1,6 @@
-// `pm person|note|goal …`. Reads go through ctx.data (own tables and views); writes only through
+// `ttybrain person|note|goal …`. Reads go through ctx.data (own tables and views); writes only through
 // ctx.self().write.*, so they are validated, transactional and recorded like any other caller's.
-import { formatTable, ValidationError, type FlagDef, type PluginContext } from "@pm/api"
+import { formatTable, ValidationError, type FlagDef, type PluginContext } from "@ttybrain/api"
 import type { Store } from "./records"
 import { LEVELS, NOTE_KINDS, type GoalRecord, type NoteRecord, type PersonRecord } from "./schema"
 

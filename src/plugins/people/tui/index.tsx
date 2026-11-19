@@ -1,6 +1,6 @@
 // The people plugin's tui part: the People screen (slot 3), the person record view's tabs (Summary, Notes, and
 // Goals for team members), the Overview's "Stakeholders to contact" panel and the person, note and goal forms.
-import { daysBetween, defineTui, type Cell } from "@pm/api/tui"
+import { daysBetween, defineTui, type Cell } from "@ttybrain/api/tui"
 import type { StaleRow } from "../logic/ops"
 import { makeStore } from "../logic/records"
 import { GoalForm, NoteForm, PersonForm } from "./forms"

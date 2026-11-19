@@ -93,7 +93,7 @@ describe("Meetings screen", () => {
   test("opens on 5 with upcoming then past, cancelled muted", async () => {
     const t = await open()
     const frame = await t.frame()
-    expect(lines(frame)[0]).toContain("pm · 5 Meetings")
+    expect(lines(frame)[0]).toContain("ttybrain · 5 Meetings")
     const upcoming = indexOf(frame, "Upcoming · 3")
     const past = indexOf(frame, "Past · 3")
     expect(upcoming).toBeGreaterThan(0)

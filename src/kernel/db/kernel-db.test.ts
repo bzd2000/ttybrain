@@ -16,7 +16,7 @@ function names(db: RawDb): string[] {
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "pm-kdb-"))
-  file = join(dir, "pm.db")
+  file = join(dir, "ttybrain.db")
   kdb = new KernelDb(openRaw(file))
   kdb.raw.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
 })

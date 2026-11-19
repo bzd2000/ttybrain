@@ -9,7 +9,7 @@ import { openRaw } from "./sqlite"
 
 export async function savepointSelfcheck(): Promise<string[]> {
   const dir = mkdtempSync(join(tmpdir(), "pm-savepoints-"))
-  const kdb = new KernelDb(openRaw(join(dir, "pm.db")))
+  const kdb = new KernelDb(openRaw(join(dir, "ttybrain.db")))
   try {
     await kdb.kysely.schema.createTable("t").addColumn("name", "text").execute()
     await kdb.transaction(async () => {

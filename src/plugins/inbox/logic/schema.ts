@@ -1,5 +1,5 @@
 // The inbox plugin's tables (design §5 Inbox) and the TypeBox shapes of its records.
-import { sql, Type, type PluginContext, type Static } from "@pm/api"
+import { sql, Type, type PluginContext, type Static } from "@ttybrain/api"
 
 export const STATUSES = ["new", "processed", "dismissed"] as const
 export const PROCESSED_BY = ["cli", "you", "assistant"] as const

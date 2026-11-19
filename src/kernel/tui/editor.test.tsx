@@ -184,13 +184,13 @@ describe("editExternal", () => {
   })
 
   test("not run in container mode", async () => {
-    process.env.PM_MODE = "container"
+    process.env.TTYBRAIN_MODE = "container"
     try {
       const r = fake()
       expect(await editExternal("x", { renderer: r, editor: "true" })).toBeNull()
       expect(r.calls).toEqual([])
     } finally {
-      delete process.env.PM_MODE
+      delete process.env.TTYBRAIN_MODE
     }
   })
 })

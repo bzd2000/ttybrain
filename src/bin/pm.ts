@@ -8,11 +8,18 @@ import { fileURLToPath } from "node:url"
 import { leading } from "../kernel/cli/args"
 import { runCli } from "../kernel/cli/dispatch"
 import { printError, type CliIo } from "../kernel/cli/output"
+import { PmError } from "../kernel/errors"
+import { moveLegacyHome } from "../kernel/home-move"
 import { bootKernel } from "../kernel/host"
 import { installShutdownHandlers } from "../kernel/shutdown"
 
 export async function main(argv: string[], env: Record<string, string | undefined>, io: CliIo): Promise<number> {
   const { global } = leading(argv)
+  // The one-time move of ~/.pm (before the rename) to ~/.ttybrain. When it cannot be done, ttybrain does not start,
+  // so no empty database is created beside the data. A database chosen with --db (like TTYBRAIN_DB) is left alone.
+  const move = moveLegacyHome(env, { db: global.db })
+  if (move.kind === "blocked") return printError(new PmError(move.message, "data_move", 1, { hint: move.hint }), global.json, io)
+  if (move.kind !== "nothing") io.err(`${move.notice}\n`)
   let kernel
   try {
     kernel = await bootKernel({ env, flags: global.db !== undefined ? { db: global.db } : {}, discover: true })
@@ -25,7 +32,7 @@ export async function main(argv: string[], env: Record<string, string | undefine
   try {
     if (argv.length === 0 && process.stdout.isTTY) {
       const { runTui } = await import("../kernel/tui/run")
-      // runTui loads each loaded plugin's tui entry (pm.tui) itself.
+      // runTui loads each loaded plugin's tui entry (ttybrain.tui) itself.
       await runTui(kernel, {
         onRenderer: (renderer) => {
           stopTui = async () => {

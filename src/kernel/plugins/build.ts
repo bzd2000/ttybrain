@@ -1,6 +1,6 @@
-// `pm plugin build [dir]`: compiles an external plugin's src/ to dist/ with pm's Babel setup and points its imports
-// of pm's shared modules at generated shims in dist/__pm/, which hand the plugin pm's own module instances from
-// globalThis.__PM_MODULES__ at runtime (one Solid, one OpenTUI, one API). Design §3.4, plan ruling R4.
+// `ttybrain plugin build [dir]`: compiles an external plugin's src/ to dist/ with ttybrain's Babel setup and points its imports
+// of ttybrain's shared modules at generated shims in dist/__pm/, which hand the plugin ttybrain's own module instances from
+// globalThis.__TTYBRAIN_MODULES__ at runtime (one Solid, one OpenTUI, one API). Design §3.4, plan ruling R4.
 //
 // Pass 1 compiles each file (TypeScript; Solid's JSX transform for .jsx/.tsx; `.js` on relative imports). Pass 2
 // runs on pass 1's output, so the imports the JSX transform adds are seen too: it collects the names each file
@@ -10,14 +10,17 @@ import { existsSync, readFileSync, statSync } from "node:fs"
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { dirname, join, posix, relative, resolve, sep } from "node:path"
 import { ValidationError } from "../errors"
+import { LEGACY_PLUGIN } from "../loader"
 import { isJsxFile, isSourceFile, relativeJs, SOLID_OPTIONS, toJs } from "./babel-options"
 
-// The modules pm shares with plugins (constraints: exactly these), in the order results list them.
-export const SHARED_MODULES = ["@pm/api", "@pm/api/tui", "solid-js", "solid-js/store", "@opentui/solid", "@opentui/core"] as const
+// The modules ttybrain shares with plugins (constraints: exactly these), in the order results list them.
+export const SHARED_MODULES = ["@ttybrain/api", "@ttybrain/api/tui", "solid-js", "solid-js/store", "@opentui/solid", "@opentui/core"] as const
 const SHARED: readonly string[] = SHARED_MODULES
 // A deeper path into a shared package ("solid-js/web") is not shared: it would load a second instance.
-const SHARED_PACKAGES = ["@pm/api", "solid-js", "@opentui/solid", "@opentui/core"]
-const isUi = (spec: string) => spec === "@pm/api/tui" || spec === "solid-js" || spec.startsWith("solid-js/") || spec.startsWith("@opentui/")
+const SHARED_PACKAGES = ["@ttybrain/api", "solid-js", "@opentui/solid", "@opentui/core"]
+// The API module names from before the rename.
+const LEGACY_API = ["@pm/api", "@pm/api/tui"]
+const isUi = (spec: string) => spec === "@ttybrain/api/tui" || spec === "solid-js" || spec.startsWith("solid-js/") || spec.startsWith("@opentui/")
 
 // "@opentui/solid" -> "opentui-solid.js"
 export const shimFileName = (name: string) => name.replace(/^@/, "").replaceAll("/", "-") + ".js"
@@ -37,7 +40,7 @@ type Babel = {
 }
 type BabelPath = { node: any }
 
-// `import(name)` through a variable: the CLI path never loads Babel, and pm ships no Babel typings.
+// `import(name)` through a variable: the CLI path never loads Babel, and ttybrain ships no Babel typings.
 async function loadBabel() {
   const load = async (name: string) => ((await import(name)) as { default: any }).default
   const core = (await import("@babel/core" as string)) as Babel & { default?: Babel }
@@ -65,12 +68,14 @@ export async function buildPlugin(dir: string): Promise<{ files: number; shims: 
   if (!existsSync(join(root, "package.json"))) throw new ValidationError(`no package.json in ${root}`)
   const srcDir = join(root, "src")
   if (!existsSync(srcDir) || !statSync(srcDir).isDirectory()) throw new ValidationError(`no src/ in ${root}`)
-  let pkg: { main?: unknown }
+  let pkg: { main?: unknown; ttybrain?: unknown; pm?: unknown }
   try {
     pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
   } catch (e) {
     throw new ValidationError(`invalid package.json in ${root}: ${(e as Error).message}`)
   }
+  // A plugin from before the rename: building it as it is would leave its old manifest key and API imports.
+  if (pkg.pm !== undefined && pkg.ttybrain === undefined) throw new ValidationError(`package.json in ${root} is ${LEGACY_PLUGIN}`)
   if (typeof pkg.main !== "string") throw new ValidationError(`package.json in ${root} has no "main"`)
 
   const { babel, ts, moduleResolver, solid } = await loadBabel()
@@ -102,6 +107,7 @@ export async function buildPlugin(dir: string): Promise<{ files: number; shims: 
         entry.relative.push(posix.normalize(posix.join(posix.dirname(out), spec)))
         return
       }
+      if (LEGACY_API.includes(spec)) return void errors.push(`${src} imports "${spec}": ${LEGACY_PLUGIN}`)
       if (isUi(spec)) entry.ui.push(spec)
       if (SHARED.includes(spec)) {
         if (names.includes(NAMESPACE)) return void errors.push(`${src}: use named imports from "${spec}"`)
@@ -112,7 +118,7 @@ export async function buildPlugin(dir: string): Promise<{ files: number; shims: 
         source.value = shim.startsWith(".") ? shim : "./" + shim
       } else if (spec.startsWith("@opentui/") || SHARED_PACKAGES.some((p) => spec.startsWith(p + "/"))) {
         // Any other OpenTUI package would bring its own @opentui/core: a second copy.
-        errors.push(`${src}: "${spec}" is not shared by pm; use ${SHARED.slice(0, -1).join(", ")} or ${SHARED.at(-1)}`)
+        errors.push(`${src}: "${spec}" is not shared by ttybrain; use ${SHARED.slice(0, -1).join(", ")} or ${SHARED.at(-1)}`)
       }
     }
     const nameOf = (n: { type: string; name?: string; value?: string }) => (n.type === "Identifier" ? n.name! : n.value!)
@@ -183,15 +189,15 @@ const RESERVED = new Set(
 // `m` and `__pm<n>` are the shim's own locals, so they take the aliased path too.
 const plainName = (n: string) => /^[A-Za-z_$][\w$]*$/.test(n) && !RESERVED.has(n) && n !== "m" && !/^__pm\d+$/.test(n)
 
-// A shim: the host's module from globalThis.__PM_MODULES__, checked at load for every name the plugin imports.
+// A shim: the host's module from globalThis.__TTYBRAIN_MODULES__, checked at load for every name the plugin imports.
 export function shimSource(name: string, names: string[]): string {
   const lines = [
-    `const m = globalThis.__PM_MODULES__?.[${JSON.stringify(name)}]`,
-    `if (!m) throw new Error('"${name}" is provided by pm; load this plugin from pm')`,
+    `const m = globalThis.__TTYBRAIN_MODULES__?.[${JSON.stringify(name)}]`,
+    `if (!m) throw new Error('"${name}" is provided by ttybrain; load this plugin from ttybrain')`,
   ]
   if (names.length > 0) {
     lines.push(
-      `for (const n of [${names.map((n) => JSON.stringify(n)).join(", ")}]) if (!(n in m)) throw new Error(\`rebuild the plugin with this pm (missing export "\${n}" from "${name}")\`)`,
+      `for (const n of [${names.map((n) => JSON.stringify(n)).join(", ")}]) if (!(n in m)) throw new Error(\`rebuild the plugin with this ttybrain (missing export "\${n}" from "${name}")\`)`,
     )
   }
   const plain = names.filter(plainName)

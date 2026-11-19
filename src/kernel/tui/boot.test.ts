@@ -40,30 +40,30 @@ function tmp(): string {
 const LOGIC = (id: string) => `export default { id: ${JSON.stringify(id)}, name: "Ext", version: "1.0.0", apiVersion: 1, activate() {} }\n`
 // A hand-written tui entry that reaches the kernel only through the shared modules, as a built plugin's shims do.
 const TUI = (id: string) =>
-  `const { defineTui } = globalThis.__PM_MODULES__["@pm/api/tui"]\n` +
+  `const { defineTui } = globalThis.__TTYBRAIN_MODULES__["@ttybrain/api/tui"]\n` +
   `export default defineTui({ plugin: ${JSON.stringify(id)}, activate() {} })\n`
 
 // A folder plugin `<pluginsDir>/<id>` with a logic entry and, when given, a tui entry.
 function folderPlugin(pluginsDir: string, id: string, o: { logic?: string; tui?: string } = {}): void {
   const dir = join(pluginsDir, id)
   mkdirSync(dir, { recursive: true })
-  const pm: Record<string, unknown> = { plugin: true, id, ...(o.tui !== undefined && { tui: "tui.js" }) }
-  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: `pm-plugin-${id}`, version: "1.0.0", type: "module", main: "index.js", pm }))
+  const ttybrain: Record<string, unknown> = { plugin: true, id, ...(o.tui !== undefined && { tui: "tui.js" }) }
+  writeFileSync(join(dir, "package.json"), JSON.stringify({ name: `ttybrain-plugin-${id}`, version: "1.0.0", type: "module", main: "index.js", ttybrain }))
   writeFileSync(join(dir, "index.js"), o.logic ?? LOGIC(id))
   if (o.tui !== undefined) writeFileSync(join(dir, "tui.js"), o.tui)
 }
 
 // Boots a kernel over `pluginsDir`, with the real built-ins or an empty built-in folder.
 async function discovered(pluginsDir: string, builtins: boolean): Promise<TestKernel> {
-  kernel = await makeTestKernel({ env: { PM_PLUGINS: pluginsDir }, discover: builtins ? true : { builtinDir: tmp() } })
+  kernel = await makeTestKernel({ env: { TTYBRAIN_PLUGINS: pluginsDir }, discover: builtins ? true : { builtinDir: tmp() } })
   return kernel
 }
 
-test("installTuiModules installs pm's shared modules", () => {
+test("installTuiModules installs ttybrain's shared modules", () => {
   installTuiModules()
-  const modules = (globalThis as { __PM_MODULES__?: Record<string, unknown> }).__PM_MODULES__!
-  expect(modules["@pm/api"]).toBe(api)
-  expect(modules["@pm/api/tui"]).toBe(tuiApi)
+  const modules = (globalThis as { __TTYBRAIN_MODULES__?: Record<string, unknown> }).__TTYBRAIN_MODULES__!
+  expect(modules["@ttybrain/api"]).toBe(api)
+  expect(modules["@ttybrain/api/tui"]).toBe(tuiApi)
   expect(modules["solid-js"]).toBe(solid)
   expect(modules["solid-js/store"]).toBe(solidStore)
   expect(modules["@opentui/solid"]).toBe(opentuiSolid)
@@ -120,7 +120,7 @@ test("the tui entry of a plugin whose logic failed or is disabled is not importe
   folderPlugin(pluginsDir, "bad", { logic: `throw new Error("logic boom")\n`, tui: throwing })
   folderPlugin(pluginsDir, "off", { tui: throwing })
   kernel = await makeTestKernel({
-    env: { PM_PLUGINS: pluginsDir, PM_CONFIG_JSON: JSON.stringify({ plugins: { disabled: ["off"] } }) },
+    env: { TTYBRAIN_PLUGINS: pluginsDir, TTYBRAIN_CONFIG_JSON: JSON.stringify({ plugins: { disabled: ["off"] } }) },
     discover: { builtinDir: tmp() },
   })
   expect(kernel.plugins.map((p) => p.status)).toEqual(["failed", "disabled"])
@@ -147,7 +147,7 @@ test("runTui loads the tui entries and lists a failed import under Plugin proble
   const setup = await createTestRenderer({ width: 100, height: 30 })
   try {
     const done = runTui(k, { renderer: setup.renderer })
-    await untilFrame(setup, "pm · 1 Overview")
+    await untilFrame(setup, "ttybrain · 1 Overview")
     setup.mockInput.pressKey("?")
     const frame = await untilFrame(setup, "Plugin problems")
     expect(frame).toContain("ext: tui boom")
@@ -206,7 +206,7 @@ test("Help lists the capture key only when inbox is loaded", async () => {
   tui = undefined
   await kernel.cleanup()
 
-  kernel = await makeTestKernel({ plugins: builtinPlugins, env: { PM_CONFIG_JSON: JSON.stringify({ plugins: { disabled: ["inbox"] } }) } })
+  kernel = await makeTestKernel({ plugins: builtinPlugins, env: { TTYBRAIN_CONFIG_JSON: JSON.stringify({ plugins: { disabled: ["inbox"] } }) } })
   expect(kernel.plugins.find((p) => p.id === "inbox")?.status).toBe("disabled")
   tui = await renderTui(kernel, { parts: builtinTuiParts.filter((p) => p.plugin !== "inbox") })
   tui.input.pressKey("?")
@@ -219,7 +219,7 @@ test("the TUI runs with no plugins", async () => {
   kernel = await makeTestKernel({ plugins: [] })
   tui = await renderTui(kernel, { parts: [] })
   const frame = await tui.frame()
-  expect(frame.split("\n")[0]).toContain("pm · 1 Overview")
+  expect(frame.split("\n")[0]).toContain("ttybrain · 1 Overview")
   expect(frame).toContain("No panels yet: plugins add them here.")
   tui.input.pressKey("?")
   const help = await tui.frame()

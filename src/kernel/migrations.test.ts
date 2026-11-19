@@ -87,7 +87,7 @@ const contracts: Migration[] = [
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "pm-mig-"))
-  paths = resolvePaths({ PM_HOME: dir })
+  paths = resolvePaths({ TTYBRAIN_HOME: dir })
   boot()
   await runner.ensureKernelTables()
 })
@@ -470,11 +470,11 @@ describe("schema checks", () => {
 })
 
 describe("backup", () => {
-  test("pm.db.bak-v2 exists after adding 003 to a DB with 2 applied", async () => {
+  test("ttybrain.db.bak-v2 exists after adding 003 to a DB with 2 applied", async () => {
     await runner.run("contracts", contracts, false)
     await reboot()
     await runner.run("contracts", [...contracts, raw("003", "CREATE TABLE contracts_c (id INTEGER PRIMARY KEY)")], false)
-    expect(readdirSync(dir).filter((f) => f.includes(".bak-"))).toEqual(["pm.db.bak-v2"])
+    expect(readdirSync(dir).filter((f) => f.includes(".bak-"))).toEqual(["ttybrain.db.bak-v2"])
   })
 
   test("the backup is a copy from before the first migration of the boot, made once per boot", async () => {
@@ -502,7 +502,7 @@ describe("backup", () => {
 
     // Once per boot: the next plugin's migrations in the same boot add no second backup.
     await runner.run("other", [raw("001", "CREATE TABLE other_t (id INTEGER PRIMARY KEY)")], false)
-    expect(readdirSync(dir).filter((f) => f.includes(".bak-")).sort()).toEqual(["pm.db.bak-v3"])
+    expect(readdirSync(dir).filter((f) => f.includes(".bak-")).sort()).toEqual(["ttybrain.db.bak-v3"])
   })
 
   test("no backup when nothing is pending", async () => {
@@ -519,7 +519,7 @@ describe("concurrent first boot", () => {
     await kdb.close()
     rmSync(dir, { recursive: true, force: true })
     dir = mkdtempSync(join(tmpdir(), "pm-mig-"))
-    paths = resolvePaths({ PM_HOME: dir })
+    paths = resolvePaths({ TTYBRAIN_HOME: dir })
     const child = join(import.meta.dir, "../../tests/fixtures/migrate-child.ts")
     const start = String(Date.now() + 300)
     const procs = [0, 1].map(() => Bun.spawn(["bun", child, dir, start], { stdout: "pipe", stderr: "pipe" }))

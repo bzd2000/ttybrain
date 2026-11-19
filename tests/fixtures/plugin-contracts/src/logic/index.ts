@@ -1,15 +1,15 @@
-// The `contracts` fixture plugin: an external plugin built with `pm plugin build` and loaded from a plugins folder
-// or from npm (tests/external-plugin.test.ts, scripts/smoke-node.sh). It is source only: pm never imports it.
-// It imports nothing but "@pm/api", owns `contract(id, project_id, title)`, publishes the view `contracts`,
+// The `contracts` fixture plugin: an external plugin built with `ttybrain plugin build` and loaded from a plugins folder
+// or from npm (tests/external-plugin.test.ts, scripts/smoke-node.sh). It is source only: ttybrain never imports it.
+// It imports nothing but "@ttybrain/api", owns `contract(id, project_id, title)`, publishes the view `contracts`,
 // registers the record type `contract` (C-) and the commands `contract add <project> <title>` and `contract list`.
 // The `// FAILURE:` lines are where the failure tests inject a throw into a copy.
-import { definePlugin, formatRef, formatTable, NonBlank, NotFoundError, parseRef, Type, type PluginContext } from "@pm/api"
+import { definePlugin, formatRef, formatTable, NonBlank, NotFoundError, parseRef, Type, type PluginContext } from "@ttybrain/api"
 // FAILURE: import
 
 // The project id behind a ref (`#CRM`, `CRM`), through the kernel's record types.
 async function projectId(ctx: Pick<PluginContext, "records">, ref: string): Promise<number> {
   const found = await ctx.records.resolve(ref.startsWith("#") ? ref : `#${ref}`)
-  if (!found || found.type !== "project") throw new NotFoundError(`no project "${ref}"`, { hint: 'run "pm project list"' })
+  if (!found || found.type !== "project") throw new NotFoundError(`no project "${ref}"`, { hint: 'run "ttybrain project list"' })
   return found.id
 }
 

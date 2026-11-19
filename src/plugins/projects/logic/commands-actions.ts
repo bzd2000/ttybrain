@@ -1,6 +1,6 @@
-// `pm action list|add|edit|done|cancel|delete` (plugin reference §2). Reads go through ctx.data (own tables,
+// `ttybrain action list|add|edit|done|cancel|delete` (plugin reference §2). Reads go through ctx.data (own tables,
 // people through people.person); writes only through ctx.self().write.*. An empty owner is me, shown as `me`.
-import { addDays, currentContext, formatTable, parseRef, ValidationError, weekEnd, type FlagDef, type PluginContext } from "@pm/api"
+import { addDays, currentContext, formatTable, parseRef, ValidationError, weekEnd, type FlagDef, type PluginContext } from "@ttybrain/api"
 import type { ActionRecord, Items } from "./items"
 import { isMe } from "./ops-actions"
 import type { Store } from "./records"

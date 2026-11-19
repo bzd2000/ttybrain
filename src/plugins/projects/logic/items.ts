@@ -1,6 +1,6 @@
 // Milestones, deliverables, risks, decisions and actions as records: their queries and mappers, lookups by display
 // ref, the soft references they carry (owners, meetings), and the five record types (MS-, D-, R-, DE-, A-).
-import { formatRef, NotFoundError, parseRef, Type, ValidationError, type PluginContext, type PluginRuntime, type Static } from "@pm/api"
+import { formatRef, NotFoundError, parseRef, Type, ValidationError, type PluginContext, type PluginRuntime, type Static } from "@ttybrain/api"
 import type { Store } from "./records"
 
 const Text = Type.String()

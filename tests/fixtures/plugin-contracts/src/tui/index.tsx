@@ -1,7 +1,7 @@
 // The `contracts` fixture's tui part: the screen "Contracts" (the first external slot, key 7) and a "Contracts" tab
-// on projects. It imports only "@pm/api/tui" and "solid-js"; the build points both (and the JSX runtime,
-// "@opentui/solid") at pm's own modules.
-import { defineTui, useQuery, useRuntime, type TuiContext } from "@pm/api/tui"
+// on projects. It imports only "@ttybrain/api/tui" and "solid-js"; the build points both (and the JSX runtime,
+// "@opentui/solid") at ttybrain's own modules.
+import { defineTui, useQuery, useRuntime, type TuiContext } from "@ttybrain/api/tui"
 import { For, Show } from "solid-js"
 
 type Runtime = Pick<TuiContext, "data" | "records">

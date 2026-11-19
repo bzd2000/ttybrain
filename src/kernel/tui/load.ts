@@ -1,5 +1,5 @@
-// Loading the plugins' tui parts: installs the UI modules pm shares with external plugins (their built shims read
-// them from globalThis.__PM_MODULES__), then imports the `pm.tui` entry of each plugin whose logic is `ok`, in
+// Loading the plugins' tui parts: installs the UI modules ttybrain shares with external plugins (their built shims read
+// them from globalThis.__TTYBRAIN_MODULES__), then imports the `ttybrain.tui` entry of each plugin whose logic is `ok`, in
 // load order. A tui entry that fails to import (or times out, for a non-built-in) is reported; its plugin's logic
 // stays loaded.
 import * as opentuiCore from "@opentui/core"
@@ -13,8 +13,8 @@ import type { TuiDef } from "./types"
 
 export function installTuiModules(): void {
   installApiModule()
-  const modules = (globalThis as { __PM_MODULES__?: Record<string, unknown> }).__PM_MODULES__!
-  modules["@pm/api/tui"] = tuiApi
+  const modules = (globalThis as { __TTYBRAIN_MODULES__?: Record<string, unknown> }).__TTYBRAIN_MODULES__!
+  modules["@ttybrain/api/tui"] = tuiApi
   modules["solid-js"] = solid
   modules["solid-js/store"] = solidStore
   modules["@opentui/solid"] = opentuiSolid

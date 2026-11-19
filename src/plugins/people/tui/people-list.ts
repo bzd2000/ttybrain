@@ -1,5 +1,5 @@
 // Pure list logic for the People screen: rows, sorts, filter and groups. No solid-js or @opentui here.
-import { daysBetween, type Tone } from "@pm/api/tui"
+import { daysBetween, type Tone } from "@ttybrain/api/tui"
 import { isStale } from "../logic/stale"
 import type { PersonRecord } from "../logic/schema"
 

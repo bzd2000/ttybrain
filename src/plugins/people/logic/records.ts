@@ -11,7 +11,7 @@ import {
   normalizeCode,
   type PluginContext,
   type PluginRuntime,
-} from "@pm/api"
+} from "@ttybrain/api"
 import type { GoalRecord, NoteRecord, PersonRecord } from "./schema"
 
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
@@ -116,7 +116,7 @@ export function makeStore(ctx: PluginRuntime) {
   // A person who may be written to (or have notes and goals written for them): not archived.
   async function activePerson(input: string): Promise<PersonRecord> {
     const p = await person(input)
-    if (p.archived) throw new ValidationError(`${p.ref} is archived`, { hint: `restore it first: pm person restore ${p.ref}` })
+    if (p.archived) throw new ValidationError(`${p.ref} is archived`, { hint: `restore it first: ttybrain person restore ${p.ref}` })
     return p
   }
 

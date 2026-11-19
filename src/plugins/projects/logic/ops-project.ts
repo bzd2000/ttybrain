@@ -12,7 +12,7 @@ import {
   ValidationError,
   type PluginContext,
   type Static,
-} from "@pm/api"
+} from "@ttybrain/api"
 import type { Store } from "./records"
 import { ContextRecord, Health, InvolvementRecord, ProjectRecord, ProjectStatus } from "./schema"
 

@@ -77,7 +77,7 @@ export function ownerOf(kdb: KernelDb, name: string): string | undefined {
   return undefined
 }
 
-// `pm plugin remove <id> --purge-data`: drops everything in the plugin's namespace (`<id>_*`: its tables,
+// `ttybrain plugin remove <id> --purge-data`: drops everything in the plugin's namespace (`<id>_*`: its tables,
 // indexes, triggers, its own views and its published `<id>__pub_*` views), its applied-migration rows and the
 // provenance rows of the record types it registered (known only when it was loaded this run), in one kernel
 // write transaction. Ids have no `_`, so the prefix never reaches another plugin's namespace.
@@ -145,7 +145,7 @@ export class MigrationRunner {
     return migrations.filter((m) => !done.has(m.id))
   }
 
-  // Copies the database to `pm.db.bak-v<N>` (N = migrations applied so far, all plugins) once per boot, before
+  // Copies the database to `ttybrain.db.bak-v<N>` (N = migrations applied so far, all plugins) once per boot, before
   // the first migration is applied to a database that existed with some applied. Called by run() itself; with a
   // plugin and its migrations it backs up only if one is pending, without them the caller states that something is.
   backupIfNeeded(pluginId?: string, migrations?: Migration[]): void {

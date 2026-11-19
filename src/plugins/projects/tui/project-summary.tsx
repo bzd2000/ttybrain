@@ -20,7 +20,7 @@ import {
   displayWidth,
   type Hint,
   type Tone,
-} from "@pm/api/tui"
+} from "@ttybrain/api/tui"
 import { makeItems } from "../logic/items"
 import { makeStore } from "../logic/records"
 

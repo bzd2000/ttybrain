@@ -1,7 +1,7 @@
 // The Actions screen's `d` form: one date field calling editAction({ due }). The input starts empty (so `+1w` works)
 // and the current due date is shown in the label; submitting empty or an unchanged date writes nothing (`e` clears a date).
 import { createEffect, Show, untrack } from "solid-js"
-import { act, Form, longDate, useQuery, useRuntime, type RecordFormProps, type SubmitResult } from "@pm/api/tui"
+import { act, Form, longDate, useQuery, useRuntime, type RecordFormProps, type SubmitResult } from "@ttybrain/api/tui"
 import { makeItems } from "../logic/items"
 import { makeStore } from "../logic/records"
 

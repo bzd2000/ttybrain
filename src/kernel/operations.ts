@@ -31,7 +31,7 @@ export type OperationDeps = {
   events: EventBus
   records: RecordTypeRegistry
   provenance: ProvenanceStore
-  validateOutputs?: boolean // on under PM_TEST=1: the bootKernel caller decides
+  validateOutputs?: boolean // on under TTYBRAIN_TEST=1: the bootKernel caller decides
 }
 
 // The first schema error as a field ("/a/b" → "a.b"; a missing property names that property) and a text.

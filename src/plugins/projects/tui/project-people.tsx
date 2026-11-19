@@ -15,7 +15,7 @@ import {
   type Hint,
   type TableColumn,
   type TableRow,
-} from "@pm/api/tui"
+} from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
 
 export const EMPTY = "No people yet. Press n to add one."

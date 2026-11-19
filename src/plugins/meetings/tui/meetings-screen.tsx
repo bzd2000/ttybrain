@@ -25,7 +25,7 @@ import {
   type TableGroup,
   type TableRow,
   type Tone,
-} from "@pm/api/tui"
+} from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
 import type { MeetingRecord } from "../logic/schema"
 

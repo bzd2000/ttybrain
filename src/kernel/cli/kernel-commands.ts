@@ -13,7 +13,7 @@ import { commandName, flagSignature, GLOBAL_FLAGS, signature, usage } from "./ar
 import type { CommandDef, FlagDef } from "./commands"
 import { formatTable, type CommandResult } from "./output"
 
-export const PM_VERSION = "0.1.0"
+export const VERSION = "0.1.0"
 
 // Help for a topic (`[]`, `[thing]` or `[thing, verb]`); supplied by the dispatcher, which resolves commands.
 export type HelpFn = (topic: string[]) => CommandResult
@@ -23,7 +23,7 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
     {
       thing: "help",
       verb: "",
-      summary: "list the commands and their flags; pm help <thing> [verb] for one",
+      summary: "list the commands and their flags; ttybrain help <thing> [verb] for one",
       args: [{ name: "topic", rest: true }],
       run: async ({ args }) => help((args.topic as string[] | undefined) ?? []),
     },
@@ -33,7 +33,7 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
       summary: "print the Markdown guide for agents",
       flags: { write: { type: "string", placeholder: "path", description: "write the guide to this file instead" } },
       run: async ({ flags }) => {
-        const markdown = kernel.guide.render(PM_VERSION)
+        const markdown = kernel.guide.render(VERSION)
         if (typeof flags.write !== "string") return { json: { markdown }, text: markdown }
         const path = resolve(flags.write)
         mkdirSync(dirname(path), { recursive: true })
@@ -56,7 +56,7 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
       summary: "install a plugin from npm, a folder or a .tgz into the plugins folder (from the next run)",
       args: [{ name: "spec", required: true }],
       run: async ({ args }) => {
-        // The installer choice (PM_PLUGIN_INSTALLER) comes from the process environment, which pm's entry point boots with.
+        // The installer choice (TTYBRAIN_PLUGIN_INSTALLER) comes from the process environment, which ttybrain's entry point boots with.
         const { name, id, version, warned } = await addPlugin(kernel.paths, String(args.spec), process.env)
         return {
           json: { name, id, version, source: "npm", warned },
@@ -92,10 +92,10 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
           if (!disabled.includes(id)) knownPlugin(kernel, id)
           plugins.disabled = disabled.filter((d) => d !== id)
         })
-        // The file no longer lists it, so if the merged config still does, PM_CONFIG_JSON (read from the process
-        // environment, which pm's entry point boots with) disables it.
+        // The file no longer lists it, so if the merged config still does, TTYBRAIN_CONFIG_JSON (read from the process
+        // environment, which ttybrain's entry point boots with) disables it.
         if (loadConfig(kernel.paths, process.env).plugins.disabled.includes(id)) {
-          return { json: { id, disabled: false, stillDisabledBy: "PM_CONFIG_JSON" }, text: `enabled ${id}; note: PM_CONFIG_JSON still disables it` }
+          return { json: { id, disabled: false, stillDisabledBy: "TTYBRAIN_CONFIG_JSON" }, text: `enabled ${id}; note: TTYBRAIN_CONFIG_JSON still disables it` }
         }
         return { json: { id, disabled: false }, text: `enabled ${id}` }
       },
@@ -123,7 +123,7 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
     {
       thing: "plugin",
       verb: "build",
-      summary: "compile a plugin's src/ to dist/ with shims for pm's shared modules (default dir: .)",
+      summary: "compile a plugin's src/ to dist/ with shims for ttybrain's shared modules (default dir: .)",
       args: [{ name: "dir" }],
       run: async ({ args }) => {
         const dir = resolve(typeof args.dir === "string" ? args.dir : ".")
@@ -165,7 +165,7 @@ const disabledList = (plugins: Obj): string[] => (Array.isArray(plugins.disabled
 
 function knownPlugin(kernel: Kernel, id: string): string {
   if (kernel.plugins.some((p) => p.id === id)) return id
-  throw new NotFoundError(`no plugin "${id}"`, { suggestions: suggest(id, kernel.plugins.map((p) => p.id)), hint: 'run "pm plugin list"' })
+  throw new NotFoundError(`no plugin "${id}"`, { suggestions: suggest(id, kernel.plugins.map((p) => p.id)), hint: 'run "ttybrain plugin list"' })
 }
 
 // The loaded plugins that require `id`, directly or through another one, sorted by id, each with the plugins
@@ -190,7 +190,7 @@ function dependantsOf(kernel: Kernel, id: string): Array<[string, string[]]> {
 
 type JsonSchema = { type?: string; description?: string }
 
-// `pm report <cliName>`: the report's required params are positional arguments (in declaration order), the
+// `ttybrain report <cliName>`: the report's required params are positional arguments (in declaration order), the
 // optional ones flags. `--format md|text|json` picks the text rendering; `--json` prints the result itself.
 function reportCommand(kernel: Kernel, report: ReportDef): CommandDef {
   const schema = report.params as { properties?: Record<string, JsonSchema>; required?: string[] }
@@ -264,14 +264,14 @@ const globalSection = () => ["Global flags:", ...flagLines(GLOBAL_FLAGS, "  ")]
 
 export function helpAll(defs: CommandDef[]): CommandResult {
   const text = [
-    "usage: pm <thing> <verb> [args] [--flags]",
+    "usage: ttybrain <thing> <verb> [args] [--flags]",
     "",
     "Commands:",
     ...commandLines(defs),
     "",
     ...globalSection(),
     "",
-    'Run "pm <thing> --help" or "pm <thing> <verb> --help" for one thing or command.',
+    'Run "ttybrain <thing> --help" or "ttybrain <thing> <verb> --help" for one thing or command.',
   ].join("\n")
   return { json: { commands: defs.map(helpCommandJson), globalFlags: globalFlagsJson() }, text: text + "\n" }
 }

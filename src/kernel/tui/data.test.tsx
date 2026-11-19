@@ -44,7 +44,7 @@ afterEach(async () => {
 })
 
 async function second(): Promise<Kernel> {
-  const k = await bootKernel({ env: { PM_HOME: kernel.home, PM_TEST: "1" }, plugins: builtinPlugins, clock: fixedClock("2026-11-13") })
+  const k = await bootKernel({ env: { TTYBRAIN_HOME: kernel.home, TTYBRAIN_TEST: "1" }, plugins: builtinPlugins, clock: fixedClock("2026-11-13") })
   others.push(k)
   return k
 }
@@ -160,7 +160,7 @@ describe("TUI data", () => {
     tui = await renderTui(kernel, { parts: [screenPart(Throwing)] })
     tui.input.pressKey("2")
     const frame = await tui.frame()
-    expect(frame.split("\n")[0]).toContain("pm · 2 Test ▾")
+    expect(frame.split("\n")[0]).toContain("ttybrain · 2 Test ▾")
     expect(frame).toContain("⚠ Test: boom")
   })
 
@@ -190,7 +190,7 @@ describe("TUI data", () => {
     expect(await tui.frame()).not.toContain("⚠ Broken: boom")
     tui.input.pressKey("2")
     const frame = await tui.frame()
-    expect(frame.split("\n")[0]).toContain("pm · 2 Test ▾")
+    expect(frame.split("\n")[0]).toContain("ttybrain · 2 Test ▾")
     expect(frame).toContain("test screen")
   })
 

@@ -15,7 +15,7 @@ test("NotFoundError", () => {
 test("other errors", () => {
   expect(new ValidationError("x", { field: "f", hint: "h" })).toMatchObject({ code: "validation", exitCode: 1, hint: "h" })
   expect(new ConflictError("x").exitCode).toBe(3)
-  expect(new BusyError("x")).toMatchObject({ code: "busy", exitCode: 3, hint: "another pm process is writing; try again" })
+  expect(new BusyError("x")).toMatchObject({ code: "busy", exitCode: 3, hint: "another ttybrain process is writing; try again" })
   expect(new IsolationError("x")).toMatchObject({ code: "isolation", exitCode: 1 })
   expect(new ViewUnavailableError("people.person")).toMatchObject({ code: "view_unavailable", exitCode: 1 })
 })

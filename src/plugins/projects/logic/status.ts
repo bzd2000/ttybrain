@@ -1,6 +1,6 @@
 // The read operation behind the prep block (spec §8): projectStatus({ project, since, reference?, previousMeeting? }).
 // Every "today"-dependent rule compares with `reference` (default: the context's today), never SQLite's clock.
-import { addDays, NonBlank, parseRef, Type, ValidationError, type PluginContext, type Static } from "@pm/api"
+import { addDays, NonBlank, parseRef, Type, ValidationError, type PluginContext, type Static } from "@ttybrain/api"
 import { ActionRecord, DecisionRecord, DeliverableRecord, MilestoneRecord, RiskRecord, type Items } from "./items"
 import { date, today } from "./ops-project"
 import type { Store } from "./records"

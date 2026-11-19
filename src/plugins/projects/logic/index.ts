@@ -1,7 +1,7 @@
 // The projects plugin: the portfolio, and what you follow up per project (plugin reference §2). Part 1:
 // projects, health, context and involvement. Part 2: milestones, deliverables, risks and decisions. Part 3:
 // actions, projectStatus, the project-status and overview reports.
-import { definePlugin } from "@pm/api"
+import { definePlugin } from "@ttybrain/api"
 import { registerCommands } from "./commands"
 import { registerActionCommands } from "./commands-actions"
 import { registerItemCommands } from "./commands-items"

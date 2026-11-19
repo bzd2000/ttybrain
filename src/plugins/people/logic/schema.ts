@@ -1,5 +1,5 @@
 // The people plugin's tables (design §4 People) and the TypeBox shapes of its records.
-import { sql, Type, type PluginContext, type Static } from "@pm/api"
+import { sql, Type, type PluginContext, type Static } from "@ttybrain/api"
 
 export const LEVELS = ["low", "high"] as const
 export const NOTE_KINDS = ["one_on_one", "interaction"] as const

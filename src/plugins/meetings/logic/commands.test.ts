@@ -25,7 +25,7 @@ async function cli(argv: string[], stdin = ""): Promise<Res> {
 }
 async function ok(...argv: string[]) {
   const r = await cli(argv)
-  if (r.code !== 0) throw new Error(`pm ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
+  if (r.code !== 0) throw new Error(`ttybrain ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
   return r
 }
 const write = (plugin: string, op: string, input: unknown) => runWithContext(k!.context(), () => (k!.runtime(plugin)!.self() as any).write[op](input))
@@ -39,7 +39,7 @@ async function boot() {
 }
 const STEERCO = ["meeting", "add", "Steering committee Q4", "--date", "2026-12-04", "--kind", "steering", "--attendees", "peter,marie", "--projects", "CRM,ERP"]
 
-describe("pm meeting", () => {
+describe("ttybrain meeting", () => {
   test("meeting add, show and list", async () => {
     await boot()
     expect((await ok(...STEERCO)).out).toBe("M-1 Steering committee Q4 on 2026-12-04\n")
@@ -133,11 +133,11 @@ describe("pm meeting", () => {
     expect((await ok("meeting", "show", "M-1")).out).toContain("\nNotes\n# Minutes\n\n- agreed\n")
   })
 
-  test("pm guide includes the meetings section", async () => {
+  test("ttybrain guide includes the meetings section", async () => {
     await boot()
     const g = await ok("guide")
     expect(g.out).toContain("## Meetings")
-    expect(g.out).toContain("pm meeting close")
+    expect(g.out).toContain("ttybrain meeting close")
     expect(g.out).toContain("--meeting M-4")
   })
 })

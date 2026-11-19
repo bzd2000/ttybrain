@@ -284,7 +284,7 @@ describe("forms", () => {
     expect(t.renderer.isDestroyed).toBe(false)
     expect(frame).toContain("New thing")
     expect(lineWith(frame, "Title")).toContain("q2g?")
-    expect(frame.split("\n")[0]).toContain("pm · 2 Todo ▾")
+    expect(frame.split("\n")[0]).toContain("ttybrain · 2 Todo ▾")
   })
 
   test("Esc cancels without saving", async () => {
@@ -361,7 +361,7 @@ describe("forms", () => {
     "busy save keeps the form and retries",
     async () => {
       const t = await open()
-      const b = await bootKernel({ env: { PM_HOME: kernel.home, PM_TEST: "1" }, plugins: [todoPlugin], clock: fixedClock("2026-11-13") })
+      const b = await bootKernel({ env: { TTYBRAIN_HOME: kernel.home, TTYBRAIN_TEST: "1" }, plugins: [todoPlugin], clock: fixedClock("2026-11-13") })
       others.push(b)
       overlay!.openForm("thing")
       await t.frame()
@@ -392,7 +392,7 @@ describe("forms", () => {
     "Esc while a busy save retries does not cancel",
     async () => {
       const t = await open()
-      const b = await bootKernel({ env: { PM_HOME: kernel.home, PM_TEST: "1" }, plugins: [todoPlugin], clock: fixedClock("2026-11-13") })
+      const b = await bootKernel({ env: { TTYBRAIN_HOME: kernel.home, TTYBRAIN_TEST: "1" }, plugins: [todoPlugin], clock: fixedClock("2026-11-13") })
       others.push(b)
       const saved = overlay!.openForm("thing")
       await t.frame()

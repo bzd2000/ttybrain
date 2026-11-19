@@ -1,4 +1,4 @@
-// Built-in plugins reach the kernel only through the shared names `@pm/api` and `@pm/api/tui`, as external
+// Built-in plugins reach the kernel only through the shared names `@ttybrain/api` and `@ttybrain/api/tui`, as external
 // plugins do. Tests (*.test.ts[x]) may still import kernel internals and test helpers.
 import { describe, expect, test } from "bun:test"
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
@@ -23,7 +23,7 @@ function walk(dir: string, out: string[] = []): string[] {
 const files = walk(pluginsDir)
 
 describe("plugin imports", () => {
-  test("plugins reach the kernel only through @pm/api and @pm/api/tui", () => {
+  test("plugins reach the kernel only through @ttybrain/api and @ttybrain/api/tui", () => {
     expect(files.length).toBeGreaterThan(0)
     const offenders = files.flatMap((f) =>
       specifiers(f)
@@ -37,10 +37,10 @@ describe("plugin imports", () => {
     expect(offenders).toEqual([])
   })
 
-  test("plugin logic never imports @pm/api/tui", () => {
+  test("plugin logic never imports @ttybrain/api/tui", () => {
     const offenders = files
       .filter((f) => f.split(sep).includes("logic"))
-      .flatMap((f) => specifiers(f).filter((s) => s === "@pm/api/tui").map((s) => `${rel(f)} → ${s}`))
+      .flatMap((f) => specifiers(f).filter((s) => s === "@ttybrain/api/tui").map((s) => `${rel(f)} → ${s}`))
     expect(offenders).toEqual([])
   })
 

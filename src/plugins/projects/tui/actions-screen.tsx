@@ -26,7 +26,7 @@ import {
   type TableColumn,
   type TableGroup,
   type TableRow,
-} from "@pm/api/tui"
+} from "@ttybrain/api/tui"
 import { makeItems, type ActionRecord } from "../logic/items"
 import { makeStore } from "../logic/records"
 import { parseActionFilter, type ActionFilter } from "./action-filter"

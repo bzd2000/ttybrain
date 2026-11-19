@@ -22,7 +22,7 @@ async function cli(...argv: string[]): Promise<{ code: number; out: string; err:
 
 async function ok(...argv: string[]) {
   const r = await cli(...argv)
-  if (r.code !== 0) throw new Error(`pm ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
+  if (r.code !== 0) throw new Error(`ttybrain ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
   return r
 }
 
@@ -338,7 +338,7 @@ describe("people report section", () => {
   })
 
   test("stakeholders-to-contact in the overview report uses staleContactDays", async () => {
-    k = await makeTestKernel({ plugins: [people, overview], env: { PM_CONFIG_JSON: '{"staleContactDays": 10}' } })
+    k = await makeTestKernel({ plugins: [people, overview], env: { TTYBRAIN_CONFIG_JSON: '{"staleContactDays": 10}' } })
     await ok("person", "add", "Marie Dubois", "--stakeholder", "--influence", "high")
     await ok("note", "add", "marie", "x", "--interaction", "--date", "2026-11-01")
     const r = await ok("report", "overview", "--json")

@@ -1,6 +1,6 @@
 // The projects plugin's tables (design §4 Projects, plugin reference §2) and the TypeBox shapes of its records.
 // Migration 001 creates every table, including those whose operations come in later parts of the plugin.
-import { sql, Type, type PluginContext, type Static } from "@pm/api"
+import { sql, Type, type PluginContext, type Static } from "@ttybrain/api"
 
 export const PROJECT_STATUSES = ["active", "on_hold", "closed"] as const
 export const HEALTHS = ["green", "amber", "red"] as const

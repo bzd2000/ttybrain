@@ -17,7 +17,7 @@ import {
   useScreenKeys,
   type Hint,
   type ReportSectionResult,
-} from "@pm/api/tui"
+} from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
 import type { SinceResult } from "../logic/since"
 import { useMeetingWrites } from "./agenda-tab"

@@ -1,4 +1,4 @@
-# pm: built-in plugin reference
+# ttybrain: built-in plugin reference
 
 Companion to [`2026-11-13-pm-design.md`](2026-11-13-pm-design.md). That document defines the kernel and the plugin API (§3); field rules and enum values are in its §4. This document says, for each plugin in the current scope, what it owns, what it exposes and what it adds to the UI.
 
@@ -40,7 +40,7 @@ The **kernel** provides:
 - the Overview screen (1), filled entirely by `overviewPanel`s;
 - the frame, switcher, help overlay and change-set review;
 - these registries: record types, tags, reports, provenance, tools and the guide;
-- the `pm plugin …` and `pm guide` commands.
+- the `ttybrain plugin …` and `ttybrain guide` commands.
 
 ---
 
@@ -84,9 +84,9 @@ It reads `projects.involvement` and `projects.project` (optional) for the **Proj
 ### CLI
 
 ```
-pm person list|show|add|edit|archive|restore
-pm note   list|add|edit|delete
-pm goal   list|add|edit|done|drop
+ttybrain person list|show|add|edit|archive|restore
+ttybrain note   list|add|edit|delete
+ttybrain goal   list|add|edit|done|drop
 ```
 
 ### UI and other contributions
@@ -165,14 +165,14 @@ It reads `people.person`, for owner, `for` and involvement names and for validat
 ### CLI
 
 ```
-pm project     list|show|add|edit|archive|context
-pm milestone   list|add|edit|done|delete
-pm deliverable list|add|edit|status|delete
-pm risk        list|add|edit|close|delete
-pm decision    list|add|edit|delete
-pm action      list|add|edit|done|cancel|delete
-pm involve     add|remove        # pm involve add CRM marie --role "key user"
-pm report status <project>
+ttybrain project     list|show|add|edit|archive|context
+ttybrain milestone   list|add|edit|done|delete
+ttybrain deliverable list|add|edit|status|delete
+ttybrain risk        list|add|edit|close|delete
+ttybrain decision    list|add|edit|delete
+ttybrain action      list|add|edit|done|cancel|delete
+ttybrain involve     add|remove        # ttybrain involve add CRM marie --role "key user"
+ttybrain report status <project>
 ```
 
 ### UI and other contributions
@@ -240,12 +240,12 @@ Actions and decisions logged during a meeting are created through `projects.writ
 ### CLI
 
 ```
-pm meeting list|show|add|edit|cancel|close|attendees|notes
-pm meeting agenda <M-n> add|edit|move|remove
-pm report board <M-n> | minutes <M-n>   [--format md|text|json]
+ttybrain meeting list|show|add|edit|cancel|close|attendees|notes
+ttybrain meeting agenda <M-n> add|edit|move|remove
+ttybrain report board <M-n> | minutes <M-n>   [--format md|text|json]
 ```
 
-Agenda items have no ref of their own: they are addressed by meeting and position (`pm meeting agenda M-4 edit 2`). `--kind` defaults to `other` on the CLI (the TUI form starts at `steering`). `--attendees` and `--projects` take comma-separated lists; the TUI form takes them as tag text (`@peter @marie`, `#CRM #ERP`). Held meetings stay writable (notes are often finished afterwards); cancelled ones are read-only, and nothing reopens a meeting. Commands print a short result line; the change-set lines above go to the change log.
+Agenda items have no ref of their own: they are addressed by meeting and position (`ttybrain meeting agenda M-4 edit 2`). `--kind` defaults to `other` on the CLI (the TUI form starts at `steering`). `--attendees` and `--projects` take comma-separated lists; the TUI form takes them as tag text (`@peter @marie`, `#CRM #ERP`). Held meetings stay writable (notes are often finished afterwards); cancelled ones are read-only, and nothing reopens a meeting. Commands print a short result line; the change-set lines above go to the change log.
 
 ### UI and other contributions
 
@@ -297,8 +297,8 @@ Inbox doesn't know projects or people. When an item is saved, it asks the kernel
 ### CLI
 
 ```
-pm inbox add "<text>"
-pm inbox list [--new] | show <I-n> | edit <I-n> | done <I-n> --summary "…" | dismiss <I-n> | reopen <I-n>
+ttybrain inbox add "<text>"
+ttybrain inbox list [--new] | show <I-n> | edit <I-n> | done <I-n> --summary "…" | dismiss <I-n> | reopen <I-n>
 ```
 
 Any write command, in any plugin, accepts `--from-inbox I-n`. That's a kernel flag that records provenance (below).
@@ -356,7 +356,7 @@ None. It doesn't own data.
 | **Provenance** | `kernel_record_origin(record_type, record_id, origin_type, origin_ref)`. The kernel records it whenever a write runs with an origin: `--from-inbox`, a change set from inbox processing, or a meeting quick-add. Inbox reads it to show "what this became", so other plugins' tables need no `inbox_item_id` column |
 | **Reports** | `report` and `reportSection` registry; renders md/text/json |
 | **Change sets** | review, one transaction, rollback, log |
-| **Guide** | `pm guide`, composed from `guideSection`s in dependency order |
+| **Guide** | `ttybrain guide`, composed from `guideSection`s in dependency order |
 | **Published views** | registry; creates the `__pub_` views at startup, checks columns, and turns each into an assistant read tool |
 | **Events** | `ctx.on` / emit; the TUI's live refresh also listens to them |
 
@@ -366,18 +366,18 @@ None. It doesn't own data.
 
 The built-ins above are packages like any other (`src/plugins/<id>/package.json`), so an external plugin looks the same. Design: `2026-11-18-pm-phase5-plugins-design.md`.
 
-**Steps.** `pm plugin new contracts` scaffolds `./contracts` (`package.json`, `tsconfig.json`, `src/logic/index.ts` with a migration and a command, `src/logic/index.test.ts`, `src/tui/index.tsx` with a screen and a project `recordTab`). `pm plugin build contracts` compiles `src/` to `dist/`. Then either copy the folder into `~/.pm/plugins/` (`PM_PLUGINS`), or `pm plugin add ./contracts` (a folder, an npm name or a `.tgz`; the first add prints the trust warning). `pm plugin list` shows its source (`folder` or `npm`) and status; `pm plugin remove contracts --yes` removes it (`--purge-data` drops its tables too).
+**Steps.** `ttybrain plugin new contracts` scaffolds `./contracts` (`package.json`, `tsconfig.json`, `src/logic/index.ts` with a migration and a command, `src/logic/index.test.ts`, `src/tui/index.tsx` with a screen and a project `recordTab`). `ttybrain plugin build contracts` compiles `src/` to `dist/`. Then either copy the folder into `~/.ttybrain/plugins/` (`TTYBRAIN_PLUGINS`), or `ttybrain plugin add ./contracts` (a folder, an npm name or a `.tgz`; the first add prints the trust warning). `ttybrain plugin list` shows its source (`folder` or `npm`) and status; `ttybrain plugin remove contracts --yes` removes it (`--purge-data` drops its tables too).
 
-**Manifest.** `package.json` with `"type": "module"`, `main` (the logic entry, default export a `definePlugin(...)`), and `"pm": { "plugin": true, "id": "contracts", "tui": "dist/tui/index.js" }` (`tui` optional, default export a `defineTui(...)`). `pm.id` must equal the `PluginDef` id and `version` the `PluginDef.version`, or the plugin fails to load. Ids may not equal a built-in's.
+**Manifest.** `package.json` with `"type": "module"`, `main` (the logic entry, default export a `definePlugin(...)`), and `"ttybrain": { "plugin": true, "id": "contracts", "tui": "dist/tui/index.js" }` (`tui` optional, default export a `defineTui(...)`). `ttybrain.id` must equal the `PluginDef` id and `version` the `PluginDef.version`, or the plugin fails to load. Ids may not equal a built-in's.
 
-**Imports.** Only `@pm/api` (logic) and `@pm/api/tui` (tui part), plus `solid-js`, `solid-js/store`, `@opentui/solid` and `@opentui/core` in the tui part. These are pm's own instances, provided at runtime through generated shims, so:
+**Imports.** Only `@ttybrain/api` (logic) and `@ttybrain/api/tui` (tui part), plus `solid-js`, `solid-js/store`, `@opentui/solid` and `@opentui/core` in the tui part. These are ttybrain's own instances, provided at runtime through generated shims, so:
 - use named imports only (`import * as` or `export *` of a shared module fails the build);
 - no other `@opentui/*` package;
-- the logic entry, directly or through its own files, must not import the UI modules or `@pm/api/tui`;
-- a plugin built against an older pm that uses a since-removed export fails at load with `rebuild the plugin with this pm`; rebuild it.
+- the logic entry, directly or through its own files, must not import the UI modules or `@ttybrain/api/tui`;
+- a plugin built against an older ttybrain that uses a since-removed export fails at load with `rebuild the plugin with this ttybrain`; rebuild it.
 
-**Rules.** Everything in `docs/architecture.md` applies: data only through `ctx.data`, views and operations; schema changes only in migrations (external plugins may not create triggers); a tui `activate` must be synchronous; importing and `activate` each time out after 5 s. A failing plugin is isolated and shown by `pm plugin list` and in Help; pm keeps running.
+**Rules.** Everything in `docs/architecture.md` applies: data only through `ctx.data`, views and operations; schema changes only in migrations (external plugins may not create triggers); a tui `activate` must be synchronous; importing and `activate` each time out after 5 s. A failing plugin is isolated and shown by `ttybrain plugin list` and in Help; ttybrain keeps running.
 
-**Type-checking** needs pm's TypeScript sources (the scaffold's `tsconfig` points `@pm/api*` at the running pm's `src/kernel/api.ts` and `src/kernel/tui/api.ts`), so author from a git checkout of pm. Building does not need them. There are no `.d.ts` files yet.
+**Type-checking** needs ttybrain's TypeScript sources (the scaffold's `tsconfig` points `@ttybrain/api*` at the running ttybrain's `src/kernel/api.ts` and `src/kernel/tui/api.ts`), so author from a git checkout of ttybrain. Building does not need them. There are no `.d.ts` files yet.
 
 **Not supported yet (Part 2).** `quickAction`, the CLI side of extra fields (`CommandDef.record`) and tag types registered by an external plugin.

@@ -1,4 +1,4 @@
-// A kernel on a temporary PM_HOME with a fixed clock (default 2026-11-13, a Friday) and PM_TEST=1. `clock`
+// A kernel on a temporary TTYBRAIN_HOME with a fixed clock (default 2026-11-13, a Friday) and TTYBRAIN_TEST=1. `clock`
 // replaces it (a test that moves the date).
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -12,7 +12,7 @@ export async function makeTestKernel(
   opts: { plugins?: BootOptions["plugins"]; discover?: BootOptions["discover"]; today?: string; clock?: Clock; env?: Record<string, string> } = {},
 ): Promise<TestKernel> {
   const home = mkdtempSync(join(tmpdir(), "pm-test-"))
-  const env = { PM_HOME: home, PM_TEST: "1", ...opts.env }
+  const env = { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1", ...opts.env }
   let kernel: Kernel
   try {
     kernel = await bootKernel({

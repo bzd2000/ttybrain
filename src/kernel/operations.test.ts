@@ -52,7 +52,7 @@ function expose(extra: Record<string, WriteOp> = {}) {
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "pm-ops-"))
-  const paths = resolvePaths({ PM_HOME: dir })
+  const paths = resolvePaths({ TTYBRAIN_HOME: dir })
   kdb = new KernelDb(openRaw(paths.db))
   await new MigrationRunner(kdb, paths, fixedClock("2026-11-13")).ensureKernelTables()
   kdb.raw.exec("CREATE TABLE fixture_item (id INTEGER PRIMARY KEY, title TEXT NOT NULL)")

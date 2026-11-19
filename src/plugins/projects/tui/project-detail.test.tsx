@@ -240,13 +240,13 @@ describe("project detail", () => {
     const t = await open()
     await inCtx(() => write().setContext!({ project: "CRM", markdown: "# A" }))
     await right(t, 7)
-    process.env.PM_MODE = "container"
+    process.env.TTYBRAIN_MODE = "container"
     try {
       t.input.pressKey("E")
       const frame = await t.frame()
       expect(frame).toContain("no external editor in container mode")
     } finally {
-      delete process.env.PM_MODE
+      delete process.env.TTYBRAIN_MODE
     }
     expect(await markdown()).toBe("# A")
   })
@@ -312,7 +312,7 @@ describe("project detail", () => {
     await inCtx(() => write().setHealth!({ project: "AAA", health: "red" }))
     t.input.pressEscape()
     let frame = await until(t, "Projects · 2 active")
-    expect(frame.split("\n")[0]).toContain("pm · 2 Projects")
+    expect(frame.split("\n")[0]).toContain("ttybrain · 2 Projects")
     expect(lineWith(frame, " AAA ")).not.toContain("›")
     for (let i = 0; i < 40 && !lineWith(frame, " CRM ").includes("›"); i++) {
       await sleep(25)

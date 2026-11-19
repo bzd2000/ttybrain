@@ -1,4 +1,4 @@
-// The plugin API (the future `@pm/api`). In phase 1, plugins import only from this module.
+// The plugin API (the future `@ttybrain/api`). In phase 1, plugins import only from this module.
 export { default as Type } from "typebox"
 export type { Static, TSchema } from "typebox"
 export { Deleted, NonBlank } from "./schemas"

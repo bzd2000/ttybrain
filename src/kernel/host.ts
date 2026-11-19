@@ -37,7 +37,7 @@ export type PluginStatus = {
   source: PluginSource
   status: "ok" | "failed" | "disabled"
   error?: string
-  tui?: string // file URL of the plugin's tui entry (pm.tui)
+  tui?: string // file URL of the plugin's tui entry (ttybrain.tui)
   dir?: string // the plugin's directory, for discovered plugins
 }
 
@@ -112,19 +112,19 @@ function withTimeout<T>(p: Promise<T>, ms: number, text: string): Promise<T> {
 
 // An origin whose ref belongs to a registered record type must name an existing record, or provenance would
 // attach to a record created later under that ref. The hint names the owning plugin's list command when there is
-// one ("pm inbox list"); the kernel knows nothing of what the record is. An inbox origin whose ref no record
+// one ("ttybrain inbox list"); the kernel knows nothing of what the record is. An inbox origin whose ref no record
 // type owns means the inbox plugin is not loaded. Other origins (a change set's `CS-<id>`) are no records.
 // Every path that writes with an origin awaits it first: the CLI dispatcher, change sets and the TUI's act.
 async function checkOrigin(records: RecordTypeRegistry, commands: CommandRegistry, context: () => OpContext, origin: Origin): Promise<void> {
   const type = records.typeOfRef(origin.ref)
   if (!type) {
     if (origin.type !== "inbox") return
-    throw new ValidationError("--from-inbox needs the inbox plugin, which is not loaded", { field: "from-inbox", hint: 'run "pm plugin list"' })
+    throw new ValidationError("--from-inbox needs the inbox plugin, which is not loaded", { field: "from-inbox", hint: 'run "ttybrain plugin list"' })
   }
   if (await runWithContext(context(), () => records.resolveAny(origin.ref))) return
   const lists = commands.list().filter((c) => c.plugin === type.plugin && c.def.verb === "list")
   const list = lists.find((c) => c.def.thing === type.plugin || type.name.split("_").includes(c.def.thing)) ?? (lists.length === 1 ? lists[0] : undefined)
-  throw new NotFoundError(`no record "${origin.ref}"`, { hint: list ? `run "pm ${list.def.thing} list"` : 'run "pm help"' })
+  throw new NotFoundError(`no record "${origin.ref}"`, { hint: list ? `run "ttybrain ${list.def.thing} list"` : 'run "ttybrain help"' })
 }
 
 function deepFreeze<T>(value: T): T {
@@ -154,7 +154,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const events = new EventBus()
   const records = new RecordTypeRegistry()
   const provenance = new ProvenanceStore(db, records)
-  const ops = new OperationRegistry({ db, events, records, provenance, validateOutputs: opts.env.PM_TEST === "1" })
+  const ops = new OperationRegistry({ db, events, records, provenance, validateOutputs: opts.env.TTYBRAIN_TEST === "1" })
   const tags = new TagRegistry(records)
   const reports = new ReportRegistry()
   const guide = new GuideRegistry()
@@ -210,7 +210,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
       continue
     }
     byId.set(id, s)
-    if (apiVersion !== API_VERSION) fail(s, `apiVersion ${apiVersion} is not supported (this pm supports ${API_VERSION})`)
+    if (apiVersion !== API_VERSION) fail(s, `apiVersion ${apiVersion} is not supported (this ttybrain supports ${API_VERSION})`)
     else if (disabled.has(id)) s.status = "disabled"
   }
 

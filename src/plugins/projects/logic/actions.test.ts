@@ -23,7 +23,7 @@ async function cli(argv: string[]): Promise<{ code: number; out: string; err: st
 const run = (...argv: string[]) => cli(argv)
 async function ok(...argv: string[]) {
   const r = await cli(argv)
-  if (r.code !== 0) throw new Error(`pm ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
+  if (r.code !== 0) throw new Error(`ttybrain ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
   return r
 }
 const api = () => k.ops.api("projects")!

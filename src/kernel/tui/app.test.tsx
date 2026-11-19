@@ -64,7 +64,7 @@ describe("TUI shell", () => {
   test("header shows screen chip and date", async () => {
     tui = await renderTui(kernel, { parts: builtinTuiParts })
     const line = firstLine(await tui.frame())
-    expect(line).toContain("pm · 1 Overview ▾")
+    expect(line).toContain("ttybrain · 1 Overview ▾")
     expect(line).toContain("Fri 13 Nov 2026")
   })
 
@@ -72,11 +72,11 @@ describe("TUI shell", () => {
     tui = await renderTui(kernel, { parts: [testPart()] })
     tui.input.pressKey("2")
     let frame = await tui.frame()
-    expect(firstLine(frame)).toContain("pm · 2 Test ▾")
+    expect(firstLine(frame)).toContain("ttybrain · 2 Test ▾")
     expect(frame).toContain("test screen")
     tui.input.pressKey("3")
     frame = await tui.frame()
-    expect(firstLine(frame)).toContain("pm · 2 Test ▾")
+    expect(firstLine(frame)).toContain("ttybrain · 2 Test ▾")
     expect(frame).toContain("test screen")
     expect(tui.nav.route()).toEqual({ kind: "screen", screen: "t" })
   })
@@ -91,18 +91,18 @@ describe("TUI shell", () => {
     await tui.settle()
     tui.input.pressEnter()
     const after = await tui.frame()
-    expect(firstLine(after)).toContain("pm · 2 Test ▾")
+    expect(firstLine(after)).toContain("ttybrain · 2 Test ▾")
     expect(after).toContain("test screen")
   })
 
   test("Esc goes back", async () => {
     tui = await renderTui(kernel, { parts: [testPart()] })
     tui.input.pressKey("2")
-    expect(firstLine(await tui.frame())).toContain("pm · 2 Test ▾")
+    expect(firstLine(await tui.frame())).toContain("ttybrain · 2 Test ▾")
     tui.input.pressEscape()
     await Bun.sleep(30) // a lone ESC is flushed by the input parser's timeout
     const frame = await tui.frame()
-    expect(firstLine(frame)).toContain("pm · 1 Overview ▾")
+    expect(firstLine(frame)).toContain("ttybrain · 1 Overview ▾")
     expect(frame).not.toContain("test screen")
   })
 
@@ -122,7 +122,7 @@ describe("TUI shell", () => {
     await tui.input.typeText("q2g?")
     const frame = await tui.frame()
     expect(frame).toContain("q2g?")
-    expect(firstLine(frame)).toContain("pm · 2 Test ▾")
+    expect(firstLine(frame)).toContain("ttybrain · 2 Test ▾")
     expect(frame).not.toContain("Plugin problems")
     expect(frame).not.toContain("1 Overview")
     expect(tui.renderer.isDestroyed).toBe(false)
@@ -194,11 +194,11 @@ describe("TUI shell", () => {
       for (let i = 0; i < 400; i++) {
         await setup.renderOnce()
         first = firstLine(setup.captureCharFrame())
-        if (first.includes("pm · 1 Overview")) break
+        if (first.includes("ttybrain · 1 Overview")) break
         await new Promise((r) => setTimeout(r, 25))
       }
-      if (!first.includes("pm · 1 Overview")) throw new Error(`timed out after about 10 s waiting for "pm · 1 Overview"; first line: ${first}`)
-      expect(first).toContain("pm · 1 Overview ▾")
+      if (!first.includes("ttybrain · 1 Overview")) throw new Error(`timed out after about 10 s waiting for "ttybrain · 1 Overview"; first line: ${first}`)
+      expect(first).toContain("ttybrain · 1 Overview ▾")
       expect(resolved).toBe(false)
       setup.mockInput.pressKey("q")
       await done
