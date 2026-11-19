@@ -205,6 +205,56 @@ describe("applying", () => {
     expect(rows("PRAGMA table_info(contracts_deal)").map((r) => r.name)).toEqual(["id", "name"])
   })
 
+  // SQLite's table rebuild (copy, drop, create, copy back) with own child rows referencing the table: foreign
+  // keys are deferred in a migration, so they are checked once, at its commit.
+  const clauses = raw(
+    "003",
+    "CREATE TABLE contracts_clause (id INTEGER PRIMARY KEY, contract_id INTEGER NOT NULL REFERENCES contracts_contract(id))",
+    "INSERT INTO contracts_contract (id, title) VALUES (1, 'a'), (2, 'b')",
+    "INSERT INTO contracts_clause (id, contract_id) VALUES (10, 1), (11, 2)",
+  )
+  const rebuild = (keep: string): Migration => ({
+    id: "004",
+    up: async (db) => {
+      await db.schema.createTable("contract_copy").addColumn("id", "integer").addColumn("title", "text").execute()
+      await db.insertInto("contract_copy").expression(db.selectFrom("contract").selectAll()).execute()
+      await db.schema.dropTable("contract").execute()
+      await db.schema
+        .createTable("contract")
+        .addColumn("id", "integer", (c) => c.primaryKey())
+        .addColumn("title", "text", (c) => c.notNull())
+        .execute()
+      await db.insertInto("contract").expression(db.selectFrom("contract_copy").selectAll().where("id", "in", keep.split(",").map(Number))).execute()
+      await db.schema.dropTable("contract_copy").execute()
+    },
+  })
+
+  test("an own table referenced by own foreign keys can be rebuilt: foreign keys are checked at the migration's commit", async () => {
+    await runner.run("contracts", [...contracts, clauses, rebuild("1,2")], false)
+    expect(applied().map((r) => r.id)).toEqual(["001", "002", "003", "004"])
+    expect(rows("SELECT id, title FROM contracts_contract ORDER BY id")).toEqual([
+      { id: 1, title: "a" },
+      { id: 2, title: "b" },
+    ])
+    expect(rows("PRAGMA table_info(contracts_contract)").map((r) => [r.name, r.notnull])).toEqual([
+      ["id", 0],
+      ["title", 1],
+    ])
+    expect(rows("PRAGMA foreign_key_list(contracts_clause)").map((r) => [r.table, r.from, r.to])).toEqual([["contracts_contract", "contract_id", "id"]])
+    expect(rows("PRAGMA foreign_key_check")).toEqual([])
+    expect(() => kdb.raw.exec("INSERT INTO contracts_clause (contract_id) VALUES (99)")).toThrow(/FOREIGN KEY/)
+  })
+
+  test("a rebuild that leaves own child rows without their parent fails at commit and is rolled back", async () => {
+    await runner.run("contracts", [...contracts, clauses], false)
+    const before = schema()
+    await expect(runner.run("contracts", [...contracts, clauses, rebuild("1")], false)).rejects.toThrow(/FOREIGN KEY/)
+    expect(applied().map((r) => r.id)).toEqual(["001", "002", "003"])
+    expect(schema()).toEqual(before)
+    expect(rows("SELECT id FROM contracts_contract ORDER BY id")).toEqual([{ id: 1 }, { id: 2 }])
+    expect(kdb.raw.inTransaction()).toBe(false)
+  })
+
   test("own triggers and views are allowed for built-in plugins", async () => {
     await runner.run(
       "contracts",

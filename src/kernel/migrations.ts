@@ -219,6 +219,10 @@ export class MigrationRunner {
         this.kdb.transaction(async () => {
           this.kdb.invalidateSchema() // another process may have migrated while we waited for the lock
           if (this.appliedIds(pluginId).has(m.id)) return // ...and applied this one
+          // Foreign keys are checked once, at commit (SQLite resets this at the transaction's end), so a migration
+          // can rebuild an own table that its other tables reference (copy, drop, create, copy back): a violation
+          // left at commit fails the commit, and the migration is rolled back.
+          this.kdb.raw.exec("PRAGMA defer_foreign_keys = ON")
           roots = rootOwners(this.kdb)
           before = this.snapshot("sqlite_schema")
           beforeTemp = this.snapshot("sqlite_temp_schema")
