@@ -16,8 +16,8 @@ import { installShutdownHandlers } from "../kernel/shutdown"
 export async function main(argv: string[], env: Record<string, string | undefined>, io: CliIo): Promise<number> {
   const { global } = leading(argv)
   // The one-time move of ~/.pm (before the rename) to ~/.ttybrain. When it cannot be done, ttybrain does not start,
-  // so no empty database is created beside the data.
-  const move = moveLegacyHome(env)
+  // so no empty database is created beside the data. A database chosen with --db (like TTYBRAIN_DB) is left alone.
+  const move = moveLegacyHome(env, { db: global.db })
   if (move.kind === "blocked") return printError(new PmError(move.message, "data_move", 1, { hint: move.hint }), global.json, io)
   if (move.kind !== "nothing") io.err(`${move.notice}\n`)
   let kernel

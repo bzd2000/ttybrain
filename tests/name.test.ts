@@ -60,7 +60,12 @@ const OLD_NAMES: Array<[string, RegExp]> = [
 // file (`src/bin/pm.ts`, `dist-node/bin/pm.js`, which kept its name) and temp-dir prefixes such as `pm-test-`.
 const ALLOWED: Array<[string, string, string]> = [
   ["src/kernel/loader.ts", "old manifest read", "reads the old manifest key only to tell the user to rebuild a plugin built before the rename"],
+  ["src/kernel/loader.ts", "old module name", "the message for a plugin built before the rename names the imports to edit"],
+  ["src/kernel/plugins/build.ts", "old manifest read", "refuses to build a plugin whose manifest is from before the rename"],
+  ["src/kernel/plugins/build.ts", "old module name", "refuses to build a plugin that imports the API under its name from before the rename"],
+  ["src/kernel/plugins/build.test.ts", "old module name", "builds a plugin from before the rename, to test that it is refused"],
   ["tests/external-plugin.test.ts", "old manifest object", "writes a manifest from before the rename, to test that it is reported"],
+  ["tests/external-plugin.test.ts", "old module name", "the message for a plugin built before the rename names the imports to edit"],
 ]
 
 function textFiles(dir: string, out: string[] = []): string[] {

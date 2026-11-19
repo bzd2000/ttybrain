@@ -356,7 +356,7 @@ test("a plugin built before the rename is reported, not fatal", async () => {
     ["projects", "ok"],
     ["meetings", "ok"],
   ])
-  const message = 'built for pm; rebuild it with "ttybrain plugin build"'
+  const message = 'built for pm; rename "pm" to "ttybrain" in package.json and @pm/ imports to @ttybrain/, then run "ttybrain plugin build" (or update the plugin)'
   expect(all.filter((p) => p.source !== "built-in")).toEqual([
     { id: "old", version: "1.0.0", source: "folder", status: "failed", error: message },
     { id: "older", version: "1.0.0", source: "npm", status: "failed", error: message },

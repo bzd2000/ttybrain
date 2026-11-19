@@ -192,6 +192,37 @@ test("a built plugin loads in ttybrain and its UI is reactive", async () => {
   }
 })
 
+test("a plugin built for pm: listed with what to edit; the build refuses it until both edits are made", async () => {
+  const LEGACY = 'built for pm; rename "pm" to "ttybrain" in package.json and @pm/ imports to @ttybrain/, then run "ttybrain plugin build" (or update the plugin)'
+  const pluginsDir = tmp()
+  const dir = join(pluginsDir, "legacy")
+  const manifest = (key: string) =>
+    JSON.stringify({ name: "pm-plugin-legacy", version: "1.0.0", type: "module", main: "dist/logic/index.js", [key]: { plugin: true, id: "legacy", tui: "dist/tui/index.js" } })
+  write(dir, "package.json", manifest("pm"))
+  write(dir, "src/logic/index.ts", LOGIC("legacy").replaceAll("@ttybrain/", "@pm/"))
+  write(dir, "src/tui/index.tsx", TUI("legacy").replaceAll("@ttybrain/", "@pm/"))
+  installApiModule()
+  const listed = async () => {
+    const k = await makeTestKernel({ env: { TTYBRAIN_PLUGINS: pluginsDir }, discover: { builtinDir: tmp() } })
+    try {
+      return k.plugins.map((p) => [p.id, p.status, p.error])
+    } finally {
+      await k.cleanup()
+    }
+  }
+  expect(await listed()).toEqual([["legacy", "failed", LEGACY]])
+
+  await expect(buildPlugin(dir)).rejects.toThrow(new ValidationError(`package.json in ${dir} is ${LEGACY}`))
+  write(dir, "package.json", manifest("ttybrain"))
+  await expect(buildPlugin(dir)).rejects.toThrow(new ValidationError(`src/logic/index.ts imports "@pm/api": ${LEGACY}`))
+  write(dir, "src/logic/index.ts", LOGIC("legacy"))
+  await expect(buildPlugin(dir)).rejects.toThrow(new ValidationError(`src/tui/index.tsx imports "@pm/api/tui": ${LEGACY}`))
+  expect(existsSync(join(dir, "dist"))).toBe(false)
+  write(dir, "src/tui/index.tsx", TUI("legacy"))
+  expect(await buildPlugin(dir)).toEqual({ files: 2, shims: ["@ttybrain/api", "@ttybrain/api/tui", "solid-js", "@opentui/solid"] })
+  expect(await listed()).toEqual([["legacy", "ok", undefined]])
+})
+
 test("a shim outside ttybrain and a missing export", async () => {
   const g = globalThis as { __TTYBRAIN_MODULES__?: Record<string, unknown> }
   const before = g.__TTYBRAIN_MODULES__

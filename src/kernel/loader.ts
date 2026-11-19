@@ -25,7 +25,9 @@ export type PluginCandidate = {
 
 export const DEFAULT_TIMEOUT_MS = 5000
 
-const LEGACY_MANIFEST = 'built for pm; rebuild it with "ttybrain plugin build"'
+// A plugin built before the rename: what to edit before `ttybrain plugin build` (which refuses it until then).
+export const LEGACY_PLUGIN =
+  'built for pm; rename "pm" to "ttybrain" in package.json and @pm/ imports to @ttybrain/, then run "ttybrain plugin build" (or update the plugin)'
 
 export function builtinPluginDir(): string {
   return fileURLToPath(new URL("../plugins/", import.meta.url))
@@ -105,7 +107,7 @@ async function candidate(dir: string, fallbackId: string, source: PluginSource, 
     const legacy = pkg.pm
     if (!isObj(legacy) || legacy.plugin !== true) return undefined
     const id = typeof legacy.id === "string" && legacy.id !== "" ? legacy.id : fallbackId
-    return { id, source, dir, ...(version !== undefined && { version }), error: LEGACY_MANIFEST }
+    return { id, source, dir, ...(version !== undefined && { version }), error: LEGACY_PLUGIN }
   }
   if (!isObj(manifest) || manifest.plugin !== true) return undefined
   const tui = typeof manifest.tui === "string" ? pathToFileURL(resolve(dir, manifest.tui)).href : undefined

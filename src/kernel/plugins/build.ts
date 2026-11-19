@@ -10,6 +10,7 @@ import { existsSync, readFileSync, statSync } from "node:fs"
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import { dirname, join, posix, relative, resolve, sep } from "node:path"
 import { ValidationError } from "../errors"
+import { LEGACY_PLUGIN } from "../loader"
 import { isJsxFile, isSourceFile, relativeJs, SOLID_OPTIONS, toJs } from "./babel-options"
 
 // The modules ttybrain shares with plugins (constraints: exactly these), in the order results list them.
@@ -17,6 +18,8 @@ export const SHARED_MODULES = ["@ttybrain/api", "@ttybrain/api/tui", "solid-js",
 const SHARED: readonly string[] = SHARED_MODULES
 // A deeper path into a shared package ("solid-js/web") is not shared: it would load a second instance.
 const SHARED_PACKAGES = ["@ttybrain/api", "solid-js", "@opentui/solid", "@opentui/core"]
+// The API module names from before the rename.
+const LEGACY_API = ["@pm/api", "@pm/api/tui"]
 const isUi = (spec: string) => spec === "@ttybrain/api/tui" || spec === "solid-js" || spec.startsWith("solid-js/") || spec.startsWith("@opentui/")
 
 // "@opentui/solid" -> "opentui-solid.js"
@@ -65,12 +68,14 @@ export async function buildPlugin(dir: string): Promise<{ files: number; shims: 
   if (!existsSync(join(root, "package.json"))) throw new ValidationError(`no package.json in ${root}`)
   const srcDir = join(root, "src")
   if (!existsSync(srcDir) || !statSync(srcDir).isDirectory()) throw new ValidationError(`no src/ in ${root}`)
-  let pkg: { main?: unknown }
+  let pkg: { main?: unknown; ttybrain?: unknown; pm?: unknown }
   try {
     pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
   } catch (e) {
     throw new ValidationError(`invalid package.json in ${root}: ${(e as Error).message}`)
   }
+  // A plugin from before the rename: building it as it is would leave its old manifest key and API imports.
+  if (pkg.pm !== undefined && pkg.ttybrain === undefined) throw new ValidationError(`package.json in ${root} is ${LEGACY_PLUGIN}`)
   if (typeof pkg.main !== "string") throw new ValidationError(`package.json in ${root} has no "main"`)
 
   const { babel, ts, moduleResolver, solid } = await loadBabel()
@@ -102,6 +107,7 @@ export async function buildPlugin(dir: string): Promise<{ files: number; shims: 
         entry.relative.push(posix.normalize(posix.join(posix.dirname(out), spec)))
         return
       }
+      if (LEGACY_API.includes(spec)) return void errors.push(`${src} imports "${spec}": ${LEGACY_PLUGIN}`)
       if (isUi(spec)) entry.ui.push(spec)
       if (SHARED.includes(spec)) {
         if (names.includes(NAMESPACE)) return void errors.push(`${src}: use named imports from "${spec}"`)
