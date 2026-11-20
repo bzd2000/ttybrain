@@ -10,6 +10,7 @@ A terminal UI built with [OpenTUI](https://opentui.com) (`@opentui/core`) and it
 
 ttybrain is being rebuilt as a **plugin kernel** (`src/kernel/`) plus plugins (`src/plugins/<id>/logic|tui/`). **Read `docs/architecture.md` before changing kernel or plugin code.** It holds the data-isolation rules, the operation and view conventions, the CLI conventions and a red-flags list.
 - Design: `docs/superpowers/specs/2026-11-13-pm-design.md`
+- Look and feel: the screen designs (`docs/superpowers/specs/2026-11-13-pm-screens.html`, `docs/superpowers/specs/2026-11-20-ttybrain-meetings-actions-design.md` §3) are the reference; `tests/design/` holds the conformance tests (see `docs/architecture.md`, "The TUI")
 - Per-plugin reference: `docs/superpowers/specs/2026-11-13-pm-plugins.md`
 - Plans: `docs/superpowers/plans/`
 

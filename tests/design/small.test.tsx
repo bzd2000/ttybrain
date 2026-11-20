@@ -1,0 +1,191 @@
+// The designed screens at 80×24 (the degradation rule of the design, §3): one test per screen. At the small size
+// no project code or person name in view is cut with `…`, the header keeps the chip and the date, every panel
+// keeps its bottom border, nothing is wider than the terminal, and the status bar holds only whole hints (each
+// one is a hint the same screen shows at 160 columns). Several screens' own design tests assert more at 80×24
+// (column drops, exact lines); this file covers the shared rules once per screen. Today is Thu 12 Nov 2026.
+import { afterEach, expect, test } from "bun:test"
+import { builtinPlugins } from "../builtins"
+import { line, seedDesign } from "../design"
+import { makeTestKernel, type TestKernel } from "../helpers"
+import { renderTui, type RenderedTui } from "../tui"
+
+let kernel: TestKernel | undefined
+let tui: RenderedTui | undefined
+afterEach(async () => {
+  tui?.destroy()
+  tui = undefined
+  await kernel?.cleanup()
+  kernel = undefined
+})
+
+async function until(t: RenderedTui, check: (frame: string) => boolean): Promise<string> {
+  let frame = await t.frame()
+  for (let i = 0; i < 100 && !check(frame); i++) {
+    await new Promise((r) => setTimeout(r, 10))
+    frame = await t.frame()
+  }
+  return frame
+}
+
+const CODES = ["CRM", "ERP", "DWH", "IAM", "HRP", "SEC", "WMS", "BI2"]
+const NAMES = [
+  "Marie Dubois", "Luc Vermeulen", "Ingrid Claes", "Tom Maes", "Peter Janssens", "Nadia El Amrani", "Jan De Smet",
+  "Anna Peeters", "Bob Willems", "Karim Haddad", "Mathias Wouters", "Sofie Lambert",
+]
+
+type Screen = {
+  name: string
+  chip: string // what the header's chip shows
+  open: (t: RenderedTui) => Promise<string> // drives to the screen, returns the settled frame
+  panels?: boolean // the screen draws bordered panels
+}
+
+const crm = async (t: RenderedTui) => {
+  t.input.pressKey("2")
+  await until(t, (f) => f.includes("CRM replatforming"))
+  await t.nav.open("#CRM")
+  await until(t, (f) => f.includes("Milestones 5"))
+}
+
+const SCREENS: Screen[] = [
+  { name: "Attention", chip: "1 Attention", panels: true, open: (t) => until(t, (f) => f.includes("Overdue actions")) },
+  {
+    name: "Projects",
+    chip: "2 Projects",
+    panels: true,
+    open: async (t) => {
+      t.input.pressKey("2")
+      return until(t, (f) => f.includes("BI2") && f.includes("Warehouse scanners"))
+    },
+  },
+  {
+    name: "Project detail",
+    chip: "2 Projects",
+    panels: true,
+    open: async (t) => {
+      await crm(t)
+      return until(t, (f) => f.includes("Solution outline approved") && f.includes("Milestones"))
+    },
+  },
+  {
+    name: "Context",
+    chip: "2 Projects",
+    panels: true,
+    open: async (t) => {
+      await crm(t)
+      for (let i = 0; i < 7; i++) t.input.pressArrow("right")
+      return until(t, (f) => f.includes("Background") && f.includes("100%"))
+    },
+  },
+  {
+    name: "People",
+    chip: "3 People",
+    panels: true,
+    open: async (t) => {
+      t.input.pressKey("3")
+      return until(t, (f) => f.includes("Sofie Lambert"))
+    },
+  },
+  {
+    name: "Actions",
+    chip: "4 Actions",
+    panels: true,
+    open: async (t) => {
+      t.input.pressKey("4")
+      return until(t, (f) => f.includes("Book vendor demo slot") && f.includes("Pilot user list"))
+    },
+  },
+  {
+    name: "Meeting prep",
+    chip: "5 Meetings",
+    panels: true,
+    open: async (t) => {
+      await t.settle()
+      await t.nav.open("M-2")
+      await until(t, (f) => f.includes("Agenda") && f.includes("Export"))
+      t.input.pressArrow("right")
+      await until(t, (f) => f.includes("Ask for this meeting"))
+      t.input.pressArrow("down")
+      return until(t, (f) => f.includes("Prep · CRM replatforming") && f.includes("Overdue actions"))
+    },
+  },
+  {
+    name: "Inbox",
+    chip: "6 Inbox",
+    panels: true,
+    open: async (t) => {
+      t.input.pressKey("6")
+      return until(t, (f) => f.includes("New · 3") && f.includes("unknown project"))
+    },
+  },
+  {
+    name: "Capture",
+    chip: "2 Projects",
+    open: async (t) => {
+      await crm(t)
+      t.input.pressKey("i")
+      return until(t, (f) => f.includes("Capture to inbox"))
+    },
+  },
+  {
+    name: "Switcher",
+    chip: "1 Attention",
+    open: async (t) => {
+      await t.settle()
+      t.input.pressKey("g")
+      return until(t, (f) => f.includes("▴"))
+    },
+  },
+]
+
+// The whole hints of the status bar (the last line): groups of words 3 or more cells apart.
+const hints = (frame: string) =>
+  line(frame, frame.replace(/\n$/, "").split("\n").length - 1)
+    .trim()
+    .split(/ {3,}/)
+    .filter(Boolean)
+
+async function render(s: Screen, width: number, height: number): Promise<string> {
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
+  await seedDesign(kernel)
+  tui = await renderTui(kernel, { width, height })
+  const frame = await s.open(tui)
+  tui.destroy()
+  tui = undefined
+  await kernel.cleanup()
+  kernel = undefined
+  return frame
+}
+
+for (const s of SCREENS) {
+  test(`${s.name} at 80x24: names whole, chip and date, panel borders, whole hints`, async () => {
+    const wide = await render(s, 160, 40)
+    const frame = await render(s, 80, 24)
+    const rows = frame.replace(/\n$/, "").split("\n")
+    expect(rows.length).toBe(24)
+    for (const l of rows) expect(l.length).toBeLessThanOrEqual(80)
+
+    // Codes and names are whole wherever they show: no proper prefix of one is followed by `…`.
+    for (const [list, min] of [[CODES, 2], [NAMES, 3]] as const)
+      for (const word of list) for (let k = min; k < word.length; k++) expect(frame).not.toContain(word.slice(0, k) + "…")
+
+    // The header: ttybrain, the chip and the date.
+    expect(line(frame, 0)).toContain(`ttybrain · ${" "}${s.chip}`)
+    expect(line(frame, 0)).toMatch(/Thu 12 Nov 2026$/)
+
+    // Every panel top has its bottom border.
+    if (s.panels) {
+      const tops = [...frame.matchAll(/╭/g)].length
+      const bottoms = [...frame.matchAll(/╰/g)].length
+      expect(tops).toBeGreaterThan(0)
+      expect(bottoms).toBe(tops)
+    }
+
+    // The status bar: whole hints only, each one the same screen shows when it has room.
+    const bar = hints(frame)
+    expect(bar.length).toBeGreaterThan(0)
+    expect(line(frame, 23)).not.toContain("…")
+    const known = new Set(hints(wide))
+    for (const h of bar) expect(known.has(h)).toBe(true)
+  })
+}

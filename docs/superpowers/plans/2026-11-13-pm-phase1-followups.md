@@ -324,3 +324,59 @@ Forms, quick capture and the Context editor keep unsaved values as drafts in `PM
 - Draft keys use the record ref exactly as the caller passed it: the same record opened as `#CRM` and as `CRM` gets two drafts. All callers pass canonical refs today.
 - The restore prompt shows no year (`from 12 Nov 10:42`); with the 30-day prune that only matters around New Year.
 - A `<Form>` rendered outside `openForm` keeps no draft (its key comes from `openForm`).
+
+## Look and feel pass (2026-11-20)
+
+Collected from the execution ledger (`.superpowers/sdd/2026-11-20-look-and-feel-pass/progress.md`) and the task reports. Plan: `docs/superpowers/plans/2026-11-20-look-and-feel-pass.md`; gap analysis: `docs/superpowers/plans/2026-11-20-look-and-feel-gaps.md`. The screens follow the designs (`docs/superpowers/specs/2026-11-13-pm-screens.html`); `tests/design/` holds the conformance tests, `tests/design/small.test.tsx` the 80×24 checks. The architecture notes are in `docs/architecture.md` ("The TUI", Look and feel).
+
+### Rulings made during the pass (and what each costs if wrong)
+
+- Plan rulings R1-R5: scrolling lists keep scrolling (no `… n more` cap); code-only things stay (Help, the "terminal too small" fallback, status messages, `e edit` / `a archived`, Closed/Archived groups, the Inbox panel on Attention); one-line data filters the design shows are in scope (on-hold projects out of "Projects needing attention", only high-influence stakeholders in "Stakeholders to contact"); the screen behind an overlay is dimmed; test ids follow the seed, not the mock (A-1 for A-27).
+- `fgAt`/`bgAt` search the whole frame top-down, so header text could shadow a lookup (a vacuous assert in `chrome.test.tsx`); the helpers take a line scope and the asserts were fixed. Cost: none.
+- Task 3 made "Late milestones · 2" fit at 80×24 and dropped the `next 14 d…` expectation in `panels.test.tsx`. Cost: none.
+- Switcher at column 10 (2 cells before the chip, as the mock's geometry), a two-cell crumb spacing, and a status bar that is not dimmed while it shows an overlay's keys. Cost: cosmetic.
+- `Nav.crumbs()` stays as a deprecated alias returning `[crumb()]` (the API is additive within apiVersion 1); `HintOptions` is exported.
+- Projects at 80×24: Table columns may declare `drop` (higher drops first) and the grow column a `minWidth`; Projects drops Effort, Risk, Act., then Next milestone with Due. Cost: a narrow terminal shows fewer columns.
+- Task 5 folded the visible look defects into its fix round: `me` and `—` muted in the project Actions tab, loose list items in Context kept apart, and the header crumb giving way after the spacer (not before it).
+- The compact "Overdue actions" of the meeting prep lists only open actions with `due_date < today` (the CLI and Markdown section keep every action due before the meeting). Cost: actions due before the meeting but not yet overdue show in Export and the CLI only (see M12 below).
+- The prep's decisions heading says `since last meeting` only when the since date is the previous meeting's date, otherwise `since <date>`; one `ReportCompactSchema` (exported from `@ttybrain/api`) is the compact form's schema, validated by the kernel; a section with a compact form never falls back to its ISO note in the TUI.
+- Inbox: refs of created records that the summary does not name are appended (`· N-1, G-1`), so the provenance stays visible and Enter's record is always on the line. Refs inside processed summaries are muted (the mock wins over gap row I8). Cost: one line differs from the mock for such items.
+- Task 4's P3 ruling: a project's Risk shows red for an open high-severity risk or issue (DWH is red where the mock draws it plain).
+
+### Left as FEATURE (the design shows behaviour or data the code does not have)
+
+- S4: a count on the switcher's Attention row (a total of attention items).
+- A12: deliverables in Attention's "Due this week".
+- A14: `x` marks the selected action done on the Attention panels (row actions on panels).
+- D5: `Tab panel`, a selection and `n` / `e` / `x` on the project Overview's right-hand panels; the panels are drawn unfocused and the status bar omits `tab panel`, `n new`, `x done`.
+- C2: the context footer's source (`via mcp`, the provenance of the last write).
+- E14: a tabbed right-hand panel for a team member (`Projects & roles · Actions · 1:1 notes · Goals`).
+- E15: groups of people as stakeholders (`Sales key users · group · 6 people`).
+- T2: the collapsed `Later · 34   No date · 3` line on Actions.
+- M11: a milestone's proposed new date (`26 Nov → 10 Dec?`) in the meeting prep.
+- Out of scope of the pass (later projects): Upcoming meetings panel, Meetings overview with series, talk-lists, 1:1 flow, project Meetings tab, BOARD project, recurring-meeting form, capture to talk-list, an actions plugin with Linked to.
+
+### Logic questions from the gap analysis (not look and feel)
+
+- A10 and A11 were applied as R3 one-line filters (on-hold projects out of "Projects needing attention", low-influence stakeholders out of "Stakeholders to contact" in the TUI). The CLI `report overview` follows A10 (it shares the query) but still lists low-influence stakeholders.
+- M12: the CLI board pack counts "overdue" as of the meeting date, the TUI prep as of today; intentional for now, decide which the CLI should use.
+- M11 (second half): a done milestone before the prep's `since` is not shown; showing it changes `projectStatus`'s window and the CLI report.
+- Item-tab.tsx: a done milestone shows `-29d` in the Milestones tab.
+- D2: the tab counts are open-only while the panel counts are totals; the person Actions tab counts open actions while the project item tabs count totals (inconsistent).
+- Recent decisions on the project Overview shows three rows where the mock shows one: does "recent" mean a time window?
+- M5: attendee order in the prep is by name; no add-order is stored. The project team reads in name order, the mock has involvement order.
+- Context tab: `e` / `E` (C8) and whether `e` should open `$VISUAL`/`$EDITOR` is undecided.
+
+### Deferred minors and concerns
+
+- Task 1: `isSelected` / `selectedText` do not prove a single selection; a Panel title can still vanish at width <= 9; there is no Node frame-text check of the footer position (verified on Bun only).
+- Task 2: `capture.tsx` `CAPTURE_TITLE` spacing typo; one backdrop covers the whole overlay stack (the lower overlay is not dimmed under a confirm).
+- Task 3: `OverviewPanelDef.columns` length is not checked against the cells; the grid/balanced layout switch remounts panels and resets their selection; fixed widths squeeze the title column at 80×24 (Attention shows `Send revised…`, `high…`, `Vendor B con`; codes and names stay whole, the titles do not); a domain example in the `types.ts` comment; sub-heading lines are reserved from the first rows, so a capped panel that drops all of a group's rows may keep up to two blank lines.
+- Task 3: the stale-health dot is a muted `○` for green or amber projects older than 30 days (a visible change).
+- Task 4: the Risk-high read is a second query that can lag (plain for one frame on first render); the Projects footer says `status=active` even when archived are shown; the first frame before measurement can show all columns at a narrow width.
+- Task 5: `RecordFields.labelWidth` misaligns against longer extra-field labels; the crumb shows its full label (no `…`) for one frame before it is measured, and the clipped-text `…` overlay hides the last character; nested lists, code blocks and quotes in Context use OpenTUI's default rendering (a nested list still shows `-` bullets), and the footer percentage is briefly `0%` before layout.
+- Task 6: the grow cell in the person panel shows its `…` one layout pass late; `Archived` is a string literal; `Other` people (neither team nor stakeholder) are accent like the other groups.
+- Task 7: the meetings view read is untyped (`any`) and unfiltered (all meetings per refresh); the first frame before the Table's measurement can cut titles.
+- Task 8: the `…` scroll marker sits on the last cell of the last visible line and hides its character.
+- Task 9: the Inbox bar omits `? help` and `q quit`, as the mock does (inconsistent with the other screens); `@ma` suggests Tom Maes (substring people search); capture's `SyntaxStyle` highlighting is verified on Bun only (the Node self-check does not open capture); the New panel is capped at half the height and scrolls; `tagParts` matches unresolved tags against the raw text spelling.
+- Task 10: the 80×24 checks assert that no code or name is cut, not that titles are whole; where titles lose characters (see Task 3) it is by design of the degradation rule.
