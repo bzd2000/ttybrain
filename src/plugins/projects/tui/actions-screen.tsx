@@ -10,6 +10,7 @@ import {
   addDays,
   dueLabel,
   fitWidth,
+  longDate,
   Panel,
   printable,
   shortDate,
@@ -34,21 +35,25 @@ import { parseActionFilter, type ActionFilter } from "./action-filter"
 
 export const EMPTY = "No open actions. Press n to add one."
 export const NO_MATCH = "No actions match the filter."
+// The design's bar (`↑↓ select  x done  d due  e edit  / filter  n new  i capture`); the global `i capture` and the
+// frame's `? help` come from the frame, and the kept `enter open` follows them.
 const HINTS: Hint[] = [
-  { key: "Enter", label: "open" },
+  { key: "↑↓", label: "select" },
   { key: "x", label: "done" },
   { key: "d", label: "due" },
   { key: "e", label: "edit" },
-  { key: "n", label: "new" },
   { key: "/", label: "filter" },
+  { key: "n", label: "new" },
 ]
+const KEPT_HINTS: Hint[] = [{ key: "Enter", label: "open" }]
+const FROM_WIDTH = 16
 const FILTER_HINTS: Hint[] = [
   { key: "Enter", label: "apply" },
   { key: "Esc", label: "clear" },
 ]
 
 // An action with what the screen shows besides its record: names and the for / from text.
-type Row = { rec: ActionRecord; ownerName: string | null; forFrom: string }
+type Row = { rec: ActionRecord; ownerName: string | null; forFrom: { text: string; person: boolean } }
 
 const firstName = (name: unknown, handle: unknown) => (name ? String(name).split(/\s+/)[0]! : handle ? `@${handle}` : null)
 const byDue = (a: Row, b: Row) => {
@@ -89,13 +94,25 @@ export function ActionsScreen() {
     const raw = await items.actionQuery().execute()
     const recs = raw.map(items.toAction)
     const titles = new Map<string, string>()
-    if (rt.records.hasType("meeting"))
+    if (rt.records.hasType("meeting")) {
+      // The meeting's date from the meetings plugin's published view (optional): `SteerCo 28 Oct`.
+      const dates = new Map<number, string>()
+      try {
+        for (const m of await (rt.data as any).selectFrom("meetings.meeting").select(["id", "date"]).execute()) dates.set(Number(m.id), String(m.date))
+      } catch {
+        // without the view the label is the title alone
+      }
       for (const ref of new Set(recs.map((r) => r.meeting).filter((m): m is string => m !== null)))
         try {
-          titles.set(ref, await rt.records.label(ref))
+          const title = await rt.records.label(ref)
+          const date = dates.get(Number(ref.replace(/^\D+/, "")))
+          // The date stays whole, the title gives way (the column is 16 wide).
+          const tail = date === undefined ? "" : ` ${shortDate(date)}`
+          titles.set(ref, `${title.length + tail.length > FROM_WIDTH ? `${title.slice(0, Math.max(1, FROM_WIDTH - tail.length - 1)).trimEnd()}…` : title}${tail}`)
         } catch {
           // a meeting that cannot be labelled falls through to the next source
         }
+    }
     const origins = await rt.provenance.originsOf(
       "action",
       recs.filter((r) => r.for === null && !(r.meeting !== null && titles.has(r.meeting))).map((r) => r.id),
@@ -105,7 +122,7 @@ export function ActionsScreen() {
       const origin = origins.get(rec.id)
       const forName: string | null = rec.for_person_id === null ? null : String(r.for_name ?? (r.for_handle ? `@${r.for_handle}` : ""))
       const meeting = rec.meeting === null ? undefined : titles.get(rec.meeting)
-      const forFrom = forName || meeting || (origin?.type === "inbox" ? `inbox ${origin.ref}` : "") || "—"
+      const forFrom = forName ? { text: forName, person: true } : { text: meeting || (origin?.type === "inbox" ? `inbox ${origin.ref}` : "") || "—", person: false }
       return { rec, ownerName: firstName(r.owner_name, r.owner_handle), forFrom }
     })
   })
@@ -130,27 +147,38 @@ export function ActionsScreen() {
     return all().filter((r) => (f.status === "all" || r.rec.status === f.status) && passes(r, f, ownerOf(r)))
   })
 
-  const row = (r: Row, overdue: boolean): TableRow => ({
-    ref: r.rec.ref,
-    cells: {
-      id: r.rec.ref,
-      title: r.rec.title,
-      project: r.rec.project?.replace(/^#/, "") ?? "",
-      owner: r.ownerName ?? "me",
-      from: r.forFrom,
-      due: overdue ? { text: r.rec.due_date === null ? "—" : shortDate(r.rec.due_date), tone: "red" } : dueLabel(r.rec.due_date, today()),
-    },
-  })
+  // `week`: 0 overdue, 1 this week, 2 next week (weekdays too), 3 later, 4 no date.
+  const row = (r: Row, week: number): TableRow => {
+    const code = r.rec.project?.replace(/^#/, "")
+    const due = r.rec.due_date
+    return {
+      ref: r.rec.ref,
+      cells: {
+        id: { text: r.rec.ref, tone: "muted" },
+        title: r.rec.title,
+        project: code ? { text: code, tone: "cyan" } : { text: "—", tone: "muted" },
+        owner: r.ownerName === null ? { text: "me", tone: "muted" } : r.ownerName,
+        from: r.forFrom.person ? { text: r.forFrom.text, tone: "magenta" } : { text: r.forFrom.text, tone: "muted" },
+        due:
+          week === 0
+            ? { text: due === null ? "—" : shortDate(due), tone: "red" }
+            : week === 2 && due !== null
+              ? longDate(due).slice(0, 3)
+              : dueLabel(due, today()),
+      },
+    }
+  }
   const groups = createMemo((): TableGroup[] => {
     const list = shown()
-    if (parsed().status !== "open") return [{ title: "Actions", rows: [...list].sort((a, b) => b.rec.id - a.rec.id).map((r) => row(r, false)) }]
+    if (parsed().status !== "open") return [{ title: "Actions", rows: [...list].sort((a, b) => b.rec.id - a.rec.id).map((r) => row(r, -1)) }]
     const bucket = (r: Row) => {
       const d = r.rec.due_date
       return d === null ? 4 : d < today() ? 0 : d <= thisWeekEnd() ? 1 : d <= nextWeekEnd() ? 2 : 3
     }
     const titles = ["Overdue", "This week", "Next week", "Later", "No date"]
+    const tones = ["red", "accent", "accent", "muted", "muted"] as const
     return titles
-      .map((title, i) => ({ title, rows: list.filter((r) => bucket(r) === i).sort(byDue).map((r) => row(r, i === 0)) }))
+      .map((title, i): TableGroup => ({ title, count: i >= 3, tone: tones[i]!, rows: list.filter((r) => bucket(r) === i).sort(byDue).map((r) => row(r, i)) }))
       .filter((g) => g.rows.length > 0)
   })
   const openCount = () => all().filter((r) => r.rec.status === "open").length
@@ -167,11 +195,12 @@ export function ActionsScreen() {
   // The project column fits the longest code shown (6 to 16): codes are never cut.
   const columns = (): TableColumn[] => [
     { id: "id", title: "ID", width: 5 },
-    { id: "title", title: "Action", width: "grow" },
+    { id: "title", title: "Action", width: "grow", minWidth: 28 },
     { id: "project", title: "Proj.", width: fitWidth(shown().map((r) => r.rec.project?.replace(/^#/, "") ?? ""), 6, 16) },
-    { id: "owner", title: "Owner", width: 9 },
-    { id: "from", title: "For / from", width: 16 },
-    { id: "due", title: "Due", width: 6 },
+    // Narrow terminals drop For / from first, then Owner; the action, its project code and its due date stay.
+    { id: "owner", title: "Owner", width: 9, drop: 1 },
+    { id: "from", title: "For / from", width: FROM_WIDTH, drop: 2 },
+    { id: "due", title: "Due", width: 7 },
   ]
 
   const openForm = async (formId: string, recordRef?: string) => {
@@ -184,7 +213,7 @@ export function ActionsScreen() {
   createEffect(() => {
     const on = editing() && keys.active()
     keys.textFocus(on)
-    onCleanup(keys.hints(on ? FILTER_HINTS : HINTS))
+    onCleanup(keys.hints(on ? FILTER_HINTS : HINTS, on ? undefined : { exact: true, frame: ["?"], after: KEPT_HINTS }))
   })
   const startFilter = () => {
     setDraft(filter())

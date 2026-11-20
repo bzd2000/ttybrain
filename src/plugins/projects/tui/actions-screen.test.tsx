@@ -73,7 +73,7 @@ describe("actions screen", () => {
   test("groups by due date", async () => {
     const t = await open()
     const frame = await t.frame()
-    const at = ["Overdue · 1", "This week · 2", "Next week · 1", "Later · 1", "No date · 1"].map((g) => indexOf(frame, g))
+    const at = ["Overdue", "This week", "Next week", "Later · 1", "No date · 1"].map((g) => indexOf(frame, g))
     expect(at.every((i) => i >= 0)).toBe(true)
     expect([...at].sort((a, b) => a - b)).toEqual(at)
     expect(frame).toContain("Actions · 6 open")
@@ -83,7 +83,7 @@ describe("actions screen", () => {
     expect(overdue).toContain("CRM")
     expect(overdue).toContain("9 Nov")
     expect(lineWith(frame, "Prepare budget")).toContain("Anna")
-    expect(lineWith(frame, "Draft scope")).toContain("16 Nov")
+    expect(lineWith(frame, "Draft scope")).toContain("Mon")
     expect(isSelected(await t.spans(), "Reply to vendor")).toBe(true) // the first row is selected
   })
 
@@ -95,12 +95,12 @@ describe("actions screen", () => {
     tui.input.pressKey("4")
     let frame = await tui.frame()
     expect(frame).toContain("Fri 13 Nov 2026")
-    expect(frame).toContain("Overdue · 1")
+    expect(frame).toContain("Overdue")
     day = "2026-11-16" // Monday
-    frame = await untilThat(tui, (f) => f.includes("Mon 16 Nov 2026") && f.includes("Overdue · 3"))
+    frame = await untilThat(tui, (f) => f.includes("Mon 16 Nov 2026") && lineWith(f, "Draft scope").includes("today"))
     expect(frame).toContain("Mon 16 Nov 2026")
-    expect(frame).toContain("Overdue · 3")
-    expect(frame).toContain("This week · 1")
+    expect(frame).toContain("Overdue")
+    expect(frame).toContain("This week")
     expect(frame).not.toContain("Next week")
     expect(frame).toContain("Later · 1")
     expect(lineWith(frame, "Draft scope")).toContain("today")
@@ -155,7 +155,7 @@ describe("actions screen", () => {
     expect(await t.frame()).toContain("Due")
     await type(t, "+1w")
     t.input.pressKey("s", { ctrl: true })
-    const frame = await untilThat(t, (f) => f.includes("Next week · 2"))
+    const frame = await untilThat(t, (f) => lineWith(f, "Someday maybe").includes("Fri"))
     expect(frame).not.toContain("No date")
     expect((await rows<any>(["due_date"]))[5].due_date).toBe("2026-11-20")
   })
@@ -177,8 +177,8 @@ describe("actions screen", () => {
     await type(t, "+1w")
     expect(await t.frame()).toContain("→ 2026-11-20")
     t.input.pressKey("s", { ctrl: true })
-    const frame = await untilThat(t, (f) => f.includes("Next week · 2"))
-    expect(frame).toContain("This week · 1")
+    const frame = await untilThat(t, (f) => lineWith(f, "Review plan").includes("Fri"))
+    expect(frame).toContain("This week")
     expect((await rows<any>(["due_date"]))[2].due_date).toBe("2026-11-20")
   })
 
@@ -214,7 +214,7 @@ describe("actions screen", () => {
     const io = { out: (s: string) => void (out += s), err: (s: string) => void (out += s), stdin: async () => "" }
     expect(await runCli(["action", "done", "A-3"], other, io)).toBe(0)
     const frame = await untilThat(t, (f) => !f.includes("Review plan"))
-    expect(frame).toContain("This week · 1")
+    expect(frame).toContain("This week")
     expect(isSelected(await t.spans(), "Draft scope")).toBe(true) // the row now at that index
   })
 
@@ -261,7 +261,7 @@ describe("actions screen", () => {
     const frame = await untilThat(tui, (f) => f.includes("Kickoff"))
     const long = lineWith(frame, "Kickoff")
     expect(long).toContain(" DATAPLATFORM2027 ")
-    expect(long).toContain("16 Nov")
+    expect(long).toContain("Mon")
     for (const l of lines(frame)) expect(l.length).toBeLessThanOrEqual(80)
     expect(lineWith(frame, "Reply to vendor").indexOf(" CRM ")).toBe(long.indexOf(" DATAPLATFORM2027 "))
   })
