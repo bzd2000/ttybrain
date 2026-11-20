@@ -21,8 +21,10 @@ export function lastText(p: PersonRow, today: string): string {
   return p.last_contact === null ? "never" : `${daysBetween(p.last_contact, today)}d`
 }
 
+// Amber for a stale high-influence stakeholder; muted for a low-influence one (stale or not) and for never.
 export function lastTone(p: PersonRow, today: string, days: number): Tone {
   if (p.is_stakeholder && p.influence === "high" && isStale(p.last_contact, today, days)) return "amber"
+  if (p.is_stakeholder && p.influence === "low") return "muted"
   return p.last_contact === null ? "muted" : undefined
 }
 

@@ -1,8 +1,11 @@
 // The People screen (slot 3): the All / Stakeholders / Team tabs over one grouped table of people.
 // - All: `Stakeholders · n`, `Team · n` (team members who are not stakeholders), `Other · n`; the Stakeholders and
 //   Team tabs show one untitled group under the panel title `People · <n>`. `Archived · n` only after `A`.
-// - Columns: name, role, project codes, influence, interest, last contact (amber for a stale high-influence
-//   stakeholder), then the columns other plugins registered for the list "people".
+// - Columns (the design's widths): name (magenta for a stakeholder), role, project codes (cyan), influence and
+//   interest (`low` and `—` muted), last contact (amber for a stale high-influence stakeholder, muted for a
+//   low-influence one), then the columns other plugins registered for the list "people". Group rows are accent.
+// - The header crumb names the active tab (`› All`); the sort is the panel's footer, on its bottom border.
+// - The status bar is the design's (`↑↓ select … t team`, then `i capture`), then `? help` and the kept keys.
 // - Keys: Enter opens the person, n note, N new person, e edit, o next sort, / filter (Enter applies, Esc clears),
 //   a / s / t tabs (and ←→), A archived, Del archive (after a confirmation), r restore.
 // - At PANEL_MIN_WIDTH columns and wider, the selected person's <PersonDetail> sits in a panel right of the list.
@@ -23,6 +26,7 @@ import {
   useOverlay,
   useQuery,
   useRuntime,
+  useScreenCrumb,
   useScreenKeys,
   useToday,
   type Hint,
@@ -39,13 +43,19 @@ export const NO_MATCH = "No people match the filter."
 // Del's confirmation, here and in the person's Summary tab.
 export const archiveQuestion = (ref: string) => `Archive ${ref}? They stay in the history and can be restored.`
 const HINTS: Hint[] = [
+  { key: "↑↓", label: "select" },
   { key: "Enter", label: "open" },
-  { key: "n", label: "note" },
-  { key: "N", label: "new" },
-  { key: "e", label: "edit" },
   { key: "o", label: "sort" },
   { key: "/", label: "filter" },
-  { key: "a s t", label: "tabs" },
+  { key: "a", label: "all" },
+  { key: "n", label: "note" },
+  { key: "s", label: "stakeholders" },
+  { key: "t", label: "team" },
+]
+// Keys the design does not show, kept after `? help` (R2).
+const KEPT_HINTS: Hint[] = [
+  { key: "N", label: "new" },
+  { key: "e", label: "edit" },
   { key: "A", label: "archived" },
   { key: "Del", label: "archive" },
   { key: "r", label: "restore" },
@@ -55,26 +65,30 @@ const FILTER_HINTS: Hint[] = [
   { key: "Esc", label: "clear" },
 ]
 const TAB_KEYS: Record<string, PeopleTab> = { a: "all", s: "stakeholders", t: "team" }
-// The Projects column fits each row's first code, plus ` …` when more follow (9 to 18), and a cell keeps whole
-// codes (joinFit): a code is never cut, and more codes than fit always end in `…`.
+const TAB_TITLES: Record<PeopleTab, string> = { all: "All", stakeholders: "Stakeholders", team: "Team" }
+// The design's widths: Name 16, Role grows, Projects 9, Infl./Int./Last 5. The Projects column fits each row's
+// first code, plus ` …` when more follow (9 to 18), and a cell keeps whole codes (joinFit): a code is never cut,
+// and more codes than fit always end in `…`. A narrow list drops Int., then Infl., then Projects, before it cuts
+// a name.
 const columns = (projectsWidth: number): TableColumn[] => [
-  { id: "name", title: "Name", width: 18 },
-  { id: "role", title: "Role", width: "grow" },
-  { id: "projects", title: "Projects", width: projectsWidth },
-  { id: "infl", title: "Infl.", width: 5 },
-  { id: "int", title: "Int.", width: 5 },
-  { id: "last", title: "Last", width: 6 },
+  { id: "name", title: "Name", width: 16 },
+  { id: "role", title: "Role", width: "grow", minWidth: 10 },
+  { id: "projects", title: "Projects", width: projectsWidth, drop: 1 },
+  { id: "infl", title: "Infl.", width: 5, drop: 2 },
+  { id: "int", title: "Int.", width: 5, drop: 3 },
+  { id: "last", title: "Last", width: 5 },
 ]
 
-const level = (v: string | null) => (v === null ? { text: "—" } : { text: v, tone: v === "low" ? ("muted" as const) : undefined })
+// `high` in the text colour; `low` and `—` (none) muted.
+const level = (v: string | null) => ({ text: v ?? "—", tone: v === "high" ? undefined : ("muted" as const) })
 
 function row(p: PersonRow, today: string, days: number, projectsWidth: number): TableRow {
   return {
     ref: p.ref,
     cells: {
-      name: p.name,
+      name: { text: p.name, tone: p.is_stakeholder ? "magenta" : undefined },
       role: roleText(p),
-      projects: joinFit(p.projects, projectsWidth),
+      projects: { text: joinFit(p.projects, projectsWidth), tone: "cyan" },
       infl: level(p.influence),
       int: level(p.interest),
       last: { text: lastText(p, today), tone: lastTone(p, today, days) },
@@ -138,7 +152,11 @@ export function PeopleScreen() {
   const groups = createMemo(() => peopleGroups(all().filter((p) => matchesFilter(p, filter())), tab(), sort(), archived()))
   const projectsWidth = createMemo(() => joinFitWidth(groups().flatMap((g) => g.rows.map((p) => p.projects)), 9, 18))
   const tableGroups = createMemo((): TableGroup[] =>
-    groups().map((g) => ({ title: g.title, rows: g.rows.map((p) => row(p, today(), days, projectsWidth())) })),
+    groups().map((g) => ({
+      title: g.title,
+      tone: g.title === "Archived" ? "muted" : "accent",
+      rows: g.rows.map((p) => row(p, today(), days, projectsWidth())),
+    })),
   )
   // The people the current tab shows, archived excluded.
   const shownCount = () => groups().filter((g) => g.title !== "Archived").reduce((n, g) => n + g.rows.length, 0)
@@ -177,8 +195,9 @@ export function PeopleScreen() {
   createEffect(() => {
     const on = editing() && keys.active()
     keys.textFocus(on)
-    onCleanup(keys.hints(on ? FILTER_HINTS : HINTS))
+    onCleanup(keys.hints(on ? FILTER_HINTS : HINTS, on ? undefined : { exact: true, frame: ["?"], after: KEPT_HINTS }))
   })
+  useScreenCrumb(() => TAB_TITLES[tab()])
   const startFilter = () => {
     setDraft(filter())
     setEditing(true)
@@ -220,6 +239,7 @@ export function PeopleScreen() {
 
   return (
     <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1}>
+      <box height={1} flexShrink={0} />
       <Tabs
         tabs={[
           { id: "all", title: "All", count: counts().all },

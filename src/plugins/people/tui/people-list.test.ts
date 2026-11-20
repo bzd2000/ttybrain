@@ -107,7 +107,10 @@ describe("text", () => {
     expect([lastText(hi(null), today), lastTone(hi(null), today, 30)]).toEqual(["never", "amber"])
     const team = person({ handle: "t", is_team: true })
     expect([lastText(team, today), lastTone(team, today, 30)]).toEqual(["never", "muted"])
-    expect(lastTone(stake("l", "low", "2026-09-14"), today, 30)).toBeUndefined()
+    // A low-influence stakeholder's days are muted, stale or not (the design: `60d`, `20d`); a team member's are text.
+    expect(lastTone(stake("l", "low", "2026-09-14"), today, 30)).toBe("muted")
+    expect(lastTone(stake("l", "low", "2026-11-03"), today, 30)).toBe("muted")
+    expect(lastTone(person({ handle: "t", is_team: true, last_contact: "2026-09-14" }), today, 30)).toBeUndefined()
   })
   test("roleText", () => {
     expect(roleText(person({ handle: "a", job_title: "CFO", organisation: "Finance" }))).toBe("CFO, Finance")

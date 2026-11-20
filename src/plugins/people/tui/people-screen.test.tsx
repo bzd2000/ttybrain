@@ -110,7 +110,7 @@ describe("People screen", () => {
     expect(lineWith(frame, "Luc Peeters")).toMatch(/high\s+low/)
     expect(lineWith(frame, "Anna Smit")).toMatch(/—\s+—/)
     expect(frame).toContain("sort: influence, then last contact")
-    expect(statusLine(frame)).toContain("enter open   n note   N new   e edit   o sort   / filter")
+    expect(statusLine(frame)).toContain("↑↓ select   enter open   o sort   / filter   a all   n note   s stakeholders   t team")
   })
 
   test("last contact shows days, never and amber", async () => {
@@ -361,7 +361,7 @@ describe("People screen: the detail panel", () => {
     const due = row.spans.find((s) => s.text.includes("-3d"))!
     expect(rgbToHex(due.fg).toLowerCase()).toBe(theme.red)
     const head = spans.lines.flatMap((l) => l.spans).find((s) => s.text.includes("Open follow-ups"))!
-    expect(rgbToHex(head.fg).toLowerCase()).toBe(theme.accent)
+    expect(rgbToHex(head.fg).toLowerCase()).toBe(theme.muted)
   })
 
   test("panel shows a team member's actions, 1:1 notes and goals", async () => {
