@@ -342,6 +342,7 @@ Collected from the execution ledger (`.superpowers/sdd/2026-11-20-look-and-feel-
 - The prep's decisions heading says `since last meeting` only when the since date is the previous meeting's date, otherwise `since <date>`; one `ReportCompactSchema` (exported from `@ttybrain/api`) is the compact form's schema, validated by the kernel; a section with a compact form never falls back to its ISO note in the TUI.
 - Inbox: refs of created records that the summary does not name are appended (`· N-1, G-1`), so the provenance stays visible and Enter's record is always on the line. Refs inside processed summaries are muted (the mock wins over gap row I8). Cost: one line differs from the mock for such items.
 - Task 4's P3 ruling: a project's Risk shows red for an open high-severity risk or issue (DWH is red where the mock draws it plain).
+- The user removed the influence/interest levels and the project codes from "Stakeholders to contact" (2026-11-20): rows show the name and the last contact only. This resolves the cut-code residual in that cell.
 
 ### Left as FEATURE (the design shows behaviour or data the code does not have)
 

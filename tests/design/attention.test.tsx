@@ -93,8 +93,8 @@ test("Attention as designed", async () => {
     cols(RISKS, ["R-6", "DWH", "Source data quality", "risk"]),
   ])
   expect([14, 15, 16].map((i) => inside(frame, i, 1))).toEqual([
-    cols(STAKEHOLDERS, ["Marie Dubois", "high/high · CRM, HRP", "41d"]),
-    cols(STAKEHOLDERS, ["Luc Vermeulen", "high/low · ERP", "35d"]),
+    cols(STAKEHOLDERS, ["Marie Dubois", "41d"]),
+    cols(STAKEHOLDERS, ["Luc Vermeulen", "35d"]),
     "last contact over 30 days, high influence first",
   ])
   expect(line(frame, 17)).toMatch(/^ ╰─+╯ ╰─+╯$/)
@@ -119,10 +119,10 @@ test("Attention as designed", async () => {
   expect(fgAt(spans, "31d ago", 10)).toBe(theme.amber)
   expect(fgAt(spans, "-6d", 7)).toBe(theme.red)
   expect(fgAt(spans, "Next 14 days", 10)).toBe(theme.muted)
-  // People names magenta, their levels muted, the age amber, the footer muted.
+  // People names magenta, the age amber, the footer muted (no levels or codes in the rows).
   expect(fgAt(spans, "Marie Dubois", 14)).toBe(theme.magenta)
   expect(fgAt(spans, "Luc Vermeulen", 15)).toBe(theme.magenta)
-  expect(fgAt(spans, "high/high", 14)).toBe(theme.muted)
+  expect(frame).not.toContain("high/high")
   expect(fgAt(spans, "41d", 14)).toBe(theme.amber)
   expect(fgAt(spans, "last contact over", 16)).toBe(theme.muted)
   // The focused panel's title is accent, the others muted.
@@ -137,7 +137,10 @@ for (const [width, height] of [[118, 36], [80, 24]] as const)
     kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
     await seedLongRefs(kernel)
     tui = await renderTui(kernel, { width, height })
-    const frame = await until(tui, (f) => f.includes("R-1000") && f.includes("Alexandra"))
+    // Settled: the long name and its age are in place (a frame before the columns are measured can cut them).
+    let frame = await until(tui, (f) => f.includes("R-1000") && f.includes("Alexandra Vandenberghe") && /Alexandra Vandenberghe +never/.test(f))
+    await tui.settle()
+    frame = await tui.frame()
     // Each panel's row (found by its id or mark; paired panels share a line) holds the whole code next to it.
     const at = (re: RegExp) => frame.split("\n").filter((l) => re.test(l))
     expect(at(/ A-1000 .+ DATAPLATFORM2027 +-2d /).length).toBe(1) // overdue
@@ -145,6 +148,6 @@ for (const [width, height] of [[118, 36], [80, 24]] as const)
     expect(at(/ ● +DATAPLATFORM2027 .+ upd 2d ago /).length).toBe(1) // needing attention
     expect(at(/│ DATAPLATFORM2027 .+ -3d /).length).toBe(1) // the late milestone
     expect(at(/ R-1000 +DATAPLATFORM2027 .+ risk /).length).toBe(1) // the high risk
-    expect(at(/ Alexandra Vandenberghe .+never /).length).toBe(1) // the stakeholder
+    expect(at(/ Alexandra Vandenberghe +never /).length).toBe(1) // the stakeholder: whole name and age
     expect(frame).not.toMatch(/DATAPLATFORM202?…|DATAPL\w*…|A-100…|R-100…|Alexandra Vande\w*…/)
   })

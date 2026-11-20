@@ -64,17 +64,15 @@ export const peopleTui = defineTui({
       empty: "No stakeholders to contact.",
       footer: `last contact over ${days} days, high influence first`,
       count: false,
-      // name (growing to a long one), level and projects, age.
-      columns: [{ min: 17, max: 24 }, "grow", 10],
+      // The name (fitted up to a long one) and the age.
+      columns: [{ min: 17, max: 24 }, 10],
       load: async () => {
         const today = ui.clock.today()
         // Only the high-influence ones, as the overview report's section.
         const rows: StaleRow[] = await ui.self().read.staleStakeholders!({ days, influence: "high" })
         return rows.map((r) => {
-          const level = `${r.influence ?? "–"}/${r.interest ?? "–"}`
           const cells: Cell[] = [
             { text: r.name, tone: "magenta" },
-            { text: r.projects.length > 0 ? `${level} · ${r.projects.join(", ")}` : level, tone: "muted" },
             { text: r.last_contact === null ? "never" : `${daysBetween(r.last_contact, today)}d`, tone: "amber" },
           ]
           return { ref: r.ref, cells }

@@ -132,7 +132,8 @@ describe("overview panels", () => {
     })
     const frame = await shot(t)
     const line = lineWith(frame, "Marie Dubois")
-    expect(line).toContain("high/high · CRM")
+    expect(line).not.toContain("high/high")
+    expect(line).not.toContain("CRM")
     expect(line).toContain("41d")
     // Only high-influence stakeholders, under a title without a count.
     expect(frame).not.toContain("Nadia")
