@@ -71,7 +71,11 @@ function list(ctx: RenderContext, token: Token): BoxRenderable | undefined {
   items.forEach((item, i) => {
     const row = new BoxRenderable(ctx, { flexDirection: "row", width: "100%" })
     row.add(new TextRenderable(ctx, { content: new StyledText([chunk(markers[i]!.padStart(width) + " ", { color: theme.muted })]), flexShrink: 0 }))
-    row.add(new TextRenderable(ctx, { content: new StyledText(inline(item.tokens?.filter((t) => t.type !== "space"), plain)), wrapMode: "word", flexGrow: 1, flexShrink: 1 }))
+    // A loose item's paragraphs each start a new line, under the first one's text.
+    const chunks = (item.tokens ?? [])
+      .filter((t) => t.type !== "space")
+      .flatMap((t, k) => (k > 0 ? [chunk("\n", plain), ...inline([t], plain)] : inline([t], plain)))
+    row.add(new TextRenderable(ctx, { content: new StyledText(chunks), wrapMode: "word", flexGrow: 1, flexShrink: 1 }))
     box.add(row)
   })
   return box

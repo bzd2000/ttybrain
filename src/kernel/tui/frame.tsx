@@ -2,9 +2,9 @@
 // open record's breadcrumb, then the badges and the date on the right) and the status bar (the keys valid right
 // now, as `key label` pairs 3 cells apart, or a message for 5 s).
 import { TextAttributes } from "@opentui/core"
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { useQuery, useRecord } from "./data"
-import { displayWidth } from "./format"
+import { displayWidth, truncate } from "./format"
 import { keyText, type Hint } from "./keys"
 import type { Message } from "./messages"
 import type { Registered } from "./registry"
@@ -21,11 +21,21 @@ function Badge(props: { def: StatusBadgeDef }) {
 // The crumb's muted tail, from the record type's crumb `detail` (run in its plugin's scope); none on null or a throw.
 function CrumbDetail(props: { def: RecordCrumbDef; recordRef: string }) {
   const q = useQuery(() => Promise.resolve().then(() => props.def.detail?.(props.recordRef) ?? null).catch(() => null), { key: () => props.recordRef })
-  return <Show when={q.data()}>{(d: () => string) => <text fg={theme.muted}>{` · ${d()}`}</text>}</Show>
+  return (
+    <Show when={q.data()}>
+      {(d: () => string) => (
+        <text fg={theme.muted} flexShrink={1} wrapMode="none">
+          {` · ${d()}`}
+        </text>
+      )}
+    </Show>
+  )
 }
 
 // `› <ref> <label>` for the open record (`#CRM` shows as `CRM`): the ref in its type's crumb tone, the label in
-// text colour, then the crumb's muted detail. Only the ref, muted, until the record is resolved.
+// text colour, then the crumb's muted detail. Only the ref, muted, until the record is resolved. The crumb takes the
+// room the badges leave (the space between them gives way first); when that is too little, the detail is clipped,
+// then the label is cut with `…`; the `› ` and the ref stay whole.
 function RecordCrumb(props: { recordRef: string }) {
   const app = useApp()
   const rec = useRecord(() => props.recordRef)
@@ -37,12 +47,35 @@ function RecordCrumb(props: { recordRef: string }) {
     const t = type()
     return t === undefined ? undefined : app.registry.crumbFor(t)
   })
+  // The crumb's measured width, and from it the room for the label (after `› `, the ref and a space).
+  const [width, setWidth] = createSignal(0)
+  const label = () => {
+    const full = ` ${rec.label() ?? ""}`
+    if (width() === 0) return full
+    const room = width() - displayWidth(CRUMB_MARK) - displayWidth(shown())
+    return room >= displayWidth(full) ? full : room < 2 ? "" : ` ${truncate(rec.label() ?? "", room - 1)}`
+  }
   return (
-    <box flexDirection="row" flexShrink={1} overflow="hidden">
-      <text fg={theme.muted}>{" › "}</text>
+    <box
+      flexDirection="row"
+      flexGrow={1}
+      flexShrink={1}
+      minWidth={0}
+      overflow="hidden"
+      onSizeChange={function () {
+        setWidth(this.width)
+      }}
+    >
+      <text fg={theme.muted} flexShrink={0}>
+        {CRUMB_MARK}
+      </text>
       <Show when={rec.label() !== undefined} fallback={<text fg={theme.muted}>{shown()}</text>}>
-        <text fg={toneColor(def()?.tone)}>{shown()}</text>
-        <text fg={theme.text}>{` ${rec.label()}`}</text>
+        <text fg={toneColor(def()?.tone)} flexShrink={0}>
+          {shown()}
+        </text>
+        <text fg={theme.text} flexShrink={0} wrapMode="none">
+          {label()}
+        </text>
         <Show when={def()} keyed>
           {(d: Registered<RecordCrumbDef>) => (
             <Show when={d.detail}>
@@ -57,6 +90,7 @@ function RecordCrumb(props: { recordRef: string }) {
   )
 }
 
+const CRUMB_MARK = " › "
 const HEADER_PADDING = 1
 const BRAND = "ttybrain"
 const BRAND_DOT = " · "
@@ -85,7 +119,7 @@ export function Header(props: {
       paddingRight={HEADER_PADDING}
       backgroundColor={theme.panel}
     >
-      <box flexDirection="row" flexShrink={1} overflow="hidden">
+      <box flexDirection="row" flexGrow={1} flexShrink={1} minWidth={0} overflow="hidden">
         <text fg={theme.accent} attributes={TextAttributes.BOLD} flexShrink={0}>
           {BRAND}
         </text>

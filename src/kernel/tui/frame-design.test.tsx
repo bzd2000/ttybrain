@@ -97,6 +97,29 @@ test("record breadcrumbs: screen chip, code cyan, label; no extra line", async (
   expect(fgAt(spans, "CRM CRM", 0)).toBe(theme.cyan)
 })
 
+// At 80 columns the space between the crumb and the badge gives way first; only then is the label cut, with `…`,
+// never the `› ` or the code.
+test("record crumb at 80 columns: the spacer goes first, then the label is cut with …", async () => {
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
+  await seedDesign(kernel)
+  const t = (tui = await renderTui(kernel, { width: 80, height: 24 }))
+  await t.nav.open("@anna")
+  // One cell short: the spacer is gone and the last letter gives way.
+  let frame = await until(t, (f) => line(f, 0).includes("Anna Peete…") && line(f, 0).includes("inbox"))
+  expect(line(frame, 0)).toBe(" ttybrain ·  3 People ▾  › @anna Anna Peete…  ● 3 new in inbox  Thu 12 Nov 2026")
+  // At 81 it fits whole.
+  t.renderer.resize(81, 24)
+  frame = await until(t, (f) => line(f, 0).includes("Anna Peeters"))
+  expect(line(frame, 0)).toBe(" ttybrain ·  3 People ▾  › @anna Anna Peeters  ● 3 new in inbox  Thu 12 Nov 2026")
+  t.renderer.resize(80, 24)
+  await t.nav.open("#CRM")
+  frame = await until(t, (f) => line(f, 0).includes("› CRM CRM replat…") && line(f, 0).includes("inbox"))
+  expect(line(frame, 0)).toBe(" ttybrain ·  2 Projects ▾  › CRM CRM replat…  ● 3 new in inbox  Thu 12 Nov 2026")
+  const spans = await t.spans()
+  expect(fgAt(spans, "CRM CRM", 0)).toBe(theme.cyan)
+  expect(fgAt(spans, "CRM replat…", 0)).toBe(theme.text)
+})
+
 test("status bar as designed", async () => {
   const t = await open()
   const frame = await t.frame()

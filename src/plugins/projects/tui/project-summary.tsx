@@ -118,8 +118,11 @@ export function ProjectSummary(props: { recordRef: string }) {
   const keys = useKeys()
   const today = useToday()
   keys.hints(HINTS, { exact: true, frame: [] })
-  // The Overview panel's inner width (measured), and from it the facts' label width.
+  // The Overview panel's inner width (measured), and from it the facts' label width; its inner height and the
+  // height its content needs, to mark clipped content with `…`.
   const [inner, setInner] = createSignal(0)
+  const [room, setRoom] = createSignal(0)
+  const [need, setNeed] = createSignal(0)
   const labelWidth = () => (inner() === 0 || inner() - LABEL - GAP >= VALUE_ROOM ? LABEL : COMPACT_LABEL)
   const at = () => labelWidth() + GAP
 
@@ -222,60 +225,78 @@ export function ProjectSummary(props: { recordRef: string }) {
             : `${p().start_date === null ? "?" : fullDate(p().start_date!)} → ${p().end_date === null ? "?" : fullDate(p().end_date!)}`
         return (
           <box flexDirection="column" flexGrow={1} minHeight={0} overflow="hidden">
-            <box flexDirection="row" flexShrink={0} gap={1}>
+            <box flexDirection="row" flexShrink={1} minHeight={0} gap={1}>
               <box flexDirection="column" flexGrow={1} flexBasis={0} flexShrink={1}>
                 <Panel title="Overview" grow>
+                  {/* On a short terminal the facts are clipped inside the panel, which keeps its border. */}
                   <box
                     flexDirection="column"
-                    flexShrink={0}
+                    flexGrow={1}
+                    flexShrink={1}
+                    minHeight={0}
+                    overflow="hidden"
                     onSizeChange={function () {
                       setInner(this.width)
+                      setRoom(this.height)
                     }}
                   >
-                    <Fact
-                      name="Health"
-                      at={at()}
-                      parts={
-                        p().health === null
-                          ? [{ text: "not set", tone: "muted" }]
-                          : [
-                              { text: `● ${p().health}`, tone: p().health! },
-                              { text: `· ${shortDate(p().health_date ?? today())}`, tone: "muted" },
-                            ]
-                      }
-                    />
-                    <Show when={p().health_comment}>
-                      {(c: () => string) => (
-                        <box paddingLeft={at()} flexShrink={0}>
-                          <text fg={theme.muted}>{c()}</text>
-                        </box>
-                      )}
-                    </Show>
-                    <text> </text>
-                    <Fact name="Status" at={at()} parts={[{ text: label(p().status) }]} />
-                    <Fact name="Dates" at={at()} parts={[{ text: dates() }]} />
-                    <Fact
-                      name="Effort"
-                      at={at()}
-                      parts={
-                        p().effort_estimate_days === null
-                          ? [{ text: "—" }]
-                          : [
-                              { text: `${p().effort_estimate_days} person-days` },
-                              ...(p().effort_note ? [{ text: `(${p().effort_note})`, tone: "muted" as Tone }] : []),
-                            ]
-                      }
-                    />
-                    <Fact name="Sponsor" at={at()} parts={[d().sponsors.length === 0 ? { text: "—" } : { text: d().sponsors.join(", "), tone: "magenta" }]} />
-                    <Fact name="Team" at={at()} parts={[{ text: d().team.length === 0 ? "—" : d().team.join(", ") }]} />
-                    <RecordFields recordType="project" recordRef={props.recordRef} labelWidth={labelWidth()} />
-                    <Show when={p().description}>
-                      {(t: () => string) => (
-                        <>
-                          <text> </text>
-                          <text fg={theme.muted}>{t()}</text>
-                        </>
-                      )}
+                    <box
+                      flexDirection="column"
+                      flexShrink={0}
+                      onSizeChange={function () {
+                        setNeed(this.height)
+                      }}
+                    >
+                      <Fact
+                        name="Health"
+                        at={at()}
+                        parts={
+                          p().health === null
+                            ? [{ text: "not set", tone: "muted" }]
+                            : [
+                                { text: `● ${p().health}`, tone: p().health! },
+                                { text: `· ${shortDate(p().health_date ?? today())}`, tone: "muted" },
+                              ]
+                        }
+                      />
+                      <Show when={p().health_comment}>
+                        {(c: () => string) => (
+                          <box paddingLeft={at()} flexShrink={0}>
+                            <text fg={theme.muted}>{c()}</text>
+                          </box>
+                        )}
+                      </Show>
+                      <text> </text>
+                      <Fact name="Status" at={at()} parts={[{ text: label(p().status) }]} />
+                      <Fact name="Dates" at={at()} parts={[{ text: dates() }]} />
+                      <Fact
+                        name="Effort"
+                        at={at()}
+                        parts={
+                          p().effort_estimate_days === null
+                            ? [{ text: "—" }]
+                            : [
+                                { text: `${p().effort_estimate_days} person-days` },
+                                ...(p().effort_note ? [{ text: `(${p().effort_note})`, tone: "muted" as Tone }] : []),
+                              ]
+                        }
+                      />
+                      <Fact name="Sponsor" at={at()} parts={[d().sponsors.length === 0 ? { text: "—" } : { text: d().sponsors.join(", "), tone: "magenta" }]} />
+                      <Fact name="Team" at={at()} parts={[{ text: d().team.length === 0 ? "—" : d().team.join(", ") }]} />
+                      <RecordFields recordType="project" recordRef={props.recordRef} labelWidth={labelWidth()} />
+                      <Show when={p().description}>
+                        {(t: () => string) => (
+                          <>
+                            <text> </text>
+                            <text fg={theme.muted}>{t()}</text>
+                          </>
+                        )}
+                      </Show>
+                    </box>
+                    <Show when={room() > 0 && need() > room()}>
+                      <text position="absolute" bottom={0} right={0} fg={theme.muted} bg={theme.bg}>
+                        …
+                      </text>
                     </Show>
                   </box>
                 </Panel>

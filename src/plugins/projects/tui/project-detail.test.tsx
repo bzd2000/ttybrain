@@ -172,6 +172,18 @@ describe("project detail", () => {
     expect(lineWith(frame, "updated 13 Nov")).toContain("100%") // on the panel's bottom border; it fits: scrolled to the end
   })
 
+  test("a list item with two paragraphs keeps them on their own lines, under the bullet's text", async () => {
+    const t = await open()
+    await inCtx(() => write().setContext!({ project: "CRM", markdown: "- first para\n\n  second para\n- other item\n" }))
+    await right(t, 7)
+    const frame = await until(t, "other item")
+    const at = frame.split("\n").findIndex((l) => l.includes("• first para"))
+    expect(at).toBeGreaterThan(0)
+    expect(frame.split("\n")[at]).not.toContain("second")
+    expect(frame.split("\n")[at + 1]).toMatch(/│ {3}second para +│/)
+    expect(frame).toContain("• other item")
+  })
+
   test("a long context at 80x24 scrolls inside the tab and keeps the breadcrumb", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await seed()

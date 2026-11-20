@@ -161,6 +161,15 @@ test("Milestones and Deliverables tabs: totals, muted refs, green ✓, done date
   spans = await t.spans()
   expect(fgAt(spans, "@anna", "Solution design")).toBe(theme.magenta)
   expect(fgAt(spans, "D-", "Solution design")).toBe(theme.muted)
+  // Actions: a named owner or for-person magenta; `me` and `—` muted (as the Actions mock draws them).
+  for (let i = 0; i < 3; i++) t.input.pressArrow("right")
+  frame = await until(t, (f) => f.includes("Send revised budget to Peter") && f.includes("Prepare SteerCo deck input"))
+  spans = await t.spans()
+  expect(line(frame, frame.split("\n").findIndex((l) => l.includes("Send revised budget")))).toMatch(/Send revised budget to Peter +me +@peter /)
+  expect(fgAt(spans, "me    ", "Send revised budget")).toBe(theme.muted)
+  expect(fgAt(spans, "@peter", "Send revised budget")).toBe(theme.magenta)
+  expect(fgAt(spans, "—", "Prepare SteerCo deck input")).toBe(theme.muted)
+  expect(fgAt(spans, "@bob", "Align migration scope")).toBe(theme.magenta)
 })
 
 // At 80×24 nothing is wider than the terminal; the facts and the short lists' titles stay whole (the
@@ -173,5 +182,10 @@ test("Project detail at 80x24 keeps names whole", async () => {
   for (const name of ["Peter Janssens", "Solution outline approved", "Design approved", "Solution outline ", "Solution design", "Integration specs", "Budget overrun ~12%", "R-11"])
     expect(frame).toContain(name)
   expect(frame).not.toMatch(/Solution outli…|Integration spe…/)
+  // The Overview panel keeps its bottom border above the status bar; what does not fit is clipped inside it, and
+  // its last visible line ends with `…`.
+  expect(line(frame, 22)).toMatch(/^ ╰─+╯/)
+  expect(inside(frame, 21, 0)).toMatch(/…$/)
+  expect(frame).not.toContain("opportunities.")
   expect(line(frame, 23)).toBe(" ←→ tabs   e edit   h health   esc back   i capture")
 })
