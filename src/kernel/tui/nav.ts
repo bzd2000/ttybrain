@@ -27,6 +27,8 @@ export type Nav = {
   // The ref of the record shown now (the top route), for the header's breadcrumb; undefined on a screen. Only the
   // current record shows, however many records were opened on the way.
   crumb(): string | undefined
+  // Deprecated (kept for apiVersion 1 plugins): use crumb(). The current record's ref as a one-item list, or [].
+  crumbs(): string[]
   // The text a screen shows after the chip while no record is open (`3 People ▾ › All`): set it with useScreenCrumb.
   screenCrumb(): string | undefined
   // Sets the screen crumb for `owner`; undefined clears it, but only if `owner` set it last.
@@ -88,6 +90,10 @@ export function createNav(kernel: Kernel, registry: TuiRegistry, track: <T>(p: P
     crumb() {
       const top = route()
       return top.kind === "record" ? top.ref : undefined
+    },
+    crumbs() {
+      const top = route()
+      return top.kind === "record" ? [top.ref] : []
     },
     screenCrumb: () => (route().kind === "screen" ? screenCrumb()?.text : undefined),
     setScreenCrumb(owner, text) {

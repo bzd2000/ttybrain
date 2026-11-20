@@ -6,7 +6,9 @@ import { onMount } from "solid-js"
 import { fgAt, line } from "../../../tests/design"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
+import { builtinPlugins } from "../../../tests/builtins"
 import { definePlugin, type PluginDef } from "../api"
+import { runWithContext } from "../context"
 import { keyText, useKeys, useScreenKeys } from "./keys"
 import { useScreenCrumb } from "./nav"
 import { theme } from "./theme"
@@ -74,6 +76,10 @@ function ActionOverlay(props: { close(): void }) {
   return <text>act overlay</text>
 }
 
+// The crumb detail's loads, and a gate a test can hold them on (open by default).
+let detailCalls = 0
+let detailGate: Promise<void> = Promise.resolve()
+
 const thingPart: TuiDef = defineTui({
   plugin: "thing",
   activate(ui) {
@@ -81,7 +87,14 @@ const thingPart: TuiDef = defineTui({
     ui.screen({ id: "plain", title: "Plain", slot: 3, component: PlainScreen })
     ui.recordTab("thing", { id: "main", title: "Main", order: 1, component: Tab })
     ui.recordTab("gadget", { id: "main", title: "Main", order: 1, component: Tab })
-    ui.recordCrumb("thing", { tone: "magenta", detail: async (ref) => (ref === "T-2" ? null : "Thu 4 Dec · 8 attendees") })
+    ui.recordCrumb("thing", {
+      tone: "magenta",
+      detail: async (ref) => {
+        detailCalls++
+        await detailGate
+        return ref === "T-2" ? null : "Thu 4 Dec · 8 attendees"
+      },
+    })
     ui.recordCrumb("gadget", {
       detail: async () => {
         throw new Error("no detail")
@@ -101,8 +114,11 @@ afterEach(async () => {
   kernel = undefined
 })
 
-async function open(): Promise<RenderedTui> {
-  kernel = await makeTestKernel({ plugins: [thingPlugin] })
+// `withPeople`: also load the people plugin, for a real write.
+async function open(withPeople = false): Promise<RenderedTui> {
+  detailCalls = 0
+  detailGate = Promise.resolve()
+  kernel = await makeTestKernel({ plugins: withPeople ? [thingPlugin, ...builtinPlugins.filter((p) => p.id === "people")] : [thingPlugin] })
   tui = await renderTui(kernel, { parts: [thingPart], width: 100, height: 20 })
   await tui.frame()
   return tui
@@ -142,6 +158,8 @@ test("a record of a claimed type shows its screen's chip, its crumb tone and mut
   let frame = await until(t, (f) => line(f, 0).includes("Thing 1"))
   expect(line(frame, 0)).toContain("ttybrain ·  2 Things ▾  › T-1 Thing 1 · Thu 4 Dec · 8 attendees")
   expect(t.nav.route()).toEqual({ kind: "record", screen: "things", ref: "T-1" })
+  expect(t.nav.crumb()).toBe("T-1")
+  expect(t.nav.crumbs()).toEqual(["T-1"]) // deprecated alias
   expect(line(frame, 1)).toContain("Main")
   let spans = await t.spans()
   expect(fgAt(spans, "T-1", 0)).toBe(theme.magenta)
@@ -198,4 +216,30 @@ test("an exact bar: the screen's hints only, the global actions', and the frame 
   t.input.pressKey("w")
   frame = await until(t, (f) => f.includes("act overlay"))
   expect(line(frame, 19).trim()).toBe("")
+})
+
+test("a write while a record is open reloads its crumb detail in place: the tail never vanishes", async () => {
+  const t = await open(true)
+  await t.nav.open("T-1")
+  let frame = await until(t, (f) => line(f, 0).includes("· Thu 4 Dec · 8 attendees"))
+  expect(line(frame, 0)).toContain("› T-1 Thing 1 · Thu 4 Dec · 8 attendees")
+  const before = detailCalls
+  // Hold the next detail loads, then write: the refresh reloads them, and until they resolve the last tail stays.
+  let release!: () => void
+  detailGate = new Promise((r) => (release = r))
+  const k = kernel!
+  const write = k.runtime("people")!.self().write as Record<string, (input: unknown) => Promise<unknown>>
+  await runWithContext(k.context(), () => write.addPerson!({ name: "Ann Example", handle: "ann" }))
+  for (let i = 0; i < 50 && detailCalls === before; i++) {
+    await new Promise((r) => setTimeout(r, 10))
+    await t.peek()
+  }
+  expect(detailCalls).toBeGreaterThan(before) // the write did reload it
+  for (let i = 0; i < 5; i++) {
+    expect(line(await t.peek(), 0)).toContain("› T-1 Thing 1 · Thu 4 Dec · 8 attendees")
+    await new Promise((r) => setTimeout(r, 10))
+  }
+  release()
+  frame = await t.frame()
+  expect(line(frame, 0)).toContain("› T-1 Thing 1 · Thu 4 Dec · 8 attendees")
 })

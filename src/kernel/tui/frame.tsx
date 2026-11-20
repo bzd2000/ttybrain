@@ -2,7 +2,7 @@
 // open record's breadcrumb, then the badges and the date on the right) and the status bar (the keys valid right
 // now, as `key label` pairs 3 cells apart, or a message for 5 s).
 import { TextAttributes } from "@opentui/core"
-import { For, Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import { useQuery, useRecord } from "./data"
 import { displayWidth } from "./format"
 import { keyText, type Hint } from "./keys"
@@ -30,10 +30,13 @@ function RecordCrumb(props: { recordRef: string }) {
   const app = useApp()
   const rec = useRecord(() => props.recordRef)
   const shown = () => (props.recordRef.startsWith("#") ? props.recordRef.slice(1) : props.recordRef)
-  const def = () => {
-    const type = rec.type()
-    return type === undefined ? undefined : app.registry.crumbFor(type)
-  }
+  // Memos: every reload gives new record data, and crumbFor builds a new object each call; without them the keyed
+  // detail below would remount (and its tail blink out) on every live refresh.
+  const type = createMemo(() => rec.type())
+  const def = createMemo(() => {
+    const t = type()
+    return t === undefined ? undefined : app.registry.crumbFor(t)
+  })
   return (
     <box flexDirection="row" flexShrink={1} overflow="hidden">
       <text fg={theme.muted}>{" › "}</text>

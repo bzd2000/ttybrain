@@ -32,7 +32,7 @@ export { editExternal, useEditExternal } from "./external"
 // component, so overlays get keys first, and while a text field has focus it withholds printable keys and Enter
 // (a component that owns the text field passes { whileTyping: true }). Claim a key with key.preventDefault() so
 // the global keys skip it. printable(key) is the character a plain key press types (undefined with Ctrl/Alt/Meta).
-export { printable, useKeys, useScreenKeys, type Hint, type Keys, type ScreenKeysOptions } from "./keys"
+export { printable, useKeys, useScreenKeys, type Hint, type HintOptions, type Keys, type ScreenKeysOptions } from "./keys"
 export { createEscChord, ESC_WINDOW_MS, type EscChord } from "./escChord"
 // Drafts of unsaved text (forms and the editor keep theirs themselves): useDraft(key, initial) for a plugin's own
 // overlay (the key is prefixed with the plugin id), <DraftPrompt> to offer one, DRAFT_KEPT the cancel message.
