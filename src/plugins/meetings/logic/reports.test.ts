@@ -245,6 +245,28 @@ describe("meetings reports", () => {
     expect(md).toContain(`| # | Ask |\n| --- | --- |\n| 2 | ${ASK} |\n| 4 | Release contingency |\n`)
   })
 
+  test("prep's compact forms: only actions overdue today; decisions 'since last meeting' only from that meeting", async () => {
+    await seed()
+    // Due before the meeting (4 Dec), not yet overdue today (13 Nov).
+    await w("projects", "addAction", { title: "Draft cutover plan", project: "CRM", due: "2026-11-20" }) // A-3
+    const section = async (title: string) => ((await read("prep", { meeting: "M-2" })) as any[])[1].sections.find((s: any) => s.title === title)
+    const actions = await section("Actions")
+    expect(actions.compact).toEqual({
+      title: "Overdue actions",
+      lines: [{ icon: { text: "!", tone: "red" }, text: [{ text: "A-1 Send revised budget to Peter" }], aside: { text: "me · -3d", tone: "red" } }],
+    })
+    // The table (Markdown, text) still lists every action due before the meeting, and the previous meeting's.
+    expect(actions.rows.map((r: any) => r.ID)).toEqual(["A-1", "A-3", "A-2"])
+    const md = (await ok("report", "board", "M-2")).out
+    expect(md).toContain("| ! A-3 | Draft cutover plan | me | 2026-11-20 | overdue |")
+    expect((await ok("report", "board", "M-2", "--format", "text")).out).toContain("A-3")
+    // The since is the previous meeting's date: "since last meeting".
+    expect((await section("Decisions")).compact.title).toBe("Decisions since last meeting")
+    // The meeting sets its own since: the date, though a previous meeting exists.
+    await w("meetings", "editMeeting", { ref: "M-2", sinceDate: "2026-10-15" })
+    expect((await section("Decisions")).compact.title).toBe("Decisions since 15 Oct")
+  })
+
   test("report board --format json keeps groups and marks", async () => {
     await seed()
     const r = JSON.parse((await ok("report", "board", "M-2", "--format", "json")).out)

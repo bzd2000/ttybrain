@@ -5,10 +5,11 @@
 // three columns with the designs' symbols, short dates, readable labels and first names, the ask under a muted
 // `Ask for this meeting (your text)`, the footer on the border), and the status bar. Seeded with the designs'
 // example data, today Thu 12 Nov 2026, 118×36. Data follows the seed (R5): M-2 rather than M-4, R-4 rather than R-9,
-// A-1 rather than A-27; 4 Dec 2026 is a Friday (the mock says Thu); the actions due before the meeting are listed (a
-// logic question, gap M12); no done milestone (completed before the since: a logic question, gap M11) and no
+// A-1 rather than A-27; 4 Dec 2026 is a Friday (the mock says Thu); only the actions overdue today are listed (the
+// controller's ruling on gap M12; the board pack's table keeps all due before the meeting); no done milestone (completed before the since: a logic question, gap M11) and no
 // proposed date (FEATURE, gap M11); attendees are stakeholders first, then team, each in handle order.
 import { afterEach, expect, test } from "bun:test"
+import { runCli } from "../../src/kernel/cli/dispatch"
 import { runWithContext } from "../../src/kernel/context"
 import { theme } from "../../src/kernel/tui/theme"
 import { builtinPlugins } from "../builtins"
@@ -106,7 +107,7 @@ test("Meeting prep as designed", async () => {
 
   // The prep: the health fact, then the sections in three columns (icon, text, the right-hand column of 16).
   const p = (i: number) => inside(frame, i, 1)
-  expect([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29].map(p)).toEqual([
+  expect([5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23].map(p)).toEqual([
     "Health          ● amber  Design slipping 2 weeks, waiting on integration spe…",
     "",
     "Milestones",
@@ -122,16 +123,10 @@ test("Meeting prep as designed", async () => {
     "·  Phase 1 excludes marketing automation                     28 Oct",
     "Overdue actions",
     "!  A-1 Send revised budget to Peter                          me · -3d",
-    "!  A-4 Prepare SteerCo deck input                            me · Fri",
-    "!  A-6 Align migration scope with DWH team                   Bob · 16 Nov",
-    "!  A-8 Invite Marie to design walkthrough                    me · 17 Nov",
-    "!  A-10 Draft cutover plan                                   me · 23 Nov",
-    "!  A-11 Agree data retention rules                           me · 26 Nov",
-    "!  A-12 Schedule key user training                           me · 29 Nov",
-    "!  A-13 Review vendor SOW change                             me · 2 Dec",
     "",
     "Ask for this meeting (your text)",
     "Approve 2-week shift of design milestone and release of contingency budget.",
+    "",
   ])
   // The footer on the bottom border, right-aligned, muted.
   const bottom = lines(frame).findIndex((l, i) => i > 4 && l.includes("generated from data"))
@@ -160,12 +155,20 @@ test("Meeting prep as designed", async () => {
   // Decisions: `·` and the date muted.
   expect(fgAt(spans, "·", "Phase 1 excludes")).toBe(theme.muted)
   expect(fgAt(spans, "28 Oct", "Phase 1 excludes")).toBe(theme.muted)
-  // Actions: overdue today red; due before the meeting amber.
+  // Actions: only those overdue today, red. A-4 (due Fri 13 Nov, before the meeting) is not overdue yet: not here,
+  // though the board pack's table (Markdown and text) still lists it.
   expect(fgAt(spans, "!", "A-1 Send")).toBe(theme.red)
   expect(fgAt(spans, "A-1 Send", "A-1 Send")).toBe(theme.text)
   expect(fgAt(spans, "me · -3d", "A-1 Send")).toBe(theme.red)
-  expect(fgAt(spans, "!", "A-4 Prepare")).toBe(theme.amber)
-  expect(fgAt(spans, "me · Fri", "A-4 Prepare")).toBe(theme.amber)
+  expect(frame).not.toContain("A-4 Prepare SteerCo deck input")
+  const report = async (...format: string[]) => {
+    let out = ""
+    const code = await runCli(["report", "board", "M-2", ...format], kernel!, { out: (s) => void (out += s), err: () => {}, stdin: async () => "" })
+    expect(code).toBe(0)
+    return out
+  }
+  expect(await report()).toContain("| ! A-4 | Prepare SteerCo deck input | me | 2026-11-13 | overdue |")
+  expect(await report("--format", "text")).toContain("Prepare SteerCo deck input")
   // The ask.
   expect(fgAt(spans, "Ask for this meeting", "(your text)")).toBe(theme.muted)
   expect(fgAt(spans, "(your text)", "(your text)")).toBe(theme.muted)
@@ -221,8 +224,8 @@ test("Meeting prep at 80×24: panels keep their borders, codes and names whole",
   // The status bar keeps its first hints.
   expect(line(frame, 23)).toMatch(/^ ←→ tabs {3}↑↓ agenda item {3}J\/K reorder {3}e edit ask/)
   // PgDn scrolls the prep to the actions.
-  expect(frame).not.toContain("A-13 Review")
+  expect(frame).not.toContain("A-1 Send revised")
   t.input.pressKey("\u001b[6~")
-  const scrolled = await until(t, (f) => f.includes("A-13 Review"))
-  expect(scrolled).toContain("A-13 Review vendor SOW change")
+  const scrolled = await until(t, (f) => f.includes("A-1 Send revised"))
+  expect(scrolled).toContain("A-1 Send revised budget to Peter")
 }, 20_000)

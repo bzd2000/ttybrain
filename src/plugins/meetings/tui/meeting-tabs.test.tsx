@@ -225,7 +225,15 @@ describe("meeting tabs", () => {
 
   test("prep at 80x24", async () => {
     const long = "Approve the two-week shift of the design milestone and release the contingency budget for the vendor"
-    const t = await open("M-2", 1, { width: 80, height: 24, extra: () => write().editAgendaItem!({ meeting: "M-2", item: 2, ask: long }) })
+    const t = await open("M-2", 1, {
+      width: 80,
+      height: 24,
+      extra: async () => {
+        await write().editAgendaItem!({ meeting: "M-2", item: 2, ask: long })
+        // More overdue actions, so the sections do not fit.
+        for (const day of ["01", "02", "03", "04", "05"]) await write("projects").addAction!({ title: `Overdue ${day}`, project: "CRM", due: `2026-11-${day}` })
+      },
+    })
     await select(t, "2.  CRM")
     // The ask wraps (as the design's paragraph does), whole.
     const frame = await until(t, (f) => f.includes("Prep · CRM") && f.includes("the vendor"))

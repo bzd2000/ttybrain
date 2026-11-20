@@ -112,7 +112,7 @@ describe("ReportSections", () => {
           lines: [{ icon: { text: "·", tone: "muted" as const }, text: [{ text: "Phase 1 excludes marketing" }], aside: { text: "28 Oct", tone: "muted" as const } }],
         },
       },
-      { title: "Empty", columns: ["d"], rows: [], empty: "none since 2026-10-28", compact: { lines: [], empty: "none since 28 Oct" } },
+      { title: "Empty", columns: ["d"], rows: [], empty: "none since 2026-10-28", note: "not updated since 2026-10-28", compact: { lines: [], empty: "none since 28 Oct" } },
       { title: "Other", columns: ["a", "b"], rows: [{ a: "A-1", b: "plain" }], marks: [{ icon: "!", tone: "red" as const }], empty: "" },
     ]
     tui = await renderTui(kernel, {
@@ -144,6 +144,8 @@ describe("ReportSections", () => {
     expect(colorOf(spans, "28 Oct")).toBe(theme.muted)
     expect(colorOf(spans, "Phase 1")).toBe(theme.text)
     expect(colorOf(spans, "! A-1")).toBe(theme.red)
+    // With a compact form, the section's own (ISO) empty text and note are not drawn.
+    expect(frame).not.toContain("2026-10-28")
   })
 
   test("useCopyText calls OSC 52 and useWriteExport writes into the export folder", async () => {

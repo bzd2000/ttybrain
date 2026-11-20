@@ -145,7 +145,8 @@ export function ReportSections(props: { sections: ReportSectionResult[]; skipCol
                 {(cc: () => NonNullable<ReportSectionResult["compact"]>) => {
                   const title = () => cc().title ?? s.title
                   const empty = () => cc().empty ?? s.empty
-                  const note = () => cc().note ?? s.note
+                  // The compact form's own note only: the section's is written for Markdown (ISO dates).
+                  const note = () => cc().note
                   return (
                     <>
                       <Show

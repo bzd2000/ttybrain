@@ -1,7 +1,7 @@
 // projects' reports: `project-status` (`ttybrain report status <project>`, the prep block, built from projectStatus) and
 // `overview` (`ttybrain report overview`, the Attention screen as text). Other plugins add sections to both (meetings
 // to the status report, people and inbox to the overview); the kernel owns neither.
-import { addDays, dueLabel, parseRef, shortDate, Type, ValidationError, type Cell, type Mark, type PluginContext, type ReportCompact, type ReportTone } from "@ttybrain/api"
+import { addDays, dueLabel, parseRef, shortDate, Type, ValidationError, ViewUnavailableError, type Cell, type Mark, type PluginContext, type ReportCompact, type ReportTone } from "@ttybrain/api"
 import type { Items } from "./items"
 import { makeOverview, type OverviewAction } from "./overview"
 import { date, today } from "./ops-project"
@@ -84,8 +84,20 @@ function registerStatusReport(ctx: PluginContext, store: Store): void {
 
   // Each section has its table (Markdown, text, JSON) and its compact form (the TUI's meeting prep).
   type Built = { title: string; columns: string[]; rows: Row[]; marks?: Array<Mark | null>; empty: string; note?: string; compact: ReportCompact }
-  const section = (id: string, order: number, build: (s: ProjectStatus, p: StatusInput, who: Map<string, string>) => Built) =>
+  const section = (id: string, order: number, build: (s: ProjectStatus, p: StatusInput, who: Map<string, string>) => Built | Promise<Built>) =>
     ctx.reportSection("project-status", { id, order, run: async (p: StatusInput) => build(await status(p), p, await firstNames(p)) })
+  // The previous meeting's date (meetings.meeting, optional): null without one, or when meetings is not loaded.
+  const previousDate = async (p: StatusInput): Promise<string | null> => {
+    const id = p.previousMeeting === undefined ? null : parseRef(p.previousMeeting, "M-")
+    if (id === null) return null
+    try {
+      const row = await ctx.data.selectFrom("meetings.meeting").select("date").where("id", "=", id).executeTakeFirst()
+      return row === undefined ? null : String(row.date)
+    } catch (e) {
+      if (e instanceof ViewUnavailableError) return null
+      throw e
+    }
+  }
 
   section("health", 10, (s, p) => ({
     title: "Health",
@@ -161,13 +173,14 @@ function registerStatusReport(ctx: PluginContext, store: Store): void {
       }),
     },
   }))
-  section("decisions", 50, (s, p) => ({
+  section("decisions", 50, async (s, p) => ({
     title: "Decisions",
     columns: ["ID", "Date", "Decision", "Decided by"],
     rows: s.decisions.map((d) => ({ ID: d.ref, Date: d.date, Decision: d.title, "Decided by": d.decided_by })),
     empty: `No decisions since ${p.since}.`,
     compact: {
-      title: p.previousMeeting !== undefined ? "Decisions since last meeting" : `Decisions since ${shortDate(p.since)}`,
+      // "since last meeting" only when the prep starts at that meeting (a meeting may set its own since date).
+      title: (await previousDate(p)) === p.since ? "Decisions since last meeting" : `Decisions since ${shortDate(p.since)}`,
       lines: s.decisions.map((d) => ({ icon: { text: "·", tone: "muted" }, text: [{ text: d.title }], ...(d.date ? { aside: { text: shortDate(d.date), tone: "muted" as const } } : {}) })),
       empty: `No decisions since ${shortDate(p.since)}.`,
     },
@@ -187,11 +200,12 @@ function registerStatusReport(ctx: PluginContext, store: Store): void {
           seen.add(a.ref)
           rows.push({ ID: a.ref, Action: a.title, Owner: me(a.owner), Due: a.due_date, Why: why })
           marks.push({ icon: "!", ...(why === "overdue" ? { tone: "red" as const } : {}) })
-          // `! A-27 Send revised budget to Peter   me · -3d`: red when overdue today, amber when due before the
-          // reference (the meeting), plain when it is only from the previous meeting.
-          const tone: ReportTone | undefined = why !== "overdue" ? undefined : a.due_date !== null && a.due_date < t ? "red" : "amber"
-          const owner = a.owner === null ? "me" : person(who, a.owner)
-          lines.push({ icon: { text: "!", ...(tone ? { tone } : {}) }, text: [{ text: `${a.ref} ${a.title}` }], aside: { text: `${owner} · ${dueLabel(a.due_date, t)}`, ...(tone ? { tone } : {}) } })
+          // The compact form lists only what is overdue today, in red (`! A-27 Send revised budget to Peter
+          // me · -3d`); the table keeps everything due before the reference and the previous meeting's actions.
+          if (a.due_date !== null && a.due_date < t) {
+            const owner = a.owner === null ? "me" : person(who, a.owner)
+            lines.push({ icon: { text: "!", tone: "red" }, text: [{ text: `${a.ref} ${a.title}` }], aside: { text: `${owner} · ${dueLabel(a.due_date, t)}`, tone: "red" } })
+          }
         }
     return { title: "Actions", columns: ["ID", "Action", "Owner", "Due", "Why"], rows, marks, empty: "No overdue actions.", compact: { title: "Overdue actions", lines } }
   })

@@ -353,9 +353,12 @@ MS-3     Training
     reports.section("status", "projects", { id: "nolines", order: 2, run: async () => section("B", { compact: {} as any }) })
     reports.section("status", "projects", { id: "badspan", order: 3, run: async () => section("C", { compact: { lines: [{ text: "x" }] } as any }) })
     reports.section("status", "projects", { id: "badaside", order: 4, run: async () => section("D", { compact: { lines: [{ text: [], aside: 3 }] } as any }) })
+    // An unknown tone, in the text, the icon or the aside.
+    reports.section("status", "projects", { id: "badtone", order: 5, run: async () => section("E", { compact: { lines: [{ text: [{ text: "x", tone: "purple" }] }] } as any }) })
+    reports.section("status", "projects", { id: "badicon", order: 6, run: async () => section("F", { compact: { lines: [{ icon: { text: "!", tone: "blue" }, text: [] }] } as any }) })
     const r = await reports.run("status", { project: "CRM" })
     const note = (id: string) => ({ title: id, columns: [], rows: [], empty: "", note: "error: malformed section result" })
-    expect(r.sections).toEqual([section("A", { compact }), note("nolines"), note("badspan"), note("badaside")])
+    expect(r.sections).toEqual([section("A", { compact }), note("nolines"), note("badspan"), note("badaside"), note("badtone"), note("badicon")])
     const plain = { title: r.title, sections: [section("A")] }
     expect(renderReport({ title: r.title, sections: [r.sections[0]!] }, "md")).toBe(renderReport(plain, "md"))
     expect(renderReport({ title: r.title, sections: [r.sections[0]!] }, "text")).toBe(renderReport(plain, "text"))

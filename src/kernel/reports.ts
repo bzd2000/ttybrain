@@ -1,6 +1,6 @@
 // Reports: a named report (registered by one plugin) is a list of sections (registered by any plugin) that
 // return structured data. The kernel runs them in order and renders the result as Markdown, text or JSON.
-import type { TSchema } from "typebox"
+import Type, { type TSchema } from "typebox"
 import Value from "typebox/value"
 import { NotFoundError, suggest, ValidationError } from "./errors"
 
@@ -18,6 +18,17 @@ export type ReportLine = { icon?: ReportSpan; text: ReportSpan[]; aside?: Report
 // context). `fact` draws the title as a label in front of the first line (`Health  ● amber  …`). Markdown, text
 // and JSON leave it out.
 export type ReportCompact = { title?: string; fact?: boolean; lines: ReportLine[]; empty?: string; note?: string }
+// The same shape as a schema: the kernel checks section results against it, and an operation that passes compact
+// forms on (meetings' `prep`) uses it in its output schema.
+const ToneSchema = Type.Union([Type.Literal("red"), Type.Literal("amber"), Type.Literal("green"), Type.Literal("muted"), Type.Literal("cyan"), Type.Literal("magenta")])
+const SpanSchema = Type.Object({ text: Type.String(), tone: Type.Optional(ToneSchema) })
+export const ReportCompactSchema = Type.Object({
+  title: Type.Optional(Type.String()),
+  fact: Type.Optional(Type.Boolean()),
+  lines: Type.Array(Type.Object({ icon: Type.Optional(SpanSchema), text: Type.Array(SpanSchema), aside: Type.Optional(SpanSchema) })),
+  empty: Type.Optional(Type.String()),
+  note: Type.Optional(Type.String()),
+})
 // `group` puts consecutive sections under one heading, `marks` (parallel to `rows`, `null` for none) gives rows
 // their hints, `text` is a Markdown paragraph after the table, and `compact` is the section's compact form.
 export type ReportSectionResult = {
@@ -126,22 +137,8 @@ function wellFormed(r: unknown): r is ReportSectionResult {
     (x.group === undefined || typeof x.group === "string") &&
     (x.text === undefined || typeof x.text === "string") &&
     (x.marks === undefined || (Array.isArray(x.marks) && x.marks.length === x.rows.length && x.marks.every((m) => typeof m === "object"))) &&
-    (x.compact === undefined || compactWellFormed(x.compact))
-  )
-}
-
-const isSpan = (s: unknown) => typeof s === "object" && s !== null && typeof (s as { text?: unknown }).text === "string"
-// A compact form: an object with an array of lines, each with an array of spans (and optional icon and aside spans).
-function compactWellFormed(c: unknown): boolean {
-  if (typeof c !== "object" || c === null) return false
-  const lines = (c as { lines?: unknown }).lines
-  return (
-    Array.isArray(lines) &&
-    lines.every((l) => {
-      if (typeof l !== "object" || l === null) return false
-      const x = l as Record<string, unknown>
-      return Array.isArray(x.text) && x.text.every(isSpan) && (x.icon === undefined || isSpan(x.icon)) && (x.aside === undefined || isSpan(x.aside))
-    })
+    // A compact form must match ReportCompactSchema (an unknown tone included).
+    (x.compact === undefined || Value.Check(ReportCompactSchema, x.compact))
   )
 }
 
