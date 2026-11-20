@@ -199,6 +199,8 @@ describe("projects: the overview report", () => {
     await seed()
     await ok("project", "add", "OPS", "Ops tooling")
     await ok("project", "edit", "OPS", "--health", "green") // fresh and green: not listed
+    await ok("project", "add", "HLD", "On hold, never updated")
+    await ok("project", "edit", "HLD", "--status", "on_hold") // on hold: not listed, even without a health
     await ok("action", "add", "Book room", "--due", "sun") // A-6: 2026-11-15
     await ok("action", "add", "Next monday", "--due", "mon") // A-7: 2026-11-16, not this week
     const r = (await ok("report", "overview", "--json")).json

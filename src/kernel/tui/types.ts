@@ -32,9 +32,22 @@ export type RecordTabDef = {
   when?: (recordRef: string) => Promise<boolean>
   component: Component<{ recordRef: string }>
 }
-export type OverviewRow = { ref: string; cells: Cell[] }
-// `count: false` leaves the row count out of the panel title (default: `Title · n`).
-export type OverviewPanelDef = { id: string; title: string; priority: number; empty: string; footer?: string; count?: boolean; load(): Promise<OverviewRow[]> }
+// `group`: a row with one goes under that muted sub-heading (after a blank line); consecutive rows with the same
+// group share it. Rows without a group come first, under the panel title.
+export type OverviewRow = { ref: string; cells: Cell[]; group?: string }
+// `count: false` leaves the row count out of the panel title (default: `Title · n`, n counting the rows without a
+// group: `Late milestones · 2` above `Next 14 days`). `columns`: each cell column's width, a number of cells or
+// "grow" (the width left over); without it the columns fit their text and the widest one grows.
+export type OverviewPanelDef = {
+  id: string
+  title: string
+  priority: number
+  empty: string
+  footer?: string
+  count?: boolean
+  columns?: Array<number | "grow">
+  load(): Promise<OverviewRow[]>
+}
 export type ListColumnDef = { id: string; title: string; width: number; value(ref: string): Promise<string | null> }
 export type RecordFormProps = { recordRef?: string; prefill?: Record<string, string>; origin?: Origin; close(savedRef?: string): void }
 export type RecordFormDef = { id: string; label: string; component: Component<RecordFormProps> }

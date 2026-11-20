@@ -4,7 +4,7 @@
 // The rows scroll so the selected one stays in view. The selected row shows as a `selectedBg` background, in the
 // focused table only (no marker column). `groups` renders `Title · n` headers above each group's rows (a group
 // without a title has no header: a screen's main group under its panel title; `count: false` leaves out the
-// ` · n`; `tone` colours the header, muted by default). A row's `detail` is a second line under it, aligned with
+// ` · n`; `tone` colours the header, muted by default; `space` puts a blank line above it). A row's `detail` is a second line under it, aligned with
 // its second column and not selectable (a processed inbox item's outcome). A focused table with rows and `onOpen`
 // adds the `↑↓ select` and `Enter open` hints. With `listId`, the columns other plugins registered for that list (registry `columns(listId)`) are
 // appended and filled through their `value(ref)`. While a text field holds text focus, the Table takes no keys,
@@ -19,7 +19,8 @@ import type { Cell, Tone } from "../types"
 
 export type TableRow = { ref: string; cells: Record<string, string | Cell>; detail?: Cell }
 export type TableColumn = { id: string; title: string; width: number | "grow"; tone?: (row: TableRow) => Tone }
-export type TableGroup = { title?: string; count?: boolean; tone?: Tone; rows: TableRow[] }
+// `space`: a blank line above the group's header (none when the header is the table's first line).
+export type TableGroup = { title?: string; count?: boolean; tone?: Tone; space?: boolean; rows: TableRow[] }
 
 export type TableProps = {
   columns: TableColumn[]
@@ -43,7 +44,7 @@ const GAP = 1
 // A grow column's width before the table has been measured.
 const UNMEASURED_GROW = 20
 
-type Line = { kind: "group"; title: string; tone: Tone } | { kind: "row"; row: TableRow } | { kind: "detail"; cell: Cell }
+type Line = { kind: "group"; title: string; tone: Tone } | { kind: "row"; row: TableRow } | { kind: "detail"; cell: Cell } | { kind: "space" }
 
 const rowLines = (row: TableRow): Line[] => (row.detail ? [{ kind: "row", row }, { kind: "detail", cell: row.detail }] : [{ kind: "row", row }])
 
@@ -60,10 +61,12 @@ export function Table(props: TableProps) {
   const flat = createMemo(() => props.groups?.flatMap((g) => g.rows) ?? props.rows ?? [])
   const lines = createMemo((): Line[] =>
     props.groups
-      ? props.groups.flatMap((g): Line[] => {
+      ? props.groups.reduce((out: Line[], g) => {
           const rows = g.rows.flatMap(rowLines)
-          return g.title === undefined ? rows : [{ kind: "group", title: g.count === false ? g.title : `${g.title} · ${g.rows.length}`, tone: g.tone ?? "muted" }, ...rows]
-        })
+          if (g.title === undefined) return [...out, ...rows]
+          const header: Line = { kind: "group", title: g.count === false ? g.title : `${g.title} · ${g.rows.length}`, tone: g.tone ?? "muted" }
+          return [...out, ...(g.space && out.length > 0 ? [{ kind: "space" } as const] : []), header, ...rows]
+        }, [])
       : flat().flatMap(rowLines),
   )
   const focused = () => props.focused !== false && keys.active()
@@ -234,7 +237,11 @@ export function Table(props: TableProps) {
         >
           <For each={visible()}>
             {(line) =>
-              line.kind === "group" ? (
+              line.kind === "space" ? (
+                <text height={1} flexShrink={0}>
+                  {" "}
+                </text>
+              ) : line.kind === "group" ? (
                 <text fg={toneColor(line.tone)} height={1} flexShrink={0}>
                   {line.title}
                 </text>

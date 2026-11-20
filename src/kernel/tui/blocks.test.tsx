@@ -301,6 +301,34 @@ describe("TUI blocks", () => {
     expect(frame).not.toContain("undefined")
   })
 
+  test("Table group with space has a blank line above its header, except as the first line", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    const [first, setFirst] = createSignal(true)
+    function TableScreen() {
+      return (
+        <Table
+          columns={[{ id: "ref", title: "Ref", width: 5 }]}
+          groups={[
+            { rows: first() ? [{ ref: "T-1", cells: { ref: "T-1" } }] : [] },
+            { title: "Next", count: false, space: true, rows: [{ ref: "T-3", cells: { ref: "T-3" } }] },
+          ]}
+          header={false}
+          focused
+        />
+      )
+    }
+    tui = await renderTui(kernel, { parts: [screenPart(TableScreen)] })
+    tui.input.pressKey("2")
+    let frame = await tui.frame()
+    const at = (s: string) => frame.split("\n").findIndex((l) => l.includes(s))
+    expect(at("Next")).toBe(at("T-1") + 2)
+    expect(frame.split("\n")[at("T-1") + 1]!.trim()).toBe("")
+    expect(at("T-3")).toBe(at("Next") + 1)
+    setFirst(false)
+    frame = await tui.frame()
+    expect(at("Next")).toBe(1)
+  })
+
   test("Table row detail line sits under its row and is not selectable", async () => {
     kernel = await makeTestKernel({ plugins: [thingPlugin] })
     function TableScreen() {

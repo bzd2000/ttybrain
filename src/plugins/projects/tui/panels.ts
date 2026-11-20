@@ -1,12 +1,16 @@
-// The projects plugin's Overview panels: overdue actions, due this week, projects needing attention, late and
-// upcoming milestones, high risks and issues. They read through the same makeOverview the `overview` report uses.
+// The projects plugin's Attention panels: overdue actions, due this week, projects needing attention, late and
+// upcoming milestones, high risks and issues, with the designs' column widths and cyan project codes. They read
+// through the same makeOverview the `overview` report uses.
 import { daysBetween, dueLabel, shortDate, type Cell, type OverviewRow, type TuiContext } from "@ttybrain/api/tui"
 import { makeItems } from "../logic/items"
-import { ATTENTION_DAYS, makeOverview, type OverviewAction } from "../logic/overview"
+import { ATTENTION_DAYS, makeOverview, MILESTONE_DAYS, type OverviewAction } from "../logic/overview"
 import { makeStore } from "../logic/records"
 
 const dash: Cell = { text: "—", tone: "muted" }
-const project = (ref: string | null): Cell => (ref === null ? dash : { text: ref.slice(1), tone: "accent" })
+const code = (text: string): Cell => ({ text, tone: "cyan" })
+const project = (ref: string | null): Cell => (ref === null ? dash : code(ref.slice(1)))
+// id, title, project, due.
+const ACTION_COLUMNS = [5, "grow", 7, 7] as const
 
 export function registerPanels(ui: TuiContext): void {
   const store = makeStore(ui)
@@ -25,6 +29,7 @@ export function registerPanels(ui: TuiContext): void {
     title: "Overdue actions",
     priority: 10,
     empty: "No overdue actions.",
+    columns: [...ACTION_COLUMNS],
     load: async () => actionRows(await overview.overdueActions(), "red"),
   })
   ui.overviewPanel({
@@ -32,6 +37,7 @@ export function registerPanels(ui: TuiContext): void {
     title: "Due this week",
     priority: 20,
     empty: "Nothing due this week.",
+    columns: [...ACTION_COLUMNS],
     load: async () => actionRows(await overview.dueThisWeek(), undefined),
   })
   ui.overviewPanel({
@@ -39,20 +45,23 @@ export function registerPanels(ui: TuiContext): void {
     title: "Projects needing attention",
     priority: 30,
     empty: "No project needs attention.",
+    count: false,
+    columns: [2, 6, "grow", 12],
     load: async () => {
       const today = ui.clock.today()
       return (await overview.projectsNeedingAttention()).map((p): OverviewRow => {
-        const tone = p.health === "red" ? "red" : p.health === "amber" ? "amber" : p.health === "green" ? "green" : "muted"
-        const dot: Cell = { text: p.health === null ? "○" : "●", tone }
         const days = p.health_date === null ? null : daysBetween(p.health_date, today)
         const age = days === null ? "never" : `${days}d ago`
-        // Without a health, or one older than the report's window, the row says so instead of showing the comment.
+        // Without a health, or one older than the report's window, the row says so (a muted ○) instead of showing
+        // the comment.
         const stale = p.health === null || days === null || days > ATTENTION_DAYS
+        const tone = stale ? "muted" : p.health === "red" ? "red" : p.health === "amber" ? "amber" : "green"
+        const dot: Cell = { text: stale ? "○" : "●", tone }
         return {
           ref: p.ref,
           cells: [
             dot,
-            { text: p.code, tone: "accent" },
+            code(p.code),
             stale ? { text: "Health not updated", tone: "muted" } : { text: p.health_comment ?? "" },
             stale ? { text: age, tone: "amber" } : { text: `upd ${age}`, tone: "muted" },
           ],
@@ -62,19 +71,21 @@ export function registerPanels(ui: TuiContext): void {
   })
   ui.overviewPanel({
     id: "milestones",
-    title: "Late milestones · next 14 days",
+    // The late ones (counted in the title), then the next 14 days' under a sub-heading.
+    title: "Late milestones",
     priority: 40,
     empty: "No late milestones and none in the next 14 days.",
+    columns: [6, "grow", 8],
     load: async () => {
       const today = ui.clock.today()
-      return (await overview.milestones()).map((m): OverviewRow => ({
-        ref: m.ref,
-        cells: [
-          { text: m.project.slice(1), tone: "accent" },
-          { text: m.title },
-          m.due_date < today ? { text: dueLabel(m.due_date, today), tone: "red" } : { text: shortDate(m.due_date) },
-        ],
-      }))
+      return (await overview.milestones()).map((m): OverviewRow => {
+        const late = m.due_date < today
+        return {
+          ref: m.ref,
+          cells: [code(m.project.slice(1)), { text: m.title }, late ? { text: dueLabel(m.due_date, today), tone: "red" } : { text: shortDate(m.due_date) }],
+          ...(!late && { group: `Next ${MILESTONE_DAYS} days` }),
+        }
+      })
     },
   })
   ui.overviewPanel({
@@ -82,10 +93,12 @@ export function registerPanels(ui: TuiContext): void {
     title: "High risks & issues",
     priority: 50,
     empty: "No open high-severity risks or issues.",
+    // id, project, title, type.
+    columns: [5, 6, "grow", 6],
     load: async () =>
       (await overview.highRisks()).map(({ risk }): OverviewRow => ({
         ref: risk.ref,
-        cells: [{ text: risk.ref, tone: "muted" }, { text: risk.title }, { text: risk.project.slice(1), tone: "accent" }, { text: risk.type, tone: "red" }],
+        cells: [{ text: risk.ref, tone: "muted" }, code(risk.project.slice(1)), { text: risk.title }, { text: risk.type, tone: "red" }],
       })),
   })
 }

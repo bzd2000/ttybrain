@@ -25,4 +25,25 @@ describe("overview layout", () => {
     for (const p of places) expect(p.height).toBeGreaterThanOrEqual(3)
     expect(places.filter((p, i) => needs[i]!.rows === 6).every((p) => p.rows >= 1 && p.rows <= 5)).toBe(true)
   })
+
+  test("a roomy screen pairs the panels in grid rows: both panels of a row get the taller one's height", () => {
+    const places = layoutOverview([full(3), full(3), full(4), { ...full(3), headings: 2 }, full(3), { ...full(2), footer: "last contact" }, full(3)], 34, 118)
+    expect(places.map((p) => p.row)).toEqual([0, 0, 1, 1, 2, 2, 3])
+    expect(places.map((p) => p.column)).toEqual([0, 1, 0, 1, 0, 1, 0])
+    expect(places.map((p) => p.height)).toEqual([5, 5, 7, 7, 5, 5, 5])
+    expect(places.map((p) => p.rows)).toEqual([3, 3, 4, 3, 3, 2, 3])
+  })
+
+  test("a grid row too tall for the screen is shrunk in priority order, keeping its pair equal", () => {
+    const places = layoutOverview([full(7), full(1), full(7), full(1)], 13, 118)
+    expect(places.map((p) => p.row)).toEqual([0, 0, 1, 1])
+    expect(places.map((p) => p.height)).toEqual([7, 7, 6, 6])
+    expect(places.map((p) => p.rows)).toEqual([4, 1, 3, 1])
+  })
+
+  test("when not even the grid's smallest rows fit, the columns are balanced instead (no grid rows)", () => {
+    const places = layoutOverview([full(6), full(6), full(6), full(0), full(0)], 10, 80)
+    expect(places.every((p) => p.row === undefined)).toBe(true)
+    for (const c of [0, 1]) expect(places.filter((p) => p.column === c).reduce((s, p) => s + p.height, 0)).toBeLessThanOrEqual(10)
+  })
 })

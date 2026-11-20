@@ -32,9 +32,10 @@ export function makeOverview(rt: PluginRuntime, store: Store, items: Items) {
       const end = weekEnd(t)
       return (await openActions()).filter((x) => x.a.due_date! >= t && x.a.due_date! <= end)
     },
+    // Active projects (not on hold or closed) that are red, amber, or without a recent health update.
     async projectsNeedingAttention(): Promise<ProjectRecord[]> {
       const stale = addDays(rt.clock.today(), -ATTENTION_DAYS)
-      return (await store.recordQuery().where("p.archived_at", "is", null).where("p.status", "!=", "closed").execute())
+      return (await store.recordQuery().where("p.archived_at", "is", null).where("p.status", "=", "active").execute())
         .map(store.toProject)
         .filter((p) => p.health === "red" || p.health === "amber" || p.health_date === null || p.health_date < stale)
         .sort((a, b) => (HEALTH_RANK[a.health ?? ""] ?? 2) - (HEALTH_RANK[b.health ?? ""] ?? 2) || a.code.localeCompare(b.code))

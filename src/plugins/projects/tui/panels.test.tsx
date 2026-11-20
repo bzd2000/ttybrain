@@ -45,8 +45,8 @@ describe("overview panels", () => {
       "Inbox is empty",
     ])
       expect(frame).toContain(s)
-    expect(frame).toContain("Late milestones · next 14 days")
-    expect(frame).toContain("last contact 30+ days ago, high influence first")
+    expect(frame).toContain("Late milestones · 0")
+    expect(frame).toContain("last contact over 30 days, high influence first")
   })
 
   test("overdue panel", async () => {
@@ -80,6 +80,7 @@ describe("overview panels", () => {
       await write().addProject!({ code: "IAM", name: "Identity" })
       await write().addProject!({ code: "ERP", name: "ERP rollout" })
       await write().setHealth!({ project: "ERP", health: "red", comment: "Vendor B contract not signed", date: "2026-11-04" })
+      await write().addProject!({ code: "BI2", name: "On hold", status: "on_hold" })
     })
     const frame = await shot(t)
     expect(lineWith(frame, "IAM")).toContain("Health not updated")
@@ -88,6 +89,9 @@ describe("overview panels", () => {
     expect(erp).toContain("Vendor B contract not signed")
     expect(erp).toContain("upd 9d ago")
     expect(frame.indexOf("ERP")).toBeLessThan(frame.indexOf("IAM"))
+    // An on-hold project does not need attention, even without a health update.
+    expect(frame).not.toContain("BI2")
+    expect(frame).toContain("╭─ Projects needing attention ─")
     const spans = await t.spans()
     const dotLine = spans.lines.find((l) => l.spans.some((s) => s.text.includes("●")))!
     expect(rgbToHex(dotLine.spans.find((s) => s.text.includes("●"))!.fg).toLowerCase()).toBe(theme.red)
@@ -105,7 +109,10 @@ describe("overview panels", () => {
     const frame = await shot(t)
     expect(lineWith(frame, "Vendor selected")).toContain("-6d")
     expect(lineWith(frame, "Design approved")).toContain("26 Nov")
-    expect(frame.indexOf("Vendor selected")).toBeLessThan(frame.indexOf("Design approved"))
+    expect(frame.indexOf("Vendor selected")).toBeLessThan(frame.indexOf("Next 14 days"))
+    expect(frame.indexOf("Next 14 days")).toBeLessThan(frame.indexOf("Design approved"))
+    // The title counts the late ones only.
+    expect(frame).toContain("Late milestones · 1")
     expect(frame).not.toContain("Far away")
     const risk = lineWith(frame, "Vendor B may miss")
     expect(risk).toContain("R-1")
@@ -120,11 +127,17 @@ describe("overview panels", () => {
       await write("people").addPerson!({ name: "Marie Dubois", handle: "marie", is_stakeholder: true, influence: "high", interest: "high" })
       await write("projects").addInvolvement!({ project: "CRM", person: "marie", role: "sponsor" })
       await write("people").addNote!({ person: "marie", kind: "interaction", text: "Coffee", date: "2026-10-03" })
+      await write("people").addPerson!({ name: "Nadia El Amrani", handle: "nadia", is_stakeholder: true, influence: "low", interest: "low" })
+      await write("people").addPerson!({ name: "Ingrid Claes", handle: "ingrid", is_stakeholder: true, influence: null, interest: "high" })
     })
     const frame = await shot(t)
     const line = lineWith(frame, "Marie Dubois")
     expect(line).toContain("high/high · CRM")
     expect(line).toContain("41d")
+    // Only high-influence stakeholders, under a title without a count.
+    expect(frame).not.toContain("Nadia")
+    expect(frame).not.toContain("Ingrid")
+    expect(frame).toContain("╭─ Stakeholders to contact ─")
   })
 
   test("inbox panel lists new items oldest first", async () => {
@@ -160,11 +173,10 @@ describe("overview panels", () => {
     const titles = [
       "Overdue actions · 6",
       "Due this week · 0",
-      "Projects needing attention · 6",
+      "Projects needing attention ─",
       "High risks & issues · 6",
-      // Too wide for the border with its padding at 80 columns: cut before the count, never left out.
-      "╭─ Late milestones · next 14 d… · 0 ─╮",
-      "Stakeholders to contact · 0",
+      "╭─ Late milestones · 0 ─",
+      "Stakeholders to contact ─",
       "Inbox · 6",
     ]
     for (const t of titles) expect(frame).toContain(t)
