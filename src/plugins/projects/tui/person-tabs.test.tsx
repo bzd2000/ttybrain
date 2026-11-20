@@ -7,6 +7,7 @@ import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
 import { theme } from "../../../kernel/tui/api"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { isSelected } from "../../../../tests/design"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -115,7 +116,7 @@ describe("projects' person tabs", () => {
     expect(tabLine(frame)).toContain("Projects & roles 3")
 
     // Del on the first row (CRM sponsor): n keeps it, y removes it.
-    expect(lineWith(frame, "CRM replatforming")).toContain("›")
+    expect(isSelected(await t.spans(), "CRM replatforming")).toBe(true)
     t.input.pressKey("DELETE")
     frame = await until(t, (f) => f.includes("Remove @marie"))
     expect(frame).toContain("Remove @marie as sponsor from CRM?")
@@ -130,7 +131,7 @@ describe("projects' person tabs", () => {
     expect(tabLine(frame)).toContain("Projects & roles 2")
 
     // Enter opens the selected project.
-    expect(lineWith(frame, "ERP upgrade")).toContain("›")
+    expect(isSelected(await t.spans(), "ERP upgrade")).toBe(true)
     t.input.pressEnter()
     await until(t, () => t.nav.route().kind === "record")
     frame = await until(t, (f) => f.includes("› ERP"))
@@ -183,7 +184,7 @@ describe("projects' person tabs", () => {
     expect(lines(frame.trimEnd()).at(-1)).toContain("n add  e edit  x done")
 
     // x on A-1: done today, so it moves first among the closed ones.
-    expect(lineWith(frame, "A-1 ")).toContain("›")
+    expect(isSelected(await t.spans(), "A-1 ")).toBe(true)
     t.input.pressKey("x")
     frame = await until(t, (f) => tabLine(f).includes("Actions 2"))
     expect((await rows("action", ["status", "done_date"]))[0]).toEqual({ status: "done", done_date: "2026-11-13" })
@@ -193,7 +194,8 @@ describe("projects' person tabs", () => {
     // Enter opens the action's project (A-2 is on CRM); an action without one stays.
     t.input.pressKey("k") // A-1 → A-3
     t.input.pressKey("k") // → A-2
-    frame = await until(t, (f) => lineWith(f, "A-2 ").includes("›"))
+    for (let i = 0; i < 80 && !isSelected(await t.spans(), "A-2 "); i++) await sleep(25)
+    expect(isSelected(await t.spans(), "A-2 ")).toBe(true)
     t.input.pressEnter()
     await until(t, () => t.nav.route().kind === "record" && (t.nav.route() as { ref: string }).ref === "#CRM")
     expect(t.nav.route()).toMatchObject({ kind: "record", ref: "#CRM" })

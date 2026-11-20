@@ -7,6 +7,7 @@ import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
 import { displayWidth, theme } from "../../../kernel/tui/api"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { isSelected } from "../../../../tests/design"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -157,7 +158,7 @@ describe("Projects screen", () => {
     const frame = await t.frame()
     expect(frame).not.toContain("New project")
     expect(lineWith(frame, " NEW ")).toContain("New thing")
-    expect(lineWith(frame, " NEW ")).toContain("›")
+    expect(isSelected(await t.spans(), " NEW ")).toBe(true)
     expect(frame).toContain("Projects · 5 active")
     const row = await inCtx(() => kernel!.runtime("projects")!.data.selectFrom("project").select(["name", "status"]).where("code", "=", "NEW").executeTakeFirst())
     expect(row).toEqual({ name: "New thing", status: "active" })
@@ -293,18 +294,18 @@ describe("Projects screen", () => {
     t.input.pressTab()
     await t.input.typeText("New thing")
     t.input.pressKey("s", { ctrl: true })
-    expect(lineWith(await t.frame(), " NEW ")).toContain("›")
+    expect(isSelected(await t.spans(), " NEW ")).toBe(true)
     t.input.pressKey("k")
     let frame = await t.frame()
-    expect(lineWith(frame, " NEW ")).not.toContain("›")
+    expect(isSelected(await t.spans(), " NEW ")).toBe(false)
     t.input.pressKey("/")
     await t.input.typeText("health:red") // hides NEW
     t.input.pressEnter()
     await t.frame()
     await escape(t)
     frame = await t.frame()
-    expect(lineWith(frame, "›")).toContain(" ERP ") // the row the filter left stays selected
-    expect(lineWith(frame, " NEW ")).not.toContain("›")
+    expect(isSelected(await t.spans(), " ERP ")).toBe(true) // the row the filter left stays selected
+    expect(isSelected(await t.spans(), " NEW ")).toBe(false)
   })
 
   test("the status bar shows only whole hints at 80x24", async () => {

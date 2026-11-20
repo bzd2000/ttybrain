@@ -1,12 +1,13 @@
 // The People screen (slot 3): the All / Stakeholders / Team tabs, the grouped list, sorts, the filter, archived
 // people and the keys that open the person and note forms, against the built-in plugins seeded through write ops.
-import { rgbToHex } from "@opentui/core"
+import { rgbToHex, type CapturedFrame } from "@opentui/core"
 import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
 import { theme } from "../../../kernel/tui/api"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { isSelected as sel } from "../../../../tests/design"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -27,7 +28,7 @@ const people = () =>
 const lines = (frame: string) => frame.split("\n")
 // The detail panel's title (the selected person's name) sits in the panels' top border line: skip that line so a
 // name finds its list row.
-const titleLine = (l: string) => l.includes("┌")
+const titleLine = (l: string) => l.includes("╭")
 const lineWith = (frame: string, s: string) => lines(frame).find((l) => l.includes(s) && !titleLine(l)) ?? ""
 const indexOf = (frame: string, s: string) => lines(frame).findIndex((l) => l.includes(s) && !titleLine(l))
 const statusLine = (frame: string) => lines(frame.trimEnd()).at(-1)!
@@ -38,11 +39,16 @@ const order = (frame: string, names: string[]) => {
   return [...names].sort((a, b) => indexOf(frame, a) - indexOf(frame, b))
 }
 
-async function until(t: RenderedTui, ok: (f: string) => boolean): Promise<string> {
+// Whether a selected row (drawn on the selection background) shows `name`.
+const isSelected = async (t: RenderedTui, name: string) => sel(await t.spans(), name)
+
+async function until(t: RenderedTui, ok: (f: string, spans: CapturedFrame) => boolean): Promise<string> {
   let frame = await t.frame()
-  for (let i = 0; i < 80 && !ok(frame); i++) {
+  let spans = await t.spans()
+  for (let i = 0; i < 80 && !ok(frame, spans); i++) {
     await sleep(25)
     frame = await t.frame()
+    spans = await t.spans()
   }
   return frame
 }
@@ -184,7 +190,7 @@ describe("People screen", () => {
     }
     t.input.pressKey("j")
     t.input.pressKey("j") // luc → marie → nadia
-    expect(lineWith(await t.frame(), "Nadia Benali")).toContain("›")
+    expect(await isSelected(t, "Nadia Benali")).toBe(true)
     t.input.pressKey("DELETE")
     let frame = await until(t, (f) => f.includes("Archive @nadia?"))
     expect(frame).toContain("Archive @nadia? They stay in the history and can be restored.")
@@ -198,7 +204,7 @@ describe("People screen", () => {
     frame = await until(t, (f) => f.includes("Archived · 1"))
     expect(indexOf(frame, "Nadia Benali")).toBeGreaterThan(indexOf(frame, "Archived · 1"))
     expect(frame).toContain("People · 4") // archived excluded
-    while (!lineWith(await t.frame(), "Nadia Benali").includes("›")) t.input.pressKey("j")
+    while (!(await isSelected(t, "Nadia Benali"))) t.input.pressKey("j")
     t.input.pressKey("n")
     frame = await until(t, (f) => f.includes("is archived"))
     expect(statusLine(frame)).toContain("@nadia is archived — press r to restore")
@@ -234,8 +240,8 @@ describe("People screen", () => {
     expect(frame).toContain("New person")
     await t.input.typeText("Zoe Claes")
     t.input.pressKey("s", { ctrl: true })
-    frame = await until(t, (f) => !f.includes("New person") && lineWith(f, "Zoe Claes").includes("›"))
-    expect(lineWith(frame, "Zoe Claes")).toContain("›")
+    frame = await until(t, (f, s) => !f.includes("New person") && sel(s, "Zoe Claes"))
+    expect(await isSelected(t, "Zoe Claes")).toBe(true)
     expect(frame).toContain("All 6")
     expect((await people()).map((p) => p.name)).toContain("Zoe Claes")
   })
@@ -257,7 +263,7 @@ describe("People screen", () => {
     await t.input.typeText(" M")
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, (f) => f.includes("Marie Dubois M"))
-    expect(lineWith(frame, "Marie Dubois M")).toContain("›")
+    expect(await isSelected(t, "Marie Dubois M")).toBe(true)
     expect((await people()).find((p) => p.handle === "marie")!.name).toBe("Marie Dubois M")
   })
 
@@ -273,10 +279,10 @@ describe("People screen", () => {
     // A person sorting above marie: she would be row 0 if the selection had been reset.
     await inCtx(() => write().addPerson!({ name: "Aaron Aerts", handle: "aaron", is_stakeholder: true, influence: "high" }))
     t.input.pressEscape()
-    frame = await until(t, (f) => f.includes("Aaron Aerts") && lineWith(f, "Marie Dubois").includes("›"))
+    frame = await until(t, (f, s) => f.includes("Aaron Aerts") && sel(s, "Marie Dubois"))
     expect(lines(frame)[0]).toContain("ttybrain · 3 People")
-    expect(lineWith(frame, "Marie Dubois")).toContain("›")
-    expect(lineWith(frame, "Aaron Aerts")).not.toContain("›")
+    expect(await isSelected(t, "Marie Dubois")).toBe(true)
+    expect(await isSelected(t, "Aaron Aerts")).toBe(false)
   })
 
   test("Esc back from a person keeps the tab", async () => {
@@ -290,7 +296,7 @@ describe("People screen", () => {
     expect(frame).toContain("People · 2")
     expect(frame).toContain("Bob Maes")
     for (const n of ["Luc Peeters", "Marie Dubois", "Nadia Benali"]) expect(frame).not.toContain(n)
-    expect(lineWith(frame, "Anna Smit")).toContain("›")
+    expect(await isSelected(t, "Anna Smit")).toBe(true)
   })
 
   test("Esc back from an archived person keeps the archived group and the selection", async () => {
@@ -298,13 +304,13 @@ describe("People screen", () => {
     await inCtx(() => write().archivePerson!({ ref: "@nadia" }))
     t.input.pressKey("A")
     await until(t, (f) => f.includes("Archived · 1"))
-    while (!lineWith(await t.frame(), "Nadia Benali").includes("›")) t.input.pressKey("j")
+    while (!(await isSelected(t, "Nadia Benali"))) t.input.pressKey("j")
     t.input.pressEnter()
     await until(t, (f) => f.includes("› @nadia"))
     t.input.pressEscape()
-    const frame = await until(t, (f) => t.nav.route().kind === "screen" && f.includes("Archived · 1") && lineWith(f, "Nadia Benali").includes("›"))
+    const frame = await until(t, (f, s) => t.nav.route().kind === "screen" && f.includes("Archived · 1") && sel(s, "Nadia Benali"))
     expect(frame).toContain("Archived · 1")
-    expect(lineWith(frame, "Nadia Benali")).toContain("›")
+    expect(await isSelected(t, "Nadia Benali")).toBe(true)
   })
 
   test("Esc back from a person keeps the sort", async () => {

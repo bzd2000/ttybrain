@@ -1,10 +1,12 @@
 // A list of rows with a selection: ↑↓/jk move it, Enter opens the selected row (onOpen(ref)). The selection
 // follows the ref across reloads; when that ref is gone it stays at the same index, clamped. Columns are
 // truncated by display width with `…`: fixed ones to their width, "grow" ones to the width left over (measured).
-// The rows scroll so the selected one stays in view. `groups` renders `Title · n` headers above each group's
-// rows (a group without a title has no header: a screen's main group under its panel title; `count: false` leaves
-// out the ` · n`). A row's `detail` is a second line under it, aligned with its second column and not selectable
-// (a processed inbox item's outcome). With `listId`, the columns other plugins registered for that list (registry `columns(listId)`) are
+// The rows scroll so the selected one stays in view. The selected row shows as a `selectedBg` background, in the
+// focused table only (no marker column). `groups` renders `Title · n` headers above each group's rows (a group
+// without a title has no header: a screen's main group under its panel title; `count: false` leaves out the
+// ` · n`; `tone` colours the header, muted by default). A row's `detail` is a second line under it, aligned with
+// its second column and not selectable (a processed inbox item's outcome). A focused table with rows and `onOpen`
+// adds the `↑↓ select` and `Enter open` hints. With `listId`, the columns other plugins registered for that list (registry `columns(listId)`) are
 // appended and filled through their `value(ref)`. While a text field holds text focus, the Table takes no keys,
 // nor keys a handler before it (its screen's) already claimed with preventDefault().
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
@@ -17,7 +19,7 @@ import type { Cell, Tone } from "../types"
 
 export type TableRow = { ref: string; cells: Record<string, string | Cell>; detail?: Cell }
 export type TableColumn = { id: string; title: string; width: number | "grow"; tone?: (row: TableRow) => Tone }
-export type TableGroup = { title?: string; count?: boolean; rows: TableRow[] }
+export type TableGroup = { title?: string; count?: boolean; tone?: Tone; rows: TableRow[] }
 
 export type TableProps = {
   columns: TableColumn[]
@@ -36,13 +38,12 @@ export type TableProps = {
   header?: boolean
 }
 
-// The selection marker column, and the gap between columns.
-const MARKER_WIDTH = 1
+// The gap between columns.
 const GAP = 1
 // A grow column's width before the table has been measured.
 const UNMEASURED_GROW = 20
 
-type Line = { kind: "group"; title: string } | { kind: "row"; row: TableRow } | { kind: "detail"; cell: Cell }
+type Line = { kind: "group"; title: string; tone: Tone } | { kind: "row"; row: TableRow } | { kind: "detail"; cell: Cell }
 
 const rowLines = (row: TableRow): Line[] => (row.detail ? [{ kind: "row", row }, { kind: "detail", cell: row.detail }] : [{ kind: "row", row }])
 
@@ -61,7 +62,7 @@ export function Table(props: TableProps) {
     props.groups
       ? props.groups.flatMap((g): Line[] => {
           const rows = g.rows.flatMap(rowLines)
-          return g.title === undefined ? rows : [{ kind: "group", title: g.count === false ? g.title : `${g.title} · ${g.rows.length}` }, ...rows]
+          return g.title === undefined ? rows : [{ kind: "group", title: g.count === false ? g.title : `${g.title} · ${g.rows.length}`, tone: g.tone ?? "muted" }, ...rows]
         })
       : flat().flatMap(rowLines),
   )
@@ -96,7 +97,7 @@ export function Table(props: TableProps) {
     if (grows === 0) return 0
     if (width() === 0) return UNMEASURED_GROW
     const fixed = cols.reduce((n, c) => n + (c.width === "grow" ? 0 : c.width), 0)
-    const free = width() - MARKER_WIDTH - GAP * cols.length - fixed
+    const free = width() - GAP * (cols.length - 1) - fixed
     return Math.max(1, Math.floor(free / grows))
   })
   const widthOf = (col: TableColumn) => (col.width === "grow" ? growWidth() : col.width)
@@ -162,7 +163,13 @@ export function Table(props: TableProps) {
     key.preventDefault()
   })
   createEffect(() => {
-    if (focused() && props.onOpen && flat().length > 0) onCleanup(keys.hints([{ key: "Enter", label: "open" }]))
+    if (!focused() || !props.onOpen || flat().length === 0) return
+    onCleanup(
+      keys.hints([
+        { key: "↑↓", label: "select" },
+        { key: "Enter", label: "open" },
+      ]),
+    )
   })
 
   const ColumnText = (cp: { col: TableColumn; text: string; fg: string }) => (
@@ -175,9 +182,6 @@ export function Table(props: TableProps) {
     const on = () => rp.row.ref === selected() && focused()
     return (
       <box flexDirection="row" height={1} flexShrink={0} gap={GAP} backgroundColor={on() ? theme.selectedBg : theme.bg}>
-        <text fg={theme.accent} width={MARKER_WIDTH} flexShrink={0}>
-          {on() ? "›" : " "}
-        </text>
         <For each={columns()}>
           {(col) => {
             const cell = () => cellOf(rowCells(rp.row), col)
@@ -188,9 +192,9 @@ export function Table(props: TableProps) {
     )
   }
 
-  // Indented past the marker and the first column, cut to what is left of the measured width.
+  // Indented past the first column, cut to what is left of the measured width.
   const Detail = (dp: { cell: Cell }) => {
-    const indent = () => MARKER_WIDTH + GAP + (columns().length > 1 ? widthOf(columns()[0]!) + GAP : 0)
+    const indent = () => (columns().length > 1 ? widthOf(columns()[0]!) + GAP : 0)
     const room = () => (width() === 0 ? UNMEASURED_GROW : Math.max(1, width() - indent()))
     return (
       <box flexDirection="row" height={1} flexShrink={0} paddingLeft={indent()}>
@@ -214,9 +218,6 @@ export function Table(props: TableProps) {
     >
       <Show when={props.header !== false && flat().length > 0}>
         <box flexDirection="row" height={1} flexShrink={0} gap={GAP}>
-          <text width={MARKER_WIDTH} flexShrink={0}>
-            {" "}
-          </text>
           <For each={columns()}>{(col) => <ColumnText col={col} text={col.title} fg={theme.muted} />}</For>
         </box>
       </Show>
@@ -234,7 +235,7 @@ export function Table(props: TableProps) {
           <For each={visible()}>
             {(line) =>
               line.kind === "group" ? (
-                <text fg={theme.muted} height={1} flexShrink={0}>
+                <text fg={toneColor(line.tone)} height={1} flexShrink={0}>
                   {line.title}
                 </text>
               ) : line.kind === "detail" ? (

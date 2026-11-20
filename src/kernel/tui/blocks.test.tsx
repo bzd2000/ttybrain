@@ -4,11 +4,13 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
+import { bgAt } from "../../../tests/design"
 import { definePlugin, type PluginDef } from "../api"
 import { onCleanup, onMount } from "solid-js"
 import { Menu } from "./components/Menu"
 import { Panel } from "./components/Panel"
 import { displayWidth } from "./format"
+import { theme } from "./theme"
 import { Table, type TableRow } from "./components/Table"
 import { useRecordForms } from "./overlay"
 import { useKeys, useScreenKeys } from "./keys"
@@ -115,24 +117,26 @@ describe("TUI blocks", () => {
       parts: [defineTui({ plugin: "thing", activate: (ui) => ui.screen({ id: "t", title: "Table", slot: 2, component: TableScreen }) })],
     })
     tui.input.pressKey("2")
-    let frame = await tui.frame()
-    expect(lineWith(frame, "A-2")).toContain("› A-2")
-    expect(lineWith(frame, "A-1")).not.toContain("›")
+    // The selection is the row background (no marker).
+    let spans = await tui.spans()
+    expect(bgAt(spans, "A-2")).toBe(theme.selectedBg)
+    expect(bgAt(spans, "A-1")).toBe(theme.bg)
 
     setRows(["A-0", "A-1", "A-2", "A-3"].map(row))
-    frame = await tui.frame()
-    expect(lineWith(frame, "A-2")).toContain("› A-2")
-    expect(lineWith(frame, "A-1")).not.toContain("›")
+    spans = await tui.spans()
+    expect(bgAt(spans, "A-2")).toBe(theme.selectedBg)
+    expect(bgAt(spans, "A-1")).toBe(theme.bg)
 
     setRows(["A-0", "A-1", "A-3"].map(row))
-    frame = await tui.frame()
+    const frame = await tui.frame()
     expect(frame).not.toContain("A-2")
-    expect(lineWith(frame, "A-3")).toContain("› A-3")
+    spans = await tui.spans()
+    expect(bgAt(spans, "A-3")).toBe(theme.selectedBg)
 
     tui.input.pressKey("k")
-    frame = await tui.frame()
-    expect(lineWith(frame, "A-1")).toContain("› A-1")
-    expect(lineWith(frame, "A-3")).not.toContain("›")
+    spans = await tui.spans()
+    expect(bgAt(spans, "A-1")).toBe(theme.selectedBg)
+    expect(bgAt(spans, "A-3")).toBe(theme.bg)
   })
 
   test("Table truncates by display width", async () => {
@@ -197,14 +201,15 @@ describe("TUI blocks", () => {
     }
     tui = await renderTui(kernel, { width: 80, height: 24, parts: [screenPart(TableScreen)] })
     tui.input.pressKey("2")
-    expect(await tui.frame()).toContain("› T-1 ")
+    expect(bgAt(await tui.spans(), "T-1 ")).toBe(theme.selectedBg)
     for (let i = 0; i < 29; i++) tui.input.pressKey("j")
     let frame = await tui.frame()
-    expect(frame).toContain("› T-30 ")
+    expect(frame).toContain("T-30 ")
+    expect(bgAt(await tui.spans(), "T-30 ")).toBe(theme.selectedBg)
     expect(lineWith(frame, "Ref")).toContain("Title")
     for (let i = 0; i < 29; i++) tui.input.pressKey("k")
     frame = await tui.frame()
-    expect(frame).toContain("› T-1 ")
+    expect(bgAt(await tui.spans(), "T-1 ")).toBe(theme.selectedBg)
     expect(frame).not.toContain("T-30")
   })
 
@@ -229,12 +234,12 @@ describe("TUI blocks", () => {
     }
     tui = await renderTui(kernel, { parts: [screenPart(FilterScreen)] })
     tui.input.pressKey("2")
-    expect(lineWith(await tui.frame(), "A-1")).toContain("› A-1")
+    expect(bgAt(await tui.spans(), "A-1")).toBe(theme.selectedBg)
     await tui.input.typeText("jk")
     tui.input.pressEnter()
     const frame = await tui.frame()
     expect(frame).toContain("jk")
-    expect(lineWith(frame, "A-1")).toContain("› A-1")
+    expect(bgAt(await tui.spans(), "A-1")).toBe(theme.selectedBg)
     expect(opened).toEqual([])
   })
 
@@ -268,8 +273,9 @@ describe("TUI blocks", () => {
     expect(frame.indexOf("Open · 2")).toBeLessThan(frame.indexOf("T-1"))
     expect(frame.indexOf("T-2")).toBeLessThan(frame.indexOf("Done · 1"))
     expect(lineWith(frame, "Ref")).toContain("Size")
-    expect(lineWith(frame, "T-1")).toContain("› T-1   big 1")
-    expect(lineWith(frame, "T-3")).toContain("T-3   big 3")
+    expect(lineWith(frame, "T-1")).toMatch(/^T-1   big 1/)
+    expect(lineWith(frame, "T-3")).toMatch(/^T-3   big 3/)
+    expect(bgAt(await tui.spans(), "T-1")).toBe(theme.selectedBg)
   })
 
   test("Table group without a title has no header line", async () => {
@@ -328,15 +334,16 @@ describe("TUI blocks", () => {
     expect(lineWith(frame, "Done lately")).not.toContain("·")
     expect(at("✓ done by you")).toBe(at("T-2") + 1)
     expect(at("T-3")).toBe(at("T-2") + 2)
-    // aligned with the second column: marker, gap, the 5-wide ref column, gap
+    // aligned with the second column: the 5-wide ref column, gap
     expect(lineWith(frame, "✓ done by you").indexOf("✓")).toBe(lineWith(frame, "two").indexOf("two"))
+    expect(lineWith(frame, "two").indexOf("two")).toBe(6)
     tui.input.pressKey("j")
-    frame = await tui.frame()
-    expect(lineWith(frame, "T-2")).toContain("› T-2")
+    expect(bgAt(await tui.spans(), "T-2")).toBe(theme.selectedBg)
     tui.input.pressKey("j")
-    frame = await tui.frame()
-    expect(lineWith(frame, "T-3")).toContain("› T-3")
-    expect(lineWith(frame, "✓ done by you")).not.toContain("›")
+    const spans = await tui.spans()
+    expect(bgAt(spans, "T-3")).toBe(theme.selectedBg)
+    // The detail line is never selected.
+    expect(bgAt(spans, "✓ done by you")).toBe(theme.bg)
   })
 
   test("useRecordForms lists a record type's registered forms", async () => {
@@ -417,10 +424,11 @@ describe("TUI blocks", () => {
     let frame = await tui.frame()
     // The panel's bottom border shows above the status bar: the panel did not grow past the screen.
     const all = frame.trimEnd().split("\n")
-    expect(all.at(-2)).toMatch(/^└─+┘\s*$/)
+    expect(all.at(-2)).toMatch(/^╰─+╯\s*$/)
     for (let i = 0; i < 39; i++) tui.input.pressKey("j")
     frame = await tui.frame()
-    expect(frame).toContain("› T-40 ")
+    expect(frame).toContain("T-40 ")
+    expect(bgAt(await tui.spans(), "T-40 ")).toBe(theme.selectedBg)
     expect(frame).not.toContain("T-1 ")
   })
 

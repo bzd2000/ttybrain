@@ -6,6 +6,7 @@ import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
 import { theme } from "../../../kernel/tui/api"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { isSelected } from "../../../../tests/design"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -137,9 +138,10 @@ describe("person record view", () => {
     expect(t.nav.stack().length).toBe(3) // Overview, People, @bobby: the old route was replaced, not stacked on
 
     t.input.pressEscape()
-    frame = await until(t, (f) => t.nav.route().kind === "screen" && lines(f).some((l) => l.includes("Bob Maes") && l.includes("›") && !l.includes("┌")))
+    frame = await until(t, (f) => t.nav.route().kind === "screen" && f.includes("Bob Maes"))
     expect(t.nav.route()).toEqual({ kind: "screen", screen: "people", params: { selected: "@bobby" } })
-    expect(lines(frame).find((l) => l.includes("Bob Maes") && !l.includes("┌"))).toContain("›")
+    for (let i = 0; i < 80 && !isSelected(await t.spans(), "Bob Maes"); i++) await sleep(25)
+    expect(isSelected(await t.spans(), "Bob Maes")).toBe(true)
   })
 
   test("notes tab lists newest first; n adds; Del deletes after confirm", async () => {
@@ -170,7 +172,7 @@ describe("person record view", () => {
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, (f) => f.includes("Fresh one") && !f.includes("New note"))
     expect(indexOf(frame, "N-5")).toBeLessThan(indexOf(frame, "N-3"))
-    expect(lineWith(frame, "N-5")).toContain("›") // the new note is selected
+    expect(isSelected(await t.spans(), "N-5")).toBe(true) // the new note is selected
     expect(lineWith(frame, "N-5")).toContain("13 Nov")
 
     t.input.pressKey("DELETE")
@@ -238,13 +240,13 @@ describe("person record view", () => {
     expect(lines(frame.trimEnd()).at(-1)).toContain("n add  e edit  x achieved/open  d drop")
 
     const status = async () => (await rows("goal", ["status"])).map((r) => r.status)
-    expect(lineWith(frame, "G-2")).toContain("›")
+    expect(isSelected(await t.spans(), "G-2")).toBe(true)
     t.input.pressKey("x")
     frame = await until(t, (f) => lineWith(f, "G-2").includes("achieved"))
     expect(await status()).toEqual(["open", "achieved", "open"])
     // Achieved goals come after the open ones; the selection stays on G-2.
     expect(indexOf(frame, "G-2")).toBeGreaterThan(indexOf(frame, "G-1"))
-    expect(lineWith(frame, "G-2")).toContain("›")
+    expect(isSelected(await t.spans(), "G-2")).toBe(true)
     expect(tabLine(frame)).toContain("Goals 2")
     t.input.pressKey("x")
     frame = await until(t, (f) => lineWith(f, "G-2").includes("open"))
@@ -257,7 +259,7 @@ describe("person record view", () => {
     t.input.pressKey("k")
     t.input.pressKey("k")
     frame = await t.frame()
-    expect(lineWith(frame, "G-3")).toContain("›")
+    expect(isSelected(await t.spans(), "G-3")).toBe(true)
     t.input.pressKey("x")
     frame = await until(t, (f) => lineWith(f, "G-3").includes("achieved"))
     expect(indexOf(frame, "G-3")).toBeLessThan(indexOf(frame, "G-2"))

@@ -1,12 +1,13 @@
 // The Meetings screen (slot 5): the Upcoming and Past groups, the past-dated planned meeting in red, and the keys
 // that add, edit, close and cancel meetings, against the built-in plugins seeded through write ops.
-import { rgbToHex } from "@opentui/core"
+import { rgbToHex, type CapturedFrame } from "@opentui/core"
 import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
 import { theme } from "../../../kernel/tui/api"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { isSelected } from "../../../../tests/design"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -30,11 +31,14 @@ const indexOf = (frame: string, s: string) => lines(frame).findIndex((l) => l.in
 const statusLine = (frame: string) => lines(frame.trimEnd()).at(-1)!
 const spansOf = async (t: RenderedTui, s: string) => (await t.spans()).lines.find((l) => l.spans.map((x) => x.text).join("").includes(s))!.spans
 
-async function until(t: RenderedTui, ok: (f: string) => boolean): Promise<string> {
+// Waits for `ok` on the frame and its spans (the selection is a row background: isSelected(spans, text)).
+async function until(t: RenderedTui, ok: (f: string, spans: CapturedFrame) => boolean): Promise<string> {
   let frame = await t.frame()
-  for (let i = 0; i < 80 && !ok(frame); i++) {
+  let spans = await t.spans()
+  for (let i = 0; i < 80 && !ok(frame, spans); i++) {
     await sleep(25)
     frame = await t.frame()
+    spans = await t.spans()
   }
   return frame
 }
@@ -85,8 +89,8 @@ function spy(): Array<{ name: string; input: unknown }> {
 }
 
 const select = async (t: RenderedTui, title: string) => {
-  for (let i = 0; i < 10 && !lineWith(await t.frame(), title).includes("›"); i++) t.input.pressKey("j")
-  expect(lineWith(await t.frame(), title)).toContain("›")
+  for (let i = 0; i < 10 && !isSelected(await t.spans(), title); i++) t.input.pressKey("j")
+  expect(isSelected(await t.spans(), title)).toBe(true)
 }
 
 describe("Meetings screen", () => {
@@ -136,7 +140,7 @@ describe("Meetings screen", () => {
     t.input.pressTab() // projects
     await t.input.typeText("#CRM,ERP")
     t.input.pressKey("s", { ctrl: true })
-    frame = await until(t, (f) => !f.includes("New meeting") && lineWith(f, "SteerCo Q1").includes("›"))
+    frame = await until(t, (f, s) => !f.includes("New meeting") && isSelected(s, "SteerCo Q1"))
     expect(lineWith(frame, "SteerCo Q1")).toMatch(/M-7\s+Fri 13 Nov\s+SteerCo Q1\s+steering\s+planned\s+2\s+CRM ERP/)
     expect(frame).toContain("Upcoming · 4")
     expect(statusLine(frame)).toContain("added M-7")
@@ -164,7 +168,7 @@ describe("Meetings screen", () => {
     for (let i = 0; i < 4; i++) t.input.pressTab() // title → attendees
     await t.input.typeText(" @tom")
     t.input.pressKey("s", { ctrl: true })
-    frame = await until(t, (f) => !f.includes("Edit M-1") && lineWith(f, "SteerCo Q4").includes("›"))
+    frame = await until(t, (f, s) => !f.includes("Edit M-1") && isSelected(s, "SteerCo Q4"))
     expect(lineWith(frame, "SteerCo Q4")).toMatch(/planned\s+3\s+CRM/)
     expect(statusLine(frame)).toContain("saved M-1")
     expect(calls).toEqual([{ name: "setAttendees", input: { meeting: "M-1", people: ["luc", "marie", "tom"] } }])
@@ -224,9 +228,9 @@ describe("Meetings screen", () => {
     // A meeting sorting above it: it would move the selection if it had been reset.
     await inCtx(() => write().addMeeting!({ title: "Kick-off", date: "2026-11-11" }))
     t.input.pressEscape()
-    frame = await until(t, (f) => !f.includes("› M-2 Board December") && f.includes("Kick-off") && lineWith(f, "Board December").includes("›"))
+    frame = await until(t, (f, s) => !f.includes("› M-2 Board December") && f.includes("Kick-off") && isSelected(s, "Board December"))
     expect(frame).not.toContain("› M-2 Board December")
-    expect(lineWith(frame, "Board December")).toContain("›")
+    expect(isSelected(await t.spans(), "Board December")).toBe(true)
   })
 
   test("the Projects column shows a 16-character code whole at 80x24", async () => {

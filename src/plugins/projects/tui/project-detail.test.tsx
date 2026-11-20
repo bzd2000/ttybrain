@@ -7,6 +7,7 @@ import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { isSelected } from "../../../../tests/design"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -283,7 +284,7 @@ describe("project detail", () => {
       list = await t.frame()
     }
     expect(t.nav.route()).toEqual({ kind: "screen", screen: "projects", params: { selected: "#CRM2027" } })
-    expect(lineWith(list, " CRM2027 ")).toContain("›")
+    expect(isSelected(await t.spans(), " CRM2027 ")).toBe(true)
   })
 
   test("people tab adds and removes involvement", async () => {
@@ -338,12 +339,12 @@ describe("project detail", () => {
     t.input.pressEscape()
     let frame = await until(t, "Projects · 2 active")
     expect(frame.split("\n")[0]).toContain("ttybrain · 2 Projects")
-    expect(lineWith(frame, " AAA ")).not.toContain("›")
-    for (let i = 0; i < 40 && !lineWith(frame, " CRM ").includes("›"); i++) {
+    expect(isSelected(await t.spans(), " AAA ")).toBe(false)
+    for (let i = 0; i < 40 && !isSelected(await t.spans(), " CRM "); i++) {
       await sleep(25)
       frame = await t.frame()
     }
-    expect(lineWith(frame, " CRM ")).toContain("›")
+    expect(isSelected(await t.spans(), " CRM ")).toBe(true)
     expect(lineWith(frame, " CRM ")).toContain("Design approved")
   })
 })

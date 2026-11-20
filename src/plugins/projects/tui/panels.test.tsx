@@ -5,6 +5,7 @@ import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { isSelected } from "../../../../tests/design"
 import { theme } from "../../../kernel/tui/theme"
 import { rgbToHex } from "@opentui/core"
 
@@ -161,7 +162,8 @@ describe("overview panels", () => {
       "Due this week · 0",
       "Projects needing attention · 6",
       "High risks & issues · 6",
-      "Late milestones · next 14 days · 0",
+      // Too wide for the border with its padding at 80 columns: cut before the count, never left out.
+      "╭─ Late milestones · next 14 d… · 0 ─╮",
       "Stakeholders to contact · 0",
       "Inbox · 6",
     ]
@@ -178,8 +180,7 @@ describe("overview panels", () => {
       for (const t of titles) expect(frame).toContain(t)
     }
     // the 6th Tab focuses Inbox (last in priority order): its first row is selected and on screen
-    expect(frame).toContain("› ")
-    expect(lineWith(frame, "›")).toContain("item 0")
+    expect(isSelected(await tui.spans(), "item 0")).toBe(true)
   })
 
   test("Enter on overdue row opens the action form", async () => {

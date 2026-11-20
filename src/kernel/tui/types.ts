@@ -4,7 +4,7 @@ import type { Component } from "solid-js"
 import type { Origin } from "../context"
 import type { PluginRuntime } from "../plugin"
 
-export type Tone = "red" | "amber" | "green" | "muted" | "accent" | undefined
+export type Tone = "red" | "amber" | "green" | "muted" | "accent" | "cyan" | "magenta" | undefined
 export type Cell = { text: string; tone?: Tone }
 export type Route =
   | { kind: "screen"; screen: string; params?: Record<string, string> }
@@ -22,7 +22,8 @@ export type RecordTabDef = {
   component: Component<{ recordRef: string }>
 }
 export type OverviewRow = { ref: string; cells: Cell[] }
-export type OverviewPanelDef = { id: string; title: string; priority: number; empty: string; footer?: string; load(): Promise<OverviewRow[]> }
+// `count: false` leaves the row count out of the panel title (default: `Title · n`).
+export type OverviewPanelDef = { id: string; title: string; priority: number; empty: string; footer?: string; count?: boolean; load(): Promise<OverviewRow[]> }
 export type ListColumnDef = { id: string; title: string; width: number; value(ref: string): Promise<string | null> }
 export type RecordFormProps = { recordRef?: string; prefill?: Record<string, string>; origin?: Origin; close(savedRef?: string): void }
 export type RecordFormDef = { id: string; label: string; component: Component<RecordFormProps> }

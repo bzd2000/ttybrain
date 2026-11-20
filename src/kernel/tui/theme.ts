@@ -13,6 +13,10 @@ export const theme = {
   red: "#f7768e",
   amber: "#e0af68",
   green: "#9ece6a",
+  // Project codes and #tags.
+  cyan: "#7dcfff",
+  // People names and @tags.
+  magenta: "#bb9af7",
 } as const
 
 // The colour of a semantic tone; no tone is the normal text colour.

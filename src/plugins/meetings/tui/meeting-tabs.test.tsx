@@ -2,7 +2,7 @@
 // Task 6 seed: M-1 SteerCo Q3 held on 28 Oct covering #CRM, and M-2 Steering committee Q4 on 4 Dec).
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
-import { rgbToHex } from "@opentui/core"
+import { rgbToHex, type CapturedFrame } from "@opentui/core"
 import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
@@ -10,6 +10,7 @@ import { runWithContext } from "../../../kernel/context"
 import { theme } from "../../../kernel/tui/api"
 import { clearMessages } from "../../../kernel/tui/messages"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { isSelected, selectedText } from "../../../../tests/design"
 import { attendeeLines } from "./agenda-list"
 import { exportFileName } from "./export-tab"
 import { loggedRows } from "./notes-tab"
@@ -36,11 +37,14 @@ const lines = (frame: string) => frame.split("\n")
 const lineWith = (frame: string, s: string) => lines(frame).find((l) => l.includes(s)) ?? ""
 const statusLine = (frame: string) => lines(frame.trimEnd()).at(-1)!
 
-async function until(t: RenderedTui, ok: (f: string) => boolean): Promise<string> {
+// Waits for `ok` on the frame and its spans (the selection is a row background: isSelected(spans, text)).
+async function until(t: RenderedTui, ok: (f: string, spans: CapturedFrame) => boolean): Promise<string> {
   let frame = await t.frame()
-  for (let i = 0; i < 80 && !ok(frame); i++) {
+  let spans = await t.spans()
+  for (let i = 0; i < 80 && !ok(frame, spans); i++) {
     await sleep(25)
     frame = await t.frame()
+    spans = await t.spans()
   }
   return frame
 }
@@ -85,8 +89,8 @@ async function open(ref: string, tabs = 0, opts: { width?: number; height?: numb
 
 // Moves the list selection onto the line holding `text`.
 const select = async (t: RenderedTui, text: string) => {
-  for (let i = 0; i < 10 && !lineWith(await t.frame(), text).includes("›"); i++) t.input.pressKey("j")
-  expect(lineWith(await t.frame(), text)).toContain("›")
+  for (let i = 0; i < 10 && !isSelected(await t.spans(), text); i++) t.input.pressKey("j")
+  expect(isSelected(await t.spans(), text)).toBe(true)
 }
 
 describe("meeting tabs", () => {
@@ -106,7 +110,7 @@ describe("meeting tabs", () => {
     await until(t, (f) => f.includes("New agenda item · M-2"))
     await t.input.typeText("Budget")
     t.input.pressKey("s", { ctrl: true })
-    frame = await until(t, (f) => !f.includes("New agenda item") && lineWith(f, "Budget").includes("›"))
+    frame = await until(t, (f, s) => !f.includes("New agenda item") && isSelected(s, "Budget"))
     expect((await agenda(2)).map((r) => r.text)).toEqual(["Minutes & open actions", "CRM status", "AOB", "Budget"])
 
     // e edits the selected item.
@@ -119,13 +123,13 @@ describe("meeting tabs", () => {
 
     // K moves it up twice, J down once; the selection follows it.
     t.input.pressKey("K")
-    frame = await until(t, (f) => lineWith(f, "Budget 2027").match(/›\s+3\s/) !== null)
+    frame = await until(t, (_, s) => selectedText(s).some((l) => /^3\s+Budget 2027/.test(l)))
     expect((await agenda(2)).map((r) => r.text)).toEqual(["Minutes & open actions", "CRM status", "Budget 2027", "AOB"])
     t.input.pressKey("K")
-    frame = await until(t, (f) => lineWith(f, "Budget 2027").match(/›\s+2\s/) !== null)
+    frame = await until(t, (_, s) => selectedText(s).some((l) => /^2\s+Budget 2027/.test(l)))
     expect((await agenda(2)).map((r) => r.text)).toEqual(["Minutes & open actions", "Budget 2027", "CRM status", "AOB"])
     t.input.pressKey("J")
-    frame = await until(t, (f) => lineWith(f, "Budget 2027").match(/›\s+3\s/) !== null)
+    frame = await until(t, (_, s) => selectedText(s).some((l) => /^3\s+Budget 2027/.test(l)))
     expect(await agenda(2)).toEqual([
       { position: 1, text: "Minutes & open actions" },
       { position: 2, text: "CRM status" },
@@ -183,7 +187,7 @@ describe("meeting tabs", () => {
     const t = await open("M-2", 1, { extra: () => write().editAgendaItem!({ meeting: "M-2", item: 3, ask: "Anything else?" }) })
     let frame = await until(t, (f) => f.includes("No project on this item."))
     // Item 1 is selected first: no project, no ask.
-    expect(lineWith(frame, "1. Minutes")).toContain("›")
+    expect(isSelected(await t.spans(), "1. Minutes")).toBe(true)
     expect(frame).toContain("Ask for this meeting")
     expect(frame).toContain("—")
     expect(frame).not.toContain("● amber")
@@ -384,7 +388,7 @@ describe("meeting tabs", () => {
     // The logged panel closes: its bottom border is the line under `+19 more`.
     const rows = lines(frame)
     const more = rows.findIndex((l) => l.includes("+19 more"))
-    expect(rows[more + 1]).toMatch(/└─+┘/)
+    expect(rows[more + 1]).toMatch(/╰─+╯/)
   })
 
   test("logged rows: at most 6, fewer when the column is short, +n more for the rest", () => {

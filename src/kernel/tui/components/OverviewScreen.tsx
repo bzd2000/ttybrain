@@ -1,7 +1,9 @@
 // The Overview screen (slot 1): the plugins' panels in two columns balanced by height (overviewLayout.ts), Tab
 // moving through them in priority order. The screen loads every panel through useQuery, so it knows each one's
-// row count and can size them to fit the screen: each panel shows its count in the title, as many rows as fit
-// (at most MAX_ROWS) plus `+N more`, or its `empty` text, or `⚠ <error>` when its first load failed (spec §9).
+// row count and can size them to fit the screen: each panel shows its count in the title (unless its `count` is
+// false), as many rows as fit (at most MAX_ROWS) plus `+N more`, or its `empty` text, or `⚠ <error>` when its
+// first load failed (spec §9). A panel's `footer` is a muted line after its rows, inside the panel (as the
+// designs draw "Stakeholders to contact"), not on the border like a Panel footer.
 // ↑↓ move within the focused panel and Enter opens the selected row's ref.
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, For, Show } from "solid-js"
@@ -97,7 +99,7 @@ function OverviewPanel(props: { def: PanelEntry; query: Query<OverviewRow[]>; pl
   const more = () => all().length - props.place.rows
   return (
     <box height={props.place.height} flexShrink={0} flexDirection="column" overflow="hidden">
-      <Panel title={props.def.title} count={props.query.data()?.length} focused={props.focused} footer={props.def.footer} grow>
+      <Panel title={props.def.title} count={props.def.count === false ? undefined : props.query.data()?.length} focused={props.focused} grow>
         <Show when={props.query.error() !== undefined && props.query.data() === undefined}>
           <text fg={theme.red} flexShrink={0}>{`⚠ ${errorText(props.query.error())}`}</text>
         </Show>
@@ -107,6 +109,7 @@ function OverviewPanel(props: { def: PanelEntry; query: Query<OverviewRow[]>; pl
             <text fg={theme.muted} flexShrink={0}>{`+${more()} more`}</text>
           </Show>
         </Show>
+        <Show when={props.def.footer}>{(f: () => string) => <text fg={theme.muted} flexShrink={0}>{f()}</text>}</Show>
       </Panel>
     </box>
   )

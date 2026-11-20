@@ -1,4 +1,4 @@
-// A row of tabs (`Title count`), the active one highlighted; ←→ switch while focused. When the row is wider than
+// A row of tabs (`Title count`), the active one highlighted (selected background, its whole label accent); ←→ switch while focused. When the row is wider than
 // `width` (default: the terminal's, less the record view's padding), zero counts go first (the active tab keeps
 // its count); if it still does not fit, only a window of tabs around the active one shows, with `‹` / `›` where
 // tabs are hidden; a single tab too wide for the row is shortened with `…`. Titles are never cut mid-word otherwise.
@@ -73,11 +73,13 @@ export function Tabs(props: { tabs: TabItem[]; active: string; onChange(id: stri
       <For each={fit().items}>
         {(x) => {
           const on = () => props.tabs[x.index]?.id === props.active
+          // The whole label (title and count) takes one colour.
+          const fg = () => (on() ? (keys.active() && props.focused !== false ? theme.accent : theme.text) : theme.muted)
           return (
             <box flexDirection="row" flexShrink={0} backgroundColor={on() ? theme.selectedBg : theme.bg} paddingLeft={1} paddingRight={1}>
-              <text fg={on() ? (keys.active() && props.focused !== false ? theme.accent : theme.text) : theme.muted}>{x.title}</text>
+              <text fg={fg()}>{x.title}</text>
               <Show when={x.count !== undefined}>
-                <text fg={theme.muted}>{` ${x.count}`}</text>
+                <text fg={fg()}>{` ${x.count}`}</text>
               </Show>
             </box>
           )

@@ -8,6 +8,7 @@ import { runCli } from "../../../kernel/cli/dispatch"
 import { runWithContext } from "../../../kernel/context"
 import { bootKernel, type Kernel } from "../../../kernel/host"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { isSelected } from "../../../../tests/design"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -83,7 +84,7 @@ describe("actions screen", () => {
     expect(overdue).toContain("9 Nov")
     expect(lineWith(frame, "Prepare budget")).toContain("Anna")
     expect(lineWith(frame, "Draft scope")).toContain("16 Nov")
-    expect(lineWith(frame, "Reply to vendor")).toContain("›") // the first row is selected
+    expect(isSelected(await t.spans(), "Reply to vendor")).toBe(true) // the first row is selected
   })
 
   test("a new day reaches a long-running TUI: header date and groups update without a remount", async () => {
@@ -143,13 +144,13 @@ describe("actions screen", () => {
     expect(frame).not.toContain("Overdue")
     expect(frame).toContain("Actions · 5 open")
     expect((await rows<any>(["status", "done_date"]))[0]).toEqual({ status: "done", done_date: "2026-11-13" })
-    expect(lineWith(frame, "›")).toContain("Prepare budget")
+    expect(isSelected(await t.spans(), "Prepare budget")).toBe(true)
   })
 
   test("d changes due", async () => {
     const t = await open()
     for (let i = 0; i < 5; i++) t.input.pressArrow("down")
-    expect(lineWith(await t.frame(), "›")).toContain("Someday maybe")
+    expect(isSelected(await t.spans(), "Someday maybe")).toBe(true)
     t.input.pressKey("d")
     expect(await t.frame()).toContain("Due")
     await type(t, "+1w")
@@ -163,7 +164,7 @@ describe("actions screen", () => {
     const t = await open()
     t.input.pressArrow("down") // A-2, due 2026-11-13 (This week)
     t.input.pressArrow("down") // A-3, due 2026-11-15
-    expect(lineWith(await t.frame(), "›")).toContain("Review plan")
+    expect(isSelected(await t.spans(), "Review plan")).toBe(true)
     t.input.pressKey("d")
     const form = await t.frame()
     expect(form).toContain("now: Sun 15 Nov 2026")
@@ -194,7 +195,7 @@ describe("actions screen", () => {
     t.input.pressKey("s", { ctrl: true })
     const frame = await untilThat(t, (f) => f.includes("Fresh one"))
     expect(frame).toContain("No date · 2")
-    expect(lineWith(frame, "›")).toContain("Fresh one")
+    expect(isSelected(await t.spans(), "Fresh one")).toBe(true)
   })
 
   test("Enter opens the action's form", async () => {
@@ -207,14 +208,14 @@ describe("actions screen", () => {
     const t = await open()
     t.input.pressArrow("down")
     t.input.pressArrow("down")
-    expect(lineWith(await t.frame(), "›")).toContain("Review plan")
+    expect(isSelected(await t.spans(), "Review plan")).toBe(true)
     other = await bootKernel({ env: { TTYBRAIN_HOME: kernel!.home, TTYBRAIN_TEST: "1" }, plugins: builtinPlugins, clock: fixedClock("2026-11-13") })
     let out = ""
     const io = { out: (s: string) => void (out += s), err: (s: string) => void (out += s), stdin: async () => "" }
     expect(await runCli(["action", "done", "A-3"], other, io)).toBe(0)
     const frame = await untilThat(t, (f) => !f.includes("Review plan"))
     expect(frame).toContain("This week · 1")
-    expect(lineWith(frame, "›")).toContain("Draft scope") // the row now at that index
+    expect(isSelected(await t.spans(), "Draft scope")).toBe(true) // the row now at that index
   })
 
   test("for/from shows inbox origin", async () => {
