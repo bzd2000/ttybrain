@@ -1,0 +1,516 @@
+<title>ttybrain Meeting Screens</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a single reading column of annotated screens; each mock is a fixed-width terminal in its own scroller. */
+:root {
+  --bg: #f5f6f9;
+  --surface: #ffffff;
+  --fg: #1d2130;
+  --muted: #5c6378;
+  --line: #dde0ea;
+  --accent: #3d5bd9;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0c0e13; --surface: #151821; --fg: #dfe3ef; --muted: #959cb4; --line: #262b38; --accent: #8aa6ff; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0c0e13; --surface: #151821; --fg: #dfe3ef; --muted: #959cb4; --line: #262b38; --accent: #8aa6ff; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.page { max-width: 1180px; margin: 0 auto; padding-block: 40px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 56px; }
+header.intro { display: flex; flex-direction: column; gap: 12px; max-width: 68ch; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0; font-weight: 600; text-wrap: balance; }
+h1 code { font-family: var(--font-mono); font-weight: 600; color: var(--accent); }
+h2 { font-size: 20px; margin: 0; font-weight: 600; text-wrap: balance; }
+p { margin: 0; }
+.lede { color: var(--muted); }
+.eyebrow { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+nav.jump { display: flex; flex-wrap: wrap; gap: 8px; }
+nav.jump a { font-family: var(--font-mono); font-size: 13px; color: var(--fg); text-decoration: none; border: 1px solid var(--line); background: var(--surface); padding: 4px 10px; border-radius: 4px; }
+nav.jump a:hover, nav.jump a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+section.screen { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 24px; }
+.screen-head { display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+kbd { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface); color: var(--fg); }
+.scroller { overflow-x: auto; padding-bottom: 6px; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 28px; font-size: 14px; color: var(--muted); }
+.notes b { color: var(--fg); font-weight: 600; }
+.qs { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; max-width: 80ch; }
+.qs ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+
+/* ---------- terminal mock (always dark: it depicts the app's own theme from src/theme.ts) ---------- */
+.term {
+  --tb: #11131a; --tp: #181b24; --tbo: #2e3442; --tbf: #7aa2f7; --tt: #c0caf5; --tm: #737aa2; --ta: #7aa2f7; --tsel: #283457;
+  --red: #f7768e; --amb: #e0af68; --grn: #9ece6a; --cy: #7dcfff; --mag: #bb9af7;
+  width: 118ch; background: var(--tb); color: var(--tt); font: 13px/1.55 var(--font-mono);
+  border-radius: 10px; overflow: hidden; border: 1px solid #000; position: relative;
+  box-shadow: 0 12px 32px -18px rgba(10, 14, 30, .55); font-variant-numeric: tabular-nums;
+}
+.chrome { display: flex; gap: 6px; padding: 8px 12px; background: #0b0d12; }
+.chrome i { width: 10px; height: 10px; border-radius: 50%; background: #2a2f3c; display: block; }
+.bar { display: flex; justify-content: space-between; gap: 2ch; background: var(--tp); padding: 0 1ch; white-space: nowrap; }
+.bar.status { justify-content: flex-start; gap: 3ch; }
+.cols { display: flex; padding: 0 .5ch .6em; min-height: 34em; }
+.dd { background: var(--tsel); color: var(--ta); padding: 0 1ch; }
+.menu { position: absolute; top: calc(26px + 1.75em); left: 4ch; width: 26ch; background: var(--tb); box-shadow: 0 10px 24px -8px rgba(0, 0, 0, .8); border-radius: 6px; }
+.menu .panel { margin: 0; padding-top: .45em; background: var(--tb); }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; }
+.panel { border: 1px solid var(--tbo); border-radius: 6px; position: relative; padding: .8em 1ch .45em; margin: .75em .5ch 0; }
+.panel.f { border-color: var(--tbf); }
+.panel > .t { position: absolute; top: -.82em; left: 1ch; background: var(--tb); padding: 0 .5ch; color: var(--tm); line-height: 1.5; }
+.panel.f > .t { color: var(--ta); }
+.panel > .bt { position: absolute; bottom: -.82em; right: 1ch; background: var(--tb); padding: 0 .5ch; color: var(--tm); line-height: 1.5; }
+.grow { flex: 1; }
+.row { display: grid; grid-template-columns: var(--c, 1fr); column-gap: 2ch; white-space: nowrap; padding: 0 .5ch; }
+.row > * { overflow: hidden; text-overflow: ellipsis; }
+.row.h { color: var(--tm); }
+.row.sel { background: var(--tsel); }
+.nav .row { --c: 2ch 1fr auto; }
+.nav .row.sel { color: var(--ta); }
+.m { color: var(--tm); } .a { color: var(--ta); } .r { color: var(--red); } .y { color: var(--amb); } .g { color: var(--grn); } .c { color: var(--cy); } .p { color: var(--mag); }
+.b { font-weight: 600; }
+.tabs { display: flex; gap: 1ch; padding: .1em .5ch .3em; white-space: nowrap; }
+.tabs span { padding: 0 1ch; color: var(--tm); }
+.tabs span.on { background: var(--tsel); color: var(--ta); }
+.sp { height: .6em; }
+.kv { display: grid; grid-template-columns: 14ch 1fr; column-gap: 2ch; padding: 0 .5ch; }
+.kv > :first-child { color: var(--tm); }
+.wrapline { white-space: normal; padding: 0 .5ch; }
+.tag-p { color: var(--cy); } .tag-u { color: var(--mag); }
+.dim > .chrome ~ :not(.overlay) { filter: brightness(.45) saturate(.6); }
+.overlay { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); width: 76ch; background: var(--tb); filter: none; }
+.overlay .panel { margin: 0; background: var(--tb); box-shadow: 0 0 0 1ch var(--tb); }
+.input { border: 1px solid var(--tbf); border-radius: 4px; padding: .2em 1ch; margin: .2em .5ch; white-space: normal; }
+.caret { background: var(--tt); color: var(--tb); }
+.ac { margin: 0 .5ch; border: 1px solid var(--tbo); border-radius: 4px; width: 46ch; }
+
+
+
+
+</style>
+
+<style>
+.chk { color: var(--tm); }
+.row.done > * { color: var(--tm); }
+.row.done > span:nth-child(2) { text-decoration: line-through; }
+</style>
+
+<div class="page">
+
+<header class="intro">
+  <span class="eyebrow">Design · meetings, talk-lists and actions · example data</span>
+  <h1>Meeting screens for <code>ttybrain</code></h1>
+  <p class="lede">Proposed screens for the reworked meetings: every meeting belongs to a person or a project (the board is a project too), meetings can recur, each person and project keeps a talk-list of things to discuss, and actions become their own plugin that links to anything. Same frame and style as the first screen designs. All names, projects and dates are invented; "today" is Friday 20 Nov 2026.</p>
+  <nav class="jump" aria-label="Screens">
+    <a href="#home">1 Attention</a><a href="#meetings">5 Meetings</a><a href="#talk">Person · Talk</a><a href="#oneonone">1:1 in progress</a><a href="#project">Project · Meetings</a><a href="#board">Board</a><a href="#series">New series</a><a href="#capture">Quick capture</a><a href="#actions">4 Actions</a><a href="#questions">Decided</a>
+  </nav>
+</header>
+
+<!-- ============ 1 ATTENTION ============ -->
+<section class="screen" id="home">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 1 · home</span>
+    <h2>Attention, with upcoming meetings</h2>
+    <p class="lede">A new panel on top: the next scheduled meetings, with what's waiting for each one. For the selected meeting it lists <b>your</b> open actions linked to that person or project, so you deal with them before you walk in.</p>
+    <div class="keys"><span><kbd>Tab</kbd> next panel</span><span><kbd>Enter</kbd> open the meeting</span><span><kbd>x</kbd> mark action done</span><span><kbd>t</kbd> add to its talk-list</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">ttybrain</span> <span class="m">·</span> <span class="dd">1 Attention ▾</span></span><span><span class="y">● 2 new in inbox</span>  <span class="m">Fri 20 Nov 2026</span></span></div>
+    <div class="cols">
+      <div class="main">
+        <div class="grid2" style="grid-template-columns: 1.35fr 1fr">
+          <div class="panel f"><span class="t">Upcoming meetings · next 7 days</span><span class="bt">r recurring</span>
+            <div class="row h" style="--c: 10ch 1fr 7ch 8ch 9ch"><span>Date</span><span>Meeting</span><span>About</span><span>To talk</span><span>Your act.</span></div>
+            <div class="row sel" style="--c: 10ch 1fr 7ch 8ch 9ch"><span>Mon 23</span><span>1:1 Anna <span class="m">r</span></span><span>Anna</span><span>4</span><span class="y">2 · 1 late</span></div>
+            <div class="row" style="--c: 10ch 1fr 7ch 8ch 9ch"><span>Tue 24</span><span>CRM steering <span class="m">r</span></span><span class="c">CRM</span><span>3</span><span>1</span></div>
+            <div class="row" style="--c: 10ch 1fr 7ch 8ch 9ch"><span>Wed 25</span><span>1:1 Bob <span class="m">r</span></span><span>Bob</span><span>1</span><span class="m">—</span></div>
+            <div class="row" style="--c: 10ch 1fr 7ch 8ch 9ch"><span>Thu 26</span><span>ERP vendor call</span><span class="c">ERP</span><span>2</span><span class="m">—</span></div>
+            <div class="row" style="--c: 10ch 1fr 7ch 8ch 9ch"><span>Fri 27</span><span>Board <span class="m">r</span></span><span class="c">BOARD</span><span>5 items</span><span>1</span></div>
+            <div class="sp"></div>
+            <div class="row h" style="--c: 1fr"><span>Before 1:1 Anna · your actions</span></div>
+            <div class="row" style="--c: 5ch 1fr 7ch"><span class="m">A-31</span><span>Review her test strategy draft</span><span class="r">-4d</span></div>
+            <div class="row" style="--c: 5ch 1fr 7ch"><span class="m">A-44</span><span>Ask HR about the AWS training budget</span><span>Mon</span></div>
+          </div>
+          <div style="display:flex; flex-direction:column">
+            <div class="panel"><span class="t">Overdue actions · 3</span>
+              <div class="row" style="--c: 5ch 1fr 7ch 6ch"><span class="m">A-27</span><span>Send revised budget to Peter</span><span class="c">CRM</span><span class="r">-6d</span></div>
+              <div class="row" style="--c: 5ch 1fr 7ch 6ch"><span class="m">A-31</span><span>Review test strategy draft</span><span>Anna</span><span class="r">-4d</span></div>
+              <div class="row" style="--c: 5ch 1fr 7ch 6ch"><span class="m">A-19</span><span>Book vendor demo slot</span><span class="c">ERP</span><span class="r">-3d</span></div>
+            </div>
+            <div class="panel"><span class="t">Projects needing attention</span>
+              <div class="row" style="--c: 2ch 6ch 1fr"><span class="r">●</span><span class="c">ERP</span><span>Vendor B contract not signed</span></div>
+              <div class="row" style="--c: 2ch 6ch 1fr"><span class="y">●</span><span class="c">CRM</span><span>Design slipping 2 weeks</span></div>
+            </div>
+            <div class="panel"><span class="t">Stakeholders to contact</span>
+              <div class="row" style="--c: 15ch 1fr 5ch"><span class="p">Marie Dubois</span><span class="m">CRM, HRP</span><span class="y">49d</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">tab</span> <span class="m">panel</span></span><span><span class="a">enter</span> <span class="m">open</span></span><span><span class="a">x</span> <span class="m">done</span></span><span><span class="a">t</span> <span class="m">to talk</span></span><span><span class="a">i</span> <span class="m">capture</span></span><span><span class="a">g</span> <span class="m">or</span> <span class="a">1-6</span> <span class="m">screens</span></span><span><span class="a">?</span> <span class="m">help</span></span></div>
+  </div></div>
+  <div class="notes">
+    <p><b>"Your act."</b> counts your open actions linked to the meeting's person or project, or to an earlier meeting in the series. Amber when one is late.</p>
+    <p><b>"To talk"</b> is the number of open items on that person's or project's talk-list. For the board it's the agenda length.</p>
+  </div>
+</section>
+
+<!-- ============ 5 MEETINGS ============ -->
+<section class="screen" id="meetings">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 5 · overview</span>
+    <h2>Meetings</h2>
+    <p class="lede">Still screen 5, now an overview across people and projects. Upcoming meetings by week on the left; the recurring series on the right with their rhythm and next date. The meetings themselves live on the person or project.</p>
+    <div class="keys"><span><kbd>Tab</kbd> upcoming / series</span><span><kbd>Enter</kbd> open meeting</span><span><kbd>n</kbd> one-off meeting</span><span><kbd>N</kbd> new series</span><span><kbd>s</kbd> skip this date</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">ttybrain</span> <span class="m">·</span> <span class="dd">5 Meetings ▾</span></span><span><span class="y">● 2 new in inbox</span>  <span class="m">Fri 20 Nov 2026</span></span></div>
+    <div class="cols">
+      <div class="main">
+        <div class="grid2" style="grid-template-columns: 1.3fr 1fr">
+          <div class="panel f"><span class="t">Upcoming</span>
+            <div class="row h" style="--c: 10ch 1fr 7ch 7ch 6ch"><span>Date</span><span>Meeting</span><span>About</span><span>Talk</span><span>Act.</span></div>
+            <div class="row a" style="--c: 1fr"><span>Next week · 23–27 Nov</span></div>
+            <div class="row sel" style="--c: 10ch 1fr 7ch 7ch 6ch"><span>Mon 23</span><span>1:1 Anna</span><span>Anna</span><span>4</span><span class="y">2</span></div>
+            <div class="row" style="--c: 10ch 1fr 7ch 7ch 6ch"><span>Tue 24</span><span>CRM steering</span><span class="c">CRM</span><span>3</span><span>1</span></div>
+            <div class="row" style="--c: 10ch 1fr 7ch 7ch 6ch"><span>Wed 25</span><span>1:1 Bob</span><span>Bob</span><span>1</span><span class="m">—</span></div>
+            <div class="row" style="--c: 10ch 1fr 7ch 7ch 6ch"><span>Thu 26</span><span>ERP vendor call <span class="m">one-off</span></span><span class="c">ERP</span><span>2</span><span class="m">—</span></div>
+            <div class="row" style="--c: 10ch 1fr 7ch 7ch 6ch"><span>Fri 27</span><span>Board</span><span class="c">BOARD</span><span>5</span><span>1</span></div>
+            <div class="row a" style="--c: 1fr"><span>Week after · 30 Nov–4 Dec</span></div>
+            <div class="row" style="--c: 10ch 1fr 7ch 7ch 6ch"><span>Mon 30</span><span class="m">1:1 Sofie</span><span>Sofie</span><span class="m">0</span><span class="m">—</span></div>
+            <div class="row" style="--c: 10ch 1fr 7ch 7ch 6ch"><span>Wed 2</span><span class="m">1:1 Karim</span><span>Karim</span><span class="m">2</span><span class="m">—</span></div>
+            <div class="sp"></div>
+            <div class="row h" style="--c: 1fr"><span>Held, closes itself Sat · 1</span></div>
+            <div class="row" style="--c: 10ch 1fr 7ch 7ch 6ch"><span class="y">Wed 18</span><span>1:1 Karim</span><span>Karim</span><span class="m">notes</span><span class="m">—</span></div>
+          </div>
+          <div class="panel"><span class="t">Series · 7</span>
+            <div class="row h" style="--c: 1fr 7ch 14ch"><span>Series</span><span>About</span><span>Rhythm</span></div>
+            <div class="row" style="--c: 1fr 7ch 14ch"><span>1:1 Anna</span><span>Anna</span><span>every 2 wk Mon</span></div>
+            <div class="row" style="--c: 1fr 7ch 14ch"><span>1:1 Bob</span><span>Bob</span><span>every 2 wk Wed</span></div>
+            <div class="row" style="--c: 1fr 7ch 14ch"><span>1:1 Sofie</span><span>Sofie</span><span>every 2 wk Mon</span></div>
+            <div class="row" style="--c: 1fr 7ch 14ch"><span>1:1 Karim</span><span>Karim</span><span>every 2 wk Wed</span></div>
+            <div class="row" style="--c: 1fr 7ch 14ch"><span>CRM steering</span><span class="c">CRM</span><span>monthly, 4th Tue</span></div>
+            <div class="row" style="--c: 1fr 7ch 14ch"><span>ERP steering</span><span class="c">ERP</span><span>monthly, 1st Thu</span></div>
+            <div class="row" style="--c: 1fr 7ch 14ch"><span>Board</span><span class="c">BOARD</span><span>monthly, last Fri</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">tab</span> <span class="m">panel</span></span><span><span class="a">enter</span> <span class="m">open</span></span><span><span class="a">n</span> <span class="m">one-off</span></span><span><span class="a">N</span> <span class="m">series</span></span><span><span class="a">s</span> <span class="m">skip date</span></span><span><span class="a">m</span> <span class="m">move date</span></span><span><span class="a">i</span> <span class="m">capture</span></span></div>
+  </div></div>
+  <div class="notes">
+    <p><b>Occurrences are created ahead</b> for the next few weeks, so you can move or skip one date without touching the series.</p>
+    <p><b>Meetings close themselves</b> 3 days after their date if you didn't close them: notes are kept, unticked talk items stay for next time. Until then they show under "Held, closes itself", so you can still add notes or actions.</p>
+  </div>
+</section>
+
+<!-- ============ PERSON TALK ============ -->
+<section class="screen" id="talk">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 3 · person</span>
+    <h2>Person · Talk</h2>
+    <p class="lede">A team member's talk-list: things you want to raise at your next 1:1, collected during the week. Open items stay until you tick them off in a meeting. The panel on the right shows the next and last meetings, and your actions for this person.</p>
+    <div class="keys"><span><kbd>n</kbd> add item</span><span><kbd>J</kbd><kbd>K</kbd> reorder</span><span><kbd>Del</kbd> drop</span><span><kbd>Enter</kbd> open next meeting</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">ttybrain</span> <span class="m">·</span> <span class="dd">3 People ▾</span> <span class="m">›</span> Anna Peeters <span class="m">· Architect · team</span></span><span><span class="y">● 2 new in inbox</span>  <span class="m">Fri 20 Nov 2026</span></span></div>
+    <div class="cols">
+      <div class="main">
+        <div class="sp"></div>
+        <div class="tabs"><span>Summary</span><span class="on">Talk 4</span><span>Meetings</span><span>Notes 12</span><span>Goals 3</span><span>Projects &amp; roles</span><span>Actions 5</span></div>
+        <div class="grid2" style="grid-template-columns: 1.4fr 1fr">
+          <div class="panel f"><span class="t">To talk about · 4 open</span><span class="bt">next: 1:1 Mon 23 Nov</span>
+            <div class="row h" style="--c: 3ch 1fr 7ch 8ch"><span></span><span>Item</span><span>Project</span><span>Added</span></div>
+            <div class="row sel" style="--c: 3ch 1fr 7ch 8ch"><span class="m">1.</span><span>AWS training budget for next year</span><span class="m">—</span><span class="m">Tue</span></div>
+            <div class="row" style="--c: 3ch 1fr 7ch 8ch"><span class="m">2.</span><span>Her view on Vendor B's architecture</span><span class="c">ERP</span><span class="m">Wed</span></div>
+            <div class="row" style="--c: 3ch 1fr 7ch 8ch"><span class="m">3.</span><span>Feedback from Marie on the design demo</span><span class="c">CRM</span><span class="m">Thu</span></div>
+            <div class="row" style="--c: 3ch 1fr 7ch 8ch"><span class="m">4.</span><span>Holiday planning around go-live</span><span class="m">—</span><span class="m">today</span></div>
+            <div class="sp"></div>
+            <div class="row h" style="--c: 1fr"><span>Carried over from 9 Nov</span></div>
+            <div class="row m" style="--c: 3ch 1fr 7ch 8ch"><span>↻</span><span>Workload: two projects at once</span><span class="m">—</span><span>2 Nov</span></div>
+          </div>
+          <div style="display:flex; flex-direction:column">
+            <div class="panel"><span class="t">Meetings</span>
+              <div class="kv" style="grid-template-columns: 8ch 1fr"><span>Next</span><span>Mon 23 Nov <span class="m">· 1:1 Anna</span></span></div>
+              <div class="kv" style="grid-template-columns: 8ch 1fr"><span>Rhythm</span><span>every 2 weeks, Monday</span></div>
+              <div class="kv" style="grid-template-columns: 8ch 1fr"><span>Last</span><span>Mon 9 Nov <span class="m">· 3 discussed, 1 carried</span></span></div>
+            </div>
+            <div class="panel"><span class="t">Your actions for Anna · 2</span>
+              <div class="row" style="--c: 5ch 1fr 6ch"><span class="m">A-31</span><span>Review her test strategy draft</span><span class="r">-4d</span></div>
+              <div class="row" style="--c: 5ch 1fr 6ch"><span class="m">A-44</span><span>Ask HR about training budget</span><span>Mon</span></div>
+              <div class="row h" style="--c: 1fr"><span>Her actions · 3</span></div>
+              <div class="row" style="--c: 5ch 1fr 6ch"><span class="m">A-38</span><span>Solution design v1</span><span>Fri</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">←→</span> <span class="m">tabs</span></span><span><span class="a">n</span> <span class="m">add</span></span><span><span class="a">e</span> <span class="m">edit</span></span><span><span class="a">J/K</span> <span class="m">reorder</span></span><span><span class="a">del</span> <span class="m">drop</span></span><span><span class="a">enter</span> <span class="m">next meeting</span></span><span><span class="a">esc</span> <span class="m">back</span></span></div>
+  </div></div>
+  <div class="notes">
+    <p><b>An item can point at a project</b> (<span class="c">ERP</span>), so the same thought shows up when you meet about that project, too, until it's discussed once.</p>
+    <p><b>Stakeholders get a Talk tab too,</b> for things to raise next time you see them, with or without a series. Logging a note on them (an interaction) offers to tick off what you discussed.</p>
+  </div>
+</section>
+
+<!-- ============ 1:1 IN PROGRESS ============ -->
+<section class="screen" id="oneonone">
+  <div class="screen-head">
+    <span class="eyebrow">Meeting · person</span>
+    <h2>1:1 in progress</h2>
+    <p class="lede">Opening the 1:1 shows the talk-list as the agenda, a notes area and the actions you agree. <kbd>Space</kbd> ticks an item as discussed. Closing the meeting (<kbd>x</kbd>) stores the notes on Anna, keeps unticked items for next time and creates the actions.</p>
+    <div class="keys"><span><kbd>Space</kbd> discussed</span><span><kbd>e</kbd> notes</span><span><kbd>a</kbd> agree an action</span><span><kbd>x</kbd> close the meeting</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">ttybrain</span> <span class="m">·</span> <span class="dd">3 People ▾</span> <span class="m">›</span> Anna Peeters <span class="m">›</span> 1:1 Mon 23 Nov</span><span><span class="y">● 2 new in inbox</span>  <span class="m">Mon 23 Nov 2026</span></span></div>
+    <div class="cols">
+      <div class="main">
+        <div class="grid2" style="grid-template-columns: 1fr 1fr">
+          <div style="display:flex; flex-direction:column">
+            <div class="panel f"><span class="t">Talk · 2 of 5 discussed</span>
+              <div class="row done" style="--c: 3ch 1fr 6ch"><span class="g">✓</span><span>AWS training budget for next year</span><span></span></div>
+              <div class="row done" style="--c: 3ch 1fr 6ch"><span class="g">✓</span><span>Workload: two projects at once</span><span></span></div>
+              <div class="row sel" style="--c: 3ch 1fr 6ch"><span>○</span><span>Her view on Vendor B's architecture</span><span class="c">ERP</span></div>
+              <div class="row" style="--c: 3ch 1fr 6ch"><span>○</span><span>Feedback from Marie on the demo</span><span class="c">CRM</span></div>
+              <div class="row" style="--c: 3ch 1fr 6ch"><span>○</span><span>Holiday planning around go-live</span><span></span></div>
+            </div>
+            <div class="panel"><span class="t">Agreed actions · 2</span>
+              <div class="row" style="--c: 5ch 1fr 8ch 6ch"><span class="a">new</span><span>Approve AWS training</span><span class="m">me</span><span>Fri</span></div>
+              <div class="row" style="--c: 5ch 1fr 8ch 6ch"><span class="a">new</span><span>Hand over DWH reviews to Mathias</span><span>Anna</span><span>4 Dec</span></div>
+              <div class="row h" style="--c: 1fr"><span>Open from before</span></div>
+              <div class="row" style="--c: 5ch 1fr 8ch 6ch"><span class="m">A-31</span><span>Review her test strategy draft</span><span class="m">me</span><span class="r">-7d</span></div>
+            </div>
+          </div>
+          <div class="panel"><span class="t">Notes</span><span class="bt">e edit · E $EDITOR</span>
+            <div class="wrapline">AWS: she wants the Solutions Architect Associate in Q1. Budget fits if we skip the conference.</div>
+            <div class="sp"></div>
+            <div class="wrapline">Workload is OK now that the CRM design is in review. Asked her to flag it early if ERP starts pulling her in.</div>
+            <div class="sp"></div>
+            <div class="wrapline m">Vendor B: _</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">space</span> <span class="m">discussed</span></span><span><span class="a">tab</span> <span class="m">panel</span></span><span><span class="a">e</span> <span class="m">notes</span></span><span><span class="a">a</span> <span class="m">action</span></span><span><span class="a">D</span> <span class="m">decision</span></span><span><span class="a">x</span> <span class="m">close</span></span><span><span class="a">esc</span> <span class="m">back</span></span></div>
+  </div></div>
+  <div class="notes">
+    <p><b>On close:</b> "1:1 Anna closed · 2 discussed, 3 kept for next time · 2 actions created · notes saved". The notes land on Anna's Notes tab as a 1:1 note.</p>
+    <p><b>Agreed actions</b> link to Anna and to this meeting. One that is about a project (pick it with <kbd>Tab</kbd> in the form) links to that project too.</p>
+  </div>
+</section>
+
+<!-- ============ PROJECT MEETINGS ============ -->
+<section class="screen" id="project">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 2 · project</span>
+    <h2>Project · Meetings</h2>
+    <p class="lede">A project's own meetings: the series, the next date with its talk-list, and the status since the last meeting (the same generated prep as the board pack). Past meetings with their notes and outcomes are below.</p>
+    <div class="keys"><span><kbd>t</kbd> add to talk-list</span><span><kbd>Enter</kbd> open meeting</span><span><kbd>N</kbd> new series</span><span><kbd>n</kbd> one-off meeting</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">ttybrain</span> <span class="m">·</span> <span class="dd">2 Projects ▾</span> <span class="m">›</span> <span class="c">CRM</span> CRM replatforming</span><span><span class="y">● 2 new in inbox</span>  <span class="m">Fri 20 Nov 2026</span></span></div>
+    <div class="cols">
+      <div class="main">
+        <div class="sp"></div>
+        <div class="tabs"><span>Overview</span><span>Milestones 5</span><span>Deliverables 6</span><span>Risks &amp; issues 4</span><span>Decisions 7</span><span>Actions 9</span><span>People 8</span><span class="on">Meetings</span><span>Talk 3</span><span>Context</span></div>
+        <div class="grid2" style="grid-template-columns: 1fr 1.15fr">
+          <div style="display:flex; flex-direction:column">
+            <div class="panel f"><span class="t">CRM steering · monthly, 4th Tue</span>
+              <div class="kv" style="grid-template-columns: 9ch 1fr"><span>Next</span><span>Tue 24 Nov</span></div>
+              <div class="kv" style="grid-template-columns: 9ch 1fr"><span>With</span><span><span class="p">Peter J.</span>, <span class="p">Marie D.</span>, Anna, Bob</span></div>
+              <div class="sp"></div>
+              <div class="row h" style="--c: 1fr"><span>To talk about · 3</span></div>
+              <div class="row sel" style="--c: 3ch 1fr"><span class="m">1.</span><span>Shift design milestone by 2 weeks</span></div>
+              <div class="row" style="--c: 3ch 1fr"><span class="m">2.</span><span>Release contingency budget</span></div>
+              <div class="row" style="--c: 3ch 1fr"><span class="m">3.</span><span>Marie's request: sales lead walkthrough</span></div>
+            </div>
+            <div class="panel"><span class="t">Past meetings</span>
+              <div class="row" style="--c: 9ch 1fr 10ch"><span class="m">27 Oct</span><span>CRM steering</span><span class="m">3 act · 1 dec</span></div>
+              <div class="row" style="--c: 9ch 1fr 10ch"><span class="m">22 Sep</span><span>CRM steering</span><span class="m">2 act · 2 dec</span></div>
+              <div class="row" style="--c: 9ch 1fr 10ch"><span class="m">14 Sep</span><span>Kick-off <span class="m">one-off</span></span><span class="m">5 act</span></div>
+            </div>
+          </div>
+          <div class="panel"><span class="t">Prep · since 27 Oct</span><span class="bt">generated from data</span>
+            <div class="kv" style="grid-template-columns: 9ch 1fr"><span>Health</span><span><span class="y">● amber</span>  design slipping 2 weeks</span></div>
+            <div class="sp"></div>
+            <div class="row" style="--c: 2ch 1fr 14ch"><span class="g">✓</span><span>Solution outline approved</span><span class="m">14 Oct</span></div>
+            <div class="row" style="--c: 2ch 1fr 14ch"><span class="y">○</span><span>Design approved</span><span class="y">26 Nov → 10 Dec?</span></div>
+            <div class="row" style="--c: 2ch 1fr 14ch"><span class="c">◐</span><span>Solution design · Anna</span><span>in review</span></div>
+            <div class="row" style="--c: 2ch 1fr 14ch"><span class="r">▲</span><span>R-9 Budget overrun ~12%</span><span class="r">high · issue</span></div>
+            <div class="row" style="--c: 2ch 1fr 14ch"><span class="m">·</span><span>Phase 1 excludes marketing autom.</span><span class="m">28 Oct</span></div>
+            <div class="sp"></div>
+            <div class="row h" style="--c: 1fr"><span>Your actions for CRM</span></div>
+            <div class="row" style="--c: 2ch 1fr 14ch"><span class="r">!</span><span>A-27 Send revised budget to Peter</span><span class="r">-6d</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">←→</span> <span class="m">tabs</span></span><span><span class="a">tab</span> <span class="m">panel</span></span><span><span class="a">t</span> <span class="m">to talk</span></span><span><span class="a">enter</span> <span class="m">open</span></span><span><span class="a">N</span> <span class="m">series</span></span><span><span class="a">n</span> <span class="m">one-off</span></span><span><span class="a">esc</span> <span class="m">back</span></span></div>
+  </div></div>
+  <div class="notes">
+    <p><b>A project can have more than one series</b> (a steering committee and a weekly team stand-up); each gets its own panel, newest next date first.</p>
+    <p><b>Talk tab</b> shows the same list on its own, including items you parked for "any meeting about CRM" from a person's talk-list.</p>
+  </div>
+</section>
+
+<!-- ============ BOARD ============ -->
+<section class="screen" id="board">
+  <div class="screen-head">
+    <span class="eyebrow">Meeting · board project</span>
+    <h2>Board meeting</h2>
+    <p class="lede">The board is a project of its own (<span class="c">BOARD</span>), so it follows the same rule. Its meetings keep today's board machinery: an agenda that names other projects, a prep block per project, the asks, and the board pack and minutes in Export.</p>
+    <div class="keys"><span><kbd>←</kbd><kbd>→</kbd> Agenda · Prep · Notes · Export</span><span><kbd>J</kbd><kbd>K</kbd> reorder</span><span><kbd>a</kbd> action</span><span><kbd>D</kbd> decision</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">ttybrain</span> <span class="m">·</span> <span class="dd">2 Projects ▾</span> <span class="m">›</span> <span class="c">BOARD</span> Management board <span class="m">›</span> Board Fri 27 Nov</span><span><span class="y">● 2 new in inbox</span>  <span class="m">Fri 20 Nov 2026</span></span></div>
+    <div class="cols" style="min-height: 22em">
+      <div class="main">
+        <div class="sp"></div>
+        <div class="tabs"><span class="on">Agenda</span><span>Prep</span><span>Notes</span><span>Export</span></div>
+        <div class="grid2" style="grid-template-columns: 1.3fr 1fr">
+          <div class="panel f"><span class="t">Agenda · 5</span>
+            <div class="row h" style="--c: 3ch 1fr 7ch 1fr"><span></span><span>Item</span><span>Project</span><span>Ask</span></div>
+            <div class="row" style="--c: 3ch 1fr 7ch 1fr"><span class="m">1.</span><span>Minutes &amp; open actions</span><span></span><span></span></div>
+            <div class="row sel" style="--c: 3ch 1fr 7ch 1fr"><span>2.</span><span>CRM status</span><span class="c">CRM</span><span>approve 2-week shift</span></div>
+            <div class="row" style="--c: 3ch 1fr 7ch 1fr"><span class="m">3.</span><span>ERP vendor decision</span><span class="c">ERP</span><span>choose vendor B</span></div>
+            <div class="row" style="--c: 3ch 1fr 7ch 1fr"><span class="m">4.</span><span>HR portal pilot go/no-go</span><span class="c">HRP</span><span>go for pilot</span></div>
+            <div class="row" style="--c: 3ch 1fr 7ch 1fr"><span class="m">5.</span><span>Budget 2027 first view</span><span></span><span class="m">—</span></div>
+          </div>
+          <div class="panel"><span class="t">Board talk-list · 2</span>
+            <div class="row" style="--c: 3ch 1fr"><span class="m">·</span><span>Hiring freeze impact on IAM wave 2</span></div>
+            <div class="row" style="--c: 3ch 1fr"><span class="m">·</span><span>Security awareness: board sponsor?</span></div>
+            <div class="sp"></div>
+            <div class="row m" style="--c: 1fr"><span><span class="a">A</span> adds one to the agenda</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">←→</span> <span class="m">tabs</span></span><span><span class="a">n</span> <span class="m">agenda item</span></span><span><span class="a">J/K</span> <span class="m">reorder</span></span><span><span class="a">A</span> <span class="m">talk-list → agenda</span></span><span><span class="a">e</span> <span class="m">edit ask</span></span><span><span class="a">esc</span> <span class="m">back</span></span></div>
+  </div></div>
+</section>
+
+<!-- ============ NEW SERIES ============ -->
+<section class="screen" id="series">
+  <div class="screen-head">
+    <span class="eyebrow">Form · from a person, a project or screen 5</span>
+    <h2>New recurring meeting</h2>
+    <p class="lede">Pick who or what the meeting is about, the rhythm and the first date. Opened from a person or project, the subject is already filled in. The rhythm is a short phrase that ttybrain reads back as dates, so you see straight away what you'll get.</p>
+    <div class="keys"><span><kbd>Tab</kbd> next field</span><span><kbd>Ctrl</kbd>+<kbd>S</kbd> save</span><span><kbd>Esc</kbd> cancel</span></div>
+  </div>
+  <div class="scroller"><div class="term dim">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">ttybrain</span> <span class="m">·</span> <span class="dd">3 People ▾</span> <span class="m">›</span> Karim Haddad</span><span><span class="y">● 2 new in inbox</span>  <span class="m">Fri 20 Nov 2026</span></span></div>
+    <div class="cols" style="min-height: 26em">
+      <div class="main">
+        <div class="sp"></div>
+        <div class="tabs"><span>Summary</span><span>Talk 2</span><span class="on">Meetings</span><span>Notes 4</span></div>
+        <div class="panel grow"><span class="t">Meetings</span></div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">tab</span> <span class="m">field</span></span><span><span class="a">ctrl+s</span> <span class="m">save</span></span><span><span class="a">esc</span> <span class="m">cancel</span></span></div>
+    <div class="overlay"><div class="panel f"><span class="t">New recurring meeting</span><span class="bt">ctrl+s save · esc cancel</span>
+      <div class="kv"><span>About</span><span>Karim Haddad <span class="m">· person</span></span></div>
+      <div class="kv"><span>Title</span><span>1:1 Karim</span></div>
+      <div class="kv"><span>Kind</span><span>1:1 <span class="m">(project · board)</span></span></div>
+      <div class="kv"><span>Rhythm</span><span><span class="input" style="display:inline-block; margin:0">every 2 weeks on wednesday<span class="caret"> </span></span></span></div>
+      <div class="kv"><span></span><span class="m">→ Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …</span></div>
+      <div class="kv"><span>First date</span><span>Wed 25 Nov</span></div>
+      <div class="kv"><span>Attendees</span><span>Karim Haddad</span></div>
+      <div class="kv"><span>Ends</span><span class="m">never</span></div>
+    </div></div>
+  </div></div>
+  <div class="notes">
+    <p><b>Rhythms it understands:</b> <code>weekly on mon</code>, <code>every 2 weeks on wed</code>, <code>monthly on the 4th tue</code>, <code>monthly on the last fri</code>, <code>monthly on day 15</code>.</p>
+    <p><b>CLI:</b> <code>ttybrain meeting series add @karim "1:1 Karim" --every "2 weeks on wed" --from wed</code>.</p>
+  </div>
+</section>
+
+<!-- ============ QUICK CAPTURE ============ -->
+<section class="screen" id="capture">
+  <div class="screen-head">
+    <span class="eyebrow">Overlay · any screen</span>
+    <h2>Quick capture to a talk-list</h2>
+    <p class="lede">The fastest way to fill a talk-list during the week. Start with <code>talk</code> (or press <kbd>t</kbd> on a person or project) and tag who or what it's for. It goes straight onto that list, not into the inbox, and the line under the input says where it lands.</p>
+    <div class="keys"><span><kbd>Tab</kbd> accept suggestion</span><span><kbd>Ctrl</kbd>+<kbd>S</kbd> save</span><span><kbd>Enter</kbd> new line</span><span><kbd>Esc</kbd> cancel</span></div>
+  </div>
+  <div class="scroller"><div class="term dim">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">ttybrain</span> <span class="m">·</span> <span class="dd">4 Actions ▾</span></span><span><span class="y">● 2 new in inbox</span>  <span class="m">Fri 20 Nov 2026</span></span></div>
+    <div class="cols" style="min-height: 20em">
+      <div class="main">
+        <div class="panel grow"><span class="t">Actions · 44 open</span></div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">ctrl+s</span> <span class="m">save</span></span><span><span class="a">tab</span> <span class="m">accept suggestion</span></span><span><span class="a">esc</span> <span class="m">cancel</span></span></div>
+    <div class="overlay"><div class="panel f"><span class="t">Capture</span><span class="bt">ctrl+s save · esc cancel</span>
+      <div class="input">talk <span class="tag-u">@anna</span> holiday planning around the CRM go-live <span class="tag-p">#CRM</span><span class="caret"> </span></div>
+      <div class="sp"></div>
+      <div class="row" style="--c: 1fr"><span><span class="g">→</span> Anna Peeters' talk-list <span class="m">· next 1:1 Mon 23 Nov</span></span></div>
+      <div class="row m" style="--c: 1fr"><span>  linked to <span class="tag-p">#CRM</span>, so it also shows at CRM steering until discussed</span></div>
+      <div class="row m" style="--c: 1fr"><span>  without "talk" it goes to the inbox as before</span></div>
+    </div></div>
+  </div></div>
+</section>
+
+<!-- ============ 4 ACTIONS ============ -->
+<section class="screen" id="actions">
+  <div class="screen-head">
+    <span class="eyebrow">Screen 4 · actions plugin</span>
+    <h2>Actions</h2>
+    <p class="lede">Actions are their own plugin now, so an action can be linked to anything: a person, a project, a meeting, several of them, or nothing. The "Linked to" column shows those links; an empty owner still means you.</p>
+    <div class="keys"><span><kbd>/</kbd> filter (<code>@anna #CRM mine</code>)</span><span><kbd>l</kbd> edit links</span><span><kbd>x</kbd> done</span><span><kbd>n</kbd> new</span></div>
+  </div>
+  <div class="scroller"><div class="term">
+    <div class="chrome"><i></i><i></i><i></i></div>
+    <div class="bar"><span><span class="a b">ttybrain</span> <span class="m">·</span> <span class="dd">4 Actions ▾</span></span><span><span class="y">● 2 new in inbox</span>  <span class="m">Fri 20 Nov 2026</span></span></div>
+    <div class="cols" style="min-height: 26em">
+      <div class="main">
+        <div class="panel f grow"><span class="t">Actions · 44 open</span><span class="bt">status:open</span>
+          <div class="row h" style="--c: 5ch 1fr 8ch 30ch 7ch"><span>ID</span><span>Action</span><span>Owner</span><span>Linked to</span><span>Due</span></div>
+          <div class="row r" style="--c: 1fr"><span>Overdue</span></div>
+          <div class="row sel" style="--c: 5ch 1fr 8ch 30ch 7ch"><span class="m">A-27</span><span>Send revised budget to Peter</span><span class="m">me</span><span><span class="c">CRM</span> <span class="p">@peter</span> <span class="m">steering 27 Oct</span></span><span class="r">14 Nov</span></div>
+          <div class="row" style="--c: 5ch 1fr 8ch 30ch 7ch"><span class="m">A-31</span><span>Review test strategy draft</span><span class="m">me</span><span><span class="p">@anna</span> <span class="m">1:1 9 Nov</span></span><span class="r">16 Nov</span></div>
+          <div class="row" style="--c: 5ch 1fr 8ch 30ch 7ch"><span class="m">A-19</span><span>Book vendor demo slot</span><span>Bob</span><span><span class="c">ERP</span></span><span class="r">17 Nov</span></div>
+          <div class="row a" style="--c: 1fr"><span>Next week</span></div>
+          <div class="row" style="--c: 5ch 1fr 8ch 30ch 7ch"><span class="m">A-44</span><span>Ask HR about training budget</span><span class="m">me</span><span><span class="p">@anna</span></span><span>Mon</span></div>
+          <div class="row" style="--c: 5ch 1fr 8ch 30ch 7ch"><span class="m">A-45</span><span>Draft 2027 budget first view</span><span class="m">me</span><span><span class="c">BOARD</span> <span class="m">board 27 Nov</span></span><span>Thu</span></div>
+          <div class="row" style="--c: 5ch 1fr 8ch 30ch 7ch"><span class="m">A-46</span><span>Renew domain certificates</span><span class="m">me</span><span class="m">—</span><span>Fri</span></div>
+          <div class="row" style="--c: 5ch 1fr 8ch 30ch 7ch"><span class="m">A-38</span><span>Solution design v1</span><span>Anna</span><span><span class="c">CRM</span></span><span>Fri</span></div>
+          <div class="row m" style="--c: 1fr"><span>Later · 33   No date · 4</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bar status"><span><span class="a">↑↓</span> <span class="m">select</span></span><span><span class="a">x</span> <span class="m">done</span></span><span><span class="a">d</span> <span class="m">due</span></span><span><span class="a">l</span> <span class="m">links</span></span><span><span class="a">e</span> <span class="m">edit</span></span><span><span class="a">/</span> <span class="m">filter</span></span><span><span class="a">n</span> <span class="m">new</span></span></div>
+  </div></div>
+  <div class="notes">
+    <p><b>Every person, project and meeting</b> gets an Actions tab from the actions plugin, listing the actions linked to it.</p>
+    <p><b>Your existing actions move over</b> with their <code>A-n</code> numbers; their project, owner, "for" person and meeting become links.</p>
+  </div>
+</section>
+
+<!-- ============ DECISIONS ============ -->
+<section class="screen" id="questions">
+  <div class="qs">
+    <h2>Decided on these screens</h2>
+    <ol>
+      <li><b>Talk items tagged with a project</b> also show at that project's next meeting, until they are discussed in either place.</li>
+      <li><b>No time of day:</b> meetings have a date only. Upcoming lists sort by date, then by series.</li>
+      <li><b>Stakeholders have talk-lists too,</b> with or without a recurring meeting.</li>
+      <li><b>Meetings close themselves</b> 3 days after their date, keeping notes and carrying unticked talk items forward.</li>
+      <li><b>Decisions stay with projects</b> (in the projects plugin). A decision taken in a meeting still records which meeting.</li>
+    </ol>
+  </div>
+</section>
+
+</div>
