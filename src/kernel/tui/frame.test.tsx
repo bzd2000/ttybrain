@@ -41,7 +41,7 @@ const thingPlugin: PluginDef = definePlugin({
   },
 })
 
-// The screen: its crumb `All`, an exact bar (`tab panel`, then only `? help` of the frame's hints) and a child that
+// The screen: its crumb `All`, an exact bar (`tab panel`, then only `? help` of the frame's hints, then its `after` hints) and a child that
 // registers its own hint, which the exact bar leaves out.
 function Child() {
   const keys = useKeys()
@@ -51,7 +51,7 @@ function Child() {
 function ThingsScreen() {
   const keys = useKeys()
   useScreenCrumb(() => "All")
-  onMount(() => keys.hints([{ key: "Tab", label: "panel" }], { exact: true, frame: ["?"] }))
+  onMount(() => keys.hints([{ key: "Tab", label: "panel" }], { exact: true, frame: ["?"], after: [{ key: "x", label: "extra" }] }))
   return (
     <box flexDirection="column">
       <text>things screen</text>
@@ -207,7 +207,7 @@ test("an exact bar: the screen's hints only, the global actions', and the frame 
   const t = await open()
   t.input.pressKey("2")
   let frame = await until(t, (f) => f.includes("things screen"))
-  expect(line(frame, 19).trim()).toBe("tab panel   w act   ? help")
+  expect(line(frame, 19).trim()).toBe("tab panel   w act   ? help   x extra")
   // Without exact: every registered hint, the global actions', then all of the frame's.
   t.input.pressKey("3")
   frame = await until(t, (f) => f.includes("plain screen"))

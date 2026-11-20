@@ -87,7 +87,7 @@ describe("Projects screen", () => {
     expect(indexOf(frame, " BI2 ")).toBeGreaterThan(onHold)
     expect(frame).not.toContain("OLD")
     expect(frame).not.toContain("Archived")
-    expect(lines(frame.trimEnd()).at(-1)).toContain("enter open   n new   e edit   h health   / filter   a archived")
+    expect(lines(frame.trimEnd()).at(-1)).toContain("↑↓ select   enter open   n new   h health   / filter   i capture   ? help   e edit   a archived")
   })
 
   test("a shows archived", async () => {
@@ -116,12 +116,12 @@ describe("Projects screen", () => {
     let frame = await t.frame()
     expect(frame).toContain(" ERP ")
     for (const code of ["CRM", "HRP", "IAM", "BI2"]) expect(frame).not.toContain(` ${code} `)
-    expect(frame).toContain("filter: health:red")
+    expect(frame).toContain("filter: status=active health:red")
     await escape(t)
     frame = await t.frame()
     expect(lines(frame)[0]).toContain("ttybrain ·  2 Projects ▾") // Esc cleared the filter; it did not go back
     for (const code of ["ERP", "CRM", "HRP", "IAM", "BI2"]) expect(frame).toContain(` ${code} `)
-    expect(frame).not.toContain("filter:")
+    expect(frame).not.toContain("health:red")
   })
 
   test("filter by text and status", async () => {
@@ -316,7 +316,7 @@ describe("Projects screen", () => {
     const shown = status.split(/\s{2,}/)
     expect(shown.length).toBeGreaterThan(2)
     for (const h of shown) expect(HINTS).toContain(h)
-    expect(shown.slice(-2)).toEqual(["? help", "q quit"])
+    expect(shown.slice(-2)).toEqual(["i capture", "? help"]) // the design's hints win over the kept ones when they do not fit
   })
 
   test("empty projects", async () => {
@@ -347,7 +347,7 @@ describe("Projects screen", () => {
     const t = await open({ width: 80, height: 24 })
     const frame = await t.frame()
     const long = lineWith(frame, "DATAPLATFORM2027")
-    expect(long).toContain(" DATAPLATFORM2027 Data pl") // the name column gives way, not the code
+    expect(long).toContain(" DATAPLATFORM2027 ") // the name column gives way (to a bare `…`), not the code
     expect(long).toContain("Ingest live")
     expect(long).toContain("40pd")
     expect(frame).not.toContain("DATAPLATFORM20…")

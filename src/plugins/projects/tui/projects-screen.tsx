@@ -30,12 +30,17 @@ import type { ProjectRecord } from "../logic/schema"
 
 export const EMPTY = "No projects yet. Press n to add one."
 export const NO_MATCH = "No projects match the filter."
+// The design's bar (`↑↓ select   enter open   n new   h health   / filter   i capture   ? help`); the global
+// `i capture` and the frame's `? help` come from the frame, and the kept `e edit` and `a archived` follow them.
 const HINTS: Hint[] = [
+  { key: "↑↓", label: "select" },
   { key: "Enter", label: "open" },
   { key: "n", label: "new" },
-  { key: "e", label: "edit" },
   { key: "h", label: "health" },
   { key: "/", label: "filter" },
+]
+const KEPT_HINTS: Hint[] = [
+  { key: "e", label: "edit" },
   { key: "a", label: "archived" },
 ]
 const FILTER_HINTS: Hint[] = [
@@ -44,6 +49,7 @@ const FILTER_HINTS: Hint[] = [
 ]
 const HEALTH_RANK: Record<string, number> = { red: 0, amber: 1, green: 2 }
 const CODE_MAX = 16 // codes are 2–16 characters and never cut
+const CODE_MIN = 5 // the design's Code column
 
 const byCode = (a: ProjectRecord, b: ProjectRecord) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0)
 // Health (not set last), then the next milestone's due date (none last), then code.
@@ -69,20 +75,35 @@ export function matches(p: ProjectRecord, filter: string): boolean {
     })
 }
 
-function row(p: ProjectRecord, today: string): TableRow {
+// `high`: the ids of the projects with an open high-severity risk or issue (their Risk count is red).
+function row(p: ProjectRecord, today: string, high: ReadonlySet<number>): TableRow {
   const due = p.next_milestone_due
+  // An on-hold project is drawn muted all through, with `◌` for its dot.
+  const hold = p.status === "on_hold"
+  const muted = (text: string) => ({ text, tone: "muted" as const })
   return {
     ref: p.ref,
-    cells: {
-      health: p.health === null ? { text: "○", tone: "muted" } : { text: "●", tone: p.health },
-      code: p.code,
-      name: p.name,
-      next: p.next_milestone_title ?? "—",
-      due: { text: dueLabel(due, today), tone: due !== null && due < today ? "red" : undefined },
-      actions: String(p.open_actions),
-      risks: String(p.open_risks),
-      effort: p.effort_estimate_days === null ? "" : `${p.effort_estimate_days}pd`,
-    },
+    cells: hold
+      ? {
+          health: muted("◌"),
+          code: muted(p.code),
+          name: muted(p.name),
+          next: muted(p.next_milestone_title ?? "—"),
+          due: muted(dueLabel(due, today)),
+          actions: muted(String(p.open_actions)),
+          risks: muted(String(p.open_risks)),
+          effort: muted(p.effort_estimate_days === null ? "" : `${p.effort_estimate_days}pd`),
+        }
+      : {
+          health: p.health === null ? { text: "○", tone: "muted" } : { text: "●", tone: p.health },
+          code: { text: p.code, tone: "cyan" },
+          name: p.name,
+          next: p.next_milestone_title ?? "—",
+          due: { text: dueLabel(due, today), tone: due !== null && due < today ? "red" : undefined },
+          actions: String(p.open_actions),
+          risks: { text: String(p.open_risks), tone: high.has(p.id) ? "red" : undefined },
+          effort: muted(p.effort_estimate_days === null ? "" : `${p.effort_estimate_days}pd`),
+        },
   }
 }
 
@@ -96,6 +117,11 @@ export function ProjectsScreen() {
 
   // One query: the record query carries the health, next milestone and open counts per project.
   const q = useQuery(async () => (await store.recordQuery().execute()).map(store.toProject))
+  const highQ = useQuery(async () => {
+    const rows = await rt.data.selectFrom("risk").select("project_id").where("status", "=", "open").where("severity", "=", "high").execute()
+    return new Set(rows.map((r) => Number(r.project_id)))
+  })
+  const high = () => highQ.data() ?? new Set<number>()
   const [archived, setArchived] = createSignal(false)
   const [filter, setFilter] = createSignal("")
   const [editing, setEditing] = createSignal(false)
@@ -114,8 +140,8 @@ export function ProjectsScreen() {
     const list = shown()
     const live = list.filter((p) => !p.archived)
     const of = (status: string) => live.filter((p) => p.status === status).sort(byCode)
-    const out: TableGroup[] = [{ rows: of("active").sort(byHealth).map((p) => row(p, today())) }]
-    const add = (title: string, ps: ProjectRecord[]) => ps.length > 0 && out.push({ title, rows: ps.map((p) => row(p, today())) })
+    const out: TableGroup[] = [{ rows: of("active").sort(byHealth).map((p) => row(p, today(), high())) }]
+    const add = (title: string, ps: ProjectRecord[]) => ps.length > 0 && out.push({ title, rows: ps.map((p) => row(p, today(), high())) })
     add("On hold", of("on_hold"))
     add("Closed", of("closed"))
     if (archived()) add("Archived", list.filter((p) => p.archived).sort(byCode))
@@ -138,14 +164,14 @@ export function ProjectsScreen() {
   }
 
   const columns = (): TableColumn[] => [
-    { id: "health", title: " ", width: 1 },
-    { id: "code", title: "Code", width: fitWidth(shown().map((p) => p.code), 4, CODE_MAX) },
+    { id: "health", title: " ", width: 2 },
+    { id: "code", title: "Code", width: fitWidth(shown().map((p) => p.code), CODE_MIN, CODE_MAX) },
     { id: "name", title: "Name", width: "grow" },
-    { id: "next", title: "Next milestone", width: 20 },
-    { id: "due", title: "Due", width: 6 },
-    { id: "actions", title: "Act.", width: 4 },
-    { id: "risks", title: "Risk", width: 4 },
-    { id: "effort", title: "Effort", width: 6 },
+    { id: "next", title: "Next milestone", width: 21 },
+    { id: "due", title: "Due", width: 7 },
+    { id: "actions", title: "Act.", width: 6 },
+    { id: "risks", title: "Risk", width: 6 },
+    { id: "effort", title: "Effort", width: 7 },
   ]
 
   const openForm = async (formId: string, recordRef?: string) => {
@@ -157,7 +183,7 @@ export function ProjectsScreen() {
   createEffect(() => {
     const on = editing() && keys.active()
     keys.textFocus(on)
-    onCleanup(keys.hints(on ? FILTER_HINTS : HINTS))
+    onCleanup(keys.hints(on ? FILTER_HINTS : HINTS, on ? undefined : { exact: true, frame: ["?"], after: KEPT_HINTS }))
   })
   const startFilter = () => {
     setDraft(filter())
@@ -194,7 +220,7 @@ export function ProjectsScreen() {
 
   return (
     <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1}>
-      <Panel title={title()} focused={keys.active()} footer={!editing() && filter() !== "" ? `filter: ${filter()}` : undefined} grow>
+      <Panel title={title()} focused={keys.active()} footer={`filter: status=active${filter() === "" ? "" : ` ${filter()}`}`} grow>
         <Show when={editing()}>
           <box flexDirection="row" height={1} flexShrink={0} gap={1}>
             <text fg={theme.accent}>/</text>

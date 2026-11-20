@@ -19,8 +19,8 @@ export type Hint = { key: string; label: string; alt?: string }
 // `exact`: these hints are the whole of the layer's own part of the status bar: hints registered without it on the
 // same layer (a Table's `↑↓ select`, say) are left out while it is registered. `frame` (with `exact`, on the screen
 // layer): which of the frame's hints (the keys of frameHints: "g", "?", "q") follow the global actions' hints; all
-// of them when left out.
-export type HintOptions = { exact?: boolean; frame?: string[] }
+// of them when left out. `after` (with `exact`): hints a screen keeps beyond its design, shown last, after the frame's.
+export type HintOptions = { exact?: boolean; frame?: string[]; after?: Hint[] }
 
 // The spec §9 key table, as Help shows it (Help adds the registered global actions after these). `c`
 // (assistant) stays unclaimed until phase 7.
@@ -96,6 +96,12 @@ export class KeysStore {
   frameKeys(): string[] | undefined {
     const top = this.top()
     return this.entries[0]().find((e) => e.layer === top && e.exact === true && e.frame !== undefined)?.frame
+  }
+
+  // The hints an exact registration on the top layer asked to show last (HintOptions.after).
+  afterHints(): Hint[] {
+    const top = this.top()
+    return this.entries[0]().find((e) => e.layer === top && e.exact === true && e.after !== undefined)?.after ?? []
   }
 
   setTextFocus(token: object, layer: string, on: boolean): void {

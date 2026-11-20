@@ -117,7 +117,8 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
       ...registry.globalActions().map((a) => ({ key: a.key, label: a.label })),
       ...frameHints(lastSlot).filter((h) => wanted === undefined || wanted.includes(h.key)),
     ]
-    return [...own, ...tail.filter((h) => !own.some((o) => o.key === h.key))]
+    const all = [...own, ...tail.filter((h) => !own.some((o) => o.key === h.key))]
+    return [...all, ...keys.afterHints().filter((h) => !all.some((o) => o.key === h.key))]
   }
   const switcherOpen = () => stack.list().some((o) => o.kind === "switcher")
 
