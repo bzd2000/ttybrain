@@ -22,6 +22,7 @@ import {
   printable,
   theme,
   toneColor,
+  truncate,
   useDraft,
   useKeys,
   useNav,
@@ -59,7 +60,8 @@ export function CaptureOverlay(props: { close(): void }) {
   const [cursor, setCursor] = createSignal(0)
 
   // --- the tags' colours inside the text ---
-  const style = SyntaxStyle.fromStyles({ cyan: { fg: theme.cyan }, magenta: { fg: theme.magenta } }, renderer.nativeScene as never)
+  const style = SyntaxStyle.fromStyles({ cyan: { fg: theme.cyan }, magenta: { fg: theme.magenta } }, renderer.nativeScene)
+  onCleanup(() => style.destroy())
   const highlight = () => {
     if (!area) return
     area.clearAllHighlights()
@@ -243,7 +245,7 @@ export function CaptureOverlay(props: { close(): void }) {
               {(s, i) => (
                 <box flexDirection="row" height={1} backgroundColor={i() === picked() ? theme.selectedBg : theme.bg}>
                   <text fg={toneColor(tagTone(s.ref.slice(0, 1)))} width={SUGGEST_TAG} flexShrink={0} wrapMode="none">
-                    {s.ref}
+                    {truncate(s.ref, SUGGEST_TAG)}
                   </text>
                   <text fg={theme.text} marginLeft={2} flexShrink={0} wrapMode="none">
                     {s.label}

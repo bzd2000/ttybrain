@@ -102,6 +102,15 @@ describe("quick capture", () => {
     expect((await items()).map((i) => i.text)).toEqual(["@anna x"])
   })
 
+  test("a long handle is cut with … in the 10-wide tag column", async () => {
+    const t = await open()
+    await inCtx(() => write("people").addPerson!({ name: "Anneliese Long", handle: "anneliese-long" }))
+    await capture(t)
+    await type(t, "@annel")
+    const frame = await until(t, (f) => f.includes("Anneliese Long"))
+    expect(frame).toContain("@annelies…  Anneliese Long")
+  })
+
   test("typing q and 2 in capture inserts them", async () => {
     const t = await open()
     await capture(t)

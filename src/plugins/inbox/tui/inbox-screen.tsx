@@ -2,7 +2,8 @@
 // rows) and `Processed · last 7 days` (processed or dismissed since today − 7, newest first, the rest of the
 // height). Tags show in their colours inside the text, an unresolved one followed by an amber `⚠ unknown <type>`.
 // Each processed item has its outcome under it, in the time and text columns: `✓ <by>` green and `→ <summary>`
-// muted with the records created from it in normal text; or `✗ dismissed` and `by <by>`, muted like a dismissed
+// muted, followed by ` · <refs>` for the records created from it that the summary does not name (so Enter's
+// record is always on the line); or `✗ dismissed` and `by <by>`, muted like a dismissed
 // item's text; a blank line between processed items. `<by>` is the configured assistant's name for the
 // assistant. ↑↓ move through both panels (the focus follows the selection). Keys (on a shown item only): Enter
 // opens the first record created from it (a new item: its edit form), e edits, z dismisses, u reopens, p processes
@@ -70,14 +71,11 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 // A multi-line item on one line: each line break shows as ` ↵ ` (the Inbox screen and the Overview panel).
 export const oneLine = (text: string) => text.replace(/\s*\n\s*/g, " ↵ ")
 
-// `text` muted, with each of `refs` in it in normal text.
-function withRefs(text: string, refs: string[]): CellPart[] {
-  if (refs.length === 0) return [{ text, tone: "muted" }]
-  const re = new RegExp(`(?<![A-Za-z0-9-])(${refs.map(escape).join("|")})(?![A-Za-z0-9-])`, "g")
-  return text
-    .split(re)
-    .filter((s) => s !== "")
-    .map((s) => (refs.includes(s) ? { text: s } : { text: s, tone: "muted" as const }))
+// `→ <summary>`, then the created refs it does not name.
+function outcomeText(summary: string, refs: string[]): string {
+  const named = (ref: string) => new RegExp(`(?<![A-Za-z0-9-])${escape(ref)}(?![A-Za-z0-9-])`).test(summary)
+  const rest = refs.filter((r) => !named(r))
+  return `→ ${summary}${rest.length > 0 ? ` · ${rest.join(", ")}` : ""}`
 }
 
 const cell = (parts: CellPart[], tone?: Cell["tone"]): Cell => ({ text: parts.map((p) => p.text).join(""), tone, parts })
@@ -125,8 +123,8 @@ export function InboxScreen() {
         : {
             detail: {
               cells: dismissed
-                ? { time: { text: "✗ dismissed", tone: "muted" }, text: { text: e.processed_by ? `by ${e.processed_by}` : "", tone: "muted" } }
-                : { time: { text: `✓ ${byName(e.processed_by)}`, tone: "green" }, text: cell(withRefs(`→ ${oneLine(e.summary ?? "")}`, e.created)) },
+                ? { time: { text: "✗ dismissed", tone: "muted" }, text: { text: e.processed_by ? `by ${byName(e.processed_by)}` : "", tone: "muted" } }
+                : { time: { text: `✓ ${byName(e.processed_by)}`, tone: "green" }, text: { text: outcomeText(oneLine(e.summary ?? ""), e.created), tone: "muted" } },
             },
           }),
     }

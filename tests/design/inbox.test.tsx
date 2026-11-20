@@ -2,7 +2,7 @@
 // panels, `New · 3` (focused, as tall as its rows) and `Processed · last 7 days` (the rest of the height); ref and
 // time muted, `#tags` cyan and `@tags` magenta inside the text, an unknown tag followed by an amber
 // `⚠ unknown project`; each processed item with its outcome under it (`✓ copilot` green in the time column, the
-// muted summary with the records it created in normal text), a blank line between processed items, a dismissed
+// muted summary, followed by the records it created that the summary does not name), a blank line between processed items, a dismissed
 // item muted; and the status bar. Seeded with the designs' example data, today Thu 12 Nov 2026, 118×36. Data
 // follows the seed (R5: I-5 rather than I-17, DE-8 rather than DE-12; the seed's ERP decision added no health
 // note, so its summary has no `· health note added`). The processor shows by the configured assistant's name
@@ -61,7 +61,8 @@ test("Inbox as designed", async () => {
     cols("", "✓ copilot", '→ decision DE-8 "Select vendor B" on ERP'),
     "",
     cols("I-3", "yesterday", "1:1 @sofie wants project mgmt training next year, follow up with options"),
-    cols("", "✓ copilot", '→ 1:1 note on Sofie · goal "PM training 2027" · action A-7 (me, Sun)'),
+    // The records its summary does not name (the note and the goal) follow it.
+    cols("", "✓ copilot", '→ 1:1 note on Sofie · goal "PM training 2027" · action A-7 (me, Sun) · N-1, G-1'),
     "",
     cols("I-2", "Mon 9 Nov", "#CRM #DWH migration overlap, Bob to align with DWH team"),
     cols("", "✓ copilot", '→ action A-6 (Bob, Mon) · risk R-11 "Data migration volume unknown"'),
@@ -97,11 +98,12 @@ test("Inbox as designed", async () => {
   expect(fgAt(spans, "@sofie", 10)).toBe(theme.magenta)
   expect(fgAt(spans, "✓ copilot", 8)).toBe(theme.green)
   expect(fgAt(spans, "→ decision", 8)).toBe(theme.muted)
-  expect(fgAt(spans, "DE-8", 8)).toBe(theme.text)
+  expect(fgAt(spans, "DE-8", 8)).toBe(theme.muted)
   expect(fgAt(spans, '"Select vendor B" on ERP', 8)).toBe(theme.muted)
   expect(fgAt(spans, "1:1 note on Sofie", 11)).toBe(theme.muted)
-  expect(fgAt(spans, "A-7", 11)).toBe(theme.text)
-  for (const ref of ["A-6", "R-11"]) expect(fgAt(spans, ref, 14)).toBe(theme.text)
+  expect(fgAt(spans, "A-7", 11)).toBe(theme.muted)
+  expect(fgAt(spans, "N-1, G-1", 11)).toBe(theme.muted)
+  for (const ref of ["A-6", "R-11"]) expect(fgAt(spans, ref, 14)).toBe(theme.muted)
   // The dismissed item all muted.
   expect(fgAt(spans, "remember to buy coffee", 16)).toBe(theme.muted)
   expect(fgAt(spans, "✗ dismissed", 17)).toBe(theme.muted)

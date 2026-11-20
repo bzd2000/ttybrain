@@ -445,6 +445,28 @@ describe("TUI blocks", () => {
     expect(fgAt(spans, "ab…", "T-2")).toBe(theme.text)
   })
 
+  test("Table cell parts: a part exactly one cell too wide is still cut with …", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    function TableScreen() {
+      return (
+        <Table
+          columns={[
+            { id: "ref", title: "Ref", width: 5 },
+            { id: "text", title: "Text", width: 6 },
+            { id: "end", title: "End", width: 3 },
+          ]}
+          rows={[{ ref: "T-1", cells: { ref: "T-1", text: { text: "abcdefgh", parts: [{ text: "abcdef" }, { text: "gh", tone: "cyan" }] }, end: "|" } }]}
+          header={false}
+          focused
+        />
+      )
+    }
+    tui = await renderTui(kernel, { parts: [screenPart(TableScreen)] })
+    tui.input.pressKey("2")
+    const frame = await tui.frame()
+    expect(lineWith(frame, "T-1")).toContain("T-1   abcde… |")
+  })
+
   test("Table detail cells sit in the row's columns; rowSpace puts a blank line between a group's rows", async () => {
     kernel = await makeTestKernel({ plugins: [thingPlugin] })
     function TableScreen() {
@@ -453,13 +475,13 @@ describe("TUI blocks", () => {
           columns={[
             { id: "ref", title: "Ref", width: 5 },
             { id: "time", title: "Time", width: 12 },
-            { id: "text", title: "Text", width: "grow" },
+            { id: "text", title: "Text", width: "grow", tone: () => "amber" },
           ]}
           groups={[
             {
               rowSpace: true,
               rows: [
-                { ref: "T-1", cells: { ref: "T-1", time: "today", text: "one" }, detail: { cells: { time: { text: "✓ you", tone: "green" }, text: { text: "→ made T-3", tone: "muted" } } } },
+                { ref: "T-1", cells: { ref: "T-1", time: "today", text: "one" }, detail: { cells: { time: { text: "✓ you", tone: "green" }, text: "→ made T-3" } } },
                 { ref: "T-2", cells: { ref: "T-2", time: "yesterday", text: "two" } },
               ],
             },
@@ -479,7 +501,9 @@ describe("TUI blocks", () => {
     expect(at("T-2")).toBe(at("T-1") + 3)
     const spans = await tui.spans()
     expect(fgAt(spans, "✓ you")).toBe(theme.green)
-    expect(fgAt(spans, "→ made T-3")).toBe(theme.muted)
+    // A column's tone colours its rows' cells, not the detail's.
+    expect(fgAt(spans, "one")).toBe(theme.amber)
+    expect(fgAt(spans, "→ made T-3")).toBe(theme.text)
     // Down skips the detail and the blank line.
     tui.input.pressKey("j")
     expect(bgAt(await tui.spans(), "T-2")).toBe(theme.selectedBg)
@@ -509,8 +533,7 @@ describe("TUI blocks", () => {
     expect(rows()[at("R-2") + 1]).toMatch(/╰─+╯/)
     expect(at("Rest")).toBe(at("R-2") + 2)
     setN(30)
-    await sleep(30)
-    frame = await tui.frame()
+    for (let i = 0; i < 100 && !frame.includes("R-12"); i++) frame = await tui.frame()
     // Both panels keep their borders; the top one takes half the 14 rows between header and status bar and scrolls inside.
     expect(at("Rest")).toBe(at("Top") + 7)
     expect(rows()[at("Rest") - 1]).toMatch(/╰─+╯/)

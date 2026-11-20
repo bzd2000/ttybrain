@@ -69,15 +69,18 @@ function fitParts(cell: Cell, width: number): CellPart[] {
       room -= w
       continue
     }
-    out.push({ ...p, text: truncate(p.text, room + 1) })
+    // `truncate` keeps a text that fits its width whole; the trailing space makes this part too wide for
+    // `room + 1` even when it is exactly that wide, so the cut always ends in `…`.
+    out.push({ ...p, text: truncate(`${p.text} `, room + 1) })
     break
   }
   return out
 }
 
+const asCell = (v: string | Cell | undefined): Cell => (v === undefined ? { text: "" } : typeof v === "string" ? { text: v } : v)
+
 function cellOf(row: TableRow, col: TableColumn): Cell {
-  const v = row.cells[col.id]
-  const cell: Cell = v === undefined ? { text: "" } : typeof v === "string" ? { text: v } : v
+  const cell = asCell(row.cells[col.id])
   const tone = col.tone?.(row)
   return tone === undefined ? cell : { ...cell, tone }
 }
@@ -255,10 +258,10 @@ export function Table(props: TableProps) {
     )
   }
 
-  // Laid out in the row's columns.
+  // Laid out in the row's columns (a column's `tone` is for its rows, not their details).
   const DetailCells = (dp: { cells: Record<string, string | Cell> }) => (
     <box flexDirection="row" height={1} flexShrink={0} gap={GAP}>
-      <For each={columns()}>{(col) => <CellText col={col} cell={cellOf({ ref: "", cells: dp.cells }, col)} />}</For>
+      <For each={columns()}>{(col) => <CellText col={col} cell={asCell(dp.cells[col.id])} />}</For>
     </box>
   )
 
