@@ -5,7 +5,10 @@ import type { Origin } from "../context"
 import type { PluginRuntime } from "../plugin"
 
 export type Tone = "red" | "amber" | "green" | "muted" | "accent" | "cyan" | "magenta" | undefined
-export type Cell = { text: string; tone?: Tone }
+// `parts`: the text in differently coloured pieces (their texts joined are `text`); a part without a tone takes the
+// cell's. A Table cuts the parts together to the column's width.
+export type CellPart = { text: string; tone?: Tone }
+export type Cell = { text: string; tone?: Tone; parts?: CellPart[] }
 export type Route =
   | { kind: "screen"; screen: string; params?: Record<string, string> }
   | { kind: "record"; screen: string; ref: string; tab?: string }

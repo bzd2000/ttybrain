@@ -4,8 +4,10 @@
 // The rows scroll so the selected one stays in view. The selected row shows as a `selectedBg` background, in the
 // focused table only (no marker column). `groups` renders `Title · n` headers above each group's rows (a group
 // without a title has no header: a screen's main group under its panel title; `count: false` leaves out the
-// ` · n`; `tone` colours the header, muted by default; `space` puts a blank line above it). A row's `detail` is a second line under it, aligned with
-// its second column and not selectable (a processed inbox item's outcome). A focused table with rows and `onOpen`
+// ` · n`; `tone` colours the header, muted by default; `space` puts a blank line above it; `rowSpace` a blank line
+// between its rows). A row's `detail` is a second line under it, not selectable (a processed inbox item's
+// outcome): one cell aligned with its second column, or `{ cells }` laid out in the row's own columns. A cell's
+// `parts` colour pieces of its text. A focused table with rows and `onOpen`
 // adds the `↑↓ select` and `Enter open` hints. With `listId`, the columns other plugins registered for that list (registry `columns(listId)`) are
 // appended and filled through their `value(ref)`. While a text field holds text focus, the Table takes no keys,
 // nor keys a handler before it (its screen's) already claimed with preventDefault().
@@ -15,15 +17,16 @@ import { displayWidth, truncate } from "../format"
 import { printable, useKeys, useScreenKeys } from "../keys"
 import { useApp } from "../scope"
 import { theme, toneColor } from "../theme"
-import type { Cell, Tone } from "../types"
+import type { Cell, CellPart, Tone } from "../types"
 
-export type TableRow = { ref: string; cells: Record<string, string | Cell>; detail?: Cell }
+export type TableRow = { ref: string; cells: Record<string, string | Cell>; detail?: Cell | { cells: Record<string, string | Cell> } }
 // `drop`: a fixed column that gives way when the table is too narrow: higher numbers go first, equal numbers go
 // together, unset never goes. `minWidth` (on the grow column): the width it keeps before columns are dropped
 // (default 16 once any column is droppable).
 export type TableColumn = { id: string; title: string; width: number | "grow"; tone?: (row: TableRow) => Tone; drop?: number; minWidth?: number }
 // `space`: a blank line above the group's header (none when the header is the table's first line).
-export type TableGroup = { title?: string; count?: boolean; tone?: Tone; space?: boolean; rows: TableRow[] }
+// `rowSpace`: a blank line between its rows (after a row's detail line).
+export type TableGroup = { title?: string; count?: boolean; tone?: Tone; space?: boolean; rowSpace?: boolean; rows: TableRow[] }
 
 export type TableProps = {
   columns: TableColumn[]
@@ -47,9 +50,30 @@ const GAP = 1
 // A grow column's width before the table has been measured.
 const UNMEASURED_GROW = 20
 
-type Line = { kind: "group"; title: string; tone: Tone } | { kind: "row"; row: TableRow } | { kind: "detail"; cell: Cell } | { kind: "space" }
+type Detail = NonNullable<TableRow["detail"]>
+type Line = { kind: "group"; title: string; tone: Tone } | { kind: "row"; row: TableRow } | { kind: "detail"; detail: Detail } | { kind: "space" }
 
-const rowLines = (row: TableRow): Line[] => (row.detail ? [{ kind: "row", row }, { kind: "detail", cell: row.detail }] : [{ kind: "row", row }])
+const rowLines = (row: TableRow): Line[] => (row.detail ? [{ kind: "row", row }, { kind: "detail", detail: row.detail }] : [{ kind: "row", row }])
+const groupRows = (g: TableGroup): Line[] => g.rows.flatMap((r, i) => (g.rowSpace && i > 0 ? [{ kind: "space" } as const, ...rowLines(r)] : rowLines(r)))
+
+// A cell's parts (or its text as one part) cut together to `width` cells, the last one ending in `…`.
+function fitParts(cell: Cell, width: number): CellPart[] {
+  const parts = cell.parts ?? [{ text: cell.text }]
+  if (displayWidth(parts.map((p) => p.text).join("")) <= width) return parts
+  const out: CellPart[] = []
+  let room = width - 1
+  for (const p of parts) {
+    const w = displayWidth(p.text)
+    if (w <= room) {
+      out.push(p)
+      room -= w
+      continue
+    }
+    out.push({ ...p, text: truncate(p.text, room + 1) })
+    break
+  }
+  return out
+}
 
 function cellOf(row: TableRow, col: TableColumn): Cell {
   const v = row.cells[col.id]
@@ -65,7 +89,7 @@ export function Table(props: TableProps) {
   const lines = createMemo((): Line[] =>
     props.groups
       ? props.groups.reduce((out: Line[], g) => {
-          const rows = g.rows.flatMap(rowLines)
+          const rows = groupRows(g)
           if (g.title === undefined) return [...out, ...rows]
           const header: Line = { kind: "group", title: g.count === false ? g.title : `${g.title} · ${g.rows.length}`, tone: g.tone ?? "muted" }
           return [...out, ...(g.space && out.length > 0 ? [{ kind: "space" } as const] : []), header, ...rows]
@@ -202,6 +226,20 @@ export function Table(props: TableProps) {
       {truncate(cp.text, widthOf(cp.col))}
     </text>
   )
+  // A cell: its text in one colour, or its parts side by side.
+  const CellText = (cp: { col: TableColumn; cell: Cell }) => (
+    <Show when={cp.cell.parts} fallback={<ColumnText col={cp.col} text={cp.cell.text} fg={toneColor(cp.cell.tone)} />}>
+      <box flexDirection="row" width={widthOf(cp.col)} flexShrink={0} height={1}>
+        <For each={fitParts(cp.cell, widthOf(cp.col))}>
+          {(p) => (
+            <text fg={toneColor(p.tone ?? cp.cell.tone)} flexShrink={0} wrapMode="none">
+              {p.text}
+            </text>
+          )}
+        </For>
+      </box>
+    </Show>
+  )
 
   const Row = (rp: { row: TableRow }) => {
     const on = () => rp.row.ref === selected() && focused()
@@ -210,12 +248,19 @@ export function Table(props: TableProps) {
         <For each={columns()}>
           {(col) => {
             const cell = () => cellOf(rowCells(rp.row), col)
-            return <ColumnText col={col} text={cell().text} fg={toneColor(cell().tone)} />
+            return <CellText col={col} cell={cell()} />
           }}
         </For>
       </box>
     )
   }
+
+  // Laid out in the row's columns.
+  const DetailCells = (dp: { cells: Record<string, string | Cell> }) => (
+    <box flexDirection="row" height={1} flexShrink={0} gap={GAP}>
+      <For each={columns()}>{(col) => <CellText col={col} cell={cellOf({ ref: "", cells: dp.cells }, col)} />}</For>
+    </box>
+  )
 
   // Indented past the first column, cut to what is left of the measured width.
   const Detail = (dp: { cell: Cell }) => {
@@ -268,7 +313,7 @@ export function Table(props: TableProps) {
                   {line.title}
                 </text>
               ) : line.kind === "detail" ? (
-                <Detail cell={line.cell} />
+                "cells" in line.detail ? <DetailCells cells={line.detail.cells} /> : <Detail cell={line.detail} />
               ) : (
                 <Row row={line.row} />
               )

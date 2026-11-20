@@ -1,4 +1,4 @@
-// The Inbox screen (slot 6): the New and Processed groups, unknown tags, process by hand (`p`), dismiss (`z`),
+// The Inbox screen (slot 6): the New and Processed panels, unknown tags, process by hand (`p`), dismiss (`z`),
 // reopen (`u`) and edit (`e`), against the built-in plugins seeded through their write operations.
 import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
@@ -77,23 +77,27 @@ describe("inbox screen", () => {
     expect(lineWith(frame, "I-3")).toContain("Mon 9 Nov")
     expect(frame).not.toContain("I-4")
     expect(frame).not.toContain("old processed")
-    // new oldest first; processed newest first, each with its second line
-    const order = ["New · 2", "I-2", "I-1", "Processed · last 7 days", "I-5", "✓ you → Action A-1", "I-3", "✗ dismissed by you"].map((s) => indexOf(frame, s))
+    // new oldest first; processed newest first, each with its second line (the outcome in the time column, then the
+    // summary or who dismissed it in the text column)
+    const order = ["New · 2", "I-2", "I-1", "Processed · last 7 days", "I-5", "→ Action A-1", "I-3", "✗ dismissed"].map((s) => indexOf(frame, s))
     expect(order.every((i) => i >= 0)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    expect(indexOf(frame, "✓ you → Action A-1")).toBe(indexOf(frame, "I-5") + 1)
-    expect(lineWith(frame, "✓ you → Action A-1")).toContain("→ A-1")
-    expect(indexOf(frame, "✗ dismissed by you")).toBe(indexOf(frame, "I-3") + 1)
+    expect(indexOf(frame, "→ Action A-1")).toBe(indexOf(frame, "I-5") + 1)
+    expect(lineWith(frame, "→ Action A-1")).toContain("✓ you        → Action A-1")
+    expect(indexOf(frame, "✗ dismissed")).toBe(indexOf(frame, "I-3") + 1)
+    expect(lineWith(frame, "✗ dismissed")).toContain("✗ dismissed  by you")
   })
 
   test("unknown tag flagged", async () => {
     const t = await open(async () => void (await inCtx(() => write("inbox").capture!({ text: "#CMR ask Marie about key user dates" }))))
     const frame = await t.frame()
-    expect(lineWith(frame, "I-1")).toContain("#CMR ⚠ ask Marie")
+    expect(lineWith(frame, "I-1")).toContain("#CMR ⚠ unknown project ask Marie")
     const spans = await t.spans()
     const row = spans.lines.find((l) => l.spans.map((s) => s.text).join("").includes("#CMR ⚠"))!
-    const cell = row.spans.find((s) => s.text.includes("#CMR"))!
-    expect(rgbToHex(cell.fg).toLowerCase()).toBe(theme.amber)
+    const fg = (text: string) => rgbToHex(row.spans.find((s) => s.text.includes(text))!.fg).toLowerCase()
+    expect(fg("#CMR")).toBe(theme.cyan)
+    expect(fg("⚠ unknown project")).toBe(theme.amber)
+    expect(fg("ask Marie")).toBe(theme.text)
   })
 
   test("p → Action creates action with provenance and marks processed", async () => {
@@ -108,13 +112,13 @@ describe("inbox screen", () => {
     frame = await until(t, (f) => f.includes("New action"))
     expect(frame).toContain("call about")
     t.input.pressKey("s", { ctrl: true })
-    frame = await until(t, (f) => f.includes("→ A-1") && !f.includes("New action"))
+    frame = await until(t, (f) => f.includes("→ Action A-1") && !f.includes("New action"))
     const action = await inCtx(async () => (await (kernel!.runtime("projects")!.data as any).selectFrom("action").select(["title", "project_id"]).executeTakeFirst()) as any)
     expect(action).toEqual({ title: "call about", project_id: 1 })
     const it = await item("I-1")
     expect([it.status, it.summary, it.processed_by]).toEqual(["processed", "Action A-1", "you"])
     expect(await inCtx(() => kernel!.runtime("projects")!.provenance.originOf("action", 1))).toEqual({ type: "inbox", ref: "I-1" })
-    expect(frame).toContain("✓ you → Action A-1")
+    expect(lineWith(frame, "→ Action A-1")).toContain("✓ you        → Action A-1")
     expect(frame).toContain("New · 0")
   })
 
@@ -134,7 +138,7 @@ describe("inbox screen", () => {
     expect(frame).not.toMatch(/Person\*/)
     expect(lineWith(frame, "Project")).toContain("#CRM")
     t.input.pressKey("s", { ctrl: true })
-    frame = await until(t, (f) => f.includes("→ N-1") && !f.includes("New note"))
+    frame = await until(t, (f) => f.includes("→ Note N-1") && !f.includes("New note"))
     const note = await inCtx(async () => (await (kernel!.runtime("people")!.data as any).selectFrom("note").select(["person_id", "project_id", "text"]).executeTakeFirst()) as any)
     expect(note).toEqual({ person_id: 2, project_id: 1, text: "worried about budget" })
     const it = await item("I-1")
@@ -156,12 +160,12 @@ describe("inbox screen", () => {
   test("z dismisses, u reopens", async () => {
     const t = await open(async () => void (await inCtx(() => write("inbox").capture!({ text: "maybe later" }))))
     t.input.pressKey("z")
-    let frame = await until(t, (f) => f.includes("✗ dismissed by you"))
+    let frame = await until(t, (f) => f.includes("✗ dismissed  by you"))
     expect(frame).toContain("New · 0")
     expect(lineWith(frame, "I-1")).toContain("maybe later")
     let it = await item("I-1")
     expect([it.status, it.processed_by]).toEqual(["dismissed", "you"])
-    t.input.pressKey("j") // the selection follows I-1 into the Processed group already; j keeps it there
+    t.input.pressKey("j") // with New empty the Processed panel has the focus, on I-1; j keeps it there
     t.input.pressKey("u")
     frame = await until(t, (f) => f.includes("New · 1"))
     expect(frame).not.toContain("✗ dismissed")
@@ -183,7 +187,7 @@ describe("inbox screen", () => {
     t.input.pressTab() // accept the suggestion
     await t.frame()
     t.input.pressKey("s", { ctrl: true })
-    frame = await until(t, (f) => f.includes("→ R-1") && !f.includes("New risk"))
+    frame = await until(t, (f) => f.includes("→ Risk / issue R-1") && !f.includes("New risk"))
     const risk = await inCtx(async () => (await (kernel!.runtime("projects")!.data as any).selectFrom("risk").select(["title", "project_id"]).executeTakeFirst()) as any)
     expect(risk).toEqual({ title: "vendor may be late", project_id: 1 })
     const it = await item("I-1")

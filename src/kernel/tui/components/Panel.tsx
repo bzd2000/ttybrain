@@ -3,7 +3,8 @@
 // for the border is cut with `…` before its count. An optional footer sits on the bottom border, right-aligned and
 // always muted (`╰──── status:open ─╯`); it costs no row, and is cut with `…` to the border's width. With `grow` it
 // takes the height left over and no more, so a Table inside it scrolls instead of pushing the panel past the
-// screen.
+// screen. With `shrink` it is as tall as its content but at most half the room (a Table inside then scrolls),
+// so a panel sized to its rows never pushes a growing one below it off the screen.
 import { createSignal, Show, type JSX } from "solid-js"
 import { displayWidth, truncate } from "../format"
 import { theme } from "../theme"
@@ -11,7 +12,7 @@ import { theme } from "../theme"
 // Border cells kept beside the title and the footer: the corner and one `─` on each side.
 const EDGE = 2
 
-export function Panel(props: { title: string; count?: number; focused?: boolean; footer?: string; grow?: boolean; children?: JSX.Element }) {
+export function Panel(props: { title: string; count?: number; focused?: boolean; footer?: string; grow?: boolean; shrink?: boolean; children?: JSX.Element }) {
   const [width, setWidth] = createSignal(0)
   // ` Title · n ` cut to the top border's room (OpenTUI leaves out a title that does not fit), keeping the count.
   const title = () => {
@@ -37,8 +38,9 @@ export function Panel(props: { title: string; count?: number; focused?: boolean;
       titleColor={props.focused ? theme.accent : theme.muted}
       flexDirection="column"
       flexGrow={props.grow ? 1 : 0}
-      flexShrink={props.grow ? 1 : 0}
-      minHeight={props.grow ? 0 : undefined}
+      flexShrink={props.grow || props.shrink ? 1 : 0}
+      minHeight={props.grow || props.shrink ? 0 : undefined}
+      maxHeight={props.shrink ? "50%" : undefined}
       paddingLeft={1}
       paddingRight={1}
       backgroundColor={theme.bg}

@@ -3,6 +3,7 @@
 export { defineTui } from "./types"
 export type {
   Cell,
+  CellPart,
   FieldEditorProps,
   GlobalActionDef,
   ListColumnDef,

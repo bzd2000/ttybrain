@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { createSignal } from "solid-js"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
-import { bgAt } from "../../../tests/design"
+import { bgAt, fgAt } from "../../../tests/design"
 import { definePlugin, type PluginDef } from "../api"
 import { onCleanup, onMount } from "solid-js"
 import { Menu } from "./components/Menu"
@@ -410,6 +410,112 @@ describe("TUI blocks", () => {
     expect(bgAt(spans, "T-3")).toBe(theme.selectedBg)
     // The detail line is never selected.
     expect(bgAt(spans, "✓ done by you")).toBe(theme.bg)
+  })
+
+  test("Table cell parts colour pieces of a cell and are cut together to the column", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    function TableScreen() {
+      return (
+        <Table
+          columns={[
+            { id: "ref", title: "Ref", width: 5 },
+            { id: "text", title: "Text", width: 14 },
+          ]}
+          rows={[
+            { ref: "T-1", cells: { ref: "T-1", text: { text: "see #CRM now", tone: "muted", parts: [{ text: "see " }, { text: "#CRM", tone: "cyan" }, { text: " now" }] } } },
+            { ref: "T-2", cells: { ref: "T-2", text: { text: "call @anna about the plan", parts: [{ text: "call " }, { text: "@anna", tone: "magenta" }, { text: " about the plan" }] } } },
+          ]}
+          header={false}
+          focused
+        />
+      )
+    }
+    tui = await renderTui(kernel, { parts: [screenPart(TableScreen)] })
+    tui.input.pressKey("2")
+    const frame = await tui.frame()
+    expect(lineWith(frame, "T-1")).toContain("T-1   see #CRM now")
+    // Cut to 14 cells with `…`, across the parts.
+    expect(lineWith(frame, "T-2")).toContain("T-2   call @anna ab…")
+    expect(lineWith(frame, "T-2")).not.toContain("about")
+    const spans = await tui.spans()
+    expect(fgAt(spans, "#CRM", "T-1")).toBe(theme.cyan)
+    // A part without a tone takes the cell's.
+    expect(fgAt(spans, "see", "T-1")).toBe(theme.muted)
+    expect(fgAt(spans, "@anna", "T-2")).toBe(theme.magenta)
+    expect(fgAt(spans, "ab…", "T-2")).toBe(theme.text)
+  })
+
+  test("Table detail cells sit in the row's columns; rowSpace puts a blank line between a group's rows", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    function TableScreen() {
+      return (
+        <Table
+          columns={[
+            { id: "ref", title: "Ref", width: 5 },
+            { id: "time", title: "Time", width: 12 },
+            { id: "text", title: "Text", width: "grow" },
+          ]}
+          groups={[
+            {
+              rowSpace: true,
+              rows: [
+                { ref: "T-1", cells: { ref: "T-1", time: "today", text: "one" }, detail: { cells: { time: { text: "✓ you", tone: "green" }, text: { text: "→ made T-3", tone: "muted" } } } },
+                { ref: "T-2", cells: { ref: "T-2", time: "yesterday", text: "two" } },
+              ],
+            },
+          ]}
+          header={false}
+          focused
+        />
+      )
+    }
+    tui = await renderTui(kernel, { parts: [screenPart(TableScreen)] })
+    tui.input.pressKey("2")
+    const frame = await tui.frame()
+    const at = (s: string) => frame.split("\n").findIndex((l) => l.includes(s))
+    expect(at("✓ you")).toBe(at("T-1") + 1)
+    expect(lineWith(frame, "✓ you")).toContain("      ✓ you        → made T-3")
+    expect(frame.split("\n")[at("T-1") + 2]!.trim()).toBe("")
+    expect(at("T-2")).toBe(at("T-1") + 3)
+    const spans = await tui.spans()
+    expect(fgAt(spans, "✓ you")).toBe(theme.green)
+    expect(fgAt(spans, "→ made T-3")).toBe(theme.muted)
+    // Down skips the detail and the blank line.
+    tui.input.pressKey("j")
+    expect(bgAt(await tui.spans(), "T-2")).toBe(theme.selectedBg)
+  })
+
+  test("Panel shrink: sized to its content, at most half the room", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    const [n, setN] = createSignal(2)
+    function PanelScreen() {
+      return (
+        <box flexDirection="column" flexGrow={1}>
+          <Panel title="Top" shrink focused>
+            <Table columns={[{ id: "ref", title: "Ref", width: 6 }]} rows={Array.from({ length: n() }, (_, i) => ({ ref: `R-${i + 1}`, cells: { ref: `R-${i + 1}` } }))} header={false} focused />
+          </Panel>
+          <Panel title="Rest" grow>
+            <text>rest</text>
+          </Panel>
+        </box>
+      )
+    }
+    tui = await renderTui(kernel, { parts: [screenPart(PanelScreen)], width: 60, height: 16 })
+    tui.input.pressKey("2")
+    let frame = await tui.frame()
+    const rows = () => frame.split("\n")
+    const at = (s: string) => rows().findIndex((l) => l.includes(s))
+    expect(at("R-2")).toBe(at("Top") + 2)
+    expect(rows()[at("R-2") + 1]).toMatch(/╰─+╯/)
+    expect(at("Rest")).toBe(at("R-2") + 2)
+    setN(30)
+    await sleep(30)
+    frame = await tui.frame()
+    // Both panels keep their borders; the top one takes half the 14 rows between header and status bar and scrolls inside.
+    expect(at("Rest")).toBe(at("Top") + 7)
+    expect(rows()[at("Rest") - 1]).toMatch(/╰─+╯/)
+    expect(frame).toContain("rest")
+    expect(frame).not.toContain("R-30")
   })
 
   test("useRecordForms lists a record type's registered forms", async () => {

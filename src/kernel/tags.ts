@@ -51,7 +51,7 @@ export class TagRegistry {
   }
 
   // Completions for a tag being typed (`#cr`, `@ma`): the record type of that prefix searches the rest.
-  async suggest(partial: string, limit: number): Promise<Array<{ ref: string; label: string }>> {
+  async suggest(partial: string, limit: number): Promise<Array<{ ref: string; label: string; detail?: string }>> {
     const def = this.defs.get(partial.slice(0, 1))?.def
     const type = def ? this.records?.byName(def.recordType) : undefined
     return type ? type.search(partial.slice(1), limit) : []

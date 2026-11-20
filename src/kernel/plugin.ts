@@ -50,8 +50,11 @@ export interface PluginContext {
   tagType(def: TagTypeDef): void
   readonly tags: {
     resolve(text: string): ReturnType<TagRegistry["resolve"]>
-    // Completions for a tag being typed (`#cr`, `@ma`); [] for an unknown prefix.
-    suggest(partial: string, limit: number): Promise<Array<{ ref: string; label: string }>>
+    // Completions for a tag being typed (`#cr`, `@ma`); [] for an unknown prefix. `detail`: what the record
+    // type's search adds (a person's role).
+    suggest(partial: string, limit: number): Promise<Array<{ ref: string; label: string; detail?: string }>>
+    // The registered tag prefixes and the record type each names (`#` → project).
+    types(): Array<{ prefix: string; recordType: string }>
   }
   command(def: CommandDef): void
   report(def: ReportDef): void

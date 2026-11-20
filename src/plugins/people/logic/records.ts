@@ -211,13 +211,17 @@ export function registerRecordTypes(ctx: PluginContext, store: Store): void {
       const like = `%${text.trim().replace(/^@/, "")}%`
       const rows = await ctx.data
         .selectFrom("person")
-        .select(["handle", "name"])
+        .select(["handle", "name", "job_title", "is_team"])
         .where((eb) => eb.or([eb("name", "like", like), eb("handle", "like", like)]))
         .where("archived_at", "is", null)
         .orderBy("name")
         .limit(limit)
         .execute()
-      return rows.map((r) => ({ ref: `@${r.handle}`, label: String(r.name) }))
+      // The detail: `team` for a team member, else the job title.
+      return rows.map((r) => {
+        const detail = Number(r.is_team) === 1 ? "team" : r.job_title ? String(r.job_title) : undefined
+        return { ref: `@${r.handle}`, label: String(r.name), ...(detail !== undefined && { detail }) }
+      })
     },
   })
   ctx.recordType({

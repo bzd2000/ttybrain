@@ -312,7 +312,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         live()
         tags.register(def, id)
       },
-      tags: { resolve: (text) => tags.resolve(text), suggest: (partial, limit) => tags.suggest(partial, limit) },
+      tags: { resolve: (text) => tags.resolve(text), suggest: (partial, limit) => tags.suggest(partial, limit), types: () => tags.types() },
       command: (def) => {
         live()
         commands.register(id, def)

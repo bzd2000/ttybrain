@@ -87,11 +87,13 @@ type Level = "high" | "low" | null
 // hold) with health, milestones, deliverables, risks and decisions, 46 open actions (3 overdue, 3 this week, 3 next
 // week, 34 later, 3 undated), M-1 "SteerCo" (28 Oct, held) and M-2 "Steering committee Q4" (4 Dec, 8 attendees,
 // 5 agenda items), the CRM context, and the inbox: 4 handled items (I-1 dismissed, I-2 … I-4 processed, with what
-// was made from them) and 3 new ones (I-5 … I-7). Only through the plugins' write operations; a failing write
-// throws.
+// was made from them; captured Mon 9 Nov and yesterday, as the Inbox design) and 3 new ones (I-5 … I-7, today at
+// 09:42, 10:15 and 11:03). Only through the plugins' write operations; a failing write throws.
 export async function seedDesign(kernel: Kernel): Promise<void> {
   const w = (plugin: string) => kernel.runtime(plugin)!.self().write as Write
   const inCtx = <T>(fn: () => Promise<T>, origin?: Origin) => runWithContext(kernel.context(origin), fn)
+  // As if the clock read `now` (the inbox items' capture and processing times).
+  const at = <T>(now: string, fn: () => Promise<T>) => runWithContext({ ...kernel.context(), today: now.slice(0, 10), now }, fn)
   const people = w("people")
   const projects = w("projects")
   const meetings = w("meetings")
@@ -225,27 +227,25 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
   })
 
   // Inbox items already handled, and what was made from them (with the item as their origin).
-  const handled = async (text: string, make: () => Promise<string>) => {
-    const item = await inCtx(() => inbox.capture!({ text }))
+  const handled = async (captured: string, processed: string, text: string, make: () => Promise<string>) => {
+    const item = await at(captured, () => inbox.capture!({ text }))
     const summary = await inCtx(make, { type: "inbox", ref: item.ref })
-    await inCtx(() => inbox.markProcessed!({ ref: item.ref, summary, by: "assistant" }))
+    await at(processed, () => inbox.markProcessed!({ ref: item.ref, summary, by: "assistant" }))
   }
-  await inCtx(async () => {
-    const coffee = await inbox.capture!({ text: "remember to buy coffee for the team" })
-    await inbox.dismiss!({ ref: coffee.ref, by: "you" })
-  })
-  await handled("#CRM #DWH migration overlap, Bob to align with DWH team", async () => {
+  const coffee = await at("2026-11-09T08:10:00", () => inbox.capture!({ text: "remember to buy coffee for the team" }))
+  await at("2026-11-09T17:00:00", () => inbox.dismiss!({ ref: coffee.ref, by: "you" }))
+  await handled("2026-11-09T14:20:00", "2026-11-10T08:30:00", "#CRM #DWH migration overlap, Bob to align with DWH team", async () => {
     const action = await projects.addAction!({ title: "Align migration scope with DWH team", project: "CRM", owner: "bob", due: "2026-11-16" })
     const risk = await projects.addRisk!({ project: "CRM", title: "Data migration volume unknown", type: "risk", severity: "medium" })
     return `action ${action.ref} (Bob, Mon) · risk ${risk.ref} "Data migration volume unknown"`
   })
-  await handled("1:1 @sofie wants project mgmt training next year, follow up with options", async () => {
+  await handled("2026-11-11T15:30:00", "2026-11-11T18:00:00", "1:1 @sofie wants project mgmt training next year, follow up with options", async () => {
     await people.addNote!({ person: "sofie", kind: "one_on_one", text: "Wants project mgmt training next year", date: "2026-11-11" })
     await people.addGoal!({ person: "sofie", title: "PM training 2027" })
     const action = await projects.addAction!({ title: "Send training plan options", due: "2026-11-15" })
     return `1:1 note on Sofie · goal "PM training 2027" · action ${action.ref} (me, Sun)`
   })
-  await handled("#ERP decision: go with vendor B, signed off by steering", async () => {
+  await handled("2026-11-11T16:45:00", "2026-11-11T18:05:00", "#ERP decision: go with vendor B, signed off by steering", async () => {
     const decision = await projects.addDecision!({ project: "ERP", title: "Select vendor B", date: "2026-11-11" })
     return `decision ${decision.ref} "Select vendor B" on ERP`
   })
@@ -304,11 +304,11 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
 
     await projects.setContext!({ project: "CRM", markdown: CRM_CONTEXT })
 
-    // The 3 new inbox items (the last one has an unknown tag).
-    await inbox.capture!({ text: "Peter worried about budget overrun on #CRM, wants an update before the board @peter" })
-    await inbox.capture!({ text: "@anna finished the solution outline #CRM, Bob needs 3 more days on specs @bob" })
-    await inbox.capture!({ text: "#CMR ask Marie about key user dates" })
   })
+  // The 3 new inbox items (the last one has an unknown tag).
+  await at("2026-11-12T09:42:00", () => inbox.capture!({ text: "Peter worried about budget overrun on #CRM, wants an update before the board @peter" }))
+  await at("2026-11-12T10:15:00", () => inbox.capture!({ text: "@anna finished the solution outline #CRM, Bob needs 3 more days on specs @bob" }))
+  await at("2026-11-12T11:03:00", () => inbox.capture!({ text: "#CMR ask Marie about key user dates" }))
 }
 
 const CRM_CONTEXT = `# Background

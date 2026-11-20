@@ -48,6 +48,26 @@ describe("plugin runtime", () => {
       { prefix: "#", recordType: "project" },
     ])
   })
+
+  test("tags.types() names each prefix's record type; a suggestion carries its record type's detail", async () => {
+    await runWithContext(k.context(), async () => {
+      const people = k.ops.api("people")!.write
+      await people.addPerson!({ name: "Marie Dubois", handle: "marie", job_title: "Head of Sales", is_stakeholder: true })
+      await people.addPerson!({ name: "Mathias Wouters", handle: "mathias", job_title: "Developer", is_team: true })
+      await people.addPerson!({ name: "Max Plain", handle: "max" })
+    })
+    const rt = k.runtime("inbox")!
+    expect(rt.tags.types()).toEqual([
+      { prefix: "@", recordType: "person" },
+      { prefix: "#", recordType: "project" },
+    ])
+    // People: a team member's detail is `team`, anyone else's their job title (none without one).
+    expect(await rt.tags.suggest("@ma", 5)).toEqual([
+      { ref: "@marie", label: "Marie Dubois", detail: "Head of Sales" },
+      { ref: "@mathias", label: "Mathias Wouters", detail: "team" },
+      { ref: "@max", label: "Max Plain" },
+    ])
+  })
 })
 
 describe("bootTui", () => {
