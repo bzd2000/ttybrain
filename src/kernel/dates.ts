@@ -53,3 +53,40 @@ export function parseDate(input: string, today: string): string {
   }
   throw new ValidationError(`invalid date "${input}"`, { field: "date", hint: HINT })
 }
+
+// --- display formats (the TUI and report lines; ISO in, read as UTC calendar dates) ---
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+function parts(iso: string): { y: number; m: number; d: number } {
+  const [y, m, d] = iso.split("-").map(Number) as [number, number, number]
+  return { y, m, d }
+}
+
+// `13 Nov`
+export function shortDate(iso: string): string {
+  const { m, d } = parts(iso)
+  return `${d} ${MONTHS[m - 1]}`
+}
+
+// `Fri 13 Nov`
+export function dayDate(iso: string): string {
+  return `${WEEKDAYS[weekday(iso)]} ${shortDate(iso)}`
+}
+
+// `Fri 13 Nov 2026`
+export function longDate(iso: string): string {
+  return `${dayDate(iso)} ${parts(iso).y}`
+}
+
+// A due date relative to today: `-3d` when overdue, `today`, the weekday up to the end of this week (Sunday),
+// otherwise `26 Nov`; `—` for none.
+export function dueLabel(date: string | null, today: string): string {
+  if (date === null) return "—"
+  const days = daysBetween(today, date)
+  if (days < 0) return `${days}d`
+  if (days === 0) return "today"
+  if (date <= weekEnd(today)) return WEEKDAYS[weekday(date)]!
+  return shortDate(date)
+}

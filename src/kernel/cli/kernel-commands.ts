@@ -8,7 +8,7 @@ import type { Kernel } from "../host"
 import { buildPlugin } from "../plugins/build"
 import { addPlugin, removePlugin, TRUST_WARNING } from "../plugins/install"
 import { createdText, scaffoldPlugin } from "../plugins/scaffold"
-import { renderReport, type ReportDef } from "../reports"
+import { renderReport, withoutCompact, type ReportDef } from "../reports"
 import { commandName, flagSignature, GLOBAL_FLAGS, signature, usage } from "./args"
 import type { CommandDef, FlagDef } from "./commands"
 import { formatTable, type CommandResult } from "./output"
@@ -218,7 +218,7 @@ function reportCommand(kernel: Kernel, report: ReportDef): CommandDef {
       }
       const result = await kernel.reports.run(report.id, params)
       const format = (given.format as "md" | "text" | "json" | undefined) ?? "md"
-      return { json: result, text: renderReport(result, format) }
+      return { json: withoutCompact(result), text: renderReport(result, format) }
     },
   }
 }

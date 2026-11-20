@@ -66,7 +66,7 @@ describe("ReportSections", () => {
     const spans = await tui.spans()
     expect(colorOf(spans, "✓ MS-1")).toBe(theme.green)
     expect(colorOf(spans, "! MS-2")).toBe(theme.red)
-    expect(colorOf(spans, "Milestones")).toBe(theme.accent)
+    expect(colorOf(spans, "Milestones")).toBe(theme.muted) // section titles are muted sub-headings (gap M6)
     expect(colorOf(spans, "No open risks.")).toBe(theme.muted)
     expect(colorOf(spans, "Last reviewed")).toBe(theme.muted)
   })
@@ -90,6 +90,60 @@ describe("ReportSections", () => {
     expect(hits[0]!.endsWith("…")).toBe(true)
     expect(hits[0]!.length).toBeLessThanOrEqual(40)
     expect(lines.some((l) => l.includes("END"))).toBe(false)
+  })
+
+  test("compact: a fact line, muted sub-headings, three columns; sections without a compact form as before", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    const compact = [
+      {
+        title: "Health",
+        columns: ["h"],
+        rows: [{ h: "amber" }],
+        empty: "",
+        compact: { fact: true, lines: [{ text: [{ text: "● amber", tone: "amber" as const }, { text: "  Slipping" }] }] },
+      },
+      {
+        title: "Decisions",
+        columns: ["d"],
+        rows: [{ d: "x" }],
+        empty: "none since 2026-10-28",
+        compact: {
+          title: "Decisions since last meeting",
+          lines: [{ icon: { text: "·", tone: "muted" as const }, text: [{ text: "Phase 1 excludes marketing" }], aside: { text: "28 Oct", tone: "muted" as const } }],
+        },
+      },
+      { title: "Empty", columns: ["d"], rows: [], empty: "none since 2026-10-28", compact: { lines: [], empty: "none since 28 Oct" } },
+      { title: "Other", columns: ["a", "b"], rows: [{ a: "A-1", b: "plain" }], marks: [{ icon: "!", tone: "red" as const }], empty: "" },
+    ]
+    tui = await renderTui(kernel, {
+      parts: [screenPart(() => (
+        <box width={60}>
+          <ReportSections sections={compact} compact />
+        </box>
+      ))],
+    })
+    tui.input.pressKey("2")
+    let frame = await tui.frame()
+    for (let i = 0; i < 20 && !frame.includes("28 Oct"); i++) frame = await tui.frame()
+    const at = frame.split("\n").findIndex((l) => l.startsWith("Health"))
+    expect(frame.split("\n").slice(at, at + 8).map((l) => l.trimEnd())).toEqual([
+      "Health          ● amber  Slipping",
+      "",
+      "Decisions since last meeting",
+      "·  Phase 1 excludes marketing               28 Oct",
+      "Empty",
+      "none since 28 Oct",
+      "Other",
+      "! A-1 · plain",
+    ])
+    const spans = await tui.spans()
+    expect(colorOf(spans, "Health")).toBe(theme.muted)
+    expect(colorOf(spans, "● amber")).toBe(theme.amber)
+    expect(colorOf(spans, "Slipping")).toBe(theme.text)
+    expect(colorOf(spans, "Decisions since")).toBe(theme.muted)
+    expect(colorOf(spans, "28 Oct")).toBe(theme.muted)
+    expect(colorOf(spans, "Phase 1")).toBe(theme.text)
+    expect(colorOf(spans, "! A-1")).toBe(theme.red)
   })
 
   test("useCopyText calls OSC 52 and useWriteExport writes into the export folder", async () => {

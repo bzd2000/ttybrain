@@ -164,34 +164,35 @@ describe("meeting tabs", () => {
 
   test("prep shows the selected project's sections with marks and the ask", async () => {
     const t = await open("M-2", 1)
-    await select(t, "2. CRM status")
+    await select(t, "2.  CRM status")
     const frame = await until(t, (f) => f.includes("Prep · CRM replatforming"))
     expect(frame).toContain("● amber")
-    expect(frame).toMatch(/[✓○] MS-1 · Design approved/)
-    expect(frame).toContain("▲ R-1")
-    expect(frame).toContain("! A-1")
-    expect(frame).toContain("Ask for this meeting")
+    // The compact form: no milestone or decision refs, the risk and action refs before their titles.
+    expect(frame).toMatch(/[✓○] {2}Design approved/)
+    expect(frame).toContain("▲  R-1")
+    expect(frame).toContain("!  A-1")
+    expect(frame).toContain("Ask for this meeting (your text)")
     expect(frame).toContain(ASK)
-    expect(frame).toContain("since SteerCo Q3 28 Oct")
+    expect(frame).toContain("generated from data · since SteerCo Q3 28 Oct")
     // Project and Name are left out: the panel title names the project.
     expect(lineWith(frame, "● amber")).not.toContain("#CRM")
     expect(lineWith(frame, "● amber")).not.toContain("CRM replatforming")
-    const overdue = (await t.spans()).lines.find((l) => l.spans.map((s) => s.text).join("").includes("! A-1"))!
-    const span = overdue.spans.find((s) => s.text.includes("! A-1"))!
+    const overdue = (await t.spans()).lines.find((l) => l.spans.map((s) => s.text).join("").includes("!  A-1"))!
+    const span = overdue.spans.find((s) => s.text.includes("!"))!
     expect(rgbToHex(span.fg).toLowerCase()).toBe(theme.red)
     const ask = (await t.spans()).lines.find((l) => l.spans.map((s) => s.text).join("").includes("Ask for this meeting"))!
-    expect(rgbToHex(ask.spans.find((s) => s.text.includes("Ask for this meeting"))!.fg).toLowerCase()).toBe(theme.accent)
+    expect(rgbToHex(ask.spans.find((s) => s.text.includes("Ask for this meeting"))!.fg).toLowerCase()).toBe(theme.muted)
   })
 
   test("prep of an item without a project", async () => {
     const t = await open("M-2", 1, { extra: () => write().editAgendaItem!({ meeting: "M-2", item: 3, ask: "Anything else?" }) })
     let frame = await until(t, (f) => f.includes("No project on this item."))
     // Item 1 is selected first: no project, no ask.
-    expect(isSelected(await t.spans(), "1. Minutes")).toBe(true)
+    expect(isSelected(await t.spans(), "1.  Minutes")).toBe(true)
     expect(frame).toContain("Ask for this meeting")
     expect(frame).toContain("—")
     expect(frame).not.toContain("● amber")
-    await select(t, "3. AOB")
+    await select(t, "3.  AOB")
     frame = await until(t, (f) => f.includes("Anything else?"))
     expect(frame).toContain("No project on this item.")
     expect(frame).not.toContain("since ")
@@ -199,7 +200,7 @@ describe("meeting tabs", () => {
 
   test("a in prep logs an action linked to the meeting and project", async () => {
     const t = await open("M-2", 1)
-    await select(t, "2. CRM status")
+    await select(t, "2.  CRM status")
     t.input.pressKey("a")
     await until(t, (f) => f.includes("New action · M-2"))
     await t.input.typeText("Send the budget")
@@ -211,7 +212,7 @@ describe("meeting tabs", () => {
 
   test("D logs a decision", async () => {
     const t = await open("M-2", 1)
-    await select(t, "2. CRM status")
+    await select(t, "2.  CRM status")
     t.input.pressKey("D")
     await until(t, (f) => f.includes("New decision · M-2"))
     t.input.pressTab() // date → title
@@ -225,18 +226,27 @@ describe("meeting tabs", () => {
   test("prep at 80x24", async () => {
     const long = "Approve the two-week shift of the design milestone and release the contingency budget for the vendor"
     const t = await open("M-2", 1, { width: 80, height: 24, extra: () => write().editAgendaItem!({ meeting: "M-2", item: 2, ask: long }) })
-    await select(t, "2. CRM")
-    const frame = await until(t, (f) => f.includes("Prep · CRM") && lineWith(f, "Approve the two-week").includes("…"))
-    expect(frame).toContain("1. Minutes")
+    await select(t, "2.  CRM")
+    // The ask wraps (as the design's paragraph does), whole.
+    const frame = await until(t, (f) => f.includes("Prep · CRM") && f.includes("the vendor"))
+    expect(frame).toContain("1.  Minutes")
     expect(frame).toContain("Prep · CRM")
-    expect(lineWith(frame, "Approve the two-week")).toContain("…")
-    expect(frame).not.toContain("release the contingency budget for the vendor")
+    const askAt = lines(frame).findIndex((l) => l.includes("Approve the two-week"))
+    const ask = lines(frame)
+      .slice(askAt, askAt + 3)
+      .map((l) => (l.split("│")[3] ?? "").trim())
+      .join(" ")
+    expect(ask).toBe(long)
     for (const l of lines(frame)) expect([...l].length).toBeLessThanOrEqual(80)
-    // The sections do not fit: PgDn scrolls them to the actions, and the ask stays in view.
-    expect(frame).not.toContain("! A-1")
+    // The sections do not fit (a muted … at the bottom says so): PgDn scrolls them, and the ask stays in view.
+    const marker = (f: string) => lines(f)[askAt - 3]!.trimEnd().endsWith("… │")
+    expect(marker(frame)).toBe(true)
+    const healthAt = lines(frame).findIndex((l) => l.includes("Health  ● amber"))
+    expect(healthAt).toBeGreaterThan(0)
     t.input.pressKey("\u001b[6~") // PgDn
-    const scrolled = await until(t, (f) => f.includes("! A-1"))
-    expect(scrolled).toContain("! A-1")
+    const scrolled = await until(t, (f) => !f.includes("Health  ● amber"))
+    expect(scrolled).not.toContain("Health  ● amber")
+    expect(marker(scrolled)).toBe(false)
     expect(scrolled).toContain("Ask for this meeting")
   })
 
@@ -320,21 +330,21 @@ describe("meeting tabs", () => {
   test("notes tab shows notes and what was logged; e edits through the editor and saves", async () => {
     const t = await open("M-2", 2)
     let frame = await until(t, (f) => f.includes("No notes yet. Press e to write them."))
-    expect(frame).toContain("1. Minutes")
+    expect(frame).toContain("1.  Minutes")
     expect(frame).toContain("Logged in this meeting")
     expect(frame).not.toContain("A-2")
 
-    // Logged against M-2 (A-2 belongs to M-1): the panel and the tab count follow.
+    // Logged against M-2 (A-2 belongs to M-1): the panel follows; the tabs have no counts (as designed).
     await inCtx(async () => {
       await write("projects").addAction!({ title: "Book the room", owner: "peter", due: "2026-11-20", meeting: "M-2" }) // A-3
       await write("projects").addAction!({ title: "Circulate the pack", meeting: "M-2" }) // A-4
       await write("projects").addDecision!({ title: "Go with vendor B", project: "CRM", meeting: "M-2" }) // DE-1
     })
-    frame = await until(t, (f) => f.includes("DE-1 Go with vendor B") && /Notes 3\s+Export/.test(f))
+    frame = await until(t, (f) => f.includes("DE-1 Go with vendor B"))
     expect(frame).toContain("A-3 Book the room · @peter · 20 Nov")
     expect(frame).toContain("A-4 Circulate the pack · me")
     expect(frame).toContain("DE-1 Go with vendor B")
-    expect(frame).toMatch(/Notes 3\s+Export/)
+    expect(frame).toMatch(/Agenda   Prep   Notes   Export/)
     expect(frame).not.toContain("Share integration specs")
 
     // e opens the built-in editor on the notes and saves them with setNotes.

@@ -69,6 +69,11 @@ export function useMeetingWrites() {
     logAction: (m: MeetingRecord, project: string | null) => void overlay.openForm("action", "action", links(m, project)),
     logDecision: (m: MeetingRecord, project: string | null) => void overlay.openForm("decision", "decision", links(m, project)),
     editItem: (m: MeetingRecord, item: AgendaItem) => void overlay.openForm("meeting", "agenda-item", { recordRef: m.ref, prefill: { item: String(item.position) } }),
+    // Moves the item to position `to` (J/K); true when it moved, so the caller's selection can follow it.
+    async moveItem(m: MeetingRecord, item: AgendaItem, to: number): Promise<boolean> {
+      if (to < 1 || to > m.agenda.length) return false
+      return (await act(() => rt.self().write.moveAgendaItem!({ meeting: m.ref, item: item.position, to }))).ok
+    },
   }
 }
 
@@ -110,9 +115,7 @@ export function AgendaTab(props: { recordRef: string }) {
     if (saved !== undefined) setWant(String(m.agenda.length + 1))
   }
   const move = async (m: MeetingRecord, item: AgendaItem, to: number) => {
-    if (to < 1 || to > m.agenda.length) return
-    const r = await act(() => rt.self().write.moveAgendaItem!({ meeting: m.ref, item: item.position, to }))
-    if (r.ok) setWant(String(to))
+    if (await writes.moveItem(m, item, to)) setWant(String(to))
   }
   const remove = async (m: MeetingRecord, item: AgendaItem) => {
     if (!(await overlay.confirm(`Remove item ${item.position} "${item.text}"?`))) return

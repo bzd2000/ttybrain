@@ -249,6 +249,9 @@ describe("meetings reports", () => {
     await seed()
     const r = JSON.parse((await ok("report", "board", "M-2", "--format", "json")).out)
     expect(r.title).toBe("Steering committee Q4 · 2026-12-04")
+    // The sections' compact forms (the TUI's prep) stay out of the CLI's JSON, both ways.
+    expect(r.sections.some((s: any) => "compact" in s)).toBe(false)
+    expect(JSON.stringify(JSON.parse((await ok("report", "board", "M-2", "--json")).out))).not.toContain('"compact"')
     const group = "CRM CRM replatforming · since 2026-10-28"
     expect(r.sections.map((s: any) => [s.title, s.group ?? null])).toEqual([
       ["Attendees", null],

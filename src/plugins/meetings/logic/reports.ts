@@ -16,6 +16,15 @@ const MeetingParams = Type.Object({ meeting: Type.String({ description: "the mee
 const CellSchema = Type.Union([Type.String(), Type.Number(), Type.Null()])
 const Tone = Type.Union([Type.Literal("red"), Type.Literal("amber"), Type.Literal("green"), Type.Literal("muted")])
 const MarkSchema = Type.Object({ icon: Type.Optional(Type.String()), tone: Type.Optional(Tone) })
+const SpanTone = Type.Union([Tone, Type.Literal("cyan"), Type.Literal("magenta")])
+const SpanSchema = Type.Object({ text: Type.String(), tone: Type.Optional(SpanTone) })
+const CompactSchema = Type.Object({
+  title: Type.Optional(Type.String()),
+  fact: Type.Optional(Type.Boolean()),
+  lines: Type.Array(Type.Object({ icon: Type.Optional(SpanSchema), text: Type.Array(SpanSchema), aside: Type.Optional(SpanSchema) })),
+  empty: Type.Optional(Type.String()),
+  note: Type.Optional(Type.String()),
+})
 const SectionSchema = Type.Object({
   title: Type.String(),
   columns: Type.Array(Type.String()),
@@ -25,6 +34,7 @@ const SectionSchema = Type.Object({
   group: Type.Optional(Type.String()),
   marks: Type.Optional(Type.Array(Type.Union([MarkSchema, Type.Null()]))),
   text: Type.Optional(Type.String()),
+  compact: Type.Optional(CompactSchema),
 })
 const SinceSchema = Type.Object({
   since: Type.String(),

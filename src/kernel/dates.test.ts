@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { addDays, isValidDate, parseDate, weekEnd } from "./dates"
+import { addDays, dayDate, dueLabel, isValidDate, parseDate, shortDate, weekEnd } from "./dates"
 import { ValidationError } from "./errors"
 
 const T = "2026-11-13"
@@ -38,4 +38,13 @@ test("addDays / isValidDate", () => {
   expect(isValidDate("2026-02-30")).toBe(false)
   expect(isValidDate("2028-02-29")).toBe(true)
   expect(isValidDate("nope")).toBe(false)
+})
+
+// The display formats are on the plugin API too, so report sections (logic) can write `14 Oct` and `-3d`.
+test("display formats: shortDate, dayDate, dueLabel", () => {
+  expect(shortDate("2026-10-14")).toBe("14 Oct")
+  expect(dayDate("2026-12-04")).toBe("Fri 4 Dec")
+  expect(dueLabel("2026-11-09", "2026-11-12")).toBe("-3d")
+  expect(dueLabel("2026-11-13", "2026-11-12")).toBe("Fri")
+  expect(dueLabel("2026-12-02", "2026-11-12")).toBe("2 Dec")
 })

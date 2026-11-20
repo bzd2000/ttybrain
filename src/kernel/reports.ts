@@ -7,8 +7,19 @@ import { NotFoundError, suggest, ValidationError } from "./errors"
 export type Cell = string | number | null
 // A row's hint: an icon written before its first cell, and a tone (the TUI colours it; Markdown and text don't).
 export type Mark = { icon?: string; tone?: "red" | "amber" | "green" | "muted" }
+// A piece of a compact line and its tone (the TUI colours it).
+export type ReportTone = "red" | "amber" | "green" | "muted" | "cyan" | "magenta"
+export type ReportSpan = { text: string; tone?: ReportTone }
+// One line of a section's compact form: an icon, the text (pieces in their tones) and a short right-hand value
+// (a date, a status).
+export type ReportLine = { icon?: ReportSpan; text: ReportSpan[]; aside?: ReportSpan }
+// How a narrow view (the TUI's meeting prep) draws a section instead of its table: `lines` in place of the rows,
+// with `title`, `empty` and `note` in place of the section's own when given (readable dates, a title for the
+// context). `fact` draws the title as a label in front of the first line (`Health  ● amber  …`). Markdown, text
+// and JSON leave it out.
+export type ReportCompact = { title?: string; fact?: boolean; lines: ReportLine[]; empty?: string; note?: string }
 // `group` puts consecutive sections under one heading, `marks` (parallel to `rows`, `null` for none) gives rows
-// their hints, and `text` is a Markdown paragraph after the table.
+// their hints, `text` is a Markdown paragraph after the table, and `compact` is the section's compact form.
 export type ReportSectionResult = {
   title: string
   columns: string[]
@@ -18,6 +29,7 @@ export type ReportSectionResult = {
   group?: string
   marks?: Array<Mark | null>
   text?: string
+  compact?: ReportCompact
 }
 // `prepare` (optional) turns the validated params into what the sections get (parsed dates, defaults, resolved
 // refs). It runs once per report run, before any section; an error it throws fails the run (exit 1/2), unlike a
@@ -113,8 +125,29 @@ function wellFormed(r: unknown): r is ReportSectionResult {
     x.rows.every((row) => typeof row === "object" && row !== null) &&
     (x.group === undefined || typeof x.group === "string") &&
     (x.text === undefined || typeof x.text === "string") &&
-    (x.marks === undefined || (Array.isArray(x.marks) && x.marks.length === x.rows.length && x.marks.every((m) => typeof m === "object")))
+    (x.marks === undefined || (Array.isArray(x.marks) && x.marks.length === x.rows.length && x.marks.every((m) => typeof m === "object"))) &&
+    (x.compact === undefined || compactWellFormed(x.compact))
   )
+}
+
+const isSpan = (s: unknown) => typeof s === "object" && s !== null && typeof (s as { text?: unknown }).text === "string"
+// A compact form: an object with an array of lines, each with an array of spans (and optional icon and aside spans).
+function compactWellFormed(c: unknown): boolean {
+  if (typeof c !== "object" || c === null) return false
+  const lines = (c as { lines?: unknown }).lines
+  return (
+    Array.isArray(lines) &&
+    lines.every((l) => {
+      if (typeof l !== "object" || l === null) return false
+      const x = l as Record<string, unknown>
+      return Array.isArray(x.text) && x.text.every(isSpan) && (x.icon === undefined || isSpan(x.icon)) && (x.aside === undefined || isSpan(x.aside))
+    })
+  )
+}
+
+// The report as Markdown, text and JSON give it: without the sections' compact forms (a TUI drawing hint).
+export function withoutCompact(r: ReportResult): ReportResult {
+  return { ...r, sections: r.sections.map(({ compact: _, ...s }) => s) }
 }
 
 const cell = (v: Cell | undefined): string => (v === null || v === undefined ? "" : String(v))
@@ -168,5 +201,5 @@ function text(r: ReportResult): string {
 export function renderReport(r: ReportResult, format: "md" | "text" | "json"): string {
   if (format === "md") return md(r)
   if (format === "text") return text(r)
-  return JSON.stringify(r, null, 2)
+  return JSON.stringify(withoutCompact(r), null, 2)
 }

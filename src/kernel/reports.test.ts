@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import Type from "typebox"
 import { NotFoundError, ValidationError } from "./errors"
 import { GuideRegistry } from "./guide"
-import { renderReport, ReportRegistry, type ReportSectionResult } from "./reports"
+import { renderReport, ReportRegistry, withoutCompact, type ReportSectionResult } from "./reports"
 
 const def = { id: "status", cliName: "status", title: "Status report", params: Type.Object({ project: Type.String() }), describe: "the prep block" }
 
@@ -340,6 +340,27 @@ MS-3     Training
     const r = await reports.run("status", { project: "CRM" })
     const note = (id: string) => ({ title: id, columns: [], rows: [], empty: "", note: "error: malformed section result" })
     expect(r.sections).toEqual([note("short"), note("long"), note("notarray"), section("D", { marks: [{ icon: "✓" }] })])
+  })
+
+  test("a compact form travels with the run; md, text and json leave it out; a malformed one is an error note", async () => {
+    const compact = {
+      title: "Decisions since last meeting",
+      lines: [{ icon: { text: "·", tone: "muted" as const }, text: [{ text: "Outline approved" }], aside: { text: "14 Oct", tone: "muted" as const } }],
+    }
+    const reports = new ReportRegistry()
+    reports.report(def)
+    reports.section("status", "projects", { id: "ok", order: 1, run: async () => section("A", { compact }) })
+    reports.section("status", "projects", { id: "nolines", order: 2, run: async () => section("B", { compact: {} as any }) })
+    reports.section("status", "projects", { id: "badspan", order: 3, run: async () => section("C", { compact: { lines: [{ text: "x" }] } as any }) })
+    reports.section("status", "projects", { id: "badaside", order: 4, run: async () => section("D", { compact: { lines: [{ text: [], aside: 3 }] } as any }) })
+    const r = await reports.run("status", { project: "CRM" })
+    const note = (id: string) => ({ title: id, columns: [], rows: [], empty: "", note: "error: malformed section result" })
+    expect(r.sections).toEqual([section("A", { compact }), note("nolines"), note("badspan"), note("badaside")])
+    const plain = { title: r.title, sections: [section("A")] }
+    expect(renderReport({ title: r.title, sections: [r.sections[0]!] }, "md")).toBe(renderReport(plain, "md"))
+    expect(renderReport({ title: r.title, sections: [r.sections[0]!] }, "text")).toBe(renderReport(plain, "text"))
+    expect(JSON.parse(renderReport({ title: r.title, sections: [r.sections[0]!] }, "json"))).toEqual(plain)
+    expect(withoutCompact({ title: r.title, sections: [r.sections[0]!] })).toEqual(plain)
   })
 
   test("a text paragraph renders after the table", () => {

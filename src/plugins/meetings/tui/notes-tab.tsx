@@ -78,17 +78,6 @@ async function loggedLines(rt: Runtime, store: Store, m: MeetingRecord): Promise
   return out
 }
 
-// How many actions and decisions are linked to the meeting (the tab's count).
-export async function loggedCount(rt: Runtime, store: Store, ref: string): Promise<number> {
-  const m = await store.meeting(ref)
-  const count = (view: "projects.action" | "projects.decision") =>
-    store.unlessUnavailable(0, async () => {
-      const row = await rt.data.selectFrom(view).select((eb) => eb.fn.countAll().as("n")).where("meeting_id", "=", m.id).executeTakeFirstOrThrow()
-      return Number(row.n)
-    })
-  return (await count("projects.action")) + (await count("projects.decision"))
-}
-
 export function NotesTab(props: { recordRef: string }) {
   const rt = useRuntime()
   const store = makeStore(rt)
@@ -155,7 +144,7 @@ export function NotesTab(props: { recordRef: string }) {
           setHeight(this.height)
         }}
       >
-        <Panel title="Notes" grow>
+        <Panel title="Notes" focused={keys.active()} grow>
           <Show when={q.data()}>
             {(d: () => { meeting: MeetingRecord }) => (
               <Show when={d().meeting.notes.trim() !== ""} fallback={<text fg={theme.muted}>{EMPTY}</text>}>
