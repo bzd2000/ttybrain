@@ -1,5 +1,5 @@
 // projects' reports: `project-status` (`ttybrain report status <project>`, the prep block, built from projectStatus) and
-// `overview` (`ttybrain report overview`, the Overview screen as text). Other plugins add sections to both (meetings
+// `overview` (`ttybrain report overview`, the Attention screen as text). Other plugins add sections to both (meetings
 // to the status report, people and inbox to the overview); the kernel owns neither.
 import { addDays, parseRef, Type, ValidationError, type Cell, type Mark, type PluginContext } from "@ttybrain/api"
 import type { Items } from "./items"
@@ -112,7 +112,7 @@ function registerStatusReport(ctx: PluginContext, store: Store): void {
 }
 
 function registerOverview(ctx: PluginContext, store: Store, items: Items): void {
-  ctx.report({ id: "overview", cliName: "overview", title: "Overview", params: Type.Object({}), describe: "the Overview screen as text" })
+  ctx.report({ id: "overview", cliName: "overview", title: "Overview", params: Type.Object({}), describe: "the Attention screen as text" })
   const section = (id: string, order: number, run: () => Promise<{ title: string; columns: string[]; rows: Row[]; empty: string }>) =>
     ctx.reportSection("overview", { id, order, run })
   const overview = makeOverview(ctx, store, items)

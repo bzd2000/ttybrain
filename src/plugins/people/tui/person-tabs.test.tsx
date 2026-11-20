@@ -98,7 +98,7 @@ describe("person record view", () => {
     expect(frame).toContain("CRM sponsor")
     expect(frame).toContain("Open follow-ups")
     expect(frame).toContain("Send revised budget")
-    expect(lines(frame.trimEnd()).at(-1)).toContain("e edit  n note  Del archive  r restore")
+    expect(lines(frame.trimEnd()).at(-1)).toContain("e edit   n note   del archive   r restore")
 
     t.input.pressKey("e")
     frame = await until(t, (f) => f.includes("Edit @marie"))
@@ -161,7 +161,7 @@ describe("person record view", () => {
     expect(frame).not.toContain("second line")
     expect(lineWith(frame, "N-4")).toMatch(/N-4\s+3 Oct\s+1:1\s+Same day/)
     expect(lineWith(frame, "N-1")).toMatch(/N-1\s+3 Oct\s+interaction\s+Budget talk/)
-    expect(lines(frame.trimEnd()).at(-1)).toContain("n add  e edit  Enter text  Del delete")
+    expect(lines(frame.trimEnd()).at(-1)).toContain("n add   e edit   enter text   del delete")
 
     t.input.pressKey("n")
     frame = await until(t, (f) => f.includes("New note · @marie"))
@@ -237,7 +237,7 @@ describe("person record view", () => {
     const spans = await t.spans()
     const row = spans.lines.find((l) => l.spans.map((s) => s.text).join("").includes("Certification"))!
     expect(rgbToHex(row.spans.find((s) => s.text.includes("-3d"))!.fg).toLowerCase()).toBe(theme.red)
-    expect(lines(frame.trimEnd()).at(-1)).toContain("n add  e edit  x achieved/open  d drop")
+    expect(lines(frame.trimEnd()).at(-1)).toContain("n add   e edit   x achieved/open   d drop")
 
     const status = async () => (await rows("goal", ["status"])).map((r) => r.status)
     expect(isSelected(await t.spans(), "G-2")).toBe(true)

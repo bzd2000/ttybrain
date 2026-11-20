@@ -13,11 +13,12 @@ export const inboxTui = defineTui({
       const row = await ui.data.selectFrom("item").select((eb) => eb.fn.countAll().as("n")).where("status", "=", "new").executeTakeFirstOrThrow()
       return Number(row.n)
     }
-    ui.screen({ id: "inbox", title: "Inbox", slot: 6, component: InboxScreen, count: newCount })
+    ui.screen({ id: "inbox", title: "Inbox", slot: 6, component: InboxScreen, count: newCount, countTone: "amber" })
     ui.globalAction({ id: "capture", key: "i", label: "capture", overlay: CaptureOverlay })
     ui.statusBadge({
       id: "inbox",
       order: 10,
+      tone: "amber",
       text: async () => {
         const n = await newCount()
         return n > 0 ? `● ${n} new in inbox` : null

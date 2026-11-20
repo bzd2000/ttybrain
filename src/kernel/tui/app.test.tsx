@@ -1,6 +1,7 @@
 import { createTestRenderer } from "@opentui/core/testing"
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { createSignal, onCleanup, onMount } from "solid-js"
+import { isSelected } from "../../../tests/design"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
 import { builtinPlugins, builtinTuiParts } from "../../../tests/builtins"
@@ -49,11 +50,12 @@ describe("status bar", () => {
       { key: "?", label: "help" },
       { key: "q", label: "quit" },
     ]
-    // Unpinned: padding 1 + "Enter open" 10 + 2 + "n new" 5 + 2 + "e edit" 6 = 26; "? help" would need 8 more.
-    expect(fitHints(hints, 27).map((h) => h.key)).toEqual(["Enter", "n", "e"])
-    // Pinned: 1 + "Enter open" 10 + 2 + "? help" 6 + 2 + "q quit" 6 = 27; "n new" needs 7 more.
-    expect(fitHints(hints, 27, ["?", "q"]).map((h) => h.key)).toEqual(["Enter", "?", "q"])
-    expect(fitHints(hints, 34, ["?", "q"]).map((h) => h.key)).toEqual(["Enter", "n", "?", "q"])
+    // Unpinned: padding 1 + "enter open" 10 + 3 + "n new" 5 + 3 + "e edit" 6 = 28; "? help" would need 9 more.
+    expect(fitHints(hints, 28).map((h) => h.key)).toEqual(["Enter", "n", "e"])
+    expect(fitHints(hints, 27).map((h) => h.key)).toEqual(["Enter", "n"])
+    // Pinned: 1 + "enter open" 10 + 3 + "? help" 6 + 3 + "q quit" 6 = 29; "n new" needs 8 more.
+    expect(fitHints(hints, 29, ["?", "q"]).map((h) => h.key)).toEqual(["Enter", "?", "q"])
+    expect(fitHints(hints, 37, ["?", "q"]).map((h) => h.key)).toEqual(["Enter", "n", "?", "q"])
     expect(fitHints(hints, 200, ["?", "q"])).toEqual(hints)
   })
 })
@@ -64,7 +66,7 @@ describe("TUI shell", () => {
   test("header shows screen chip and date", async () => {
     tui = await renderTui(kernel, { parts: builtinTuiParts })
     const line = firstLine(await tui.frame())
-    expect(line).toContain("ttybrain · 1 Overview ▾")
+    expect(line).toContain("ttybrain ·  1 Attention ▾")
     expect(line).toContain("Fri 13 Nov 2026")
   })
 
@@ -72,11 +74,11 @@ describe("TUI shell", () => {
     tui = await renderTui(kernel, { parts: [testPart()] })
     tui.input.pressKey("2")
     let frame = await tui.frame()
-    expect(firstLine(frame)).toContain("ttybrain · 2 Test ▾")
+    expect(firstLine(frame)).toContain("ttybrain ·  2 Test ▾")
     expect(frame).toContain("test screen")
     tui.input.pressKey("3")
     frame = await tui.frame()
-    expect(firstLine(frame)).toContain("ttybrain · 2 Test ▾")
+    expect(firstLine(frame)).toContain("ttybrain ·  2 Test ▾")
     expect(frame).toContain("test screen")
     expect(tui.nav.route()).toEqual({ kind: "screen", screen: "t" })
   })
@@ -85,24 +87,24 @@ describe("TUI shell", () => {
     tui = await renderTui(kernel, { parts: [testPart()] })
     tui.input.pressKey("g")
     const frame = await tui.frame()
-    expect(frame).toContain("1 Overview")
-    expect(frame).toContain("2 Test")
+    expect(frame).toContain("1  Attention")
+    expect(frame).toContain("2  Test")
     tui.input.pressKey("j")
     await tui.settle()
     tui.input.pressEnter()
     const after = await tui.frame()
-    expect(firstLine(after)).toContain("ttybrain · 2 Test ▾")
+    expect(firstLine(after)).toContain("ttybrain ·  2 Test ▾")
     expect(after).toContain("test screen")
   })
 
   test("Esc goes back", async () => {
     tui = await renderTui(kernel, { parts: [testPart()] })
     tui.input.pressKey("2")
-    expect(firstLine(await tui.frame())).toContain("ttybrain · 2 Test ▾")
+    expect(firstLine(await tui.frame())).toContain("ttybrain ·  2 Test ▾")
     tui.input.pressEscape()
     await Bun.sleep(30) // a lone ESC is flushed by the input parser's timeout
     const frame = await tui.frame()
-    expect(firstLine(frame)).toContain("ttybrain · 1 Overview ▾")
+    expect(firstLine(frame)).toContain("ttybrain ·  1 Attention ▾")
     expect(frame).not.toContain("test screen")
   })
 
@@ -122,9 +124,9 @@ describe("TUI shell", () => {
     await tui.input.typeText("q2g?")
     const frame = await tui.frame()
     expect(frame).toContain("q2g?")
-    expect(firstLine(frame)).toContain("ttybrain · 2 Test ▾")
+    expect(firstLine(frame)).toContain("ttybrain ·  2 Test ▾")
     expect(frame).not.toContain("Plugin problems")
-    expect(frame).not.toContain("1 Overview")
+    expect(frame).not.toContain("1 Attention")
     expect(tui.renderer.isDestroyed).toBe(false)
   })
 
@@ -144,15 +146,18 @@ describe("TUI shell", () => {
     tui.input.pressKey("j")
     expect(await tui.frame()).toContain("j presses: 1")
     tui.input.pressKey("g")
-    expect(await tui.frame()).toContain("› 2 Test")
+    expect(isSelected(await tui.spans(), "2  Test")).toBe(true)
     tui.input.pressKey("k")
     tui.input.pressKey("k")
     await tui.settle()
     tui.input.pressKey("j")
-    const frame = await tui.frame()
-    expect(frame).toContain("› 2 Test")
-    expect(frame).not.toContain("› 1 Overview")
-    expect(frame).toContain("j presses: 1")
+    const spans = await tui.spans()
+    expect(isSelected(spans, "2  Test")).toBe(true)
+    expect(isSelected(spans, "1  Attention")).toBe(false)
+    // (The switcher hangs over the count; close it to read it.)
+    tui.input.pressEscape()
+    await Bun.sleep(30) // a lone ESC is flushed by the input parser's timeout
+    expect(await tui.frame()).toContain("j presses: 1")
   })
 
   test("while typing, useScreenKeys drops printable keys and Enter unless the handler opts in with whileTyping", async () => {
@@ -194,11 +199,11 @@ describe("TUI shell", () => {
       for (let i = 0; i < 400; i++) {
         await setup.renderOnce()
         first = firstLine(setup.captureCharFrame())
-        if (first.includes("ttybrain · 1 Overview")) break
+        if (first.includes("ttybrain ·  1 Attention")) break
         await new Promise((r) => setTimeout(r, 25))
       }
-      if (!first.includes("ttybrain · 1 Overview")) throw new Error(`timed out after about 10 s waiting for "ttybrain · 1 Overview"; first line: ${first}`)
-      expect(first).toContain("ttybrain · 1 Overview ▾")
+      if (!first.includes("ttybrain ·  1 Attention")) throw new Error(`timed out after about 10 s waiting for "ttybrain ·  1 Attention"; first line: ${first}`)
+      expect(first).toContain("ttybrain ·  1 Attention ▾")
       expect(resolved).toBe(false)
       setup.mockInput.pressKey("q")
       await done

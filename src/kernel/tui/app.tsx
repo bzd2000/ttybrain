@@ -13,8 +13,8 @@ import { Switcher, type SwitcherEntry } from "./components/Switcher"
 import { bindDataSession, DataContext } from "./data"
 import { createDraftStore } from "./drafts"
 import { longDate } from "./format"
-import { Header, StatusBar } from "./frame"
-import { createGlobalKeyHandler, FRAME_HINTS, KeysContext, KeysStore, LayerContext, SCREEN_LAYER, useGlobalKeys } from "./keys"
+import { CHIP_COLUMN, Header, StatusBar } from "./frame"
+import { createGlobalKeyHandler, frameHints, KeysContext, KeysStore, LayerContext, SCREEN_LAYER, useGlobalKeys, type Hint } from "./keys"
 import { clearMessages, currentMessage, notify } from "./messages"
 import { createNav, NavContext, OVERVIEW_ID, type Nav } from "./nav"
 import { createOverlay, createOverlayStack, OverlayContext } from "./overlay"
@@ -38,6 +38,16 @@ export type TuiHandle = {
 
 // The frame hints that stay in the status bar when the others do not fit.
 const PINNED_HINTS = ["?", "q"]
+// Screen 1's name (its route id stays OVERVIEW_ID).
+export const ATTENTION_TITLE = "Attention"
+// Behind an open overlay the header and the screen are dimmed: the theme background at 55% over them.
+const BACKDROP = `${theme.bg}8c`
+// The switcher drops down under the header chip, on the line under the header, starting 2 cells before the chip
+// as the designs' `.menu` does (4 cells in, under `pm · `'s chip at 6).
+const SWITCHER_PLACE = { top: 1, left: CHIP_COLUMN - 2 }
+// Other overlays are centred across, with their middle at about 44% of the height between header and status bar.
+const OVERLAY_ABOVE = 44
+const OVERLAY_BELOW = 56
 
 type Screen = SwitcherEntry & { component: Component<{}>; plugin?: string }
 
@@ -86,7 +96,7 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
   nav.setFormOpener((recordType, formId, formProps) => void overlay.openForm(recordType, formId, formProps))
   onCleanup(() => nav.setFormOpener(undefined))
 
-  const screens: Screen[] = [{ id: OVERVIEW_ID, title: "Overview", slot: OVERVIEW_SLOT, component: OverviewScreen }, ...registry.screens()]
+  const screens: Screen[] = [{ id: OVERVIEW_ID, title: ATTENTION_TITLE, slot: OVERVIEW_SLOT, component: OverviewScreen }, ...registry.screens()]
   const screenOf = (id: string) => screens.find((s) => s.id === id)
   const current = () => screenOf(nav.route().screen) ?? screens[0]!
   const route = () => nav.route()
@@ -96,11 +106,20 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
     ...registry.errors().map((e) => e.error),
     ...kernel.plugins.filter((p) => p.status === "failed").map((p) => `${p.id}: ${p.error ?? "failed"}`),
   ]
+  // On a screen (not in an overlay, not while typing) the bar is the screen's hints, then the global actions'
+  // (`i capture`), then the frame's (`g or 1-6 screens`, `? help`, `q quit`, or those an exact registration asks for).
+  const lastSlot = Math.max(...screens.map((s) => s.slot))
   const hints = () => {
     const own = keys.hints()
     if (keys.top() !== SCREEN_LAYER || keys.textFocused()) return own
-    return [...own, ...FRAME_HINTS]
+    const wanted = keys.frameKeys()
+    const tail: Hint[] = [
+      ...registry.globalActions().map((a) => ({ key: a.key, label: a.label })),
+      ...frameHints(lastSlot).filter((h) => wanted === undefined || wanted.includes(h.key)),
+    ]
+    return [...own, ...tail.filter((h) => !own.some((o) => o.key === h.key))]
   }
+  const switcherOpen = () => stack.list().some((o) => o.kind === "switcher")
 
   useGlobalKeys(
     createGlobalKeyHandler({
@@ -148,7 +167,13 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
           <KeysContext.Provider value={keys}>
             <OverlayContext.Provider value={overlay}>
               <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.bg}>
-                <Header chip={`${current().slot} ${current().title} ▾`} crumbs={nav.crumbs()} badges={registry.badges()} date={longDate(refresh.today())} />
+                <Header
+                  chip={`${current().slot} ${current().title} ${switcherOpen() ? "▴" : "▾"}`}
+                  crumb={nav.crumb()}
+                  screenCrumb={nav.screenCrumb()}
+                  badges={registry.badges()}
+                  date={longDate(refresh.today())}
+                />
                 <box flexGrow={1} flexDirection="column" overflow="hidden">
                   <Show when={!tooSmall()} fallback={<text>{`Terminal too small (need ${MIN_WIDTH}×${MIN_HEIGHT})`}</text>}>
                     <LayerContext.Provider value={SCREEN_LAYER}>
@@ -163,12 +188,25 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
                   </Show>
                 </box>
                 <StatusBar hints={hints()} message={currentMessage()} width={dims().width} pinned={PINNED_HINTS} />
+                <Show when={stack.list().length > 0}>
+                  <box position="absolute" top={0} left={0} width="100%" height={Math.max(0, dims().height - 1)} backgroundColor={BACKDROP} zIndex={9} />
+                </Show>
                 <For each={stack.list()}>
-                  {(o) => (
-                    <box position="absolute" top={2} left={0} width="100%" alignItems="center" zIndex={10}>
-                      <LayerContext.Provider value={o.id}>{o.render()}</LayerContext.Provider>
-                    </box>
-                  )}
+                  {(o) =>
+                    o.kind === "switcher" ? (
+                      <box position="absolute" top={SWITCHER_PLACE.top} left={SWITCHER_PLACE.left} zIndex={10}>
+                        <LayerContext.Provider value={o.id}>{o.render()}</LayerContext.Provider>
+                      </box>
+                    ) : (
+                      <box position="absolute" top={1} left={0} width="100%" height={Math.max(0, dims().height - 2)} flexDirection="column" alignItems="center" zIndex={10}>
+                        <box flexGrow={OVERLAY_ABOVE} flexShrink={1} />
+                        <box flexShrink={0} flexDirection="column" alignItems="center" width="100%">
+                          <LayerContext.Provider value={o.id}>{o.render()}</LayerContext.Provider>
+                        </box>
+                        <box flexGrow={OVERLAY_BELOW} flexShrink={1} />
+                      </box>
+                    )
+                  }
                 </For>
               </box>
             </OverlayContext.Provider>

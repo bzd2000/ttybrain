@@ -14,7 +14,13 @@ import type { KeyEvent } from "@opentui/core"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { createContext, createSignal, onCleanup, onMount, useContext, type Accessor } from "solid-js"
 
-export type Hint = { key: string; label: string }
+// `alt`: a second key for the same thing, shown as `<key> or <alt> <label>` (`g or 1-6 screens`).
+export type Hint = { key: string; label: string; alt?: string }
+// `exact`: these hints are the whole of the layer's own part of the status bar: hints registered without it on the
+// same layer (a Table's `↑↓ select`, say) are left out while it is registered. `frame` (with `exact`, on the screen
+// layer): which of the frame's hints (the keys of frameHints: "g", "?", "q") follow the global actions' hints; all
+// of them when left out.
+export type HintOptions = { exact?: boolean; frame?: string[] }
 
 // The spec §9 key table, as Help shows it (Help adds the registered global actions after these). `c`
 // (assistant) stays unclaimed until phase 7.
@@ -35,19 +41,28 @@ export const GLOBAL_KEYS: Hint[] = [
   { key: "q", label: "quit" },
 ]
 
-// The hints the frame adds on a screen (not in an overlay, not while typing).
-export const FRAME_HINTS: Hint[] = [
-  { key: "g", label: "screens" },
-  { key: "?", label: "help" },
-  { key: "q", label: "quit" },
-]
+// The hints the frame adds on a screen (not in an overlay, not while typing), after the global actions' hints;
+// `lastSlot` is the highest screen number key (`g or 1-6 screens`).
+export function frameHints(lastSlot: number): Hint[] {
+  return [
+    { key: "g", ...(lastSlot > 1 ? { alt: `1-${lastSlot}` } : {}), label: "screens" },
+    { key: "?", label: "help" },
+    { key: "q", label: "quit" },
+  ]
+}
+
+// A hint's key as the status bar shows it: named keys in lowercase (`Enter` → `enter`, `Ctrl+S` → `ctrl+s`, `Esc`,
+// `Tab`, `Del`); single letters stay as typed (`J/K` and `D` are Shift+j/k/d).
+export function keyText(key: string): string {
+  return key.replace(/\b[A-Z][a-z]+\b/g, (w) => w.toLowerCase()).replace(/\+([A-Z])\b/g, (_, c: string) => `+${c.toLowerCase()}`)
+}
 
 // The layer a component renders in: "screen", or the id of the overlay it belongs to.
 export const SCREEN_LAYER = "screen"
 export const LayerContext = createContext<string>(SCREEN_LAYER)
 
 type TextClaim = { token: object; layer: string }
-type HintEntry = { id: number; token: object; layer: string; list: Hint[] }
+type HintEntry = { id: number; token: object; layer: string; list: Hint[] } & HintOptions
 
 // Per app: who holds text focus and which hints are registered, by layer. Only the top layer counts.
 export class KeysStore {
@@ -63,15 +78,24 @@ export class KeysStore {
   }
 
   // The hints registered on the top layer, in registration order (a screen's before its blocks'); a key
-  // registered twice shows once, with its first label.
+  // registered twice shows once, with its first label. While an `exact` registration is on the layer, only the
+  // exact ones count.
   hints(): Hint[] {
     const top = this.top()
+    const on = this.entries[0]().filter((e) => e.layer === top)
+    const exact = on.some((e) => e.exact === true)
     const out: Hint[] = []
-    for (const e of this.entries[0]()) {
-      if (e.layer !== top) continue
+    for (const e of on) {
+      if (exact && e.exact !== true) continue
       for (const h of e.list) if (!out.some((o) => o.key === h.key)) out.push(h)
     }
     return out
+  }
+
+  // The frame hint keys an exact registration on the top layer asked for (HintOptions.frame), or undefined: all.
+  frameKeys(): string[] | undefined {
+    const top = this.top()
+    return this.entries[0]().find((e) => e.layer === top && e.exact === true && e.frame !== undefined)?.frame
   }
 
   setTextFocus(token: object, layer: string, on: boolean): void {
@@ -81,10 +105,10 @@ export class KeysStore {
     if (!on && has) setClaims(claims().filter((c) => c.token !== token))
   }
 
-  addHints(token: object, layer: string, list: Hint[]): () => void {
+  addHints(token: object, layer: string, list: Hint[], opts: HintOptions = {}): () => void {
     const id = this.nextId++
     const [, setEntries] = this.entries
-    setEntries((e) => [...e, { id, token, layer, list }])
+    setEntries((e) => [...e, { id, token, layer, list, ...opts }])
     return () => setEntries((e) => e.filter((x) => x.id !== id))
   }
 
@@ -100,8 +124,9 @@ export const KeysContext = createContext<KeysStore>()
 export type Keys = {
   // While on, the single-letter global keys are off (call it when a text field gains and loses focus).
   textFocus(on: boolean): void
-  // Shows `list` in the status bar while registered; returns the function that removes it.
-  hints(list: Hint[]): () => void
+  // Shows `list` in the status bar while registered; returns the function that removes it. With `{ exact: true }`
+  // the list is the layer's whole own part of the bar (HintOptions), so a screen can set its bar exactly.
+  hints(list: Hint[], opts?: HintOptions): () => void
   // True while no overlay sits above this component: gate `focused` props on it (useScreenKeys gates handlers).
   active(): boolean
   // True while a text field on the top layer holds text focus: blocks (Table, Tabs) leave every key to it.
@@ -116,7 +141,7 @@ export function useKeys(): Keys {
   onCleanup(() => store.drop(token))
   return {
     textFocus: (on) => store.setTextFocus(token, layer, on),
-    hints: (list) => store.addHints(token, layer, list),
+    hints: (list, opts) => store.addHints(token, layer, list, opts),
     active: () => store.top() === layer,
     typing: () => store.textFocused(),
   }

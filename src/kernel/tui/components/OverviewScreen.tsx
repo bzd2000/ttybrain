@@ -1,5 +1,5 @@
-// The Overview screen (slot 1): the plugins' panels in two columns balanced by height (overviewLayout.ts), Tab
-// moving through them in priority order. The screen loads every panel through useQuery, so it knows each one's
+// The Attention screen (slot 1, route id "overview"): the plugins' panels in two columns balanced by height
+// (overviewLayout.ts), Tab moving through them in priority order. The screen loads every panel through useQuery, so it knows each one's
 // row count and can size them to fit the screen: each panel shows its count in the title (unless its `count` is
 // false), as many rows as fit (at most MAX_ROWS) plus `+N more`, or its `empty` text, or `⚠ <error>` when its
 // first load failed (spec §9). A panel's `footer` is a muted line after its rows, inside the panel (as the
@@ -66,9 +66,9 @@ export function OverviewScreen() {
   return (
     <Show when={panels.length > 0} fallback={<text fg={theme.muted}>No panels yet: plugins add them here.</text>}>
       <KeyHints
+        exact
         hints={[
-          { key: "Tab", label: "next panel" },
-          { key: "↑↓", label: "move" },
+          { key: "Tab", label: "panel" },
           { key: "Enter", label: "open" },
         ]}
       />

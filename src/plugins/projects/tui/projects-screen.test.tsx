@@ -65,7 +65,7 @@ const health = async (code: string) =>
     return row?.health ?? null
   })
 
-const HINTS = ["Enter open", "n new", "e edit", "h health", "/ filter", "a archived", "g screens", "? help", "q quit"]
+const HINTS = ["enter open", "n new", "e edit", "h health", "/ filter", "a archived", "↑↓ select", "i capture", "g or 1-6 screens", "? help", "q quit"]
 
 describe("Projects screen", () => {
   test("sorted by health then next milestone", async () => {
@@ -73,7 +73,7 @@ describe("Projects screen", () => {
     await seed()
     const t = await open()
     const frame = await t.frame()
-    expect(lines(frame)[0]).toContain("ttybrain · 2 Projects ▾")
+    expect(lines(frame)[0]).toContain("ttybrain ·  2 Projects ▾")
     expect(frame).toContain("Projects · 4 active")
     const order = ["ERP", "CRM", "HRP", "IAM"].map((c) => indexOf(frame, ` ${c} `))
     expect(order.every((i) => i > 0)).toBe(true)
@@ -87,7 +87,7 @@ describe("Projects screen", () => {
     expect(indexOf(frame, " BI2 ")).toBeGreaterThan(onHold)
     expect(frame).not.toContain("OLD")
     expect(frame).not.toContain("Archived")
-    expect(lines(frame.trimEnd()).at(-1)).toContain("Enter open  n new  e edit  h health  / filter  a archived")
+    expect(lines(frame.trimEnd()).at(-1)).toContain("enter open   n new   e edit   h health   / filter   a archived")
   })
 
   test("a shows archived", async () => {
@@ -119,7 +119,7 @@ describe("Projects screen", () => {
     expect(frame).toContain("filter: health:red")
     await escape(t)
     frame = await t.frame()
-    expect(lines(frame)[0]).toContain("ttybrain · 2 Projects ▾") // Esc cleared the filter; it did not go back
+    expect(lines(frame)[0]).toContain("ttybrain ·  2 Projects ▾") // Esc cleared the filter; it did not go back
     for (const code of ["ERP", "CRM", "HRP", "IAM", "BI2"]) expect(frame).toContain(` ${code} `)
     expect(frame).not.toContain("filter:")
   })
@@ -363,6 +363,6 @@ describe("Projects screen", () => {
     const t = await open()
     t.input.pressKey("g")
     const frame = await t.frame()
-    expect(lines(frame).find((l) => l.includes("2 Projects") && !l.includes("▾"))).toMatch(/2 Projects\s+4\b/)
+    expect(lines(frame).find((l) => l.includes("2  Projects"))).toMatch(/2  Projects\s+4\b/)
   })
 })

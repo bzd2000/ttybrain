@@ -486,7 +486,7 @@ describe("TUI blocks", () => {
     expect(frame).toContain("main of T-1")
     const status = frame.trimEnd().split("\n").at(-1)!
     expect(status).toContain("←→ tabs")
-    expect(status).toContain("Esc back")
+    expect(status).toContain("esc back")
 
     tui.input.pressArrow("right")
     frame = await tui.frame()

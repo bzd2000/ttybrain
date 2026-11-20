@@ -93,7 +93,7 @@ describe("People screen", () => {
   test("opens on 3 and lists stakeholders then team", async () => {
     const t = await open()
     const frame = await t.frame()
-    expect(lines(frame)[0]).toContain("ttybrain · 3 People ▾")
+    expect(lines(frame)[0]).toContain("ttybrain ·  3 People ▾")
     expect(frame).toContain("All 5")
     expect(frame).toContain("Stakeholders 4")
     expect(frame).toContain("Team 2")
@@ -110,7 +110,7 @@ describe("People screen", () => {
     expect(lineWith(frame, "Luc Peeters")).toMatch(/high\s+low/)
     expect(lineWith(frame, "Anna Smit")).toMatch(/—\s+—/)
     expect(frame).toContain("sort: influence, then last contact")
-    expect(statusLine(frame)).toContain("Enter open  n note  N new  e edit  o sort  / filter")
+    expect(statusLine(frame)).toContain("enter open   n note   N new   e edit   o sort   / filter")
   })
 
   test("last contact shows days, never and amber", async () => {
@@ -171,7 +171,7 @@ describe("People screen", () => {
     for (const n of ["Nadia Benali", "Anna Smit", "Bob Maes"]) expect(frame).not.toContain(n)
     await escape(t)
     frame = await until(t, (f) => !f.includes("filter:"))
-    expect(lines(frame)[0]).toContain("ttybrain · 3 People ▾") // Esc cleared the filter; it did not go back
+    expect(lines(frame)[0]).toContain("ttybrain ·  3 People ▾") // Esc cleared the filter; it did not go back
     expect(order(frame, ALL)).toEqual(ALL)
     t.input.pressKey("/")
     await t.input.typeText("zzz")
@@ -273,14 +273,14 @@ describe("People screen", () => {
     t.input.pressEnter()
     let frame = await until(t, (f) => f.includes("› @marie Marie Dubois"))
     expect(frame).toContain("› @marie Marie Dubois")
-    expect(lines(frame)[0]).toContain("ttybrain · 3 People")
+    expect(lines(frame)[0]).toContain("ttybrain ·  3 People")
     expect(frame).toContain("Summary")
     expect(frame).toContain("@marie · Stakeholder")
     // A person sorting above marie: she would be row 0 if the selection had been reset.
     await inCtx(() => write().addPerson!({ name: "Aaron Aerts", handle: "aaron", is_stakeholder: true, influence: "high" }))
     t.input.pressEscape()
     frame = await until(t, (f, s) => f.includes("Aaron Aerts") && sel(s, "Marie Dubois"))
-    expect(lines(frame)[0]).toContain("ttybrain · 3 People")
+    expect(lines(frame)[0]).toContain("ttybrain ·  3 People")
     expect(await isSelected(t, "Marie Dubois")).toBe(true)
     expect(await isSelected(t, "Aaron Aerts")).toBe(false)
   })
@@ -335,8 +335,8 @@ describe("People screen", () => {
     const t = await open()
     await inCtx(() => write().archivePerson!({ ref: "@bob" }))
     t.input.pressKey("g")
-    const frame = await until(t, (f) => /3 People\s+4\b/.test(f))
-    expect(lines(frame).find((l) => l.includes("3 People") && !l.includes("▾"))).toMatch(/3 People\s+4\b/)
+    const frame = await until(t, (f) => /3  People\s+4\b/.test(f))
+    expect(lines(frame).find((l) => l.includes("3  People"))).toMatch(/3  People\s+4\b/)
   })
 })
 

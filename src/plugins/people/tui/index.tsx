@@ -15,6 +15,7 @@ export const peopleTui = defineTui({
       title: "People",
       slot: 3,
       component: PeopleScreen,
+      records: ["person"],
       // The people who are not archived.
       count: async () => {
         const row = await ui.data.selectFrom("person").select((eb) => eb.fn.countAll().as("n")).where("archived_at", "is", null).executeTakeFirstOrThrow()

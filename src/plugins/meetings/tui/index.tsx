@@ -17,6 +17,7 @@ export const meetingsTui = defineTui({
       title: "Meetings",
       slot: 5,
       component: MeetingsScreen,
+      records: ["meeting"],
       // The planned meetings.
       count: async () => {
         const row = await ui.data.selectFrom("meeting").select((eb) => eb.fn.countAll().as("n")).where("status", "=", "planned").executeTakeFirstOrThrow()

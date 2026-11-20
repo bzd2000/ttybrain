@@ -147,7 +147,7 @@ test("runTui loads the tui entries and lists a failed import under Plugin proble
   const setup = await createTestRenderer({ width: 100, height: 30 })
   try {
     const done = runTui(k, { renderer: setup.renderer })
-    await untilFrame(setup, "ttybrain · 1 Overview")
+    await untilFrame(setup, "ttybrain ·  1 Attention")
     setup.mockInput.pressKey("?")
     const frame = await untilFrame(setup, "Plugin problems")
     expect(frame).toContain("ext: tui boom")
@@ -182,8 +182,7 @@ test("an async tui activate fails the part only", async () => {
     expect(await tui.frame()).not.toContain("Plugin problems")
     tui.input.pressKey("g")
     const switcher = await tui.frame()
-    expect(switcher).toContain("─Screens")
-    expect(switcher).toMatch(/\b2 Projects\b/)
+    expect(switcher).toMatch(/\b2  Projects\b/)
     expect(switcher).not.toContain("Ext screen")
     // The registry itself: the failed part's screen is gone, the built-ins' screens stay.
     const registry = bootTui(kernel, builtinTuiParts, { builtin: true, external: [asyncPart] })
@@ -219,7 +218,7 @@ test("the TUI runs with no plugins", async () => {
   kernel = await makeTestKernel({ plugins: [] })
   tui = await renderTui(kernel, { parts: [] })
   const frame = await tui.frame()
-  expect(frame.split("\n")[0]).toContain("ttybrain · 1 Overview")
+  expect(frame.split("\n")[0]).toContain("ttybrain ·  1 Attention")
   expect(frame).toContain("No panels yet: plugins add them here.")
   tui.input.pressKey("?")
   const help = await tui.frame()

@@ -96,7 +96,7 @@ test.each(cases)("pm works with %s disabled", async (_name, disabled) => {
   expect(parts.builtin.map((p) => p.plugin).sort()).toEqual(BUILTINS.filter((id) => !off.has(id)).sort())
   tui = await renderTui(k, { parts: parts.builtin, external: parts.external })
   const frame = await tui.frame()
-  expect(frame.split("\n")[0]).toContain("ttybrain · 1 Overview")
+  expect(frame.split("\n")[0]).toContain("ttybrain ·  1 Attention")
   if (off.size === BUILTINS.length) expect(frame).toContain("No panels yet: plugins add them here.")
 })
 

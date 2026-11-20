@@ -7,6 +7,7 @@ import type {
   GlobalActionDef,
   ListColumnDef,
   OverviewPanelDef,
+  RecordCrumbDef,
   RecordFormDef,
   RecordTabDef,
   ScreenDef,
@@ -16,7 +17,7 @@ import type {
 // Keys the kernel's global key map owns (spec §9), plus `c` for the assistant (phase 7). Screen-local keys
 // are not reserved: the focused screen's handler runs before global actions.
 export const RESERVED_KEYS: ReadonlySet<string> = new Set(["j", "k", "n", "e", "x", "g", "q", "?", "/", "1", "2", "3", "4", "5", "6", "7", "8", "9", "c"])
-// Slot 1 is the kernel's Overview; built-in screens may take 2–6; the rest are numbered from 7 in order.
+// Slot 1 is the kernel's Attention screen; built-in screens may take 2–6; the rest are numbered from 7 in order.
 export const OVERVIEW_SLOT = 1
 const BUILTIN_SLOTS = { min: 2, max: 6 }
 const FIRST_FREE_SLOT = 7
@@ -41,6 +42,7 @@ export class TuiRegistry {
   private readonly editorList: Array<Owned<{ recordType: string; field: string; editor: Component<FieldEditorProps> }>> = []
   private readonly actionList: Array<Owned<{ def: GlobalActionDef }>> = []
   private readonly badgeList: Array<Owned<{ def: StatusBadgeDef }>> = []
+  private readonly crumbList: Array<Owned<{ recordType: string; def: RecordCrumbDef }>> = []
   private readonly errorList: Array<{ plugin: string; error: string }> = []
 
   // --- getters ---
@@ -57,6 +59,16 @@ export class TuiRegistry {
 
   screenBySlot(n: number): (Registered<ScreenDef> & { slot: number }) | undefined {
     return this.screens().find((s) => s.slot === n)
+  }
+
+  // The screen that records of `recordType` belong to (its `records`), if any.
+  screenForRecord(recordType: string): (Registered<ScreenDef> & { slot: number }) | undefined {
+    return this.screens().find((s) => s.records?.includes(recordType) === true)
+  }
+
+  crumbFor(recordType: string): Registered<RecordCrumbDef> | undefined {
+    const c = this.crumbList.find((x) => x.recordType === recordType)
+    return c && registered(c)
   }
 
   tabsFor(recordType: string): Array<Registered<RecordTabDef>> {
@@ -105,12 +117,16 @@ export class TuiRegistry {
     if (this.screenList.some((s) => s.def.id === def.id)) throw new ValidationError(`screen "${def.id}" is already registered`)
     const slot = builtin ? def.slot : undefined
     if (slot !== undefined) {
-      if (slot === OVERVIEW_SLOT) throw new ValidationError(`slot ${OVERVIEW_SLOT} is reserved for the Overview screen`)
+      if (slot === OVERVIEW_SLOT) throw new ValidationError(`slot ${OVERVIEW_SLOT} is reserved for the Attention screen`)
       if (!Number.isInteger(slot) || slot < BUILTIN_SLOTS.min || slot > BUILTIN_SLOTS.max) {
         throw new ValidationError(`slot ${slot} must be between ${BUILTIN_SLOTS.min} and ${BUILTIN_SLOTS.max}`)
       }
       const taken = this.screenList.find((s) => s.slot === slot)
       if (taken) throw new ValidationError(`slot ${slot} is already taken by screen "${taken.def.id}"`)
+    }
+    for (const type of def.records ?? []) {
+      const owner = this.screenList.find((s) => s.def.records?.includes(type))
+      if (owner) throw new ValidationError(`record type "${type}" already belongs to screen "${owner.def.id}"`)
     }
     this.screenList.push({ plugin, def, ...(slot !== undefined ? { slot } : {}) })
   }
@@ -164,11 +180,17 @@ export class TuiRegistry {
     this.badgeList.push({ plugin, def })
   }
 
+  addRecordCrumb(plugin: string, recordType: string, def: RecordCrumbDef): void {
+    this.open()
+    if (this.crumbList.some((c) => c.recordType === recordType)) throw new ValidationError(`a crumb for "${recordType}" is already registered`)
+    this.crumbList.push({ plugin, recordType, def })
+  }
+
   // --- lifecycle (bootTui) ---
 
   // Removes everything `plugin` registered.
   remove(plugin: string): void {
-    for (const list of [this.screenList, this.tabList, this.panelList, this.columnList, this.formList, this.editorList, this.actionList, this.badgeList] as Array<Array<{ plugin: string }>>) {
+    for (const list of [this.screenList, this.tabList, this.panelList, this.columnList, this.formList, this.editorList, this.actionList, this.badgeList, this.crumbList] as Array<Array<{ plugin: string }>>) {
       for (let i = list.length - 1; i >= 0; i--) if (list[i]!.plugin === plugin) list.splice(i, 1)
     }
   }

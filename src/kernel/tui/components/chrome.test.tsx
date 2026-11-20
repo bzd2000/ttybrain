@@ -163,11 +163,12 @@ test("active tab label is accent including its count", async () => {
   expect(frame).toContain(" Milestones 5 ")
   const spans = await t.spans()
   expect(fgAt(spans, "Milestones 5")).toBe(theme.accent)
-  expect(fgAt(spans, "5 ")).toBe(theme.accent)
+  // Scoped to the tab line: the header's date holds digits too.
+  expect(fgAt(spans, "5 ", "Milestones 5")).toBe(theme.accent)
   expect(bgAt(spans, "Milestones 5")).toBe(theme.selectedBg)
   // An inactive tab stays muted, its count too.
   expect(fgAt(spans, "Deliverables 6")).toBe(theme.muted)
-  expect(fgAt(spans, "6")).toBe(theme.muted)
+  expect(fgAt(spans, "6", "Deliverables 6")).toBe(theme.muted)
 })
 
 test("cyan and magenta tones", async () => {
@@ -189,11 +190,11 @@ test("old tone values still work", async () => {
   expect(fgAt(spans, "Book vendor demo")).toBe(theme.text)
 })
 
-test("a focused table with rows adds the ↑↓ select hint before Enter open", async () => {
+test("a focused table with rows adds the ↑↓ select hint before enter open", async () => {
   const t = await open()
   const bar = lines(await t.frame()).find((l) => l.includes("q quit"))!
   expect(bar).toContain("↑↓ select")
-  expect(bar.indexOf("↑↓ select")).toBeLessThan(bar.indexOf("Enter open"))
+  expect(bar.indexOf("↑↓ select")).toBeLessThan(bar.indexOf("enter open"))
 })
 
 test("an overview panel may leave the count out of its title", async () => {

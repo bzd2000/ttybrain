@@ -42,6 +42,7 @@ export function bootTui(kernel: Kernel, parts: TuiDef[], opts: { builtin?: boole
       fieldEditor: (recordType, field, editor) => (live(), registry.addEditor(id, recordType, field, editor)),
       globalAction: (def) => (live(), registry.addGlobalAction(id, def)),
       statusBadge: (def) => (live(), registry.addBadge(id, def)),
+      recordCrumb: (recordType, def) => (live(), registry.addRecordCrumb(id, recordType, def)),
     }
     const fail = (error: string) => {
       failed = true

@@ -43,7 +43,7 @@ export function Help(props: { hints: Hint[]; actions: Hint[]; problems: string[]
       <Show when={props.hints.length > 0}>
         <text> </text>
         <text fg={theme.muted}>Here</text>
-        <text fg={theme.text}>{props.hints.map((h) => `${h.key} ${h.label}`).join("   ")}</text>
+        <text fg={theme.text}>{props.hints.map((h) => `${h.key}${h.alt === undefined ? "" : ` or ${h.alt}`} ${h.label}`).join("   ")}</text>
       </Show>
       <text> </text>
       <text fg={theme.muted}>Plugin problems</text>

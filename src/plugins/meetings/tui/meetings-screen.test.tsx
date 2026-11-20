@@ -97,7 +97,7 @@ describe("Meetings screen", () => {
   test("opens on 5 with upcoming then past, cancelled muted", async () => {
     const t = await open()
     const frame = await t.frame()
-    expect(lines(frame)[0]).toContain("ttybrain · 5 Meetings")
+    expect(lines(frame)[0]).toContain("ttybrain ·  5 Meetings")
     const upcoming = indexOf(frame, "Upcoming · 3")
     const past = indexOf(frame, "Past · 3")
     expect(upcoming).toBeGreaterThan(0)
@@ -114,7 +114,7 @@ describe("Meetings screen", () => {
     for (const s of cancelled) expect(rgbToHex(s.fg).toLowerCase()).toBe(theme.muted)
     const held = (await spansOf(t, "Board October")).find((s) => s.text.includes("Board October"))!
     expect(rgbToHex(held.fg).toLowerCase()).toBe(theme.text)
-    expect(statusLine(frame)).toContain("Enter open  n new  e edit  x close  Del cancel")
+    expect(statusLine(frame)).toContain("enter open   n new   e edit   x close   del cancel")
   })
 
   test("a planned meeting in the past shows its date red", async () => {

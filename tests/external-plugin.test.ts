@@ -206,14 +206,14 @@ test("TUI: screen 7 and the project tab", async () => {
   const t = await renderLoaded(k)
   t.input.pressKey("7")
   let frame = await until(t, (f) => f.includes("C-1 Support"))
-  expect(frame.split("\n")[0]).toContain("ttybrain · 7 Contracts")
+  expect(frame.split("\n")[0]).toContain("ttybrain ·  7 Contracts")
   expect(frame).toContain("C-1 Support · #CRM")
 
   t.input.pressKey("2")
-  await until(t, (f) => (f.split("\n")[0] ?? "").includes("ttybrain · 2 Projects"))
+  await until(t, (f) => (f.split("\n")[0] ?? "").includes("ttybrain ·  2 Projects"))
   await t.nav.open("#CRM", "contracts")
   frame = await until(t, (f) => f.includes("› CRM CRM") && f.includes("1 contract"))
-  expect(frame.split("\n")[2]).toMatch(/\bPeople +Context +Contracts 1\b/) // the tab bar, scrolled to the new tab
+  expect(frame.split("\n")[1]).toMatch(/\bPeople +Context +Contracts 1\b/) // the tab bar (under the header), scrolled to the new tab
   expect(frame).toContain("C-1 Support")
 })
 
@@ -312,7 +312,7 @@ test("failure: an async tui activate rejecting — pm still starts", async () =>
     installTuiModules()
     const parts = await loadTuiParts(k)
     tui = await renderTui(k, { parts: parts.builtin, external: parts.external })
-    expect((await tui.frame()).split("\n")[0]).toContain("ttybrain · 1 Overview")
+    expect((await tui.frame()).split("\n")[0]).toContain("ttybrain ·  1 Attention")
     tui.input.pressKey("?")
     expect(await until(tui, (f) => f.includes("Plugin problems"))).toContain("contracts: tui activate must be synchronous")
     tui.input.pressKey("?")

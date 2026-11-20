@@ -8,6 +8,7 @@ export type {
   ListColumnDef,
   OverviewPanelDef,
   OverviewRow,
+  RecordCrumbDef,
   RecordFormDef,
   RecordFormProps,
   RecordTabDef,
@@ -18,7 +19,8 @@ export type {
   TuiContext,
   TuiDef,
 } from "./types"
-export { useNav, type Nav } from "./nav"
+// useScreenCrumb(() => text): the screen's crumb after the header chip (`3 People ▾ › All`) while it is mounted.
+export { useNav, useScreenCrumb, type Nav } from "./nav"
 // Overlays above the screen: open(c), openForm(recordType, formId?, props?) and confirm(text).
 export { useOverlay, type Overlay } from "./overlay"
 // The record forms registered for a record type: Array<{ id, label, plugin }> (for a menu of forms to open).

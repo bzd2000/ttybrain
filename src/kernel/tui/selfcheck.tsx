@@ -98,11 +98,11 @@ export async function runTuiSelfCheck(opts: { expectScreen?: string } = {}): Pro
       try {
         await setup.renderOnce()
         let header = setup.captureCharFrame().split("\n")[0] ?? ""
-        check(header.includes("ttybrain · 1 Overview") && header.includes("Fri 13 Nov 2026"), `unexpected header: "${header}"`)
+        check(header.includes("ttybrain ·  1 Attention") && header.includes("Fri 13 Nov 2026"), `unexpected header: "${header}"`)
         setup.mockInput.pressKey("2")
         let frame = await settled()
         header = frame.split("\n")[0] ?? ""
-        check(header.includes("ttybrain · 2 Fixture") && frame.includes("fixture screen: 0 things"), `key 2 did not open the Fixture screen: "${header}"`)
+        check(header.includes("ttybrain ·  2 Fixture") && frame.includes("fixture screen: 0 things"), `key 2 did not open the Fixture screen: "${header}"`)
 
         // Another connection commits: live refresh sees data_version change and the query reloads.
         const other = await bootKernel({ env, plugins: [fixture], clock })
@@ -116,7 +116,7 @@ export async function runTuiSelfCheck(opts: { expectScreen?: string } = {}): Pro
 
         setup.mockInput.pressKey("3")
         frame = await settled()
-        check(frame.includes("⚠ Broken: boom") && (frame.split("\n")[0] ?? "").includes("ttybrain · 3 Broken"), "the error boundary did not contain a throwing screen")
+        check(frame.includes("⚠ Broken: boom") && (frame.split("\n")[0] ?? "").includes("ttybrain ·  3 Broken"), "the error boundary did not contain a throwing screen")
       } finally {
         setup.renderer.destroy()
       }
@@ -187,7 +187,7 @@ async function checkExternalScreen(clock: ReturnType<typeof fixedClock>, title: 
         await handle!.idle()
         await setup.renderOnce()
         const header = setup.captureCharFrame().split("\n")[0] ?? ""
-        check(header.includes(`ttybrain · 7 ${title}`), `key 7 did not open the "${title}" screen: "${header}"`)
+        check(header.includes(`ttybrain ·  7 ${title}`), `key 7 did not open the "${title}" screen: "${header}"`)
       } finally {
         setup.renderer.destroy()
       }

@@ -69,7 +69,7 @@ test("new → build → load", async () => {
     await new Promise((r) => setTimeout(r, 20))
     frame = await tui.frame()
   }
-  expect(frame.split("\n")[0]).toContain("ttybrain · 7 Demo")
+  expect(frame.split("\n")[0]).toContain("ttybrain ·  7 Demo")
   expect(frame).toContain("1 First")
 })
 

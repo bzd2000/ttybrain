@@ -118,7 +118,7 @@ describe("project detail", () => {
     tui.input.pressKey("2")
     await tui.frame()
     await tui.nav.open("#CRM")
-    const tabLine = async () => (await tui!.frame()).split("\n")[2]!
+    const tabLine = async () => (await tui!.frame()).split("\n")[1]!
     const words = ["Summary", "Milestones", "Deliverables", "Risks & issues", "Decisions", "Actions", "People", "Context"]
     const check = (line: string) => {
       // every word on the tab line is a whole tab title or count, or a marker
@@ -132,11 +132,11 @@ describe("project detail", () => {
     expect(line).toContain("›") // more tabs to the right
     check(line)
     tui.input.pressArrow("right")
-    line = (await tui.frame()).split("\n")[2]!
+    line = (await tui.frame()).split("\n")[1]!
     expect(line).toContain("Milestones 1")
     check(line)
     for (let i = 0; i < 6; i++) tui.input.pressArrow("right")
-    line = (await tui.frame()).split("\n")[2]!
+    line = (await tui.frame()).split("\n")[1]!
     expect(line).toContain("Context")
     expect(line).toContain("‹")
     expect(line).not.toMatch(/›\s*$/)
@@ -338,7 +338,7 @@ describe("project detail", () => {
     await inCtx(() => write().setHealth!({ project: "AAA", health: "red" }))
     t.input.pressEscape()
     let frame = await until(t, "Projects · 2 active")
-    expect(frame.split("\n")[0]).toContain("ttybrain · 2 Projects")
+    expect(frame.split("\n")[0]).toContain("ttybrain ·  2 Projects")
     expect(isSelected(await t.spans(), " AAA ")).toBe(false)
     for (let i = 0; i < 40 && !isSelected(await t.spans(), " CRM "); i++) {
       await sleep(25)

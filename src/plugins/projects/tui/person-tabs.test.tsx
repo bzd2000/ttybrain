@@ -95,7 +95,7 @@ describe("projects' person tabs", () => {
     expect(rgbToHex(erp.spans.find((s) => s.text.includes("ERP upgrade"))!.fg).toLowerCase()).toBe(theme.muted)
     const crm = spans.lines.find((l) => l.spans.map((s) => s.text).join("").includes("CRM replatforming"))!
     expect(rgbToHex(crm.spans.find((s) => s.text.includes("CRM replatforming"))!.fg).toLowerCase()).not.toBe(theme.muted)
-    expect(lines(frame.trimEnd()).at(-1)).toContain("n add  Del remove")
+    expect(lines(frame.trimEnd()).at(-1)).toContain("n add   del remove")
 
     // n: the involvement form with the person prefilled; it asks for the project.
     t.input.pressKey("n")
@@ -181,7 +181,7 @@ describe("projects' person tabs", () => {
     const spans = await t.spans()
     const a1 = spans.lines.find((l) => l.spans.map((s) => s.text).join("").includes("Send revised budget"))!
     expect(rgbToHex(a1.spans.find((s) => s.text.includes("-3d"))!.fg).toLowerCase()).toBe(theme.red)
-    expect(lines(frame.trimEnd()).at(-1)).toContain("n add  e edit  x done")
+    expect(lines(frame.trimEnd()).at(-1)).toContain("n add   e edit   x done")
 
     // x on A-1: done today, so it moves first among the closed ones.
     expect(isSelected(await t.spans(), "A-1 ")).toBe(true)

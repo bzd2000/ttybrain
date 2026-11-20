@@ -114,10 +114,33 @@ describe("bootTui", () => {
     expect(reg.errors()).toEqual([{ plugin: "projects", error: 'tui part for "projects": a part for this plugin is already loaded' }])
   })
 
-  test("slot 1 is reserved for the Overview screen", () => {
+  test("slot 1 is reserved for the Attention screen", () => {
     const reg = bootTui(k, [part("projects", (ui) => ui.screen(screen("projects", 1)))], { builtin: true })
     expect(reg.screens()).toEqual([])
-    expect(reg.errors()).toEqual([{ plugin: "projects", error: "projects: slot 1 is reserved for the Overview screen" }])
+    expect(reg.errors()).toEqual([{ plugin: "projects", error: "projects: slot 1 is reserved for the Attention screen" }])
+  })
+
+  test("a record type belongs to one screen; one crumb per record type", () => {
+    const reg = bootTui(
+      k,
+      [
+        part("projects", (ui) => {
+          ui.screen({ ...screen("projects", 2), records: ["project"] })
+          ui.recordCrumb("project", { tone: "cyan" })
+        }),
+        part("people", (ui) => ui.screen({ ...screen("people", 3), records: ["person", "project"] })),
+        part("meetings", (ui) => ui.recordCrumb("project", { tone: "red" })),
+      ],
+      { builtin: true },
+    )
+    expect(reg.screenForRecord("project")?.id).toBe("projects")
+    expect(reg.screenForRecord("person")).toBeUndefined() // the people part failed whole
+    expect(reg.crumbFor("project")).toEqual({ tone: "cyan", plugin: "projects" })
+    expect(reg.crumbFor("person")).toBeUndefined()
+    expect(reg.errors()).toEqual([
+      { plugin: "people", error: 'people: record type "project" already belongs to screen "projects"' },
+      { plugin: "meetings", error: 'meetings: a crumb for "project" is already registered' },
+    ])
   })
 
   test("globalAction keys: single character, not a global key, not taken by an earlier action (a taken key skips only that action)", () => {

@@ -25,7 +25,9 @@ import {
   type Draft,
 } from "@ttybrain/api/tui"
 
-export const CAPTURE_TITLE = "Capture to inbox · ctrl+s save · esc cancel"
+// The designs' capture overlay is 76 cells wide (the kernel centres it); never wider than the terminal.
+const CAPTURE_WIDTH = 76
+export const CAPTURE_TITLE ="Capture to inbox · ctrl+s save · esc cancel"
 const SUGGESTIONS = 5
 // A tag being typed right before the cursor: the prefix and at least one character, at a word start.
 const TYPING_TAG = /(?:^|[\s([])([#@][A-Za-z0-9][A-Za-z0-9-]*)$/
@@ -187,7 +189,7 @@ export function CaptureOverlay(props: { close(): void }) {
   }, { whileTyping: true })
 
   return (
-    <box border borderColor={theme.accent} backgroundColor={theme.panel} flexDirection="column" width="80%" paddingLeft={1} paddingRight={1} title={CAPTURE_TITLE}>
+    <box border borderColor={theme.accent} backgroundColor={theme.panel} flexDirection="column" width={CAPTURE_WIDTH} maxWidth="100%" paddingLeft={1} paddingRight={1} title={CAPTURE_TITLE}>
       <Show when={offer()}>
         {(d: () => Draft<TextDraft>) => <DraftPrompt savedAt={d().savedAt} restore={restore} discard={discardDraft} close={() => props.close()} />}
       </Show>

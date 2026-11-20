@@ -2,7 +2,7 @@
 // (docs/superpowers/specs/2026-11-13-pm-screens.html) through the plugins' write operations, and the span helpers
 // read a rendered frame's colours. Use with `makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })`
 // (the designs' today, Thu 12 Nov 2026). Ids follow the seed, not the mock (A-1 rather than A-27).
-import { rgbToHex, type CapturedFrame, type CapturedSpan } from "@opentui/core"
+import { rgbToHex, TextAttributes, type CapturedFrame, type CapturedSpan } from "@opentui/core"
 import { runWithContext, type Origin } from "../src/kernel/context"
 import { addDays } from "../src/kernel/dates"
 import type { Kernel } from "../src/kernel/host"
@@ -10,10 +10,19 @@ import { theme } from "../src/kernel/tui/theme"
 
 // --- span helpers ---
 
-// The span under the first cell of the first occurrence of `text` (searched line by line), or undefined.
-function spanAt(spans: CapturedFrame, text: string): CapturedSpan | undefined {
-  for (const l of spans.lines) {
+// Which lines a lookup searches: every line (undefined), line `i` (a number), or the lines whose text contains the
+// string or matches the regex. Scope a lookup when the same text can also show elsewhere (the header's date holds
+// digits, a crumb repeats a code).
+export type LineScope = number | string | RegExp | undefined
+
+const inScope = (scope: LineScope, index: number, text: string) =>
+  scope === undefined ? true : typeof scope === "number" ? index === scope : typeof scope === "string" ? text.includes(scope) : scope.test(text)
+
+// The span under the first cell of the first occurrence of `text` (searched line by line, in `scope`), or undefined.
+function spanAt(spans: CapturedFrame, text: string, scope?: LineScope): CapturedSpan | undefined {
+  for (const [i, l] of spans.lines.entries()) {
     const whole = l.spans.map((s) => s.text).join("")
+    if (!inScope(scope, i, whole)) continue
     const at = whole.indexOf(text)
     if (at < 0) continue
     let pos = 0
@@ -25,16 +34,22 @@ function spanAt(spans: CapturedFrame, text: string): CapturedSpan | undefined {
   return undefined
 }
 
-// The foreground colour (hex) of the first cell of `text`, or undefined when the frame does not show it.
-export function fgAt(spans: CapturedFrame, text: string): string | undefined {
-  const s = spanAt(spans, text)
+// The foreground colour (hex) of the first cell of `text` (in `scope`), or undefined when the frame does not show it.
+export function fgAt(spans: CapturedFrame, text: string, scope?: LineScope): string | undefined {
+  const s = spanAt(spans, text, scope)
   return s && rgbToHex(s.fg)
 }
 
-// The background colour (hex) of the first cell of `text`, or undefined when the frame does not show it.
-export function bgAt(spans: CapturedFrame, text: string): string | undefined {
-  const s = spanAt(spans, text)
+// The background colour (hex) of the first cell of `text` (in `scope`), or undefined when the frame does not show it.
+export function bgAt(spans: CapturedFrame, text: string, scope?: LineScope): string | undefined {
+  const s = spanAt(spans, text, scope)
   return s && rgbToHex(s.bg)
+}
+
+// Whether the first cell of `text` (in `scope`) is bold; undefined when the frame does not show it.
+export function boldAt(spans: CapturedFrame, text: string, scope?: LineScope): boolean | undefined {
+  const s = spanAt(spans, text, scope)
+  return s && (s.attributes & TextAttributes.BOLD) !== 0
 }
 
 // Per line, the text drawn on the selected-row background (theme.selectedBg), trimmed; lines without it are left

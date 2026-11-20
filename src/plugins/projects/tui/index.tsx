@@ -24,6 +24,7 @@ export const projectsTui = defineTui({
       title: "Projects",
       slot: 2,
       component: ProjectsScreen,
+      records: ["project"],
       // The active, non-archived projects.
       count: async () => {
         const row = await ui.data
@@ -47,6 +48,8 @@ export const projectsTui = defineTui({
       },
     })
     registerPanels(ui)
+    // The header shows an open project as `› CRM CRM replatforming`, the code cyan.
+    ui.recordCrumb("project", { tone: "cyan" })
     ui.recordForm("project", { id: "project", label: "Project", component: ProjectForm })
     ui.recordForm("project", { id: "health", label: "Health update", component: HealthForm })
     ui.recordForm("project", { id: "involvement", label: "Involvement", component: InvolvementForm })

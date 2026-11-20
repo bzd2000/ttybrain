@@ -32,7 +32,7 @@ test("the help starts with ttybrain and its usage lines say ttybrain", async () 
 test("the TUI header says ttybrain", async () => {
   const tui = await renderTui(kernel, { parts: builtinTuiParts })
   try {
-    expect((await tui.frame()).split("\n")[0]).toContain("ttybrain · 1 Overview")
+    expect((await tui.frame()).split("\n")[0]).toContain("ttybrain ·  1 Attention")
   } finally {
     tui.destroy()
   }
