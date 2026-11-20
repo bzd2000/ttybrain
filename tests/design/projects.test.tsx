@@ -102,3 +102,16 @@ test("a free-text filter extends the footer; a long code shows whole", async () 
   frame = await until(tui, (f) => f.includes("filter: status=active crm"))
   expect(line(frame, 34)).toMatch(/ filter: status=active crm ─╯$/)
 })
+
+// At 80×24 columns drop from the right (Effort, Risk, Act., then Next milestone with Due); codes and names stay whole.
+test("Projects at 80x24 drops columns, never names or codes", async () => {
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
+  await seedDesign(kernel)
+  tui = await renderTui(kernel, { width: 80, height: 24 })
+  tui.input.pressKey("2")
+  const frame = await until(tui, (f) => f.includes("BI2") && f.includes("Warehouse scanners"))
+  for (const [code, name] of [["ERP", "ERP vendor selection"], ["CRM", "CRM replatforming"], ["HRP", "HR self-service portal"], ["DWH", "Data warehouse migration"], ["IAM", "Identity & access rollout"], ["SEC", "Security awareness 2027"], ["WMS", "Warehouse scanners"], ["BI2", "Self-service BI phase 2"]])
+    expect(frame).toContain(` ${code!.padEnd(5)} ${name} `)
+  for (const h of ["Effort", "Risk"]) expect(inside(frame, 2)).not.toContain(h)
+  for (const l of frame.split("\n")) expect(l.length).toBeLessThanOrEqual(80)
+})

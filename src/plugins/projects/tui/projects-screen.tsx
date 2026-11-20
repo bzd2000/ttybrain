@@ -166,12 +166,13 @@ export function ProjectsScreen() {
   const columns = (): TableColumn[] => [
     { id: "health", title: " ", width: 2 },
     { id: "code", title: "Code", width: fitWidth(shown().map((p) => p.code), CODE_MIN, CODE_MAX) },
-    { id: "name", title: "Name", width: "grow" },
-    { id: "next", title: "Next milestone", width: 21 },
-    { id: "due", title: "Due", width: 7 },
-    { id: "actions", title: "Act.", width: 6 },
-    { id: "risks", title: "Risk", width: 6 },
-    { id: "effort", title: "Effort", width: 7 },
+    { id: "name", title: "Name", width: "grow", minWidth: 26 },
+    // Narrow terminals drop columns from the right: Effort, Risk, Act., then Next milestone with its Due.
+    { id: "next", title: "Next milestone", width: 21, drop: 1 },
+    { id: "due", title: "Due", width: 7, drop: 1 },
+    { id: "actions", title: "Act.", width: 6, drop: 2 },
+    { id: "risks", title: "Risk", width: 6, drop: 3 },
+    { id: "effort", title: "Effort", width: 7, drop: 4 },
   ]
 
   const openForm = async (formId: string, recordRef?: string) => {

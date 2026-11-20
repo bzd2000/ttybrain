@@ -347,9 +347,7 @@ describe("Projects screen", () => {
     const t = await open({ width: 80, height: 24 })
     const frame = await t.frame()
     const long = lineWith(frame, "DATAPLATFORM2027")
-    expect(long).toContain(" DATAPLATFORM2027 ") // the name column gives way (to a bare `…`), not the code
-    expect(long).toContain("Ingest live")
-    expect(long).toContain("40pd")
+    expect(long).toContain(" DATAPLATFORM2027 Data platform") // columns drop from the right, never the code or the name
     expect(frame).not.toContain("DATAPLATFORM20…")
     for (const l of lines(frame)) expect(displayWidth(l)).toBeLessThanOrEqual(80)
     // The column is as wide as the longest code: the names line up.

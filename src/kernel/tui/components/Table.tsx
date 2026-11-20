@@ -18,7 +18,10 @@ import { theme, toneColor } from "../theme"
 import type { Cell, Tone } from "../types"
 
 export type TableRow = { ref: string; cells: Record<string, string | Cell>; detail?: Cell }
-export type TableColumn = { id: string; title: string; width: number | "grow"; tone?: (row: TableRow) => Tone }
+// `drop`: a fixed column that gives way when the table is too narrow: higher numbers go first, equal numbers go
+// together, unset never goes. `minWidth` (on the grow column): the width it keeps before columns are dropped
+// (default 16 once any column is droppable).
+export type TableColumn = { id: string; title: string; width: number | "grow"; tone?: (row: TableRow) => Tone; drop?: number; minWidth?: number }
 // `space`: a blank line above the group's header (none when the header is the table's first line).
 export type TableGroup = { title?: string; count?: boolean; tone?: Tone; space?: boolean; rows: TableRow[] }
 
@@ -83,7 +86,22 @@ export function Table(props: TableProps) {
       { key: () => flat().map((r) => r.ref).join("\n") },
     ),
   )
-  const columns = (): TableColumn[] => [...props.columns, ...extra.map((def) => ({ id: `${def.plugin}:${def.id}`, title: def.title, width: def.width }))]
+  const allColumns = (): TableColumn[] => [...props.columns, ...extra.map((def) => ({ id: `${def.plugin}:${def.id}`, title: def.title, width: def.width }))]
+  // The columns that fit: while the fixed columns, the gaps and the grow column's minimum exceed the measured
+  // width, the droppable columns go, highest `drop` first (ties together).
+  const fitColumns = (): TableColumn[] => {
+    let cols = allColumns()
+    const total = width()
+    const grow = cols.find((c) => c.width === "grow")
+    if (total === 0 || grow === undefined || !cols.some((c) => c.drop !== undefined)) return cols
+    const need = (list: TableColumn[]) => list.reduce((n, c) => n + (c.width === "grow" ? (grow.minWidth ?? 16) : c.width), 0) + GAP * (list.length - 1)
+    while (need(cols) > total) {
+      const top = Math.max(...cols.map((c) => c.drop ?? -1))
+      if (top < 0) break
+      cols = cols.filter((c) => c.drop !== top)
+    }
+    return cols
+  }
   const rowCells = (row: TableRow): TableRow => {
     if (extra.length === 0) return row
     const cells = { ...row.cells }
@@ -93,6 +111,10 @@ export function Table(props: TableProps) {
 
   // --- measured size: grow columns share the width left over; the body height drives scrolling ---
   const [width, setWidth] = createSignal(0)
+  // A memo with a structural check, so a width change that drops nothing does not rebuild the rows.
+  const columns = createMemo(fitColumns, undefined, {
+    equals: (a, b) => a.length === b.length && a.every((c, i) => c.id === b[i]!.id && c.width === b[i]!.width && c.title === b[i]!.title && c.tone === b[i]!.tone),
+  })
   const [height, setHeight] = createSignal(0)
   const growWidth = createMemo(() => {
     const cols = columns()

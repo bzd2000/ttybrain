@@ -102,6 +102,44 @@ async function escape(t: RenderedTui) {
 }
 
 describe("TUI blocks", () => {
+  test("Table drops droppable columns, highest first and ties together, until the grow column keeps its minimum", async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    const columns = [
+      { id: "ref", title: "Ref", width: 5 },
+      { id: "title", title: "Title", width: "grow" as const, minWidth: 10 },
+      { id: "a", title: "ColA", width: 6, drop: 1 },
+      { id: "b", title: "ColB", width: 6, drop: 1 },
+      { id: "c", title: "ColC", width: 6, drop: 2 },
+      { id: "d", title: "ColD", width: 6, drop: 3 },
+    ]
+    // Everything needs 5 + 10 + 24 + 5 gaps = 44; without D 37; without C 30; without A and B 16.
+    const widths = [44, 40, 34, 26]
+    const row = (w: number): TableRow[] => [{ ref: `R${w}`, cells: { ref: `R${w}`, title: `W${w}`, a: "aa", b: "bb", c: "cc", d: "dd" } }]
+    function Tables() {
+      return (
+        <box flexDirection="column">
+          {widths.map((w) => (
+            <box width={w} height={2} flexDirection="column">
+              <Table columns={columns} rows={row(w)} focused />
+            </box>
+          ))}
+        </box>
+      )
+    }
+    tui = await renderTui(kernel, { parts: [screenPart(Tables)] })
+    tui.input.pressKey("2")
+    let frame = await tui.frame()
+    for (let i = 0; i < 100 && !frame.includes("ColC"); i++) {
+      await sleep(10)
+      frame = await tui.frame()
+    }
+    const cells = (w: number) => lineWith(frame, `W${w}`).trim().split(/\s+/)
+    expect(cells(44)).toEqual(["R44", "W44", "aa", "bb", "cc", "dd"])
+    expect(cells(40)).toEqual(["R40", "W40", "aa", "bb", "cc"])
+    expect(cells(34)).toEqual(["R34", "W34", "aa", "bb"])
+    expect(cells(26)).toEqual(["R26", "W26"])
+  })
+
   test("Table keeps selection by ref across reloads", async () => {
     kernel = await makeTestKernel({ plugins: [thingPlugin] })
     const row = (ref: string): TableRow => ({ ref, cells: { ref, title: `title ${ref}` } })
