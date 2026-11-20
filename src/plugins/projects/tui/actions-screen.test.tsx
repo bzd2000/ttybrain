@@ -248,6 +248,19 @@ describe("actions screen", () => {
     expect(lineWith(frame, "Prepare budget")).toContain("—")
   })
 
+  test("a meeting title of wide characters gives way by display width; its date stays whole", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await seed()
+    await inCtx(async () => {
+      await write("meetings").addMeeting!({ title: "季度指导委员会会议", date: "2026-12-04" }) // 18 cells
+      await write().addAction!({ title: "Send the minutes", meeting: "M-1" })
+    })
+    tui = await renderTui(kernel, { width: 120, height: 32 })
+    tui.input.pressKey("4")
+    const frame = await untilThat(tui, (f) => f.includes("Send the minutes"))
+    expect(lineWith(frame, "Send the minutes")).toContain(" 4 Dec")
+  })
+
   test("a 16-character project code is shown whole at 80x24", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await inCtx(async () => {

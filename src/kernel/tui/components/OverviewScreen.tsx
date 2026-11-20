@@ -4,8 +4,8 @@
 // the screen: each panel shows its count in the title (unless its `count` is false; rows with a `group` are not
 // counted), as many rows as fit (at most MAX_ROWS) plus `+N more`, or its `empty` text, or `⚠ <error>` when its
 // first load failed (spec §9). Rows with a `group` show under a muted sub-heading after a blank line. A panel's
-// `footer` is a muted line after its rows, inside the panel (as the designs draw "Stakeholders to contact"), not
-// on the border like a Panel footer. A panel's `columns` fix its column widths.
+// `footer` is a muted line after its rows, inside the panel (as the screen designs draw it), not
+// on the border like a Panel footer. A panel's `columns` set its column widths.
 // ↑↓ move within the focused panel and Enter opens the selected row's ref.
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, For, Show } from "solid-js"
@@ -132,11 +132,16 @@ function OverviewPanel(props: { def: PanelEntry; query: Query<OverviewRow[]>; pl
     }
     return out
   }
-  // Fixed by the panel's `columns`; otherwise the column with the widest text (the last of equals) takes the
+  // Set by the panel's `columns` (a `{ min, max }` fits the rows shown); otherwise the column with the widest text (the last of equals) takes the
   // leftover width and the others fit their rows.
   const columns = (): TableColumn[] => {
     const fixed = props.def.columns
-    if (fixed) return fixed.map((width, i) => ({ id: `c${i}`, title: "", width }))
+    if (fixed)
+      return fixed.map((w, i) => ({
+        id: `c${i}`,
+        title: "",
+        width: typeof w === "object" ? Math.max(w.min, fitWidth(shown(), `c${i}`, "", w.max)) : w,
+      }))
     const n = Math.max(0, ...all().map((r) => r.cells.length))
     const natural = Array.from({ length: n }, (_, i) => fitWidth(shown(), `c${i}`, "", Infinity))
     const grow = natural.reduce((best, w, i) => (w >= (natural[best] ?? 0) ? i : best), 0)

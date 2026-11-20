@@ -96,7 +96,7 @@ export function AgendaTab(props: { recordRef: string }) {
   const rows = createMemo((): TableRow[] =>
     (meeting()?.agenda ?? []).map((a) => ({
       ref: String(a.position),
-      cells: { pos: String(a.position), text: a.text, project: a.project === null ? "" : a.project.slice(1), ask: firstLine(a.ask) },
+      cells: { pos: String(a.position), text: a.text, project: { text: a.project === null ? "" : a.project.slice(1), tone: "cyan" }, ask: firstLine(a.ask) },
     })),
   )
   // `current`: the position the table has selected; `want`: a position to select once it is shown (a new or

@@ -133,6 +133,10 @@ async function until(t: RenderedTui, check: (frame: string) => boolean): Promise
   return frame
 }
 
+test("keyText lowercases camel-case named keys (PgUp/PgDn) too", () => {
+  expect(["PgUp/PgDn", "PgUp", "PgDn", "Shift+PgDn"].map(keyText)).toEqual(["pgup/pgdn", "pgup", "pgdn", "shift+pgdn"])
+})
+
 test("keyText lowercases named keys only", () => {
   expect(["Enter", "Esc", "Tab", "Del", "Ctrl+S", "Shift+Tab", "J/K", "D", "N", "↑↓", "1-6", "/", "a s t"].map(keyText)).toEqual([
     "enter",

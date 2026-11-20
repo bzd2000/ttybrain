@@ -154,7 +154,7 @@ export function InboxScreen() {
     else edit(e)
   }
 
-  keys.hints(HINTS, { exact: true, frame: [], after: KEPT })
+  keys.hints(HINTS, { exact: true, frame: ["?"], after: KEPT })
 
   useScreenKeys((key) => {
     if (key.defaultPrevented) return

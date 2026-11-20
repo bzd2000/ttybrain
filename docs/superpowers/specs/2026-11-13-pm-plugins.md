@@ -70,7 +70,7 @@ It reads `projects.involvement` and `projects.project` (optional) for the **Proj
 
 | Read (with logic) | Input | Returns |
 |---|---|---|
-| `staleStakeholders` | `days`, `limit?` | stakeholders with no note for `days`, high influence first, with their projects |
+| `staleStakeholders` | `days`, `limit?`, `influence?` | stakeholders with no note for `days` (only those of `influence` when given), high influence first, with their projects |
 
 | Write | Input | Change-set line |
 |---|---|---|
@@ -96,7 +96,7 @@ ttybrain goal   list|add|edit|done|drop
 | `screen` | **People** (3): All / Stakeholders / Team tabs (`a` `s` `t`), sorts (`o`), filter (`/`: `infl:`, `int:`, text), archived (`A`, Del, `r`), new person (`N`), new note (`n`); a detail panel from 110 columns (sections for team members) |
 | `recordTab` on `person` | **Summary**, **Notes**, **Goals** (team members only, through the `when` option) |
 | `recordForm` | `person`, `note`, `goal` |
-| `overviewPanel` | **Stakeholders to contact** (uses `staleContactDays`) |
+| `overviewPanel` | **Stakeholders to contact** (high influence only, uses `staleContactDays`) |
 | `tagType` | `@handle` → person |
 | `listColumn` | — (People columns are its own) |
 | `guideSection` | how to record 1:1s and stakeholder interactions |

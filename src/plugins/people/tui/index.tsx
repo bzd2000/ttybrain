@@ -64,13 +64,13 @@ export const peopleTui = defineTui({
       empty: "No stakeholders to contact.",
       footer: `last contact over ${days} days, high influence first`,
       count: false,
-      // name, level and projects, age.
-      columns: [17, "grow", 10],
+      // name (growing to a long one), level and projects, age.
+      columns: [{ min: 17, max: 24 }, "grow", 10],
       load: async () => {
         const today = ui.clock.today()
-        const rows: StaleRow[] = await ui.self().read.staleStakeholders!({ days })
-        // Only the high-influence ones (the designs' panel).
-        return rows.filter((r) => r.influence === "high").map((r) => {
+        // Only the high-influence ones, as the overview report's section.
+        const rows: StaleRow[] = await ui.self().read.staleStakeholders!({ days, influence: "high" })
+        return rows.map((r) => {
           const level = `${r.influence ?? "–"}/${r.interest ?? "–"}`
           const cells: Cell[] = [
             { text: r.name, tone: "magenta" },

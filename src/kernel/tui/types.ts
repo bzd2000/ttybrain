@@ -39,8 +39,10 @@ export type RecordTabDef = {
 // group share it. Rows without a group come first, under the panel title.
 export type OverviewRow = { ref: string; cells: Cell[]; group?: string }
 // `count: false` leaves the row count out of the panel title (default: `Title · n`, n counting the rows without a
-// group: `Late milestones · 2` above `Next 14 days`). `columns`: each cell column's width, a number of cells or
-// "grow" (the width left over); without it the columns fit their text and the widest one grows.
+// group: `Title · 2` above a `Later` sub-heading). `columns`: each cell column's width, a number of cells,
+// `{ min, max }` (at least `min`, growing to the longest text shown up to `max`, so codes and ids stay whole while
+// the grow column gives way) or "grow" (the width left over); without it the columns fit their text and the widest
+// one grows.
 export type OverviewPanelDef = {
   id: string
   title: string
@@ -48,7 +50,7 @@ export type OverviewPanelDef = {
   empty: string
   footer?: string
   count?: boolean
-  columns?: Array<number | "grow">
+  columns?: Array<number | "grow" | { min: number; max: number }>
   load(): Promise<OverviewRow[]>
 }
 export type ListColumnDef = { id: string; title: string; width: number; value(ref: string): Promise<string | null> }

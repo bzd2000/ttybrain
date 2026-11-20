@@ -72,7 +72,7 @@ test("Inbox as designed", async () => {
   ])
   expect(line(frame, 34)).toMatch(/^ ╰─+╯$/)
   // The design's bar, then the kept `u reopen` (R2).
-  expect(line(frame, 35)).toBe(" ↑↓ select   enter open   p process   z dismiss   e edit   i capture   u reopen")
+  expect(line(frame, 35)).toBe(" ↑↓ select   enter open   p process   z dismiss   e edit   i capture   ? help   u reopen")
 
   const spans = await t.spans()
   expect(isSelected(spans, "Peter worried about budget")).toBe(true)

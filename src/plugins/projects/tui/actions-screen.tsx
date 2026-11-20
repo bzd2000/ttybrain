@@ -8,14 +8,16 @@ import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from
 import {
   act,
   addDays,
+  dayDate,
+  displayWidth,
   dueLabel,
   fitWidth,
-  longDate,
   Panel,
   printable,
   shortDate,
   Table,
   theme,
+  truncate,
   useKeys,
   useNav,
   useOverlay,
@@ -108,7 +110,8 @@ export function ActionsScreen() {
           const date = dates.get(Number(ref.replace(/^\D+/, "")))
           // The date stays whole, the title gives way (the column is 16 wide).
           const tail = date === undefined ? "" : ` ${shortDate(date)}`
-          titles.set(ref, `${title.length + tail.length > FROM_WIDTH ? `${title.slice(0, Math.max(1, FROM_WIDTH - tail.length - 1)).trimEnd()}…` : title}${tail}`)
+          const cut = truncate(title, Math.max(2, FROM_WIDTH - displayWidth(tail)))
+          titles.set(ref, `${cut === title ? title : `${cut.slice(0, -1).trimEnd()}…`}${tail}`)
         } catch {
           // a meeting that cannot be labelled falls through to the next source
         }
@@ -163,7 +166,7 @@ export function ActionsScreen() {
           week === 0
             ? { text: due === null ? "—" : shortDate(due), tone: "red" }
             : week === 2 && due !== null
-              ? longDate(due).slice(0, 3)
+              ? dayDate(due).split(" ")[0]!
               : dueLabel(due, today()),
       },
     }

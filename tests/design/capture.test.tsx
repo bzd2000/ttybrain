@@ -13,6 +13,7 @@ import { bgAt, fgAt, line, seedDesign } from "../design"
 import { makeTestKernel, type TestKernel } from "../helpers"
 import { renderTui, type RenderedTui } from "../tui"
 import { theme } from "../../src/kernel/tui/theme"
+import { runWithContext } from "../../src/kernel/context"
 
 const WIDTH = 118
 const HEIGHT = 36
@@ -104,4 +105,21 @@ test("Quick capture as designed", async () => {
   // The screen behind is dimmed.
   expect(fgAt(spans, "Thu 12 Nov 2026", 0)).not.toBe(theme.muted)
   expect(fgAt(spans, "ttybrain", 0)).not.toBe(theme.accent)
+})
+
+// A long code stays whole in the suggestions: the tag column grows to the longest one shown (10 to 17 cells).
+test("Quick capture suggests a 16-character code whole", async () => {
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
+  const w = kernel.runtime("projects")!.self().write as Record<string, (i: any) => Promise<any>>
+  await runWithContext(kernel.context(), () => w.addProject!({ code: "DATAPLATFORM2027", name: "Data platform" }))
+  tui = await renderTui(kernel, { width: WIDTH, height: HEIGHT })
+  await tui.settle()
+  tui.input.pressKey("i")
+  await until(tui, (f) => f.includes("Capture to inbox"))
+  await tui.input.typeText("Ask about #DATA")
+  const frame = await until(tui, (f) => f.includes("Data platform"))
+  const row = frame.split("\n").find((l) => l.includes("Data platform"))!
+  expect(row).toContain("#DATAPLATFORM2027  Data platform")
+  const spans = await tui.spans()
+  expect(fgAt(spans, "#DATAPLATFORM2027", "Data platform")).toBe(theme.cyan)
 })

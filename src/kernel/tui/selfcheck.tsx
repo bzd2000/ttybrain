@@ -1,12 +1,14 @@
 // The TUI self-check: renders <TuiApp> on the current runtime with OpenTUI's test renderer and checks the frame,
 // and checks that a second boot on the same database writes nothing (read-only boot, also on node:sqlite), that a
 // useQuery screen reloads after another connection's commit (data_version) and that an error boundary holds; then
-// the loader path: the built-ins discovered from their manifests and their tui entries imported and booted.
+// the loader path: the built-ins discovered from their manifests and their tui entries imported and booted, and
+// quick capture (`i`) opened over them with a `#tag` typed, which must render in the project-code colour (the
+// textarea's SyntaxStyle highlight).
 // With `--expect-screen <title>` it then boots with discovery (the plugins folder from TTYBRAIN_PLUGINS in the
 // environment), renders, presses `7` (the first external screen) and requires `7 <title>` in the header.
 // Run: `bun src/kernel/tui/selfcheck.tsx` or, after the Node build,
 // `node --experimental-ffi dist-node/kernel/tui/selfcheck.js`. Prints `tui ok` on success.
-import { SyntaxStyle } from "@opentui/core"
+import { rgbToHex, SyntaxStyle } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
 import { mkdtempSync, realpathSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -14,11 +16,13 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { definePlugin, type PluginDef } from "../api"
 import { fixedClock } from "../clock"
+import { runWithContext } from "../context"
 import { bootKernel } from "../host"
 import { TuiApp, type TuiHandle } from "./app"
 import { bootTui } from "./boot"
 import { useQuery, useRuntime } from "./data"
 import { installTuiModules, loadTuiParts } from "./load"
+import { theme } from "./theme"
 import { defineTui } from "./types"
 
 // A fixture plugin with a migration and a published view, so the second boot has something it could rewrite.
@@ -157,11 +161,48 @@ async function checkLoaderPath(clock: ReturnType<typeof fixedClock>): Promise<vo
       const registry = bootTui(kernel, parts.builtin, { builtin: true, external: parts.external })
       check(registry.errors().length === 0, `tui parts failed to boot: ${registry.errors().map((e) => e.error).join("; ")}`)
       check(registry.screenBySlot(2)?.id !== undefined && registry.globalActions().some((a) => a.key === "i"), "the built-in tui parts registered nothing")
+      await checkCapture(kernel, registry)
     } finally {
       await kernel.shutdown()
     }
   } finally {
     rmSync(home, { recursive: true, force: true })
+  }
+}
+
+// Quick capture over the built-ins: `i` opens it, a typed `#tag` renders, coloured as a project code.
+async function checkCapture(kernel: Awaited<ReturnType<typeof bootKernel>>, registry: ReturnType<typeof bootTui>): Promise<void> {
+  const write = kernel.runtime("projects")!.self().write as Record<string, (input: unknown) => Promise<unknown>>
+  await runWithContext(kernel.context(), () => write.addProject!({ code: "CRM", name: "CRM replatforming" }))
+  let handle: TuiHandle | undefined
+  const setup = await testRender(() => <TuiApp kernel={kernel} registry={registry} refreshMs={20} expose={(h) => (handle = h)} />, { width: 100, height: 30 })
+  const settled = async () => {
+    await handle!.idle()
+    await setup.renderOnce()
+    return setup.captureCharFrame()
+  }
+  try {
+    await settled()
+    setup.mockInput.pressKey("i")
+    let frame = await settled()
+    check(frame.includes("Capture to inbox"), "i did not open quick capture")
+    await setup.mockInput.typeText("#CRM call Marie")
+    for (let i = 0; i < 50 && !frame.includes("#CRM call Marie"); i++) {
+      await new Promise((r) => setTimeout(r, 20))
+      frame = await settled()
+    }
+    check(frame.includes("#CRM call Marie"), `the typed text did not render in quick capture: "${frame}"`)
+    const line = setup.captureSpans().lines.find((l) => l.spans.map((s) => s.text).join("").includes("#CRM call Marie"))
+    let pos = 0
+    let fg: string | undefined
+    const at = line?.spans.map((s) => s.text).join("").indexOf("#CRM call") ?? -1
+    for (const s of line?.spans ?? []) {
+      if (fg === undefined && at < pos + s.text.length) fg = rgbToHex(s.fg)
+      pos += s.text.length
+    }
+    check(fg === theme.cyan, `the #tag in quick capture is not coloured as a project code (${fg})`)
+  } finally {
+    setup.renderer.destroy()
   }
 }
 

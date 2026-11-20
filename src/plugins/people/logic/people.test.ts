@@ -351,4 +351,17 @@ describe("people report section", () => {
       },
     ])
   })
+
+  test("stakeholders-to-contact lists only high-influence stakeholders (as the Attention panel)", async () => {
+    k = await makeTestKernel({ plugins: [people, overview] })
+    await ok("person", "add", "Marie Dubois", "--stakeholder", "--influence", "high")
+    await ok("person", "add", "Nadia El Amrani", "--stakeholder", "--influence", "low")
+    await ok("person", "add", "Jan De Smet", "--stakeholder")
+    const r = await ok("report", "overview", "--json")
+    expect(r.json.sections[0].rows).toEqual([{ person: "@marie", name: "Marie Dubois", influence: "high", "last contact": null, projects: "" }])
+    const text = await ok("report", "overview")
+    expect(text.out).toContain("Marie Dubois")
+    expect(text.out).not.toContain("Nadia")
+    expect(text.out).not.toContain("Jan De Smet")
+  })
 })

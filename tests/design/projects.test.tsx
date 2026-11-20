@@ -115,3 +115,30 @@ test("Projects at 80x24 drops columns, never names or codes", async () => {
   for (const h of ["Effort", "Risk"]) expect(inside(frame, 2)).not.toContain(h)
   for (const l of frame.split("\n")) expect(l.length).toBeLessThanOrEqual(80)
 })
+
+// The footer says which statuses are listed: the design's `status=active` for its view (active, with on-hold
+// projects under them), `closed` added when a Closed group shows, and `+archived` while `a` shows archived ones.
+test("Projects footer names what is shown", async () => {
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
+  await seedDesign(kernel)
+  tui = await renderTui(kernel, { width: 118, height: 36 })
+  tui.input.pressKey("2")
+  let frame = await until(tui, (f) => f.includes("BI2"))
+  expect(line(frame, 34)).toMatch(/─ filter: status=active ─╯$/)
+  const w = kernel.runtime("projects")!.self().write as Record<string, (i: any) => Promise<any>>
+  await runWithContext(kernel.context(), async () => {
+    await w.addProject!({ code: "OLD", name: "Old one", status: "closed" })
+    await w.addProject!({ code: "GONE", name: "Gone one" })
+    await w.archiveProject!({ project: "GONE" })
+  })
+  frame = await until(tui, (f) => f.includes("Old one"))
+  expect(line(frame, 34)).toMatch(/─ filter: status=active,closed ─╯$/)
+  tui.input.pressKey("a")
+  frame = await until(tui, (f) => f.includes("Gone one"))
+  expect(line(frame, 34)).toMatch(/─ filter: status=active,closed \+archived ─╯$/)
+  tui.input.pressKey("/")
+  for (const ch of "o") tui.input.pressKey(ch)
+  tui.input.pressEnter()
+  frame = await until(tui, (f) => f.includes("+archived o "))
+  expect(line(frame, 34)).toMatch(/─ filter: status=active,closed \+archived o ─╯$/)
+})

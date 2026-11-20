@@ -1,4 +1,4 @@
-// The app-wide services (useApp) and <PluginScope>, in their own module so the kernel's components (Overview,
+// The app-wide services (useApp) and <PluginScope>, in their own module so the kernel's components (Attention,
 // RecordView, the header badges) can use them without importing app.tsx.
 import { createContext, useContext, type Accessor, type JSX } from "solid-js"
 import type { Kernel } from "../host"
@@ -28,7 +28,7 @@ export function useApp(): TuiAppContext {
 }
 
 // Every registered component (screen, tab, panel, badge, overlay) renders inside one: an error boundary labelled
-// with its title, and its plugin's runtime for useRuntime() (none for the kernel's Overview). Overlays pass
+// with its title, and its plugin's runtime for useRuntime() (none for the kernel's Attention screen). Overlays pass
 // `close`, so Esc still closes one that failed.
 export function PluginScope(props: { kernel: Kernel; plugin: string | undefined; label: string; close?: () => void; children: JSX.Element }) {
   return (

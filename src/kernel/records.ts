@@ -9,7 +9,7 @@ export type RecordTypeDef = {
   prefix: string // "A-", "DE-", or a non-dash prefix such as "#" or "@"
   resolve(input: string): Promise<number | null>
   label(id: number): Promise<string>
-  // `detail`: an optional short description shown beside the label (a person's role).
+  // `detail`: an optional short description shown beside the label (a role, a status).
   search(text: string, limit: number): Promise<Array<{ ref: string; label: string; detail?: string }>>
   // The display ref of a record. Defaults to prefix + id; types whose refs are not numeric (`#CRM`) supply it.
   ref?(id: number): Promise<string>

@@ -70,13 +70,13 @@ function row(m: MeetingRecord, today: string, projectsWidth: number): TableRow {
   return {
     ref: m.ref,
     cells: {
-      ref: cell(m.ref),
+      ref: cell(m.ref, "muted"),
       date: cell(dayDate(m.date), m.status === "planned" && m.date < today ? "red" : muted),
       title: cell(m.title),
       kind: cell(m.kind),
       status: cell(m.status),
       att: cell(String(m.attendees.length)),
-      projects: cell(joinFit(codes(m), projectsWidth)),
+      projects: cell(joinFit(codes(m), projectsWidth), muted ?? "cyan"),
     },
   }
 }

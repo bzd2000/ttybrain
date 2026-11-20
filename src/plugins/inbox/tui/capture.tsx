@@ -17,6 +17,7 @@ import {
   createEscChord,
   DRAFT_KEPT,
   DraftPrompt,
+  fitWidth,
   notify,
   Panel,
   printable,
@@ -37,9 +38,10 @@ import { tagRanges, tagTone } from "./tags"
 const CAPTURE_WIDTH = 76
 export const CAPTURE_TITLE = "Capture to inbox"
 const CAPTURE_FOOTER = "ctrl+s save · esc cancel"
-// The suggestion box's width, and its tag column's.
+// The suggestion box's width, and its tag column's: the designs' 10 cells, growing to the longest tag shown (a
+// 16-character code and its `#`) so tags stay whole.
 const SUGGEST_WIDTH = 46
-const SUGGEST_TAG = 10
+const SUGGEST_TAG = { min: 10, max: 17 }
 // The text box grows with its lines up to this many, then scrolls.
 const MAX_LINES = 6
 const SUGGESTIONS = 5
@@ -142,6 +144,7 @@ export function CaptureOverlay(props: { close(): void }) {
     { key: () => word() ?? "" },
   )
   const suggestions = () => (word() === undefined ? [] : (search.data() ?? []))
+  const tagWidth = () => fitWidth(suggestions().map((s) => s.ref), SUGGEST_TAG.min, SUGGEST_TAG.max)
   createEffect(() => {
     word()
     setPicked(0)
@@ -244,8 +247,8 @@ export function CaptureOverlay(props: { close(): void }) {
             <For each={suggestions()}>
               {(s, i) => (
                 <box flexDirection="row" height={1} backgroundColor={i() === picked() ? theme.selectedBg : theme.bg}>
-                  <text fg={toneColor(tagTone(s.ref.slice(0, 1)))} width={SUGGEST_TAG} flexShrink={0} wrapMode="none">
-                    {truncate(s.ref, SUGGEST_TAG)}
+                  <text fg={toneColor(tagTone(s.ref.slice(0, 1)))} width={tagWidth()} flexShrink={0} wrapMode="none">
+                    {truncate(s.ref, tagWidth())}
                   </text>
                   <text fg={theme.text} marginLeft={2} flexShrink={0} wrapMode="none">
                     {s.label}

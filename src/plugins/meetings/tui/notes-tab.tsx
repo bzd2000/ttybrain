@@ -8,10 +8,12 @@ import type { ScrollBoxRenderable } from "@opentui/core"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import {
   act,
+  displayWidth,
   Panel,
   printable,
   shortDate,
   theme,
+  toneColor,
   truncate,
   useEditExternal,
   useKeys,
@@ -19,6 +21,7 @@ import {
   useQuery,
   useRuntime,
   useScreenKeys,
+  type CellPart,
   type Hint,
 } from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
@@ -44,7 +47,7 @@ const BORDERS = 2 // a panel's top and bottom border
 
 // The logged lines that fit in a column of `height` rows (0: not measured yet) under a Notes panel of at least
 // NOTES_MIN rows: at most LOGGED_MAX, then `+n more` for the rest (that line counts against the room, not the cap).
-export function loggedRows(logged: string[], height: number): { shown: string[]; more: number } {
+export function loggedRows<T>(logged: T[], height: number): { shown: T[]; more: number } {
   const room = height === 0 ? LOGGED_MAX + 1 : Math.max(1, height - NOTES_MIN - 2 * BORDERS)
   if (logged.length <= Math.min(room, LOGGED_MAX)) return { shown: logged, more: 0 }
   const n = Math.min(LOGGED_MAX, room - 1)
@@ -54,8 +57,9 @@ export function loggedRows(logged: string[], height: number): { shown: string[];
 type Store = ReturnType<typeof makeStore>
 type Runtime = ReturnType<typeof useRuntime>
 
-// The actions and decisions linked to the meeting, in the order they were logged, one line each.
-async function loggedLines(rt: Runtime, store: Store, m: MeetingRecord): Promise<string[]> {
+// The actions and decisions linked to the meeting, in the order they were logged, one line each, in coloured
+// pieces: the ref muted, the owner's handle magenta (`me` muted).
+async function loggedLines(rt: Runtime, store: Store, m: MeetingRecord): Promise<CellPart[][]> {
   const actions = await store.unlessUnavailable([] as Array<{ id: unknown; title: unknown; due_date: unknown; owner_id: unknown; handle: unknown }>, () =>
     rt.data
       .selectFrom("projects.action as a")
@@ -69,12 +73,32 @@ async function loggedLines(rt: Runtime, store: Store, m: MeetingRecord): Promise
     rt.data.selectFrom("projects.decision").select(["id", "title"]).where("meeting_id", "=", m.id).orderBy("id").execute(),
   )
   const owner = (r: (typeof actions)[number]) => (r.owner_id === null ? "me" : r.handle === null ? `person:${r.owner_id}` : `@${r.handle}`)
-  const out: string[] = []
+  const out: CellPart[][] = []
   for (const r of actions) {
-    const due = r.due_date === null ? [] : [shortDate(String(r.due_date))]
-    out.push([`${await rt.records.refOf("action", Number(r.id))} ${r.title}`, owner(r), ...due].join(" · "))
+    const who = owner(r)
+    out.push([
+      { text: await rt.records.refOf("action", Number(r.id)), tone: "muted" },
+      { text: ` ${r.title} · ` },
+      { text: who, tone: who === "me" ? "muted" : "magenta" },
+      ...(r.due_date === null ? [] : [{ text: ` · ${shortDate(String(r.due_date))}` }]),
+    ])
   }
-  for (const r of decisions) out.push(`${await rt.records.refOf("decision", Number(r.id))} ${r.title}`)
+  for (const r of decisions) out.push([{ text: await rt.records.refOf("decision", Number(r.id)), tone: "muted" }, { text: ` ${r.title}` }])
+  return out
+}
+
+// The pieces of a line cut together to `width` cells (the last one shown ends with `…` when cut).
+function cutParts(parts: CellPart[], width: number): CellPart[] {
+  const out: CellPart[] = []
+  let left = width
+  for (const [i, p] of parts.entries()) {
+    if (left <= 0) break
+    const rest = parts.slice(i).reduce((n, q) => n + displayWidth(q.text), 0)
+    const text = rest <= left ? p.text : truncate(p.text, left)
+    out.push({ ...p, text })
+    left -= displayWidth(text)
+    if (text !== p.text) break
+  }
   return out
 }
 
@@ -167,9 +191,15 @@ export function NotesTab(props: { recordRef: string }) {
             </Show>
             <For each={rows().shown}>
               {(l) => (
-                <text wrapMode="none" fg={theme.text}>
-                  {truncate(l, width() === 0 ? UNMEASURED : Math.max(1, width()))}
-                </text>
+                <box flexDirection="row" height={1} flexShrink={0}>
+                  <For each={cutParts(l, width() === 0 ? UNMEASURED : Math.max(1, width()))}>
+                    {(p) => (
+                      <text wrapMode="none" flexShrink={0} fg={toneColor(p.tone)}>
+                        {p.text}
+                      </text>
+                    )}
+                  </For>
+                </box>
               )}
             </For>
             <Show when={rows().more > 0}>

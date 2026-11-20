@@ -64,7 +64,11 @@ export function ProjectPeople(props: { recordRef: string }) {
   const rows = createMemo((): TableRow[] =>
     (q.data() ?? []).map((i) => ({
       ref: rowRef(i),
-      cells: { person: `${i.name} @${i.handle}`, role: i.role, kind: [i.team ? "Team" : "", i.stakeholder ? "Stakeholder" : ""].filter(Boolean).join(" · ") },
+      cells: {
+        person: { text: `${i.name} @${i.handle}`, parts: [{ text: i.name, tone: "magenta" }, { text: ` @${i.handle}`, tone: "muted" }] },
+        role: i.role,
+        kind: [i.team ? "Team" : "", i.stakeholder ? "Stakeholder" : ""].filter(Boolean).join(" · "),
+      },
     })),
   )
   const [current, setCurrent] = createSignal<string | undefined>()

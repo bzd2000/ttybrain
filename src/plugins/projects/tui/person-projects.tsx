@@ -69,7 +69,7 @@ export function PersonProjects(props: { recordRef: string }) {
     (q.data()?.roles ?? []).map((r) => {
       const tone = r.archived ? ("muted" as const) : undefined
       const cell = (text: string) => ({ text, tone })
-      return { ref: rowRef(r), cells: { code: cell(r.code), name: cell(r.name), role: cell(r.role), status: cell(r.status) } }
+      return { ref: rowRef(r), cells: { code: { text: r.code, tone: tone ?? "cyan" }, name: cell(r.name), role: cell(r.role), status: cell(r.status) } }
     }),
   )
   const [current, setCurrent] = createSignal<string | undefined>()

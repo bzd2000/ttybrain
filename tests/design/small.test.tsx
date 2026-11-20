@@ -5,7 +5,7 @@
 // (column drops, exact lines); this file covers the shared rules once per screen. Today is Thu 12 Nov 2026.
 import { afterEach, expect, test } from "bun:test"
 import { builtinPlugins } from "../builtins"
-import { line, seedDesign } from "../design"
+import { line, seedDesign, seedLongRefs } from "../design"
 import { makeTestKernel, type TestKernel } from "../helpers"
 import { renderTui, type RenderedTui } from "../tui"
 
@@ -203,3 +203,18 @@ for (const s of SCREENS) {
     for (const w of s.must) expect(frame).toContain(w)
   })
 }
+
+// Attention with long refs at 80×24: the 16-character code, the four-digit ids and the long name are whole in every
+// panel (the panels' columns grow to them and the titles give way); tests/design/attention.test.tsx has the lines.
+test("Attention at 80x24 with long codes, ids and names: whole", async () => {
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
+  await seedLongRefs(kernel)
+  tui = await renderTui(kernel, { width: 80, height: 24 })
+  const frame = await until(tui, (f) => f.includes("R-1000") && f.includes("Alexandra"))
+  for (const word of ["DATAPLATFORM2027", "A-1000", "A-1001", "R-1000", "Alexandra Vandenberghe"]) {
+    for (let k = 2; k < word.length; k++) expect(frame).not.toContain(word.slice(0, k) + "…")
+    expect(frame).toContain(word)
+  }
+  expect([...frame.matchAll(/DATAPLATFORM2027/g)].length).toBe(5)
+  expect([...frame.matchAll(/╭/g)].length).toBe([...frame.matchAll(/╰/g)].length)
+})

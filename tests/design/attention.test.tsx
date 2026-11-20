@@ -5,7 +5,7 @@
 // seed's three actions (the design's deliverable row is A12, a FEATURE).
 import { afterEach, expect, test } from "bun:test"
 import { builtinPlugins } from "../builtins"
-import { fgAt, isSelected, line, seedDesign } from "../design"
+import { fgAt, isSelected, line, seedDesign, seedLongRefs } from "../design"
 import { makeTestKernel, type TestKernel } from "../helpers"
 import { renderTui, type RenderedTui } from "../tui"
 import { theme } from "../../src/kernel/tui/theme"
@@ -129,3 +129,22 @@ test("Attention as designed", async () => {
   expect(fgAt(spans, "Overdue actions", 1)).toBe(theme.accent)
   expect(fgAt(spans, "Late milestones", 6)).toBe(theme.muted)
 })
+
+// The panels' columns are minimums that grow to their longest text: a 16-character code, four-digit ids and a long
+// name stay whole in every panel (titles give way), at the design's size and at 80×24.
+for (const [width, height] of [[118, 36], [80, 24]] as const)
+  test(`Attention at ${width}x${height}: long codes, ids and names whole`, async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
+    await seedLongRefs(kernel)
+    tui = await renderTui(kernel, { width, height })
+    const frame = await until(tui, (f) => f.includes("R-1000") && f.includes("Alexandra"))
+    // Each panel's row (found by its id or mark; paired panels share a line) holds the whole code next to it.
+    const at = (re: RegExp) => frame.split("\n").filter((l) => re.test(l))
+    expect(at(/ A-1000 .+ DATAPLATFORM2027 +-2d /).length).toBe(1) // overdue
+    expect(at(/ A-1001 .+ DATAPLATFORM2027 +Fri /).length).toBe(1) // due this week
+    expect(at(/ ● +DATAPLATFORM2027 .+ upd 2d ago /).length).toBe(1) // needing attention
+    expect(at(/│ DATAPLATFORM2027 .+ -3d /).length).toBe(1) // the late milestone
+    expect(at(/ R-1000 +DATAPLATFORM2027 .+ risk /).length).toBe(1) // the high risk
+    expect(at(/ Alexandra Vandenberghe .+never /).length).toBe(1) // the stakeholder
+    expect(frame).not.toMatch(/DATAPLATFORM202?…|DATAPL\w*…|A-100…|R-100…|Alexandra Vande\w*…/)
+  })

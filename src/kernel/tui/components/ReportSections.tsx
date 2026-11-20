@@ -3,8 +3,8 @@
 // plain lines and `note` muted. A group heading is drawn once, before the first section of a group. It takes no keys;
 // the caller puts it in a scrollbox. Lines truncate by display width.
 //
-// With `compact`, a section that has a compact form is drawn from it instead, as the meeting prep design does: a
-// fact (`Health          ● amber  …`, the label muted in 16 cells) or a muted sub-heading and one line per entry in
+// With `compact`, a section that has a compact form is drawn from it instead, as the screen designs do: a
+// fact (`Status          ● open  …`, the label muted in 16 cells) or a muted sub-heading and one line per entry in
 // three columns: the icon (2 cells and a gap), the text, and the right-hand value in a column of 16 (narrower on a
 // narrow box: the widest value shown). Sections follow each other without blank lines; a blank line follows the facts.
 import { createMemo, createSignal, For, Show } from "solid-js"

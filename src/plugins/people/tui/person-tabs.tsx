@@ -165,7 +165,13 @@ export function PersonNotes(props: { recordRef: string }) {
   const rows = createMemo((): TableRow[] =>
     (q.data()?.notes ?? []).map((n) => ({
       ref: n.ref,
-      cells: { ref: n.ref, date: shortDate(n.date), kind: n.kind === "one_on_one" ? "1:1" : "interaction", project: n.project ?? "", text: firstLine(n.text) },
+      cells: {
+        ref: { text: n.ref, tone: "muted" },
+        date: shortDate(n.date),
+        kind: n.kind === "one_on_one" ? "1:1" : "interaction",
+        project: { text: n.project ?? "", tone: "cyan" },
+        text: firstLine(n.text),
+      },
     })),
   )
   // The selected note, only while it is shown (a reload may have removed it).
@@ -257,7 +263,7 @@ export function PersonGoals(props: { recordRef: string }) {
   const rows = createMemo((): TableRow[] =>
     (q.data()?.goals ?? []).map((g) => {
       const target: Cell = { text: dueLabel(g.target_date, today()), tone: g.status === "open" && g.target_date !== null && g.target_date < today() ? "red" : undefined }
-      return { ref: g.ref, cells: { ref: g.ref, title: g.title, target, status: g.status } }
+      return { ref: g.ref, cells: { ref: { text: g.ref, tone: "muted" }, title: g.title, target, status: g.status } }
     }),
   )
   const selected = () => (q.data()?.goals ?? []).find((g) => g.ref === sel.current())

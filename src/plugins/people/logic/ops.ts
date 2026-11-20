@@ -50,7 +50,7 @@ const AddGoal = Type.Object({ person: Ref, title: Name, target_date: Type.Option
 const EditGoal = Type.Object({ ref: Ref, title: Type.Optional(Name), target_date: Clearable, notes: Clearable })
 const SetGoalStatus = Type.Object({ ref: Ref, status: GoalStatus })
 
-const StaleInput = Type.Object({ days: Type.Integer({ minimum: 0 }), limit: Type.Optional(Type.Integer({ minimum: 1 })) })
+const StaleInput = Type.Object({ days: Type.Integer({ minimum: 0 }), limit: Type.Optional(Type.Integer({ minimum: 1 })), influence: Type.Optional(Level) })
 const StaleRow = Type.Object({
   ref: Type.String(),
   name: Type.String(),
@@ -157,11 +157,12 @@ export function registerOps(ctx: PluginContext, store: Store): void {
       staleStakeholders: {
         input: StaleInput,
         output: Type.Array(StaleRow),
-        toolDescription: "Active stakeholders with no note for `days` days: high influence first, then oldest contact first.",
+        toolDescription:
+          "Active stakeholders with no note for `days` days (only those of `influence` when given): high influence first, then oldest contact first.",
         run: async (i: Static<typeof StaleInput>): Promise<StaleRow[]> => {
           const rows = (await store.personQuery().where("p.is_stakeholder", "=", 1).where("p.archived_at", "is", null).execute())
             .map(store.toPerson)
-            .filter((p) => isStale(p.last_contact, today(), i.days))
+            .filter((p) => isStale(p.last_contact, today(), i.days) && (i.influence === undefined || p.influence === i.influence))
             .sort(
               (a, b) =>
                 Number(b.influence === "high") - Number(a.influence === "high") ||

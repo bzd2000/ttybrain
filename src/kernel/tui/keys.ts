@@ -52,9 +52,9 @@ export function frameHints(lastSlot: number): Hint[] {
 }
 
 // A hint's key as the status bar shows it: named keys in lowercase (`Enter` → `enter`, `Ctrl+S` → `ctrl+s`, `Esc`,
-// `Tab`, `Del`); single letters stay as typed (`J/K` and `D` are Shift+j/k/d).
+// `Tab`, `Del`, `PgUp` → `pgup`); single letters stay as typed (`J/K` and `D` are Shift+j/k/d).
 export function keyText(key: string): string {
-  return key.replace(/\b[A-Z][a-z]+\b/g, (w) => w.toLowerCase()).replace(/\+([A-Z])\b/g, (_, c: string) => `+${c.toLowerCase()}`)
+  return key.replace(/\b[A-Z][a-z]+(?:[A-Z][a-z]+)*\b/g, (w) => w.toLowerCase()).replace(/\+([A-Z])\b/g, (_, c: string) => `+${c.toLowerCase()}`)
 }
 
 // The layer a component renders in: "screen", or the id of the overlay it belongs to.

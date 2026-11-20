@@ -1,5 +1,5 @@
 // The projects plugin's Attention panels: overdue actions, due this week, projects needing attention, late and
-// upcoming milestones, high risks and issues, with the designs' column widths and cyan project codes. They read
+// upcoming milestones, high risks and issues, with the designs' column widths (growing for long codes and ids) and cyan project codes. They read
 // through the same makeOverview the `overview` report uses.
 import { daysBetween, dueLabel, shortDate, type Cell, type OverviewRow, type TuiContext } from "@ttybrain/api/tui"
 import { makeItems } from "../logic/items"
@@ -9,8 +9,11 @@ import { makeStore } from "../logic/records"
 const dash: Cell = { text: "—", tone: "muted" }
 const code = (text: string): Cell => ({ text, tone: "cyan" })
 const project = (ref: string | null): Cell => (ref === null ? dash : code(ref.slice(1)))
+// Ids and codes start at the designs' widths and grow to their longest text (codes up to 16), so they stay whole.
+const ID = { min: 5, max: 8 }
+const CODE = (min: number) => ({ min, max: 16 })
 // id, title, project, due.
-const ACTION_COLUMNS = [5, "grow", 7, 7] as const
+const ACTION_COLUMNS = [ID, "grow", CODE(7), 7] as const
 
 export function registerPanels(ui: TuiContext): void {
   const store = makeStore(ui)
@@ -46,7 +49,7 @@ export function registerPanels(ui: TuiContext): void {
     priority: 30,
     empty: "No project needs attention.",
     count: false,
-    columns: [2, 6, "grow", 12],
+    columns: [2, CODE(6), "grow", 12],
     load: async () => {
       const today = ui.clock.today()
       return (await overview.projectsNeedingAttention()).map((p): OverviewRow => {
@@ -75,7 +78,7 @@ export function registerPanels(ui: TuiContext): void {
     title: "Late milestones",
     priority: 40,
     empty: "No late milestones and none in the next 14 days.",
-    columns: [6, "grow", 8],
+    columns: [CODE(6), "grow", 8],
     load: async () => {
       const today = ui.clock.today()
       return (await overview.milestones()).map((m): OverviewRow => {
@@ -94,7 +97,7 @@ export function registerPanels(ui: TuiContext): void {
     priority: 50,
     empty: "No open high-severity risks or issues.",
     // id, project, title, type.
-    columns: [5, 6, "grow", 6],
+    columns: [ID, CODE(6), "grow", 6],
     load: async () =>
       (await overview.highRisks()).map(({ risk }): OverviewRow => ({
         ref: risk.ref,

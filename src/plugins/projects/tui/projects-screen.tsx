@@ -148,6 +148,12 @@ export function ProjectsScreen() {
     return out
   })
   const activeCount = () => groups()[0]!.rows.length
+  // What the list shows: the design's `status=active` (active projects, the on-hold ones under them), `closed`
+  // when a Closed group shows, `+archived` while archived ones are shown, then the filter text.
+  const footer = () => {
+    const closed = groups().some((g) => g.title === "Closed")
+    return `filter: status=active${closed ? ",closed" : ""}${archived() ? " +archived" : ""}${filter() === "" ? "" : ` ${filter()}`}`
+  }
   // Under a filter the count is what the filter leaves (the switcher's count stays the unfiltered one).
   const title = () => `Projects · ${activeCount()} ${filter() === "" ? "active" : "shown"}${archived() ? " · archived shown" : ""}`
   const loaded = (ref: string | undefined) => ref !== undefined && groups().some((g) => g.rows.some((r) => r.ref === ref))
@@ -221,7 +227,7 @@ export function ProjectsScreen() {
 
   return (
     <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1}>
-      <Panel title={title()} focused={keys.active()} footer={`filter: status=active${filter() === "" ? "" : ` ${filter()}`}`} grow>
+      <Panel title={title()} focused={keys.active()} footer={footer()} grow>
         <Show when={editing()}>
           <box flexDirection="row" height={1} flexShrink={0} gap={1}>
             <text fg={theme.accent}>/</text>

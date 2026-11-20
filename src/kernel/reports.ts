@@ -13,13 +13,13 @@ export type ReportSpan = { text: string; tone?: ReportTone }
 // One line of a section's compact form: an icon, the text (pieces in their tones) and a short right-hand value
 // (a date, a status).
 export type ReportLine = { icon?: ReportSpan; text: ReportSpan[]; aside?: ReportSpan }
-// How a narrow view (the TUI's meeting prep) draws a section instead of its table: `lines` in place of the rows,
+// How a narrow view (a TUI panel that embeds a report) draws a section instead of its table: `lines` in place of the rows,
 // with `title`, `empty` and `note` in place of the section's own when given (readable dates, a title for the
-// context). `fact` draws the title as a label in front of the first line (`Health  ● amber  …`). Markdown, text
+// context). `fact` draws the title as a label in front of the first line (`Status  ● open  …`). Markdown, text
 // and JSON leave it out.
 export type ReportCompact = { title?: string; fact?: boolean; lines: ReportLine[]; empty?: string; note?: string }
 // The same shape as a schema: the kernel checks section results against it, and an operation that passes compact
-// forms on (meetings' `prep`) uses it in its output schema.
+// forms on (a read operation that returns sections) uses it in its output schema.
 const ToneSchema = Type.Union([Type.Literal("red"), Type.Literal("amber"), Type.Literal("green"), Type.Literal("muted"), Type.Literal("cyan"), Type.Literal("magenta")])
 const SpanSchema = Type.Object({ text: Type.String(), tone: Type.Optional(ToneSchema) })
 export const ReportCompactSchema = Type.Object({

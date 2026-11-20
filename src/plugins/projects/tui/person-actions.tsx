@@ -80,7 +80,13 @@ export function PersonActions(props: { recordRef: string }) {
       const shared = ACTIONS.cells(a, today())
       return {
         ref: a.ref,
-        cells: { ref: shared.ref!, title: shared.title!, project: a.project?.replace(/^#/, "") ?? "", as: a.owner_id === data.personId ? "owner" : "for", due: shared.due! },
+        cells: {
+          ref: { text: a.ref, tone: "muted" },
+          title: shared.title!,
+          project: a.project ? { text: a.project.replace(/^#/, ""), tone: "cyan" } : "",
+          as: a.owner_id === data.personId ? "owner" : "for",
+          due: shared.due!,
+        },
       }
     })
   })

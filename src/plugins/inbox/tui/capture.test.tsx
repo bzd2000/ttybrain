@@ -102,13 +102,17 @@ describe("quick capture", () => {
     expect((await items()).map((i) => i.text)).toEqual(["@anna x"])
   })
 
-  test("a long handle is cut with … in the 10-wide tag column", async () => {
+  test("the tag column grows to the longest tag shown (17 at most); a longer one is cut with …", async () => {
     const t = await open()
-    await inCtx(() => write("people").addPerson!({ name: "Anneliese Long", handle: "anneliese-long" }))
+    await inCtx(async () => {
+      await write("people").addPerson!({ name: "Anneliese Long", handle: "anneliese-long" })
+      await write("people").addPerson!({ name: "Annelore Longer", handle: "annelore-longname" })
+    })
     await capture(t)
     await type(t, "@annel")
-    const frame = await until(t, (f) => f.includes("Anneliese Long"))
-    expect(frame).toContain("@annelies…  Anneliese Long")
+    const frame = await until(t, (f) => f.includes("Anneliese Long") && f.includes("Annelore Longer"))
+    expect(frame).toContain("@anneliese-long    Anneliese Long")
+    expect(frame).toContain("@annelore-longna…  Annelore Longer")
   })
 
   test("typing q and 2 in capture inserts them", async () => {
