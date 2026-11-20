@@ -107,12 +107,13 @@ describe("listColumn and field extension points", () => {
     expect(lineWith(frame, "Call vendor")).toContain("FA-1")
   })
 
-  test("summary shows extra field", async () => {
+  test("overview shows extra field, its value lined up with the facts (labelWidth)", async () => {
     const t = await boot()
     await projects(t)
     await t.nav.open("#CRM")
-    const frame = await until(t, (f) => f.includes("Budget  12000"))
-    expect(frame).toContain("Budget  12000")
+    const frame = await until(t, (f) => f.includes("12000"))
+    expect(lineWith(frame, "Budget")).toContain("Budget          12000")
+    expect(lineWith(frame, "Budget").indexOf("12000")).toBe(lineWith(frame, "Status").indexOf("active"))
   })
 
   test("project form edits extra field", async () => {

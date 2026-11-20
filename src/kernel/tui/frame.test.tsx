@@ -160,7 +160,7 @@ test("a record of a claimed type shows its screen's chip, its crumb tone and mut
   expect(t.nav.route()).toEqual({ kind: "record", screen: "things", ref: "T-1" })
   expect(t.nav.crumb()).toBe("T-1")
   expect(t.nav.crumbs()).toEqual(["T-1"]) // deprecated alias
-  expect(line(frame, 1)).toContain("Main")
+  expect(line(frame, 2)).toContain("Main") // the tabs, after a blank line
   let spans = await t.spans()
   expect(fgAt(spans, "T-1", 0)).toBe(theme.magenta)
   expect(fgAt(spans, "Thing 1", 0)).toBe(theme.text)

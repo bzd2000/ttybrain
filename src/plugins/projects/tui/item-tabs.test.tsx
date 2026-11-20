@@ -49,7 +49,7 @@ async function seed(extra?: () => Promise<void>) {
   })
 }
 
-// Opens #CRM and moves `tabs` tabs right (Summary → Milestones is 1, … Actions is 5).
+// Opens #CRM and moves `tabs` tabs right (Overview → Milestones is 1, … Actions is 5).
 async function open(tabs: number, extra?: () => Promise<void>): Promise<RenderedTui> {
   kernel = await makeTestKernel({ plugins: builtinPlugins })
   await seed(extra)
@@ -111,7 +111,9 @@ describe("milestones tab", () => {
     frame = await until(t, "✓")
     expect(lineWith(frame, "Kickoff")).toContain("✓")
     expect((await rows<any>("milestone", ["done_date"]))[0].done_date).toBe("2026-11-13")
-    expect(frame).toContain("Milestones 0")
+    // The tab counts all milestones; the done one shows its date, not a countdown.
+    expect(frame).toContain("Milestones 1")
+    expect(lineWith(frame, "Kickoff")).toContain("20 Nov")
   })
 
   test("late milestone shows late", async () => {
@@ -280,7 +282,7 @@ describe("actions tab", () => {
     expect(await rows("action", ["title", "owner_id", "project_id"])).toEqual([{ title: "Call vendor", owner_id: null, project_id: 1 }])
   })
 
-  test("x on an action sets it to done, and the tab count drops by one", async () => {
+  test("x on an action sets it to done; the tab counts all actions, so it stays", async () => {
     const t = await open(5, async () => {
       await write().addAction!({ title: "One", project: "CRM" })
       await write().addAction!({ title: "Two", project: "CRM", owner: "@peter" })
@@ -288,8 +290,9 @@ describe("actions tab", () => {
     let frame = await until(t, "Actions 2")
     expect(lineWith(frame, "Two")).toContain("@peter")
     t.input.pressKey("x")
-    frame = await until(t, "Actions 1")
-    expect(frame).toContain("Actions 1")
+    frame = await until(t, "done ")
+    expect(lineWith(frame, "One")).toContain("done")
+    expect(frame).toContain("Actions 2")
     expect((await rows<any>("action", ["status"]))[0].status).toBe("done")
   })
 })

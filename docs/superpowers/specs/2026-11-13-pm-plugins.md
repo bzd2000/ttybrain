@@ -180,7 +180,7 @@ ttybrain report status <project>
 | Extension point | What |
 |---|---|
 | `screen` | **Projects** (2), **Actions** (4) |
-| `recordTab` on `project` | **Summary**, Milestones, Deliverables, Risks & issues, Decisions, Actions, People, **Context** |
+| `recordTab` on `project` | **Overview**, Milestones, Deliverables, Risks & issues, Decisions, Actions, People, **Context** (the item tabs' counts are all of their items, as the tabs list them) |
 | `recordTab` on `person` | **Projects & roles**, **Actions** (every action owned by or for that person: open ones first, then done and cancelled; the tab count is the open ones) |
 | `overviewPanel` | Overdue actions · Due this week · Projects needing attention · Late milestones (+ next 14 days) · High risks & issues |
 | `reportSection` in `project-status` | Health · Milestones · Deliverables · Risks & issues · Decisions · Actions (in that order) |

@@ -1,7 +1,8 @@
 // An open record: the tabs its type has (tabsFor, with their counts) and the active tab's component with
 // `{ recordRef }`, in that tab's plugin scope; the header shows its breadcrumb (frame.tsx). ←→ switch tabs.
 // A tab with `when` shows only once its check resolved true (or threw: a broken check never hides data); a
-// `tab` that is not shown falls back to the first tab.
+// `tab` that is not shown falls back to the first tab. As the screen designs draw it, a blank line sits between the
+// header and the tabs.
 import { createMemo, createSignal, Show } from "solid-js"
 import { useQuery, useRecord } from "../data"
 import { useKeys } from "../keys"
@@ -50,7 +51,7 @@ export function RecordView(props: { recordRef: string; tab?: string }) {
   const active = () => shownTabs().find((t) => t.id === chosen()) ?? shownTabs()[0]
 
   return (
-    <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1}>
+    <box flexDirection="column" flexGrow={1} minHeight={0} paddingTop={1} paddingLeft={1} paddingRight={1}>
       <Tabs
         tabs={shownTabs().map((t) => ({ id: t.id, title: t.title, count: loaded.data()?.counts.get(t.id) ?? null }))}
         active={active()?.id ?? ""}

@@ -67,9 +67,9 @@ test("record breadcrumbs: screen chip, code cyan, label; no extra line", async (
   await t.nav.open("#CRM")
   let frame = await until(t, (f) => line(f, 0).includes("CRM replatforming"))
   expect(line(frame, 0)).toContain("ttybrain ·  2 Projects ▾  › CRM CRM replatforming")
-  // The tabs come straight under the header: no `› CRM` line between.
-  // (The first tab's name and the tab counts are Task 5's: here only that line 1 is the tab row.)
-  expect(line(frame, 1)).toMatch(/^\s+\S.*Milestones \d+\s+Deliverables \d+/)
+  // A blank line, then the tabs: no `› CRM` line between.
+  expect(line(frame, 1)).toBe("")
+  expect(line(frame, 2)).toMatch(/^\s+Overview\s+Milestones \d+\s+Deliverables \d+/)
   expect(frame).not.toMatch(/^\s*› CRM/m)
   let spans = await t.spans()
   expect(fgAt(spans, "›", 0)).toBe(theme.muted)

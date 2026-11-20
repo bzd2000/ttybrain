@@ -42,7 +42,9 @@ export type ItemKind = {
   deleteOp: string
 }
 
-const REF: TableColumn = { id: "ref", title: "Ref", width: 6 }
+// Refs muted, people (owners, for) magenta, as on the designed screens.
+const REF: TableColumn = { id: "ref", title: "Ref", width: 6, tone: () => "muted" }
+const person = (text: string | null | undefined): Cell => (text ? { text, tone: "magenta" } : { text: "—" })
 const DELIVERABLE_FLOW = ["not_started", "in_progress", "in_review", "delivered"]
 const byDate = (key: string) => (a: Rec, b: Rec) => (a[key] ?? "9999") < (b[key] ?? "9999") ? -1 : (a[key] ?? "9999") > (b[key] ?? "9999") ? 1 : a.id - b.id
 const SEVERITY: Record<string, number> = { high: 0, medium: 1, low: 2 }
@@ -57,9 +59,10 @@ export const ITEM_KINDS: Record<string, ItemKind> = {
     columns: [REF, { id: "done", title: " ", width: 1 }, { id: "title", title: "Milestone", width: "grow" }, { id: "due", title: "Due", width: 6 }, { id: "late", title: "", width: 4 }],
     cells: (r, today) => ({
       ref: r.ref,
-      done: r.done_date !== null ? "✓" : "○",
+      done: r.done_date !== null ? { text: "✓", tone: "green" } : "○",
       title: r.title,
-      due: dueLabel(r.due_date, today),
+      // A done milestone's date is history, not a countdown.
+      due: r.done_date !== null ? { text: shortDate(r.due_date), tone: "muted" } : dueLabel(r.due_date, today),
       late: red(r.done_date === null && r.due_date < today ? "late" : "", true),
     }),
     complete: (r, today) => (r.done_date === null ? { op: "completeMilestone", input: { ref: r.ref, date: today } } : undefined),
@@ -78,7 +81,7 @@ export const ITEM_KINDS: Record<string, ItemKind> = {
     cells: (r, today) => ({
       ref: r.ref,
       title: r.title,
-      owner: r.owner ?? "—",
+      owner: person(r.owner),
       status: r.status,
       due: red(dueLabel(r.due_date, today), r.status !== "delivered" && r.due_date !== null && r.due_date < today),
     }),
@@ -98,7 +101,7 @@ export const ITEM_KINDS: Record<string, ItemKind> = {
         .map(items.toRisk)
         .sort((a, b) => Number(a.status !== "open") - Number(b.status !== "open") || SEVERITY[a.severity]! - SEVERITY[b.severity]! || a.id - b.id),
     columns: [REF, { id: "type", title: "Type", width: 5 }, { id: "title", title: "Title", width: "grow" }, { id: "severity", title: "Severity", width: 8 }, { id: "owner", title: "Owner", width: 14 }, { id: "status", title: "Status", width: 6 }],
-    cells: (r) => ({ ref: r.ref, type: r.type, title: r.title, severity: red(r.severity, r.severity === "high"), owner: r.owner ?? "—", status: r.status }),
+    cells: (r) => ({ ref: r.ref, type: r.type, title: r.title, severity: red(r.severity, r.severity === "high"), owner: person(r.owner), status: r.status }),
     complete: (r, today) => (r.status === "open" ? { op: "closeRisk", input: { ref: r.ref, date: today } } : undefined),
     completeHint: "close",
     deleteOp: "deleteRisk",
@@ -124,8 +127,8 @@ export const ITEM_KINDS: Record<string, ItemKind> = {
     cells: (r, today) => ({
       ref: r.ref,
       title: r.title,
-      owner: r.owner ?? "me",
-      for: r.for ?? "—",
+      owner: person(r.owner ?? "me"),
+      for: person(r.for),
       due: red(dueLabel(r.due_date, today), r.status === "open" && r.due_date !== null && r.due_date < today),
       status: r.status,
     }),

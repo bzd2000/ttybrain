@@ -1,4 +1,4 @@
-// The project detail record view (Summary, People, Context tabs) against the built-in plugins, seeded through the
+// The project detail record view (Overview, People, Context tabs) against the built-in plugins, seeded through the
 // write operations. Opened with nav.open("#CRM").
 import { afterEach, describe, expect, test } from "bun:test"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
@@ -107,7 +107,7 @@ describe("project detail", () => {
     expect(frame).toContain("Milestones 1")
     expect(frame).toContain("Risks & issues 1")
     expect(frame).toContain("People 2")
-    expect(lineWith(frame, "Summary")).toContain("Context")
+    expect(lineWith(frame, "Overview")).toContain("Context")
   })
 
   test("at 80 columns the tabs drop zero counts, then window around the active tab with ‹ › instead of cutting words", async () => {
@@ -118,8 +118,8 @@ describe("project detail", () => {
     tui.input.pressKey("2")
     await tui.frame()
     await tui.nav.open("#CRM")
-    const tabLine = async () => (await tui!.frame()).split("\n")[1]!
-    const words = ["Summary", "Milestones", "Deliverables", "Risks & issues", "Decisions", "Actions", "People", "Context"]
+    const tabLine = async () => (await tui!.frame()).split("\n")[2]!
+    const words = ["Overview", "Milestones", "Deliverables", "Risks & issues", "Decisions", "Actions", "People", "Context"]
     const check = (line: string) => {
       // every word on the tab line is a whole tab title or count, or a marker
       for (const piece of line.replace(/[‹›]/g, " ").trim().split(/\s{2,}/)) {
@@ -127,16 +127,16 @@ describe("project detail", () => {
       }
     }
     let line = await tabLine()
-    expect(line).toContain("Summary")
+    expect(line).toContain("Overview")
     expect(line).not.toContain(" 0") // zero counts are dropped first
     expect(line).toContain("›") // more tabs to the right
     check(line)
     tui.input.pressArrow("right")
-    line = (await tui.frame()).split("\n")[1]!
+    line = (await tui.frame()).split("\n")[2]!
     expect(line).toContain("Milestones 1")
     check(line)
     for (let i = 0; i < 6; i++) tui.input.pressArrow("right")
-    line = (await tui.frame()).split("\n")[1]!
+    line = (await tui.frame()).split("\n")[2]!
     expect(line).toContain("Context")
     expect(line).toContain("‹")
     expect(line).not.toMatch(/›\s*$/)
@@ -167,11 +167,9 @@ describe("project detail", () => {
       await sleep(25)
       frame = await t.frame()
     }
-    expect(frame).toContain("Background")
-    expect(frame).not.toContain("# Background")
+    expect(frame).toContain("# Background") // the design keeps heading markers
     expect(frame).toContain("Legacy CRM")
-    expect(lineWith(frame, "Context · markdown")).toContain("updated 13 Nov")
-    expect(lineWith(frame, "Context · markdown")).toContain("100%") // it fits: scrolled to the end
+    expect(lineWith(frame, "updated 13 Nov")).toContain("100%") // on the panel's bottom border; it fits: scrolled to the end
   })
 
   test("a long context at 80x24 scrolls inside the tab and keeps the breadcrumb", async () => {
@@ -262,7 +260,7 @@ describe("project detail", () => {
     expect(await t.frame()).toContain("Edit CRM")
   })
 
-  test("a code edit from Summary follows the rename, and Esc selects the renamed project", async () => {
+  test("a code edit from Overview follows the rename, and Esc selects the renamed project", async () => {
     const t = await open()
     await until(t, "› CRM CRM replatforming")
     t.input.pressKey("e")
@@ -272,7 +270,7 @@ describe("project detail", () => {
     t.input.pressKey("s", { ctrl: true })
     const frame = await until(t, "› CRM2027 CRM replatforming")
     expect(frame).toContain("› CRM2027 CRM replatforming")
-    expect(frame).toContain("Design slipping") // the Summary of the same project, not "not found"
+    expect(frame).toContain("Design slipping") // the Overview of the same project, not "not found"
     expect(t.nav.stack().length).toBe(3) // Overview, Projects, #CRM2027: the old route was replaced, not stacked on
     const codes = await inCtx(async () => (await kernel!.runtime("projects")!.data.selectFrom("project").select("code").execute()).map((r: any) => r.code))
     expect(codes).toEqual(["CRM2027"])
