@@ -38,6 +38,7 @@ type Screen = {
   chip: string // what the header's chip shows
   open: (t: RenderedTui) => Promise<string> // drives to the screen, returns the settled frame
   panels?: boolean // the screen draws bordered panels
+  must: string[] // codes and names that show whole at 80×24
 }
 
 const crm = async (t: RenderedTui) => {
@@ -48,9 +49,10 @@ const crm = async (t: RenderedTui) => {
 }
 
 const SCREENS: Screen[] = [
-  { name: "Attention", chip: "1 Attention", panels: true, open: (t) => until(t, (f) => f.includes("Overdue actions")) },
+  { name: "Attention", must: ["CRM", "ERP", "DWH", "IAM", "HRP", "Marie Dubois", "Luc Vermeulen"], chip: "1 Attention", panels: true, open: (t) => until(t, (f) => f.includes("Overdue actions")) },
   {
     name: "Projects",
+    must: CODES,
     chip: "2 Projects",
     panels: true,
     open: async (t) => {
@@ -60,6 +62,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: "Project detail",
+    must: ["CRM", "Peter Janssens"],
     chip: "2 Projects",
     panels: true,
     open: async (t) => {
@@ -69,6 +72,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: "Context",
+    must: ["CRM"],
     chip: "2 Projects",
     panels: true,
     open: async (t) => {
@@ -79,6 +83,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: "People",
+    must: [...NAMES, "CRM", "ERP", "DWH"],
     chip: "3 People",
     panels: true,
     open: async (t) => {
@@ -88,6 +93,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: "Actions",
+    must: ["CRM", "ERP", "DWH", "IAM", "HRP"],
     chip: "4 Actions",
     panels: true,
     open: async (t) => {
@@ -97,6 +103,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: "Meeting prep",
+    must: ["CRM", "ERP", "HRP"],
     chip: "5 Meetings",
     panels: true,
     open: async (t) => {
@@ -111,6 +118,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: "Inbox",
+    must: ["CRM"],
     chip: "6 Inbox",
     panels: true,
     open: async (t) => {
@@ -120,6 +128,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: "Capture",
+    must: ["CRM"],
     chip: "2 Projects",
     open: async (t) => {
       await crm(t)
@@ -129,6 +138,7 @@ const SCREENS: Screen[] = [
   },
   {
     name: "Switcher",
+    must: ["CRM", "ERP"],
     chip: "1 Attention",
     open: async (t) => {
       await t.settle()
@@ -170,7 +180,7 @@ for (const s of SCREENS) {
       for (const word of list) for (let k = min; k < word.length; k++) expect(frame).not.toContain(word.slice(0, k) + "…")
 
     // The header: ttybrain, the chip and the date.
-    expect(line(frame, 0)).toContain(`ttybrain · ${" "}${s.chip}`)
+    expect(line(frame, 0)).toContain(`ttybrain ·  ${s.chip}`)
     expect(line(frame, 0)).toMatch(/Thu 12 Nov 2026$/)
 
     // Every panel top has its bottom border.
@@ -187,5 +197,9 @@ for (const s of SCREENS) {
     expect(line(frame, 23)).not.toContain("…")
     const known = new Set(hints(wide))
     for (const h of bar) expect(known.has(h)).toBe(true)
+    // The first hints survive (the screen's own come first, the frame's tail drops).
+    const first = hints(wide).slice(0, 2)
+    expect(bar.slice(0, first.length)).toEqual(first)
+    for (const w of s.must) expect(frame).toContain(w)
   })
 }
