@@ -1,8 +1,10 @@
 // The handover of the actions this plugin used to own to the actions plugin (design 2026-11-20 §4). The rows stay
 // in `action` (migration 001) until the actions plugin has imported them through the read `legacyActions` (its own
-// data step); this step then deletes the rows it imported (ids up to the last one imported), so there is one copy. Until then nothing in this plugin shows them.
+// data step); this step then deletes the rows it imported (each (id, updated_at) actions reports), so there is one
+// copy. A row that does not match (an older build wrote it after the move, R4) is kept, and the step
+// "actions-leftovers" names it in `ttybrain plugin list` until it is gone. Until then nothing in this plugin shows them.
 // The emptied table is kept (plan ruling R2): a data step may not change the schema.
-import { Type, type PluginContext } from "@ttybrain/api"
+import { Type, ValidationError, type PluginContext } from "@ttybrain/api"
 
 const Opt = Type.Union([Type.String(), Type.Null()])
 const OptId = Type.Union([Type.Integer(), Type.Null()])
@@ -33,11 +35,26 @@ export function registerHandover(ctx: PluginContext): void {
     },
   })
 
+  type Imported = { imported: boolean; rows: Array<{ id: number; updated_at: string }> }
+  const imported = async (): Promise<Imported | undefined> => {
+    const read = ctx.read("actions")?.importedLegacy
+    const out = read === undefined ? undefined : ((await read({})) as Imported)
+    return out?.imported ? out : undefined
+  }
   ctx.upgrade("actions-handover", async () => {
-    const actions = ctx.read("actions")?.importedLegacy
-    const done = actions === undefined ? undefined : ((await actions({})) as { imported: boolean; lastId: number | null })
-    if (done === undefined || !done.imported) return "later"
-    if (done.lastId !== null) await ctx.data.deleteFrom("action").where("id", "<=", done.lastId).execute()
+    const done = await imported()
+    if (done === undefined) return "later"
+    for (const r of done.rows) await ctx.data.deleteFrom("action").where("id", "=", r.id).where("updated_at", "=", r.updated_at).execute()
     return "done"
+  })
+  // Rows the handover did not take: named (as an error that keeps the step pending) rather than silently stranded.
+  ctx.upgrade("actions-leftovers", async () => {
+    if ((await imported()) === undefined) return "later"
+    const left = await ctx.data.selectFrom("action").select("id").orderBy("id").execute()
+    if (left.length === 0) return "done"
+    const ids = left.map((r) => Number(r.id)).join(", ")
+    throw new ValidationError(`the projects plugin's action table still holds rows the actions plugin did not take (id ${ids})`, {
+      hint: "an older ttybrain wrote them after the actions moved; they are kept as they are (nothing shows them); report it",
+    })
   })
 }

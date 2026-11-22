@@ -151,6 +151,7 @@ const steps = (k: Kernel) => all(k, `SELECT plugin, id FROM kernel_plugin_migrat
 const DONE = [
   { plugin: "actions", id: "upgrade:from-projects" },
   { plugin: "projects", id: "upgrade:actions-handover" },
+  { plugin: "projects", id: "upgrade:actions-leftovers" },
 ]
 
 beforeEach(() => {
@@ -176,7 +177,8 @@ describe("actions: the handover from projects", () => {
     expect(all(k, `SELECT ${COLUMNS} FROM actions_action ORDER BY id`)).toEqual(rows)
     expect(all(k, `SELECT count(*) AS n FROM projects_action`)).toEqual([{ n: 0 }])
     expect(steps(k)).toEqual(DONE)
-    expect(all(k, `SELECT source, rows, last_id FROM actions_handover`)).toEqual([{ source: "projects", rows: 300, last_id: rows[rows.length - 1]!.id }])
+    expect(all(k, `SELECT source, rows FROM actions_handover`)).toEqual([{ source: "projects", rows: 300 }])
+    expect(all(k, `SELECT id, updated_at FROM actions_handover_row ORDER BY id`)).toEqual(rows.map((r) => ({ id: r.id, updated_at: r.updated_at })))
     // The start that moved them backed the database up first: the backup holds the legacy rows, as they were.
     const backups = readdirSync(home).filter((f) => /^ttybrain\.db\.bak-v\d+$/.test(f))
     expect(backups.length).toBe(1)
@@ -272,71 +274,88 @@ describe("actions: the handover from projects", () => {
     expect(steps(next)).toEqual(DONE)
   })
 
-  test("an id already taken in actions (added while projects was off) stops the move; following the hint moves them", async () => {
-    const rows = legacyRows(3) // A-1, A-2, A-5
+  test("projects off at upgrade: new actions get ids above 1000000, so the move keeps every id and origin", async () => {
+    const rows = legacyRows(3) // A-1 (from I-1), A-4, A-5
     await legacyDatabase(rows)
     const off = await boot(ALL, WITHOUT_PROJECTS)
-    expect((await ok(off, "action", "add", "New while projects was off", "--due", "2026-11-20", "--json")).json.ref).toBe("A-1")
+    expect((await ok(off, "action", "add", "New while projects was off", "--json")).json.ref).toBe("A-1000001")
+    expect((await ok(off, "action", "add", "Another", "--from-inbox", "I-2", "--json")).json.ref).toBe("A-1000002")
     await close(off)
 
     const k = await boot(ALL)
+    expect(k.plugins.find((p) => p.id === "actions")).toEqual({ id: "actions", version: "1.0.0", source: "built-in", status: "ok" })
+    expect(steps(k)).toEqual(DONE)
+    expect(all(k, `SELECT ${COLUMNS} FROM actions_action WHERE id < 1000000 ORDER BY id`)).toEqual(rows)
+    expect(all(k, `SELECT id, title FROM actions_action WHERE id > 1000000 ORDER BY id`)).toEqual([
+      { id: 1000001, title: "New while projects was off" },
+      { id: 1000002, title: "Another" },
+    ])
+    expect(all(k, `SELECT count(*) AS n FROM projects_action`)).toEqual([{ n: 0 }])
+    // Origins: the moved A-1 still comes from I-1, the new A-1000002 from I-2.
+    expect(all(k, `SELECT record_id, origin_ref FROM kernel_record_origin WHERE record_type = 'action' AND origin_type = 'inbox' ORDER BY record_id`)).toEqual([
+      { record_id: 1, origin_ref: "I-1" },
+      { record_id: 1000002, origin_ref: "I-2" },
+    ])
+    expect((await ok(k, "inbox", "show", "I-1", "--json")).json.created.map((c: any) => c.ref)).toEqual(["A-1"])
+    // After the move, ids go on from the highest.
+    expect((await ok(k, "action", "add", "After the move", "--json")).json.ref).toBe("A-1000003")
+  })
+
+  test("a normal upgrade never uses the high range", async () => {
+    const rows = legacyRows(3)
+    await legacyDatabase(rows)
+    const k = await boot(ALL)
+    expect((await ok(k, "action", "add", "Next", "--json")).json.ref).toBe("A-6")
+  })
+
+  test("an id taken anyway (defensive): nothing moves, and the hint says to keep the data and report it", async () => {
+    const rows = legacyRows(3)
+    await legacyDatabase(rows)
+    const off = await boot(ALL, WITHOUT_PROJECTS)
+    off.db.raw.exec(`INSERT INTO actions_action (id, title, status, created_at, updated_at) VALUES (4, 'Planted', 'open', 'n', 'n')`)
+    await close(off)
+    const k = await boot(ALL)
     const status = k.plugins.find((p) => p.id === "actions")!
-    expect(status.error).toBe(
-      'data step "from-projects" failed: cannot move the projects plugin\'s actions: A-1 already exists in the actions plugin (added while projects was off)',
-    )
+    expect(status.error).toBe('data step "from-projects" failed: cannot move the projects plugin\'s actions: A-4 already exists in the actions plugin')
     expect(status.hint).toBe(
-      "save it (ttybrain action list --json), delete it (ttybrain action delete A-1 --yes), start ttybrain again (the move then runs), then add it back (ttybrain action add): it gets a new id",
+      "this should not happen; your data is untouched (the actions stay in the projects plugin until they can move). Don't delete actions to make room: report it",
     )
-    // plugin list says what to do.
-    expect((await ok(k, "plugin", "list")).out).toContain("hint (actions): save it (ttybrain action list --json)")
-    expect(all(k, `SELECT id, title FROM actions_action`)).toEqual([{ id: 1, title: "New while projects was off" }])
+    expect(status.hint).not.toContain("action delete")
+    expect(all(k, `SELECT id FROM actions_action`)).toEqual([{ id: 4 }])
     expect(all(k, `SELECT count(*) AS n FROM projects_action`)).toEqual([{ n: 3 }])
     expect(steps(k)).toEqual([])
-
-    // The hint, step by step: save it, delete it (this start still fails the move), start again, add it back.
-    const saved = (await ok(k, "action", "list", "--json")).json.find((a: any) => a.ref === "A-1")
-    expect(saved).toMatchObject({ title: "New while projects was off", due_date: "2026-11-20" })
-    await ok(k, "action", "delete", "A-1", "--yes")
-    await close(k)
-    const next = await boot(ALL)
-    expect(next.plugins.find((p) => p.id === "actions")).toEqual({ id: "actions", version: "1.0.0", source: "built-in", status: "ok" })
-    expect(all(next, `SELECT ${COLUMNS} FROM actions_action ORDER BY id`)).toEqual(rows)
-    expect(all(next, `SELECT count(*) AS n FROM projects_action`)).toEqual([{ n: 0 }])
-    expect(steps(next)).toEqual(DONE)
-    const back = (await ok(next, "action", "add", saved.title, "--due", saved.due_date, "--json")).json
-    expect([back.ref, back.title, back.due_date]).toEqual(["A-6", "New while projects was off", "2026-11-20"])
+    expect(collision(["A-1", "A-2"]).message).toBe("cannot move the projects plugin's actions: A-1, A-2 already exist in the actions plugin")
   })
 
-  test("the collision message names every id, in the right number", () => {
-    const two = collision(["A-1", "A-2"])
-    expect(two.message).toBe("cannot move the projects plugin's actions: A-1, A-2 already exist in the actions plugin (added while projects was off)")
-    expect(two.hint).toBe(
-      "save them (ttybrain action list --json), delete them (ttybrain action delete A-1 --yes; ttybrain action delete A-2 --yes), start ttybrain again (the move then runs), then add them back (ttybrain action add): they get new ids",
-    )
-  })
-
-  test("projects drops only the rows that were imported: a start that stopped between the two steps keeps a later row", async () => {
-    const rows = legacyRows(4) // A-1, A-2, A-5, A-6
+  test("projects drops only the rows it handed over (id and updated_at); a row an older build wrote later is kept and named", async () => {
+    const rows = legacyRows(4) // A-1, A-4, A-5, A-6
     await legacyDatabase(rows)
     const k = await boot(ALL)
     expect(steps(k)).toEqual(DONE)
-    // As if the start had stopped after the import (projects' step not recorded), with a row an older build wrote
-    // since (R4) and an imported one still there.
-    k.db.raw.exec(`
-      DELETE FROM kernel_plugin_migration WHERE plugin = 'projects' AND id = 'upgrade:actions-handover';
-      INSERT INTO projects_action (id, title, status, created_at, updated_at) VALUES (2, 'Imported copy', 'open', 'n', 'n'), (50, 'Written later', 'open', 'n', 'n');
-    `)
+    // As if the start had stopped after the import (projects' steps not recorded), with the imported rows still
+    // there, except A-6, which an older build deleted and then reused for a new row (R4).
+    const insert = k.db.raw.prepare(`INSERT INTO projects_action (id, title, status, created_at, updated_at) VALUES (?, ?, 'open', ?, ?)`)
+    for (const r of rows.slice(0, 3)) insert.run([r.id, r.title, r.created_at, r.updated_at])
+    insert.run([6, "Written later with id 6", "2026-11-20T10:00:00", "2026-11-20T10:00:00"])
+    k.db.raw.exec(`DELETE FROM kernel_plugin_migration WHERE plugin = 'projects' AND id LIKE 'upgrade:%'`)
     await close(k)
+
     const again = await boot(ALL)
-    expect(steps(again)).toEqual(DONE)
-    expect(all(again, `SELECT id, title FROM projects_action`)).toEqual([{ id: 50, title: "Written later" }])
-    expect(all(again, `SELECT ${COLUMNS} FROM actions_action ORDER BY id`)).toEqual(rows) // not imported twice
+    expect(all(again, `SELECT id, title FROM projects_action`)).toEqual([{ id: 6, title: "Written later with id 6" }])
+    expect(all(again, `SELECT ${COLUMNS} FROM actions_action ORDER BY id`)).toEqual(rows) // nothing imported twice
+    const projectsStatus = again.plugins.find((p) => p.id === "projects")!
+    expect(projectsStatus.status).toBe("ok")
+    expect(projectsStatus.error).toBe(
+      'data step "actions-leftovers" failed: the projects plugin\'s action table still holds rows the actions plugin did not take (id 6)',
+    )
+    expect(projectsStatus.hint).toBe("an older ttybrain wrote them after the actions moved; they are kept as they are (nothing shows them); report it")
+    expect(steps(again)).toEqual([DONE[0], DONE[1]])
   })
 
   test("a new database: both steps are done at the first start, with nothing to move", async () => {
     const k = await boot(ALL)
     expect(steps(k)).toEqual(DONE)
-    expect(all(k, `SELECT source, rows, last_id FROM actions_handover`)).toEqual([{ source: "projects", rows: 0, last_id: null }])
+    expect(all(k, `SELECT source, rows FROM actions_handover`)).toEqual([{ source: "projects", rows: 0 }])
     expect((await ok(k, "action", "add", "First", "--json")).json.ref).toBe("A-1")
   })
 })

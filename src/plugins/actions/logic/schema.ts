@@ -1,7 +1,7 @@
 // The actions plugin's tables. `action` has the columns actions had in the projects plugin (projects_action), so the
 // handover (handover.ts) copies each row as it is, with its id: `project_id`, `for_person_id` and `meeting_id` are
 // soft references (plain integers) to other plugins' records. `handover` records which plugin's legacy rows were
-// imported, so that plugin can drop its copy.
+// imported, and `handover_row` each imported (id, updated_at), so that plugin drops exactly those rows of its copy.
 import { sql, type PluginContext } from "@ttybrain/api"
 
 export const ACTION_STATUSES = ["open", "done", "cancelled"] as const
@@ -32,8 +32,14 @@ export function registerSchema(ctx: PluginContext): void {
       .createTable("handover")
       .addColumn("source", "text", (c) => c.primaryKey()) // the plugin the rows came from
       .addColumn("rows", "integer", (c) => c.notNull())
-      .addColumn("last_id", "integer") // the highest id imported (null: none), so the source drops only those
       .addColumn("imported_at", "text", (c) => c.notNull())
+      .execute()
+    await db.schema
+      .createTable("handover_row")
+      .addColumn("source", "text", (c) => c.notNull())
+      .addColumn("id", "integer", (c) => c.notNull())
+      .addColumn("updated_at", "text", (c) => c.notNull())
+      .addPrimaryKeyConstraint("handover_row_pk", ["source", "id"])
       .execute()
   })
 }

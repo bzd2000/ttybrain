@@ -3,6 +3,7 @@
 // record with its `ref`; `describe` gives the change-set line. The reads: `projectActions` (the actions part of a
 // project's status: overdue and from the previous meeting) and `importedLegacy` (the handover, handover.ts).
 import { currentContext, Deleted, NonBlank, parseDate, parseRef, Type, ValidationError, type PluginContext, type Static } from "@ttybrain/api"
+import { RESERVED } from "./handover"
 import { ActionRecord, type Store } from "./records"
 
 const Ref = NonBlank()
@@ -66,6 +67,15 @@ export function registerOps(ctx: PluginContext, store: Store): void {
     }
   }
 
+  const imported = async () => (await db.selectFrom("handover").select("source").where("source", "=", "projects").executeTakeFirst()) !== undefined
+  // Until the projects plugin's actions are imported, a new action's id is above RESERVED, so it cannot take an id
+  // a moved one keeps (projects off at the upgrade); after that, ids go on from the highest.
+  const newId = async (): Promise<number | undefined> => {
+    if (await imported()) return undefined
+    const row = await db.selectFrom("action").select((eb) => eb.fn.max("id").as("m")).executeTakeFirst()
+    return Math.max(Number(row?.m ?? 0), RESERVED) + 1
+  }
+
   async function setStatus(ref: string, status: "done" | "cancelled", doneDate: string | null): Promise<ActionRecord> {
     const a = await store.find(ref)
     await store.guardProject(a.project)
@@ -98,13 +108,14 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         toolDescription: "A project's open actions that are overdue on a date (default today), and those from a meeting (M-n).",
         run: projectActions,
       },
-      // Whether the projects plugin's actions were imported, and the highest id that was (null: there were none).
+      // Whether the projects plugin's actions were imported, and each imported row as it was (id, updated_at).
       importedLegacy: {
         input: Type.Object({}),
-        output: Type.Object({ imported: Type.Boolean(), lastId: Type.Union([Type.Integer(), Type.Null()]) }),
+        output: Type.Object({ imported: Type.Boolean(), rows: Type.Array(Type.Object({ id: Type.Integer(), updated_at: Type.String() })) }),
         run: async () => {
-          const row = await db.selectFrom("handover").select("last_id").where("source", "=", "projects").executeTakeFirst()
-          return { imported: row !== undefined, lastId: row === undefined || row.last_id === null ? null : Number(row.last_id) }
+          if (!(await imported())) return { imported: false, rows: [] }
+          const rows = await db.selectFrom("handover_row").select(["id", "updated_at"]).where("source", "=", "projects").orderBy("id").execute()
+          return { imported: true, rows: rows.map((r) => ({ id: Number(r.id), updated_at: String(r.updated_at) })) }
         },
       },
     },
@@ -126,9 +137,11 @@ export function registerOps(ctx: PluginContext, store: Store): void {
           const meeting = await store.meetingId(i.meeting)
           const due = dueOf(i.due)
           const t = now()
+          const id = await newId()
           const res = await db
             .insertInto("action")
             .values({
+              ...(id !== undefined && { id }),
               title: i.title.trim(),
               due_date: due ?? null,
               status: "open",

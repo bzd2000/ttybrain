@@ -9,19 +9,15 @@ import { currentContext, formatRef, ValidationError, type PluginContext } from "
 const COLUMNS = ["id", "title", "due_date", "status", "done_date", "owner_id", "project_id", "for_person_id", "meeting_id", "notes", "created_at", "updated_at"] as const
 type LegacyAction = Record<(typeof COLUMNS)[number], unknown>
 
-// The newer actions that hold ids the moved ones keep. The way out, in order: save them, delete them, start again
-// (the move then runs), add them back (they get new ids, after the moved ones).
+// Actions added before the import (projects off at the upgrade) get ids above RESERVED (ops.ts), so the moved ids
+// cannot be taken. Should one be taken anyway, nothing moves and nothing is changed: deleting an action would also
+// erase the origins the moved one with that id carries, so the hint says not to.
+export const RESERVED = 1_000_000
 export function collision(refs: string[]): ValidationError {
   const one = refs.length === 1
-  const deletes = refs.map((r) => `ttybrain action delete ${r} --yes`).join("; ")
-  return new ValidationError(
-    `cannot move the projects plugin's actions: ${refs.join(", ")} ${one ? "already exists" : "already exist"} in the actions plugin (added while projects was off)`,
-    {
-      hint:
-        `save ${one ? "it" : "them"} (ttybrain action list --json), delete ${one ? "it" : "them"} (${deletes}), ` +
-        `start ttybrain again (the move then runs), then add ${one ? "it" : "them"} back (ttybrain action add): ${one ? "it gets a new id" : "they get new ids"}`,
-    },
-  )
+  return new ValidationError(`cannot move the projects plugin's actions: ${refs.join(", ")} ${one ? "already exists" : "already exist"} in the actions plugin`, {
+    hint: "this should not happen; your data is untouched (the actions stay in the projects plugin until they can move). Don't delete actions to make room: report it",
+  })
 }
 
 export function registerHandover(ctx: PluginContext): void {
@@ -38,9 +34,11 @@ export function registerHandover(ctx: PluginContext): void {
     for (let i = 0; i < ids.length; i += 500)
       for (const r of await db.selectFrom("action").select("id").where("id", "in", ids.slice(i, i + 500)).execute()) taken.add(Number(r.id))
     if (taken.size > 0) throw collision([...taken].sort((a, b) => a - b).map((n) => formatRef("A-", n)))
-    for (const a of actions) await db.insertInto("action").values(Object.fromEntries(COLUMNS.map((c) => [c, a[c] ?? null]))).execute()
-    const lastId = ids.length === 0 ? null : Math.max(...ids)
-    await db.insertInto("handover").values({ source: "projects", rows: actions.length, last_id: lastId, imported_at: currentContext().now }).execute()
+    for (const a of actions) {
+      await db.insertInto("action").values(Object.fromEntries(COLUMNS.map((c) => [c, a[c] ?? null]))).execute()
+      await db.insertInto("handover_row").values({ source: "projects", id: a.id, updated_at: a.updated_at }).execute()
+    }
+    await db.insertInto("handover").values({ source: "projects", rows: actions.length, imported_at: currentContext().now }).execute()
     return "done"
   })
 }

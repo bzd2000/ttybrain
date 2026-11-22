@@ -62,8 +62,8 @@ expect_in "handover A-7" '"ref": "A-7"' "$out"
 expect_in "handover A-42" '"ref": "A-42"' "$out"
 out="$(TTYBRAIN_HOME="$handover_home" ttybrain action add "After the move" --json)"
 expect_in "handover next id" '"ref": "A-43"' "$out"
-out="$(db_eval '[db.prepare("SELECT count(*) AS n FROM projects_action").get().n, db.prepare("SELECT id, created_at FROM actions_action WHERE id = 7").get()]')"; echo "$out"
-expect_in "handover projects emptied" '[0,{"id":7,"created_at":"2026-01-01T00:00:00"}]' "$out"
+out="$(db_eval '[db.prepare("SELECT count(*) AS n FROM projects_action").get().n, db.prepare("SELECT id, created_at, updated_at FROM actions_action WHERE id IN (7, 42) ORDER BY id").all()]')"; echo "$out"
+expect_in "handover projects emptied, timestamps kept" '[0,[{"id":7,"created_at":"2026-01-01T00:00:00","updated_at":"2026-01-02T00:00:00"},{"id":42,"created_at":"2026-01-03T00:00:00","updated_at":"2026-01-04T00:00:00"}]]' "$out"
 
 # The fixture plugin (tests/fixtures/plugin-contracts), built with `ttybrain plugin build` and loaded on Node: first as a
 # folder in TTYBRAIN_PLUGINS, then packed and installed with `ttybrain plugin add <tgz>` through npm (offline: no dependencies).
