@@ -7,6 +7,7 @@
 import { createMemo, createSignal, Show } from "solid-js"
 import {
   act,
+  KeyHints,
   Panel,
   printable,
   Table,
@@ -32,7 +33,6 @@ const HINTS: Hint[] = [
   { key: "d", label: "due" },
   { key: "l", label: "links" },
   { key: "Del", label: "delete" },
-  { key: "Enter", label: "open" },
 ]
 
 type Runtime = Pick<TuiContext, "data" | "records">
@@ -160,6 +160,10 @@ export function RecordActions(props: { recordRef: string }) {
           />
         </Show>
       </Panel>
+      {/* Registered after the Table's own hints, so on a narrow bar `enter open` gives way before `↑↓ select`. */}
+      <Show when={q.data() !== undefined}>
+        <KeyHints hints={[{ key: "Enter", label: "open" }]} />
+      </Show>
     </box>
   )
 }

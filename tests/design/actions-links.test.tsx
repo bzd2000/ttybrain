@@ -78,7 +78,7 @@ test("a project's Actions tab: the screen's columns, the project left out of Lin
     cols(["A-8", "Invite Marie to design walkthrough", "me", "@marie", "17 Nov"], WIDE),
     cols(["A-10", "Draft cutover plan", "me", "—", "23 Nov"], WIDE),
   ])
-  expect(line(frame, 35)).toBe(" ←→ tabs   esc back   n add   e edit   x done   d due   l links   del delete   enter open   ? help   q quit")
+  expect(line(frame, 35)).toBe(" ←→ tabs   esc back   n add   e edit   x done   d due   l links   del delete   ↑↓ select   ? help   q quit")
   const spans = await tui.spans()
   expect(isSelected(spans, "Send revised budget to Peter")).toBe(true)
   expect(fgAt(spans, "A-4", 6)).toBe(theme.muted)
