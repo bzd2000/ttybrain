@@ -229,7 +229,7 @@ Readers: `meetings` (minutes and notes), `people` (follow-ups) and `projects` (o
 
 | Write | Input | Change-set line |
 |---|---|---|
-| `addAction` | `title`, `owner?`, `due?`, `notes?`, `links?: string[]` (any refs), shorthands `project?`, `forPerson?`, `meeting?` | `+ action "Send the roadmap" (me, #CRM, due Fri)` |
+| `addAction` | `title`, `owner?`, `due?`, `notes?`, `links?: string[]` (any refs), shorthands `project?`, `forPerson?`, `meeting?` | `+ action "Send the roadmap" (me, #CRM, due 2026-11-20)` |
 | `editAction` | `ref`, the same fields; `links` replaces all links, an empty value clears a field | `~ A-41 due, links` (the changed fields) |
 | `linkAction` / `unlinkAction` | `{ ref, to }`: one record ref; `unlinkAction` is always allowed (a gone link by `<type>:<id>`) | `~ A-41 link #ERP`, `~ A-41 unlink @peter` |
 | `completeAction` / `cancelAction` | `ref`, `date?` | `~ A-41 done`, `~ A-41 cancelled` |
