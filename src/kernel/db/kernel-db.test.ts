@@ -74,6 +74,24 @@ describe("openRaw", () => {
   })
 })
 
+describe("KernelDb.write noWait", () => {
+  test("fails with BusyError at once while another connection holds the write lock, and keeps busy_timeout", async () => {
+    const other = openRaw(file)
+    try {
+      other.exec("BEGIN IMMEDIATE")
+      const started = performance.now()
+      await expect(kdb.write(async () => 1, { noWait: true })).rejects.toThrow(BusyError)
+      expect(performance.now() - started).toBeLessThan(1000)
+      expect(kdb.raw.inTransaction()).toBe(false)
+      expect(kdb.raw.prepare("PRAGMA busy_timeout").all([])).toEqual([{ timeout: 3000 }])
+      other.exec("ROLLBACK")
+      expect(await kdb.write(async () => 2, { noWait: true })).toBe(2)
+    } finally {
+      other.close()
+    }
+  })
+})
+
 describe("KernelDb.transaction", () => {
   test("writes are visible after commit", async () => {
     await kdb.transaction(async () => {

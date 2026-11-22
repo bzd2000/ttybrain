@@ -64,7 +64,7 @@ const renameTui = defineTui({
           recordType="project"
           recordRef="#CRM"
           submit={async (v) => {
-            const r = await act(() => ui.use("projects")!.write.editProject!({ project: "#CRM", name: v.name ?? "" }))
+            const r = await act(() => ui.use("projects")!.write!.editProject!({ project: "#CRM", name: v.name ?? "" }))
             return r.ok ? { ok: true, ref: (r.value as { ref: string }).ref } : r
           }}
           close={() => props.close()}

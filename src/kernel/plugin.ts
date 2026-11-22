@@ -6,7 +6,7 @@ import type { Clock } from "./clock"
 import type { Origin } from "./context"
 import type { Config } from "./config"
 import type { FieldDef } from "./fields"
-import type { PluginApi, ReadOp, WriteOp } from "./operations"
+import type { PluginApi, PluginReadApi, ReadOp, WriteOp } from "./operations"
 import type { RecordTypeDef } from "./records"
 import type { ReportDef, ReportResult, ReportSectionDef } from "./reports"
 import type { TagRegistry, TagTypeDef } from "./tags"
@@ -32,10 +32,16 @@ export interface PluginContext {
   readonly config: Config
   readonly clock: Clock
   migration(id: string, up: (db: Kysely<any>) => Promise<void>): void
+  // A one-time data step (docs/architecture.md, "Data steps"): run at boot once every plugin's migrations and views
+  // are in place, in its own write transaction, with this context (data changes allowed, schema changes not).
+  // "done" records it so it never runs again; "later" commits nothing and leaves it pending; a throw rolls it back,
+  // keeps it pending and shows the error with the plugin, which stays loaded.
+  upgrade(id: string, run: () => Promise<"done" | "later">): void
   publish(name: string, def: ViewDef): void
   expose(ops: { read?: Record<string, ReadOp>; write?: Record<string, WriteOp> }): void
-  // Another plugin's exposed operations; undefined unless it is in `requires`.
-  use(pluginId: string): PluginApi | undefined
+  // Another plugin's exposed operations: read and write for a plugin in `requires`; only `read` (`write` is
+  // undefined) for one only in `reads`, while it is loaded at a version in that range; undefined otherwise.
+  use(pluginId: string): PluginApi | PluginReadApi | undefined
   self(): PluginApi
   recordType(def: Omit<RecordTypeDef, "plugin">): void
   readonly records: {

@@ -7,13 +7,18 @@ import type { Kysely } from "kysely"
 import { systemClock, type Clock } from "./clock"
 import type { KernelDb } from "./db/kernel-db"
 import type { TableAccess } from "./db/scope"
-import { IsolationError } from "./errors"
+import { BusyError, IsolationError } from "./errors"
 import type { Kernel } from "./host"
 import { assertPluginId, isReservedName } from "./plugin-id"
 import type { Paths } from "./paths"
 
 export type Migration = { id: string; up: (db: Kysely<any>) => Promise<void> }
+// A one-time data step (`ctx.upgrade`). Applied ones are kept in kernel_plugin_migration as `upgrade:<id>`.
+export type DataStep = { id: string; run: () => Promise<"done" | "later"> }
+export type StepOutcome = "done" | "later" | "busy"
 
+export const STEP_PREFIX = "upgrade:"
+const isStepRow = (id: string) => id.startsWith(STEP_PREFIX)
 
 const KERNEL_TABLES = [
   `CREATE TABLE IF NOT EXISTS kernel_plugin_migration (
@@ -191,6 +196,7 @@ export class MigrationRunner {
     const ids = new Set<string>()
     for (const m of migrations) {
       if (!m.id || ids.has(m.id)) throw new IsolationError(`plugin "${pluginId}": migration id "${m.id}" is empty or duplicated`)
+      if (isStepRow(m.id)) throw new IsolationError(`plugin "${pluginId}": migration id "${m.id}" may not start with "${STEP_PREFIX}" (kept for data steps)`)
       ids.add(m.id)
     }
     if (this.kdb.raw.inTransaction()) throw new Error("migrations cannot run inside a transaction")
@@ -201,8 +207,46 @@ export class MigrationRunner {
     for (const m of todo) await this.apply(pluginId, m, external)
   }
 
+  // Migrations only: data step rows (`upgrade:<id>`) are not counted (backups are named by migrations applied).
   private appliedCount(): number {
-    return Number(this.kdb.raw.prepare("SELECT count(*) AS n FROM kernel_plugin_migration").all([])[0]?.n ?? 0)
+    const rows = this.kdb.raw.prepare("SELECT count(*) AS n FROM kernel_plugin_migration WHERE substr(id, 1, ?) <> ?").all([STEP_PREFIX.length, STEP_PREFIX])
+    return Number(rows[0]?.n ?? 0)
+  }
+
+  // The data steps of a plugin not yet recorded as done. Read-only.
+  pendingSteps(pluginId: string, steps: DataStep[]): DataStep[] {
+    const done = this.appliedIds(pluginId)
+    return steps.filter((s) => !done.has(`${STEP_PREFIX}${s.id}`))
+  }
+
+  // Runs one data step in its own kernel write transaction, with plugin data changes allowed (like a write
+  // operation's scope; schema changes stay refused outside migrations). "done" is recorded in the same transaction;
+  // "later" rolls back whatever the step did. A throw rolls back and is rethrown. "busy": another connection holds
+  // the write lock, so nothing ran (the boot does not wait for it). The caller provides the operation context.
+  async runStep(pluginId: string, step: DataStep): Promise<StepOutcome> {
+    const later = Symbol("later")
+    let started = false
+    try {
+      await this.kdb.write(
+        async () => {
+          started = true
+          this.kdb.invalidateSchema()
+          if (this.appliedIds(pluginId).has(`${STEP_PREFIX}${step.id}`)) return // another process ran it meanwhile
+          const outcome: unknown = await step.run()
+          if (outcome === "later") throw later
+          if (outcome !== "done") throw new Error(`returned ${JSON.stringify(outcome) ?? String(outcome)}; a data step returns "done" or "later"`)
+          this.kdb.raw
+            .prepare("INSERT INTO kernel_plugin_migration (plugin, id, applied_at) VALUES (?, ?, ?)")
+            .run([pluginId, `${STEP_PREFIX}${step.id}`, this.clock.now()])
+        },
+        { op: true, noWait: true },
+      )
+      return "done"
+    } catch (e) {
+      if (e === later) return "later"
+      if (!started && e instanceof BusyError) return "busy"
+      throw e
+    }
   }
 
   private bootCount(): number {

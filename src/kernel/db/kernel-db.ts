@@ -24,7 +24,9 @@ type Hooks = Array<() => void>
 // One per open `write`. `queue` chains the nested writes started inside it; `hooks` are its after-commit hooks.
 // `op` marks a write operation's own scope (operations.ts): plugin data changes (R15) need one, open, on the chain.
 type WriteScope = { open: boolean; queue: Promise<unknown>; hooks: Hooks; parent?: WriteScope; op: boolean }
-export type WriteOptions = { op?: boolean }
+// `noWait`: an outermost write that fails with BusyError at once, instead of waiting busy_timeout, when another
+// connection holds the write lock (boot's data steps, which a read-only command must not wait for).
+export type WriteOptions = { op?: boolean; noWait?: boolean }
 const newScope = (op: boolean, parent?: WriteScope): WriteScope => ({ open: true, queue: Promise.resolve(), hooks: [], parent, op })
 const LATE = "write started after its parent write ended; await nested writes"
 const NESTED_RUNNING = "a write ran a statement while one of its nested writes was running; await nested writes"
@@ -81,8 +83,9 @@ export class KernelDb {
     return result
   }
 
-  private async outer<T>(fn: () => Promise<T>): Promise<T> {
-    this.raw.exec("BEGIN IMMEDIATE")
+  private async outer<T>(fn: () => Promise<T>, noWait = false): Promise<T> {
+    if (noWait) this.beginNoWait()
+    else this.raw.exec("BEGIN IMMEDIATE")
     this.depth++
     try {
       const result = await fn()
@@ -94,6 +97,17 @@ export class KernelDb {
       throw e
     } finally {
       this.depth--
+    }
+  }
+
+  // BEGIN IMMEDIATE with busy_timeout 0 for that one statement, restored afterwards.
+  private beginNoWait(): void {
+    const timeout = Number(Object.values(this.raw.prepare("PRAGMA busy_timeout").all([])[0] ?? {})[0] ?? 0)
+    this.raw.exec("PRAGMA busy_timeout = 0")
+    try {
+      this.raw.exec("BEGIN IMMEDIATE")
+    } finally {
+      this.raw.exec(`PRAGMA busy_timeout = ${timeout}`)
     }
   }
 
@@ -159,7 +173,7 @@ export class KernelDb {
   write<T>(fn: () => Promise<T>, opts: WriteOptions = {}): Promise<T> {
     const op = opts.op === true
     const parent = this.writing.getStore()
-    if (!parent) return this.outermost(fn, op)
+    if (!parent) return this.outermost(fn, op, opts.noWait === true)
     if (!parent.open) return Promise.reject(new Error(LATE))
     const run = parent.queue.then(async () => {
       if (!parent.open) throw new Error(LATE)
@@ -174,13 +188,13 @@ export class KernelDb {
 
   // After-commit hooks run once the lock is released and outside any write scope, so a hook that writes
   // (a `record.changed` handler) is a fresh outermost write.
-  private async outermost<T>(fn: () => Promise<T>, op: boolean): Promise<T> {
+  private async outermost<T>(fn: () => Promise<T>, op: boolean, noWait = false): Promise<T> {
     if (this.closed) throw new Error("database is closed")
     const scope = newScope(op)
     const result = await this.withWriteLock(async () => {
       this.openRoot = scope
       try {
-        return await this.writing.run(scope, () => this.outer(() => this.drained(scope, fn)))
+        return await this.writing.run(scope, () => this.outer(() => this.drained(scope, fn), noWait))
       } finally {
         this.openRoot = undefined
       }

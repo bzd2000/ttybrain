@@ -22,6 +22,8 @@ export type PluginApi = {
   read: Record<string, (input: any) => Promise<any>>
   write: Record<string, (input: any) => Promise<any>>
 }
+// What `ctx.use(id)` gives for a plugin the caller only `reads`: its read operations.
+export type PluginReadApi = { read: PluginApi["read"]; write?: undefined }
 
 type Kind = "read" | "write"
 type Entry = { plugin: string; name: string; kind: Kind; op: ReadOp | WriteOp }

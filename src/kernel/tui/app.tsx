@@ -104,7 +104,8 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
 
   const problems = () => [
     ...registry.errors().map((e) => e.error),
-    ...kernel.plugins.filter((p) => p.status === "failed").map((p) => `${p.id}: ${p.error ?? "failed"}`),
+    // Failed plugins, and loaded ones with an error (a data step that failed: the plugin itself runs).
+    ...kernel.plugins.filter((p) => p.status === "failed" || (p.status === "ok" && p.error !== undefined)).map((p) => `${p.id}: ${p.error ?? "failed"}`),
   ]
   // On a screen (not in an overlay, not while typing) the bar is the screen's hints, then the global actions'
   // (`i capture`), then the frame's (`g or 1-6 screens`, `? help`, `q quit`, or those an exact registration asks for).

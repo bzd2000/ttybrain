@@ -5,6 +5,7 @@ import { isSelected } from "../../../tests/design"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
 import { builtinPlugins, builtinTuiParts } from "../../../tests/builtins"
+import { definePlugin } from "../api"
 import { fitHints } from "./frame"
 import { useKeys, useScreenKeys } from "./keys"
 import { runTui } from "./run"
@@ -115,6 +116,32 @@ describe("TUI shell", () => {
     const frame = await tui.frame()
     expect(frame).toContain("Plugin problems")
     expect(frame).toContain('tui part for "ghost": plugin is not loaded')
+  })
+
+  test("? lists a failed data step of a loaded plugin", async () => {
+    const stepper = definePlugin({
+      id: "stepper",
+      name: "Stepper",
+      version: "1.0.0",
+      apiVersion: 1,
+      activate: (ctx) =>
+        ctx.upgrade("s1", async () => {
+          throw new Error("boom")
+        }),
+    })
+    const k = await makeTestKernel({ plugins: [...builtinPlugins, stepper] })
+    try {
+      expect(k.plugins.find((p) => p.id === "stepper")?.status).toBe("ok")
+      tui = await renderTui(k, { parts: builtinTuiParts })
+      tui.input.pressKey("?")
+      const frame = await tui.frame()
+      expect(frame).toContain("Plugin problems")
+      expect(frame).toContain('stepper: data step "s1" failed: boom')
+    } finally {
+      tui?.destroy()
+      tui = undefined
+      await k.cleanup()
+    }
   })
 
   test("text field disables single-letter keys", async () => {

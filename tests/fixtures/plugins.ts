@@ -98,7 +98,7 @@ export function beta(opts: { requires?: Record<string, string>; reads?: Record<s
             input: Type.Object({ title: Type.String() }),
             output: Type.Object({ ref: Type.String(), id: Type.Integer() }),
             describe: (i) => `+ item "${i.title}" via beta`,
-            run: async (i) => ctx.use("alpha")!.write.add!({ title: i.title }),
+            run: async (i) => ctx.use("alpha")!.write!.add!({ title: i.title }),
           },
         },
       })

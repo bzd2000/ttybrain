@@ -199,7 +199,79 @@ export async function runIsolationSelfCheck(): Promise<{ ok: boolean; results: S
     } catch {}
     rmSync(dir, { recursive: true, force: true })
   }
+  await checkDataSteps(check, assert)
   return { ok: results.length > 0 && results.every((r) => r.ok), results }
+}
+
+// Data steps (ctx.upgrade) on this runtime: a boot that finds the write lock taken leaves a pending step for later
+// without waiting; the next boot runs it once, with own DML and a read of a `reads`-only plugin through ctx.use.
+async function checkDataSteps(check: (name: string, fn: () => Promise<void>) => Promise<void>, assert: (cond: boolean, msg: string) => void) {
+  const dir = mkdtempSync(join(tmpdir(), "pm-steps-"))
+  let runs = 0
+  const giver = definePlugin({
+    id: "giver",
+    name: "Giver",
+    version: "1.0.0",
+    apiVersion: 1,
+    activate(ctx) {
+      ctx.expose({ read: { ready: { input: Type.Object({}), output: Type.Boolean(), run: async () => true } } })
+    },
+  })
+  const taker = (withStep: boolean) =>
+    definePlugin({
+      id: "taker",
+      name: "Taker",
+      version: "1.0.0",
+      apiVersion: 1,
+      reads: { giver: "^1.0.0" },
+      activate(ctx) {
+        ctx.migration("001", async (db) => {
+          await db.schema.createTable("row").addColumn("id", "integer", (c) => c.primaryKey()).addColumn("note", "text").execute()
+        })
+        if (!withStep) return
+        ctx.upgrade("s1", async () => {
+          runs++
+          const g = ctx.use("giver")
+          if (!g || g.write !== undefined || !(await g.read.ready!({}))) return "later"
+          await ctx.data.insertInto("row").values({ note: "moved" }).execute()
+          return "done"
+        })
+      },
+    })
+  const boot = (withStep: boolean) =>
+    bootKernel({ env: { TTYBRAIN_HOME: dir, TTYBRAIN_TEST: "1" }, plugins: [giver, taker(withStep)], clock: fixedClock("2026-11-13") })
+  let first: Awaited<ReturnType<typeof bootKernel>> | undefined
+  try {
+    first = await boot(false)
+    const k = first
+    await check("a pending data step does not wait for another connection's write lock", async () => {
+      k.db.raw.exec("BEGIN IMMEDIATE")
+      try {
+        const started = performance.now()
+        const b = await boot(true)
+        const ms = performance.now() - started
+        await b.shutdown()
+        assert(ms < 1000 && runs === 0, `boot took ${Math.round(ms)} ms and ran the step ${runs} times`)
+      } finally {
+        k.db.raw.exec("ROLLBACK")
+      }
+    })
+    await check("a data step runs once, then is recorded", async () => {
+      for (let i = 0; i < 2; i++) await (await boot(true)).shutdown()
+      const rows = k.db.raw.prepare("SELECT note FROM taker_row").all([])
+      const ids = k.db.raw.prepare("SELECT id FROM kernel_plugin_migration WHERE plugin = 'taker' ORDER BY id").all([]).map((r) => r.id)
+      assert(runs === 1 && JSON.stringify(rows) === '[{"note":"moved"}]' && JSON.stringify(ids) === '["001","upgrade:s1"]', `runs ${runs}, rows ${JSON.stringify(rows)}, ids ${JSON.stringify(ids)}`)
+    })
+  } catch (e) {
+    await check("data steps boot", async () => {
+      throw e
+    })
+  } finally {
+    try {
+      await first?.shutdown()
+    } catch {}
+    rmSync(dir, { recursive: true, force: true })
+  }
 }
 
 // Runtime-neutral "am I the entry module" (no import.meta.main): compare real paths.
