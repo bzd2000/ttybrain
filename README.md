@@ -53,7 +53,7 @@ Actions are now their own plugin (`actions`), no longer part of `projects`. On t
 - Before the move, ttybrain copies the database to `ttybrain.db.bak-v<N>` next to it (N = the number of migrations applied so far). Keep that file until you are happy with the result.
 - **Do not use an older build afterwards.** An older build opens the same database and sees no actions (its projects table is empty); don't add actions with it, they would not be seen by the new build either.
 - If the `projects` or `actions` plugin was switched off during the upgrade, the move waits until both are on. Actions you add in the meantime get ids above 1,000,000 (`A-1000001`) so they cannot collide with the ones still to be moved; they keep those ids.
-- External plugins: the `projects` plugin is now 2.0.0. A plugin that `requires` `projects ^1` fails to load, and one that reads `projects.project` at `^1` (it no longer has `open_actions`) sees that view as unavailable, until you update its ranges. The new `actions` plugin starts at 2.0.0: read `actions.action` and `actions.link` at `^2`. Stored change sets that name `projects.addAction` (and the other four action operations) no longer apply.
+- External plugins: the `projects` plugin is now 2.0.0. A plugin that `requires` `projects ^1` fails to load, and one that reads `projects.project` at `^1` (it no longer has `open_actions`) sees that view as unavailable, until you update its ranges. The new `actions` plugin starts at 2.0.0: read `actions.action` and `actions.link` at `^2`. A new change set that names `projects.addAction` (or one of the other four action operations) is refused; name `actions.addAction` and the like instead. Change sets already applied stay in the history as they were.
 
 ## Development
 
