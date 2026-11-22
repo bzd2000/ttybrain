@@ -37,7 +37,7 @@ src/plugins/<id>/tui/       screens, record tabs, panels, forms, badges: each pl
 tests/helpers.ts            makeTestKernel; tests/builtins.ts the built-ins as static lists (tests only); tests/fixtures/ fixture plugins
 ```
 
-Every feature is a plugin, built-ins included: `people`, `projects`, `meetings`, `inbox`, `assistant`. Built-ins use exactly the same API as external plugins: they are found by the same loader, described by the same manifest, and import only `@ttybrain/api` and `@ttybrain/api/tui` (`tests/logic-ui-split.test.ts` and a plugin-imports test enforce it; a relative import into `src/kernel` from a plugin's non-test file fails). If a built-in needs something the API doesn't offer, **extend the API**; never take a shortcut into the kernel. There are no static plugin lists in `src/` (`src/plugins/index.ts` and `tui.ts` are gone); tests that need the built-ins import `tests/builtins.ts`.
+Every feature is a plugin, built-ins included: `people`, `projects`, `actions`, `meetings`, `inbox`, `assistant`. Built-ins use exactly the same API as external plugins: they are found by the same loader, described by the same manifest, and import only `@ttybrain/api` and `@ttybrain/api/tui` (`tests/logic-ui-split.test.ts` and a plugin-imports test enforce it; a relative import into `src/kernel` from a plugin's non-test file fails). If a built-in needs something the API doesn't offer, **extend the API**; never take a shortcut into the kernel. There are no static plugin lists in `src/` (`src/plugins/index.ts` and `tui.ts` are gone); tests that need the built-ins import `tests/builtins.ts`.
 
 ## Plugin loading
 
@@ -54,7 +54,7 @@ Every feature is a plugin, built-ins included: `people`, `projects`, `meetings`,
 1. **Plugins never touch the database directly.** They get `ctx.data`, a scoped Kysely instance (`Kysely<any>`), and nothing else. There is no connection handle and no `kysely.transaction()`, `BEGIN`, `SAVEPOINT` or `PRAGMA` (raw `sql` for those is rejected).
 2. **Short names, prefixed physically.** A plugin writes `selectFrom("action")`; the kernel turns it into `projects_action`. A plugin can only address tables it created in its own migrations. Plugin ids and table short names may not contain `__` (it is the view separator), and `kernel` and `sqlite` are reserved ids.
 3. **Cross-plugin reads use published views only**, written `<plugin>.<view>`, e.g. `leftJoin("people.person as o", "o.id", "a.owner_id")`. Views are read-only, declared with `ctx.publish(name, { version, columns, query })`, and are a versioned contract. Declare the plugins whose views you read in `reads`. `reads` is recorded after `activate` returns, so **do not query views during `activate`**.
-4. **Cross-plugin writes use exposed write operations only**: `ctx.use("projects").write.addAction({...})`, and only for plugins in `requires`. `ctx.use(id)` is `undefined` for any other plugin. Read operations of a plugin in `reads` (or `requires`) come from `ctx.read(id)` (also on the TUI runtime): its `read` operations, or `undefined` while it is not loaded or is loaded at a version outside the `reads` range (as for its views).
+4. **Cross-plugin writes use exposed write operations only**: `ctx.use("actions").write.addAction({...})` (meetings does this: it requires `actions`), and only for plugins in `requires`. `ctx.use(id)` is `undefined` for any other plugin. Read operations of a plugin in `reads` (or `requires`) come from `ctx.read(id)` (also on the TUI runtime): its `read` operations, or `undefined` while it is not loaded or is loaded at a version outside the `reads` range (as for its views).
 5. **Two checks enforce 1–4.**
    - *Layer 1* rewrites and checks the Kysely query tree: tables, aliases, views, columns, and DDL only in migrations.
    - *Layer 2* runs `EXPLAIN` on the compiled SQL and checks the tables actually touched. Table-valued functions and virtual tables (`pragma_table_info`, `dbstat`, `json_each`: opcodes `VOpen`/`VFilter`) are rejected, since they open no table the check can see.
@@ -79,7 +79,7 @@ Every feature is a plugin, built-ins included: `people`, `projects`, `meetings`,
 ```ts
 ctx.expose({
   read:  { projectStatus: { input: T.Object(…), output: T.Object(…), run: async (i) => … } },
-  write: { addAction:     { input: …, output: …, describe: (i) => `+ action "${i.title}"`, run: async (i) => … } },
+  write: { addMilestone:  { input: …, output: …, describe: (i) => `+ milestone "${i.title}"`, run: async (i) => … } },
 })
 ```
 
@@ -145,13 +145,14 @@ Rules:
 
 | Plugin | Requires | Reads views of | Owns | Record types |
 |---|---|---|---|---|
-| `people` | — | projects | person, note, goal | `@handle`, `N-`, `G-` |
-| `projects` | people | people, meetings | project, health_update, milestone, deliverable, risk, decision, action, involvement | `#CODE`, `MS-`, `D-`, `R-`, `DE-`, `A-` |
-| `meetings` | projects, people | people, projects | meeting, attendee, agenda_item | `M-` |
+| `people` | — | projects, actions | person, note, goal | `@handle`, `N-`, `G-` |
+| `projects` | people | people, meetings, actions | project, health_update, milestone, deliverable, risk, decision, involvement | `#CODE`, `MS-`, `D-`, `R-`, `DE-` |
+| `actions` | — | people, projects, meetings | action, link | `A-` |
+| `meetings` | projects, people, actions | people, projects, actions | meeting, attendee, agenda_item | `M-` |
 | `inbox` | — | — | item, link | `I-` |
 | `assistant` (phase 7) | — | all (as tools) | — | — |
 
-`requires` must stay acyclic. Use `reads` plus soft references to look "upwards" (as `people` → `projects.involvement` does).
+`requires` must stay acyclic. (`actions` requires nothing so that `meetings` can require it and `projects` can still read it; an action's links to projects, people and meetings are ids resolved through record types and views, as soft references.) Use `reads` plus soft references to look "upwards" (as `people` → `projects.involvement` does).
 
 ## CLI conventions
 
@@ -163,6 +164,7 @@ Rules:
   - "not found" includes `did you mean` suggestions.
 - **Input:**
   - no prompts, ever; `destructive: true` commands need `--yes`;
+  - a flag that may be given several times sets `repeatable: true` in its `FlagDef` (`--link a --link b`: the value is the array of every occurrence; meaningless on a boolean flag, which the kernel does not reject, so don't);
   - dates accept `YYYY-MM-DD`, `today`, `tomorrow`, `+Nd`, `+Nw` and `mon`–`sun`, and are output as ISO;
   - references accept `A-12` or `12`, `CRM` or `#CRM`, `anna` or `@anna`.
 - An empty action owner, or the token `me`, means **me**. So `me` is a reserved handle: no person can have it.

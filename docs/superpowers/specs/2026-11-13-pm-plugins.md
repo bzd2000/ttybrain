@@ -23,6 +23,10 @@ Companion to [`2026-11-13-pm-design.md`](2026-11-13-pm-design.md). That document
                    │ projects │◄─────────│ meetings │
                    └──────────┘ requires └──────────┘
 
+   ┌──────────┐ requires ┌──────────┐
+   │ actions  │◄─────────│ meetings │   (actions requires nothing; it reads
+   └──────────┘          └──────────┘    people, projects, meetings softly)
+
    ┌──────────┐    ┌───────────┐    (no requires: both work through kernel
    │  inbox   │    │ assistant │     registries: tags, record types, tools,
    └──────────┘    └───────────┘     provenance)
@@ -30,9 +34,10 @@ Companion to [`2026-11-13-pm-design.md`](2026-11-13-pm-design.md). That document
 
 | Plugin | Requires | Reads views of | Record types (display prefix) | Screens (key) |
 |---|---|---|---|---|
-| `people` | — | projects | `person` (`@handle`), `note` (`N-`), `goal` (`G-`) | People (3) |
-| `projects` | `people ^1` | people, meetings | `project` (`#CODE`), `milestone` (`MS-`), `deliverable` (`D-`), `risk` (`R-`), `decision` (`DE-`), `action` (`A-`) | Projects (2), Actions (4) |
-| `meetings` | `projects ^1`, `people ^1` | people, projects | `meeting` (`M-`), `agenda_item` (no prefix) | Meetings (5) |
+| `people` | — | projects, actions | `person` (`@handle`), `note` (`N-`), `goal` (`G-`) | People (3) |
+| `projects` | `people ^1` | people, meetings, actions | `project` (`#CODE`), `milestone` (`MS-`), `deliverable` (`D-`), `risk` (`R-`), `decision` (`DE-`) | Projects (2) |
+| `actions` | — | people, projects, meetings | `action` (`A-`) | Actions (4) |
+| `meetings` | `projects ^2`, `people ^1`, `actions ^2` | people, projects, actions | `meeting` (`M-`), `agenda_item` (no prefix) | Meetings (5) |
 | `inbox` | — | — | `inbox_item` (`I-`) | Inbox (6) |
 | `assistant` | — | all (as tools) | — | — (side pane) |
 
@@ -107,7 +112,7 @@ ttybrain goal   list|add|edit|done|drop
 
 ## 2. `projects`
 
-The portfolio, and everything you follow up per project: health, milestones, deliverables, risks and issues, decisions and actions. It also owns **involvement**, meaning who plays which role on which project.
+The portfolio, and everything you follow up per project: health, milestones, deliverables, risks and issues and decisions. (Actions are the `actions` plugin's, §2a; they were part of `projects` until its 2.0.) It also owns **involvement**, meaning who plays which role on which project.
 
 ### Data
 
@@ -119,7 +124,6 @@ The portfolio, and everything you follow up per project: health, milestones, del
 | `deliverable` | `project_id → project`, `title`, `owner_id → person` **(soft)**, `due_date`, `status` (not_started/in_progress/in_review/delivered), `milestone_id → milestone`, `delivered_date`, `status_changed_at` |
 | `risk` | `project_id → project`, `type` (risk/issue), `title`, `description`, `severity` (low/medium/high), `owner_id → person` **(soft)**, `mitigation`, `status` (open/closed), `closed_date` |
 | `decision` | `project_id → project` (optional), `date`, `title`, `description`, `decided_by`, `meeting_id → meeting` **(soft)** |
-| `action` | `title`, `due_date`, `status` (open/done/cancelled), `done_date`, `owner_id → person` **(soft; empty = you)**, `project_id → project` (optional), `for_person_id → person` **(soft)**, `meeting_id → meeting` **(soft)**, `notes` |
 | `involvement` | `project_id → project`, `person_id → person` **(soft)**, `role`; unique (project, person, role) |
 
 `projects` requires `people` and stores person IDs as soft references. It validates them on every write and shows names by joining `people.person`, never the internal `person` table.
@@ -128,27 +132,28 @@ The portfolio, and everything you follow up per project: health, milestones, del
 
 | View | Columns |
 |---|---|
-| `projects.project` | id, code, name, description, status, start_date, end_date, effort_estimate_days, `health`, `health_comment`, `health_date` (latest update), `next_milestone_title`, `next_milestone_due`, `open_actions`, `open_risks`, archived |
+| `projects.project` | id, code, name, description, status, start_date, end_date, effort_estimate_days, `health`, `health_comment`, `health_date` (latest update), `next_milestone_title`, `next_milestone_due`, `open_risks`, archived |
 | `projects.health_update` | id, project_id, date, health, comment |
 | `projects.milestone` | id, project_id, title, due_date, done_date, `late` |
 | `projects.deliverable` | id, project_id, title, owner_id, due_date, status, status_changed_at, milestone_id |
 | `projects.risk` | id, project_id, type, title, severity, owner_id, status, closed_date |
 | `projects.decision` | id, project_id, date, title, decided_by, meeting_id |
-| `projects.action` | id, title, due_date, status, done_date, owner_id, project_id, for_person_id, meeting_id |
 | `projects.involvement` | project_id, person_id, role |
 
-Views take no injected clock, so nothing in them depends on "today": `projects.action` has no `overdue` column, and `late` on `projects.milestone` (computed with SQLite's `date('now')`) is a display convenience only. Logic (reports, `projectStatus`, the TUI's groupings) compares `due_date` with the context's `today` itself.
+Views take no injected clock, so nothing in them depends on "today": `actions.action` has no `overdue` column, and `late` on `projects.milestone` (computed with SQLite's `date('now')`) is a display convenience only. Logic (reports, `projectStatus`, the TUI's groupings) compares `due_date` with the context's `today` itself.
 
 The project `context` Markdown is **not** in a view, because it's large. It's read with `getContext`.
 
-It reads `people.person`, for owner, `for` and involvement names and for validating person references, and `meetings.meeting` (optional), for meeting titles on actions and decisions.
+It reads `people.person`, for owner and involvement names and for validating person references, `meetings.meeting` (optional), for meeting titles on decisions, and `actions.action` and `actions.link` (optional), for the open-action counts it shows (`open_actions` on a project record in the CLI and TUI; it is no longer a column of `projects.project`).
 
 ### Exposed operations
 
 | Read (with logic) | Input | Returns |
 |---|---|---|
 | `getContext` | `project` | `{ markdown, updatedAt }` |
-| `projectStatus` | `project`, `since`, `reference?` (default today), `previousMeeting?` | the structured data behind the prep block (health and "stale" warning, milestones, deliverables, risks, decisions, actions) |
+| `projectStatus` | `project`, `since`, `reference?` (default today), `previousMeeting?` | the structured data behind the prep block (health and "stale" warning, milestones, deliverables, risks, decisions) |
+
+`projectStatus` no longer returns actions: the project's overdue and meeting actions come from `actions.projectActions`, which the actions plugin's `project-status` section uses.
 
 | Write | Input | Change-set line |
 |---|---|---|
@@ -159,7 +164,6 @@ It reads `people.person`, for owner, `for` and involvement names and for validat
 | `addDeliverable` / `editDeliverable` / `setDeliverableStatus` / `deleteDeliverable` | … | `~ D-8 in_review → delivered` |
 | `addRisk` / `editRisk` / `closeRisk` / `deleteRisk` | … | `+ risk R-13 "Vendor delay" (high)` |
 | `addDecision` / `editDecision` / `deleteDecision` | … | `+ decision DE-14 "Select vendor B" (ERP, M-4)` |
-| `addAction` / `editAction` / `completeAction` / `cancelAction` / `deleteAction` | … | `+ action A-41 "Tell Peter…" (me, Fri)` |
 | `addInvolvement` / `removeInvolvement` | `project`, `person`, `role` | `+ @marie on CRM as key user` |
 
 ### CLI
@@ -170,7 +174,6 @@ ttybrain milestone   list|add|edit|done|delete
 ttybrain deliverable list|add|edit|status|delete
 ttybrain risk        list|add|edit|close|delete
 ttybrain decision    list|add|edit|delete
-ttybrain action      list|add|edit|done|cancel|delete
 ttybrain involve     add|remove        # ttybrain involve add CRM marie --role "key user"
 ttybrain report status <project>
 ```
@@ -179,18 +182,80 @@ ttybrain report status <project>
 
 | Extension point | What |
 |---|---|
-| `screen` | **Projects** (2), **Actions** (4) |
+| `screen` | **Projects** (2) |
 | `recordTab` on `project` | **Overview**, Milestones, Deliverables, Risks & issues, Decisions, Actions, People, **Context** (the item tabs' counts are all of their items, as the tabs list them) |
-| `recordTab` on `person` | **Projects & roles**, **Actions** (every action owned by or for that person: open ones first, then done and cancelled; the tab count is the open ones) |
-| `overviewPanel` | Overdue actions · Due this week · Projects needing attention · Late milestones (+ next 14 days) · High risks & issues |
-| `reportSection` in `project-status` | Health · Milestones · Deliverables · Risks & issues · Decisions · Actions (in that order) |
-| `report` | `project-status`, with params `project`, `since`, `reference` (the date the due-soon windows count from, default today: a meeting's date) and `previous-meeting` (an `M-n`: its open actions are listed too); the names are kebab-case because report params are CLI flags. Its sections mark rows: Health `●` in the health colour, Milestones `✓` / `○` (red when late), Deliverables `✓` / `◐` / `○`, Risks `▲` (red for high), Actions `!` (red for overdue). Meetings uses it as the section slot of its board pack |
+| `recordTab` on `person` | **Projects & roles** |
+| `overviewPanel` | Projects needing attention · Late milestones (+ next 14 days) · High risks & issues |
+| `reportSection` in `project-status` | Health · Milestones · Deliverables · Risks & issues · Decisions (in that order; the Actions section, order 60, is added by `actions`) |
+| `report` | `project-status`, with params `project`, `since`, `reference` (the date the due-soon windows count from, default today: a meeting's date) and `previous-meeting` (an `M-n`: its open actions are listed too, by the actions plugin's section); the names are kebab-case because report params are CLI flags. Its sections mark rows: Health `●` in the health colour, Milestones `✓` / `○` (red when late), Deliverables `✓` / `◐` / `○`, Risks `▲` (red for high); the Actions section's `!` marks (red for overdue) come from `actions`. Meetings uses it as the section slot of its board pack |
 | `tagType` | `#CODE` → project |
 | `quickAction` on `project` | Update health (`h`) |
-| `recordForm` `action`, `decision` | with `prefill.meeting` (`M-n`) a new action or decision is linked to that meeting (no field; the form's title names the meeting) |
-| `guideSection` | how to turn notes into actions, decisions, risks, health and deliverable updates |
+| `recordForm` `decision` | with `prefill.meeting` (`M-n`) a new decision is linked to that meeting (no field; the form's title names the meeting) |
+| `guideSection` | how to turn notes into decisions, risks, health and deliverable updates |
 
-**Events emitted:** `project.changed`, `action.changed`, `health.changed` (phase 2+; not emitted yet — use `record.changed`).
+**Events emitted:** `project.changed`, `health.changed` (phase 2+; not emitted yet — use `record.changed`).
+
+---
+
+## 2a. `actions`
+
+What you or someone else has to do: an owner, an optional due date and links to the records the action concerns (projects, people, meetings). Split out of `projects` in the 2.0 releases of both; the actions the projects plugin held were handed over once, ids and history intact (see the follow-ups, "Actions plugin").
+
+`actions` requires nothing. It reads `people.person` (owner and linked-person names), `projects.project` (codes) and `meetings.meeting` (titles and dates), all optional: a link to a record whose plugin is not loaded shows as `<type>:<id>`, a gone record as `—`.
+
+### Data
+
+| Table | Columns |
+|---|---|
+| `action` | `title`, `due_date`, `status` (open/done/cancelled), `done_date`, `owner_id → person` **(soft; empty = you)**, `notes` |
+| `link` | `action_id → action` (no `ON DELETE`), `record_type` (`project`, `person`, `meeting`), `record_id`; unique per (action, record); `id` gives the order the links were made in |
+| `handover`, `handover_row` | bookkeeping of the one-time import of the legacy `projects` actions (internal; not published) |
+
+### Published views
+
+| View | Columns |
+|---|---|
+| `actions.action` (version 2) | id, title, due_date, status, done_date, owner_id (no link columns; no `overdue`, since views take no clock) |
+| `actions.link` (version 1) | id, action_id, record_type, record_id |
+
+Readers: `meetings` (minutes and notes), `people` (follow-ups) and `projects` (open-action counts) declare `reads: { actions: "^2" }`.
+
+### Exposed operations
+
+| Read (with logic) | Input | Returns |
+|---|---|---|
+| `projectActions` | `project`, `reference?`, `previousMeeting?` | a project's open actions overdue at `reference` (default today) and those from `previousMeeting`; behind the `project-status` section |
+| `importedLegacy` | — | whether the legacy import is done, and each imported row's `(id, updated_at)`; used by `projects`' handover step |
+
+| Write | Input | Change-set line |
+|---|---|---|
+| `addAction` | `title`, `owner?`, `due?`, `notes?`, `links?: string[]` (any refs), shorthands `project?`, `forPerson?`, `meeting?` | `+ action "Send the roadmap" (me, #CRM, due Fri)` |
+| `editAction` | `ref`, the same fields; `links` replaces all links, an empty value clears a field | `~ A-41 due, links` (the changed fields) |
+| `linkAction` / `unlinkAction` | `{ ref, to }`: one record ref; `unlinkAction` is always allowed (a gone link by `<type>:<id>`) | `~ A-41 link #ERP`, `~ A-41 unlink @peter` |
+| `completeAction` / `cancelAction` | `ref`, `date?` | `~ A-41 done`, `~ A-41 cancelled` |
+| `deleteAction` | `ref` | `- action A-41 "Send the roadmap"` |
+
+An action counts as archived (writes refused, hidden from Attention and the overview) only when it has project links and every one of them is archived; linking to an archived project is refused. Until the legacy import is done, new actions get ids above 1,000,000 so they cannot collide with the ids still to be moved.
+
+### CLI
+
+```
+ttybrain action list|show|add|edit|link|unlink|done|cancel|delete
+```
+
+`list` groups Overdue / This week / Next week / Later / No date, with `--open --overdue --owner --project --for --meeting --link <ref>`. `add` and `edit` take `--owner` (empty = you), `--due`, `--notes`, `--project`, `--for`, `--meeting` (shorthand for links) and `--link <ref>` (repeatable). `--json` keeps the `ActionRecord` fields (`ref id title due_date status done_date owner_id owner project_id project for_person_id for meeting_id meeting notes`; the three link fields are the first link of that type) and adds `links: [{ type, id, ref }]`. Exit codes as everywhere.
+
+### UI and other contributions
+
+| Extension point | What |
+|---|---|
+| `screen` | **Actions** (4), exactly as the design draws it (its bar leaves out the global actions' hints) |
+| `recordTab` on `project`, `person`, `meeting` | **Actions**: the actions linked to that record (a person's also the ones they own); columns ID, Action, Owner, Linked to (the record itself left out), Due |
+| `recordForm` `action` | the full form, a due-date form (`d`) and a links form (`l`); the links field takes refs separated by spaces (`#CRM @anna M-4`) |
+| `overviewPanel` | Overdue actions · Due this week |
+| `reportSection` | in `project-status`: Actions (order 60); in `overview`: Overdue actions (10), Due this week (20) |
+| `recordType` | `action` (`A-`) |
+| `guideSection` | how to turn "X will do Y" into actions, link them and close them |
 
 ---
 
@@ -216,7 +281,7 @@ Boards, steering committees and other meetings. It covers the agenda with an "as
 | `meetings.agenda_item` | id, meeting_id, position, text, project_id, ask |
 | `meetings.attendee` | meeting_id, person_id |
 
-It reads `people.person` (attendee names) and `projects.project` (agenda project codes and names).
+It reads `people.person` (attendee names), `projects.project` (agenda project codes and names) and `actions.action` / `actions.link` (the actions linked to a meeting, for the minutes and the prep).
 
 ### Exposed operations
 
@@ -235,7 +300,7 @@ It reads `people.person` (attendee names) and `projects.project` (agenda project
 | `addAgendaItem` / `editAgendaItem` / `moveAgendaItem` / `removeAgendaItem` | … | `~ M-4 item 2 ask: "Release contingency"` (also `+ M-4 item 3 "Budget"`, `~ M-4 item 4 → 2`, `- M-4 item 2 "AOB"`) |
 | `setNotes` | `meeting`, `markdown` | `~ M-4 notes` |
 
-Actions and decisions logged during a meeting are created through `projects.write.addAction` and `projects.write.addDecision`, with `meeting: "M-4"`. Meetings doesn't store them.
+Actions logged during a meeting are created through `actions.write.addAction` (`meetings` requires `actions ^2`) with `meeting: "M-4"`, decisions through `projects.write.addDecision`. Meetings doesn't store them.
 
 ### CLI
 
@@ -254,6 +319,7 @@ Agenda items have no ref of their own: they are addressed by meeting and positio
 | `screen` | **Meetings** (5) |
 | `recordTab` on `meeting` | **Agenda**, **Prep**, **Notes**, **Export** (board pack while planned, minutes once held, `m` switches, `w` writes `<exportDir>/<date>-<slug>.md`, `y` copies by OSC 52) |
 | `recordForm` on `meeting` | meeting, agenda item, attendees |
+| `recordTab` on `meeting` (from `actions`) | **Actions**: the actions linked to the meeting |
 | `recordTab` on `project` | — (left out for now) |
 | `report` | `board` and `minutes`. The board embeds `project-status` per agenda project through `ctx.reports.run`, with `since` from `sinceDate`; its title is `<title> · <date>`, and the minutes' is `Minutes · <title> · <date>` |
 | keys | `x` (close) and `w` (write the export) are plain keys on the screen and tabs; `quickAction` is not used (phase 5) |

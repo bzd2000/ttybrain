@@ -381,3 +381,33 @@ Collected from the execution ledger (`.superpowers/sdd/2026-11-20-look-and-feel-
 - Task 8: the `…` scroll marker sits on the last cell of the last visible line and hides its character.
 - Task 9: the Inbox bar omits `? help` and `q quit`, as the mock does (inconsistent with the other screens); `@ma` suggests Tom Maes (substring people search); capture's `SyntaxStyle` highlighting is verified on Bun only (the Node self-check does not open capture); the New panel is capped at half the height and scrolls; `tagParts` matches unresolved tags against the raw text spelling.
 - Task 10: the 80×24 checks assert that no code or name is cut, not that titles are whole; where titles lose characters (see Task 3) it is by design of the degradation rule.
+
+## Actions plugin (2026-11-22)
+
+Collected from the execution ledger (`.superpowers/sdd/2026-11-22-actions-plugin/progress.md`). Plan: `docs/superpowers/plans/2026-11-22-actions-plugin.md`; design: `docs/superpowers/specs/2026-11-20-ttybrain-meetings-actions-design.md` §4. Actions moved out of `projects` into their own plugin (`actions` 2.0.0), linked to any number of projects, people and meetings; the existing actions were handed over once, atomically, with ids, history and provenance kept.
+
+### Rulings made during the actions plugin (and what each costs if wrong)
+
+- **R1, amended: the break is wider than a view.** The plan said only `projects.project` loses `open_actions` (view version 2). Removing the action operations and view needs a major bump of `projects` (spec rule), and the break is: `projects` is 2.0.0; the `projects.action` view, the five action write operations (`addAction`, `editAction`, `completeAction`, `cancelAction`, `deleteAction`; `projects` now exposes only the read `legacyActions` for the handover) and `projectStatus.actions` are gone (`actions.projectActions` returns them now); a plugin that `requires: projects ^1` fails to load; stored change sets that name `projects.*Action` fail when applied. `actions` is 2.0.0 as well: `actions.action` is version 2 (no `project_id`, `for_person_id`, `meeting_id`; the new `actions.link` view carries them), so a plugin that `reads: actions ^1` loses the view. Cost: external plugins must update their ranges (documented in the README's upgrade note); built-ins and the fixture plugin were updated.
+- **R2: projects keeps its emptied legacy table** (`projects_action`) after the handover; a later projects migration may drop it. No DDL runs in a data step.
+- **R3: "for" became a person link**; the owner stays a column (`owner_id`, null = you). JSON `for` / `for_person_id` = the first linked person.
+- **R4: an old build** opening the database after the handover sees no actions (its projects table is empty). Accepted; the README's upgrade note says so, and names the backup `ttybrain.db.bak-v<N>`.
+- `ctx.use(id)` stays `PluginApi | undefined` for `requires` only; a new `ctx.read(id)` gives the read operations of a plugin in `reads` or `requires` (the plan's "use for reads" would have changed a published return type). Additive; cost: one more context method.
+- A backup is taken before the first data step a boot attempts, once per applied-migration count, outside any transaction (the "nothing lost" constraint). Cost: one backup file per pending-step series.
+- A pending `"later"` data step takes the write lock briefly on every write-capable boot; read-only boots skip steps (documented in `docs/architecture.md`, "Data steps").
+- The id collision is prevented, not advised away: while the legacy import is not done, actions created in `actions` get ids above 1,000,000 (`max(id, 1000000) + 1`); the collision path stays as a defensive error whose hint does not suggest deleting; `projects`' step deletes only rows matching an imported `(id, updated_at)` pair (`actions.importedLegacy`), and leftovers stay and are listed in the step's hint. Cost: actions added while `projects` was off during the upgrade get numbers like `A-1000001` for good.
+- A data step's error hint is shown in the plugin list and in Help (not just logged).
+- An action counts as archived (writes refused, hidden from Attention and the overview) only when it has project links and every one is archived; `unlinkAction` is always allowed; linking a new archived project is refused. Cost: an action with one live and one archived project stays editable.
+- Screens match the mock exactly: a small generic kernel option (`hints(..., { globals: false })`) lets an exact status bar leave out the global actions' hints (the keys keep working). Cost: `?`, `i` and `enter` are not advertised on the Actions screen (Help lists them).
+- On a person's Actions tab, Owner stays at 80 columns (Linked to is dropped first); the meeting tab's `n` passes `{ meeting }`; the tab's hints include `enter open`, registered after the Table's own so that on a narrow bar `enter open` gives way before `↑↓ select` (done in Task 5).
+
+### Deferred minors and concerns
+
+- Leftover legacy rows (not matching the imported pairs) keep an `actions-leftovers` error on every start, with no in-app fix. Follow-up: an `action import-leftovers` command.
+- A fresh install with `projects` disabled from the first start keeps allocating ids above 1,000,000 forever (the import never completes). Follow-up: a kernel fact "database created this boot" so a new database counts the import as done.
+- `actions_action` has `INTEGER PRIMARY KEY` without `AUTOINCREMENT`, so a deleted maximum id can be reused (provenance is forgotten on delete, which mitigates it).
+- `action edit` help could say that the CLI cannot clear all links at once (`links: []` works through the operation).
+- `repeatable` on a boolean flag is not rejected by the kernel (meaningless there).
+- The compat fields (`project`, `for`, `meeting`, and their ids) can disagree with `links[].ref` for gone records and for projects outside the projects view's range (`—` versus `<type>:<id>`).
+- Task 4 (to verify in the final review): the action form's edit may write links and the field edit as separate operations, so the links stay changed if `editAction` then fails; an earlier review said they share one `act`.
+- Side-by-side review items (after the meetings rework): a board meeting gets a fifth tab `Actions` (the design says every meeting gets one, the mock draws four); the Linked-to meeting labels show the full title and date, the mock's short `steering 27 Oct` needs series names from the meetings rework; 9-character refs (`A-1000001`) staying whole at 80x24 was left to this review.

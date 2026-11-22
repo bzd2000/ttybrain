@@ -1,6 +1,6 @@
 # ttybrain
 
-A personal project-portfolio tool: a CLI (`ttybrain <thing> <verb>`, also usable by an AI agent) and, from phase 2, a terminal UI built with [OpenTUI](https://opentui.com) and Solid. It is a small plugin kernel plus plugins (`people`, `projects`, `meetings`, `inbox`); the built-ins are ordinary plugins that can be switched off, and you can add your own. Data is one SQLite file under `TTYBRAIN_HOME` (default `~/.ttybrain`). It runs on Bun 1.3.14+ and Node.js 26.4+. See `docs/architecture.md`.
+A personal project-portfolio tool: a CLI (`ttybrain <thing> <verb>`, also usable by an AI agent) and, from phase 2, a terminal UI built with [OpenTUI](https://opentui.com) and Solid. It is a small plugin kernel plus plugins (`people`, `projects`, `actions`, `meetings`, `inbox`); the built-ins are ordinary plugins that can be switched off, and you can add your own. Data is one SQLite file under `TTYBRAIN_HOME` (default `~/.ttybrain`). It runs on Bun 1.3.14+ and Node.js 26.4+. See `docs/architecture.md`.
 
 ## CLI
 
@@ -45,6 +45,15 @@ pm was renamed ttybrain (2026-11-19). On the first run, ttybrain moves `~/.pm` t
 - The environment variables are renamed `PM_<X>` to `TTYBRAIN_<X>` (a clean break: the old names are not read). Update your shell profile, containers and scripts.
 - External plugins must be rebuilt (`ttybrain plugin build`): the API is now `@ttybrain/api`, the manifest key is `"ttybrain"`. A plugin built for pm fails with `built for pm; rename "pm" to "ttybrain" in package.json and @pm/ imports to @ttybrain/, then run "ttybrain plugin build" (or update the plugin)`; `ttybrain plugin build` refuses it until both edits are made.
 - The command is `ttybrain`, with `tb` as a short alias.
+
+## Upgrading to the actions plugin
+
+Actions are now their own plugin (`actions`), no longer part of `projects`. On the first start after upgrading, ttybrain moves every existing action out of the projects tables into the actions plugin, once and atomically: ids (`A-27` stays `A-27`), titles, dates, status, owners, notes, history and provenance are kept, and the project, person and meeting an action pointed at become links.
+
+- Before the move, ttybrain copies the database to `ttybrain.db.bak-v<N>` next to it (N = the number of migrations applied so far). Keep that file until you are happy with the result.
+- **Do not use an older build afterwards.** An older build opens the same database and sees no actions (its projects table is empty); don't add actions with it, they would not be seen by the new build either.
+- If the `projects` or `actions` plugin was switched off during the upgrade, the move waits until both are on. Actions you add in the meantime get ids above 1,000,000 (`A-1000001`) so they cannot collide with the ones still to be moved; they keep those ids.
+- External plugins: the `projects` plugin is now 2.0.0 and `actions` 2.0.0. A plugin that `requires` `projects ^1` fails to load, and one that reads `projects.project` at `^1` (it no longer has `open_actions`) or `actions.action` at `^1` (the link columns moved to `actions.link`) sees that view as unavailable, until you update its ranges. Stored change sets that name `projects.addAction` (and the other four action operations) no longer apply.
 
 ## Development
 
