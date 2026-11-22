@@ -12,6 +12,7 @@ import {
   parseDate,
   Type,
   ValidationError,
+  ViewUnavailableError,
   type PluginContext,
   type Static,
 } from "@ttybrain/api"
@@ -138,23 +139,36 @@ export function makeOccurrences(ctx: PluginContext, store: Store) {
     return made
   }
 
-  // A meeting that carries nothing: no notes, no agenda, nothing linked to it or made from it.
+  // Whether another plugin's view has a row; a view that cannot be read counts as having one (fail closed: keep).
+  async function anyIn(read: () => Promise<unknown>): Promise<boolean> {
+    try {
+      return (await read()) !== undefined
+    } catch (e) {
+      if (e instanceof ViewUnavailableError) return true
+      throw e
+    }
+  }
+
+  // A meeting that carries nothing: no notes, no agenda, nothing linked to it or made from it, no origin of its own.
   async function empty(meetingId: number, notes: string): Promise<boolean> {
     if (notes.trim() !== "") return false
     if (await db.selectFrom("agenda_item").select("id").where("meeting_id", "=", meetingId).executeTakeFirst()) return false
-    const linked = await store.unlessUnavailable(undefined as unknown, () =>
-      db.selectFrom("actions.link").select("action_id").where("record_type", "=", "meeting").where("record_id", "=", meetingId).executeTakeFirst(),
-    )
-    if (linked) return false
-    const decided = await store.unlessUnavailable(undefined as unknown, () => db.selectFrom("projects.decision").select("id").where("meeting_id", "=", meetingId).executeTakeFirst())
-    if (decided) return false
-    return (await ctx.provenance.createdFrom("meeting", formatRef("M-", meetingId))).length === 0
+    if (await anyIn(() => db.selectFrom("actions.link").select("action_id").where("record_type", "=", "meeting").where("record_id", "=", meetingId).executeTakeFirst())) return false
+    if (await anyIn(() => db.selectFrom("projects.decision").select("id").where("meeting_id", "=", meetingId).executeTakeFirst())) return false
+    if ((await ctx.provenance.createdFrom("meeting", formatRef("M-", meetingId))).length > 0) return false
+    return (await ctx.provenance.originOf("meeting", meetingId)) === undefined
   }
 
-  // Deletes the planned occurrences of a series that `which` picks and that carry nothing (children first: they do
-  // not cascade).
+  // Deletes the planned occurrences of a series, dated today or later, that `which` picks and that carry nothing
+  // (children first: they do not cascade). Past ones are never deleted.
   async function removePlanned(seriesId: number, which: (m: { date: string; series_date: string }) => boolean): Promise<void> {
-    const planned = await db.selectFrom("meeting").select(["id", "date", "series_date", "notes"]).where("series_id", "=", seriesId).where("status", "=", "planned").execute()
+    const planned = await db
+      .selectFrom("meeting")
+      .select(["id", "date", "series_date", "notes"])
+      .where("series_id", "=", seriesId)
+      .where("status", "=", "planned")
+      .where("date", ">=", today())
+      .execute()
     for (const m of planned) {
       const id = Number(m.id)
       if (!which({ date: String(m.date), series_date: String(m.series_date) }) || !(await empty(id, String(m.notes)))) continue

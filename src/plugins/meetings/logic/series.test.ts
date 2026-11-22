@@ -195,27 +195,57 @@ describe("series", () => {
     expect(rows(next).filter((m) => m.series_id === 2)).toEqual([])
   })
 
+  test("a deleted occurrence's id is never given again, so nothing of it carries over (review: reused M-n kept CS-1)", async () => {
+    const k = await boot()
+    await w(k, "addSeries", { about: "@karim", title: "1:1 Karim", every: "weekly on wed", from: "wed" }) // M-1 … M-8
+    await runWithContext(k.context(), () => k.changeSets.apply([{ plugin: "meetings", operation: "editMeeting", input: { ref: "M-7", title: "Karim, moved agenda" } }]))
+    const origin = (id: number) => runWithContext(k.context(), () => k.runtime("meetings")!.provenance.originOf("meeting", id))
+    expect(await origin(7)).toEqual({ type: "changeset", ref: "CS-1" })
+    await w(k, "endSeries", { ref: "S-1", on: "2026-12-01" })
+    // M-7 has an origin of its own: it counts as holding something and stays; M-2 … M-6 and M-8 go.
+    expect(occurrences(k).map((o) => o[0])).toEqual(["M-1", "M-7"])
+    const added: string[] = []
+    for (let n = 1; n <= 7; n++) added.push((await w(k, "addMeeting", { about: "#CRM", title: `One-off ${n}`, date: "2026-12-15" })).ref)
+    expect(added).toEqual(["M-9", "M-10", "M-11", "M-12", "M-13", "M-14", "M-15"])
+    for (const id of [9, 10, 11, 12, 13, 14, 15]) expect(await origin(id)).toBeUndefined()
+  })
+
+  test("the keep check: a decision taken in an occurrence keeps it; a past planned one is never deleted", async () => {
+    const k = await boot()
+    await w(k, "addSeries", { about: "@karim", title: "1:1 Karim", every: "weekly on wed", from: "wed" }) // M-1 … M-8
+    await w(k, "addDecision", { project: "CRM", title: "Go with B", meeting: "M-5" }, "projects")
+    // Three weeks later: M-1 (25 Nov) and M-2 (2 Dec) are past and still planned (not closed).
+    const next = await later("2026-12-10")
+    await w(next, "endSeries", { ref: "S-1", on: "2026-11-30" })
+    expect(occurrences(next).map((o) => [o[0], o[1]])).toEqual([
+      ["M-1", "2026-11-25"],
+      ["M-2", "2026-12-02"], // after the end date but in the past: kept
+      ["M-3", "2026-12-09"], // the same
+      ["M-5", "2026-12-23"], // a decision was taken in it: kept
+    ])
+  })
+
   test("edit: title and attendees reach the planned occurrences from today; a new rhythm replaces the untouched ones", async () => {
     const k = await boot()
     await w(k, "addSeries", { about: "@karim", title: "1:1 Karim", every: "2 weeks on wed", from: "wed" })
     await w(k, "setNotes", { meeting: "M-2", markdown: "prep" })
     const s = await w(k, "editSeries", { ref: "S-1", title: "Karim 1:1", attendees: ["karim", "anna"], every: "2 weeks on thu" })
     expect(s).toMatchObject({ ref: "S-1", title: "Karim 1:1", rhythm: "every 2 weeks on thu", attendees: ["@anna", "@karim"], next: "2026-11-26" })
-    // M-1, M-3 and M-4 carried nothing and went; their ids are free again (a new meeting takes the highest id + 1).
+    // M-1, M-3 and M-4 carried nothing and went; their ids are never given again.
     expect(rows(k).map((m) => [`M-${m.id}`, m.title, m.date, m.series_date])).toEqual([
-      ["M-3", "Karim 1:1", "2026-11-26", "2026-11-26"],
+      ["M-5", "Karim 1:1", "2026-11-26", "2026-11-26"],
       ["M-2", "Karim 1:1", "2026-12-09", "2026-12-09"], // has notes: kept
-      ["M-4", "Karim 1:1", "2026-12-10", "2026-12-10"],
-      ["M-5", "Karim 1:1", "2026-12-24", "2026-12-24"],
-      ["M-6", "Karim 1:1", "2027-01-07", "2027-01-07"],
+      ["M-6", "Karim 1:1", "2026-12-10", "2026-12-10"],
+      ["M-7", "Karim 1:1", "2026-12-24", "2026-12-24"],
+      ["M-8", "Karim 1:1", "2027-01-07", "2027-01-07"],
     ])
     expect(attendees(k, 2)).toEqual(["anna", "karim"])
-    expect(attendees(k, 6)).toEqual(["anna", "karim"])
+    expect(attendees(k, 8)).toEqual(["anna", "karim"])
     const until = await w(k, "editSeries", { ref: "S-1", until: "2026-12-20" })
     expect(until.end_date).toBe("2026-12-20")
-    expect(rows(k).map((m) => `M-${m.id}`)).toEqual(["M-3", "M-2", "M-4"])
+    expect(rows(k).map((m) => `M-${m.id}`)).toEqual(["M-5", "M-2", "M-6"])
     expect((await w(k, "editSeries", { ref: "S-1", until: null })).end_date).toBeNull()
-    expect(rows(k).map((m) => `M-${m.id}`)).toEqual(["M-3", "M-2", "M-4", "M-5", "M-6"])
+    expect(rows(k).map((m) => `M-${m.id}`)).toEqual(["M-5", "M-2", "M-6", "M-9", "M-10"])
   })
 
   test("upcoming lists the planned meetings between two dates; the series view and S- refs", async () => {

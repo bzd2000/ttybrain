@@ -2,7 +2,7 @@
 // its own write transaction, without waiting for a write lock another process holds. A read-only boot skips it.
 import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../tests/helpers"
-import { definePlugin, Type, type PluginContext, type PluginDef } from "./api"
+import { definePlugin, Type, ValidationError, type PluginContext, type PluginDef } from "./api"
 import { runCli } from "./cli/dispatch"
 import { fixedClock, type Clock } from "./clock"
 import { runWithContext } from "./context"
@@ -187,6 +187,31 @@ describe("upkeep", () => {
       { id: "alpha", version: "1.0.0", source: "built-in", status: "ok", error: 'upkeep "u1" failed: boom' },
       { id: "beta", version: "1.0.0", source: "built-in", status: "ok", error: null },
     ])
+  })
+
+  test("the CLI command whose write ran a failing upkeep warns on stderr, hint included; the exit code is the command's", async () => {
+    const failing: Run = async () => {
+      throw new ValidationError("counter is stuck", { hint: "run alpha reset" })
+    }
+    const a = await first([plugin("alpha", { upkeep: failing }), plugin("beta", { upkeep: async () => { throw new Error("boom") } })])
+    const run = io()
+    expect(await runCli(["alpha", "add", "kept", "--json"], a, run.io)).toBe(0)
+    expect(JSON.parse(run.o.out)).toEqual({ ref: "R-1" })
+    expect(run.o.err).toBe('warning: upkeep "u1" failed: counter is stuck\nhint: run alpha reset\nwarning: upkeep "u1" failed: boom\n')
+    // Raised once: the next command of this process says nothing more (the error stays on the plugin's status).
+    const next = io()
+    expect(await runCli(["alpha", "add", "again"], a, next.io)).toBe(0)
+    expect(next.o.err).toBe("")
+    // A failing command still warns, and keeps its own exit code.
+    const b = await again(a.home, [plugin("alpha", { upkeep: failing })])
+    const bad = io()
+    expect(await runCli(["alpha", "add"], b, bad.io)).toBe(1) // missing <note>: no write, so no upkeep either
+    expect(bad.o.err).not.toContain("warning:")
+    await runWithContext(b.context(), () => b.ops.api("alpha")!.write.add!({ note: "x" })) // the upkeep ran (and failed) outside a command
+    const later = io()
+    expect(await runCli(["alpha", "count"], b, later.io)).toBe(0)
+    expect(later.o.err).toBe("") // only failures raised during the command itself
+    expect(b.upkeepFailures()).toEqual([{ plugin: "alpha", text: 'upkeep "u1" failed: counter is stuck', hint: "run alpha reset" }])
   })
 
   test("a failed plugin's upkeeps never run; ids must be unique and non-empty; registering after activate throws", async () => {

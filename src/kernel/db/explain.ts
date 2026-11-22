@@ -116,8 +116,15 @@ export function isSingleTrigger(sql: string): boolean {
 }
 
 // The check every EXPLAIN of plugin-originated SQL goes through, before anything is prepared.
+// `sqlite_sequence` is SQLite's own table for AUTOINCREMENT counters, shared by every plugin's tables (its rows name
+// them). Plugin SQL may never name it, so the only touches left are SQLite's own bookkeeping of an AUTOINCREMENT
+// insert into an own table, which tablesTouched leaves out. SQLite has no dynamic identifiers, so the name appearing
+// in the text (quoted or not, any case) is the only way to address it; a literal mentioning it is refused too.
+const SEQUENCE = "sqlite_sequence"
+
 export function assertStatementAllowed(sql: string, context: StatementContext): void {
   if (!isSingleStatement(sql) && !(context === "migration" && isSingleTrigger(sql))) throw new IsolationError("only a single SQL statement is allowed")
+  if (sql.toLowerCase().includes(SEQUENCE)) throw new IsolationError(`${SEQUENCE} is SQLite's own table; plugins may not name it`)
   const keyword = firstKeyword(sql)
   if (!ALLOWED_KEYWORDS[context].has(keyword)) {
     throw new IsolationError(`${keyword || "this"} statements are not allowed here`)
@@ -168,7 +175,9 @@ export function createTableChecker(raw: RawDb): TableChecker {
         else if (op.opcode === "Vacuum") [root, db] = [1, 0] // rewrites the whole file: report as the schema table
         else continue
         // db 0 = main. Anything else (temp/attached) is reported unmapped, never guessed (fail closed).
-        out.add(db === 0 ? (map.get(root) ?? `page${root}`) : `db${db}:page${root}`)
+        const table = db === 0 ? (map.get(root) ?? `page${root}`) : `db${db}:page${root}`
+        if (table === SEQUENCE) continue // SQLite's AUTOINCREMENT bookkeeping (the statement cannot name it)
+        out.add(table)
       }
       const result = [...out]
       cache.set(explained, result)

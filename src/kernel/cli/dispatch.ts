@@ -109,11 +109,17 @@ async function dispatch(argv: string[], kernel: Kernel, io: CliIo): Promise<{ re
 }
 
 export async function runCli(argv: string[], kernel: Kernel, io: CliIo): Promise<number> {
+  const seen = kernel.upkeepFailures().length
+  let code: number
   try {
     const { result, json } = await dispatch(argv, kernel, io)
     printResult(result, json, io)
-    return 0
+    code = 0
   } catch (e) {
-    return printError(e, wantsJson(argv), io)
+    code = printError(e, wantsJson(argv), io)
   }
+  // An upkeep that failed during this command (it ran before the command's first write): said on stderr, so a CLI
+  // user sees it; the exit code is the command's.
+  for (const f of kernel.upkeepFailures().slice(seen)) io.err(`warning: ${f.text}\n${f.hint ? `hint: ${f.hint}\n` : ""}`)
+  return code
 }

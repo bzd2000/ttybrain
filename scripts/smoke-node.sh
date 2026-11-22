@@ -112,6 +112,11 @@ out="$(meetings_eval '[db.prepare("PRAGMA foreign_key_check").all(), db.prepare(
 expect_in "meetings 002: keys" '[[],[{"on_delete":"NO ACTION"}]]' "$out"
 out="$(TTYBRAIN_HOME="$meetings_home" ttybrain meeting subject --all-without "#BOARD")"; echo "$out"
 expect_in "meeting subject --all-without" "M-3 about #BOARD (project)" "$out"
+# 002 makes meeting ids AUTOINCREMENT: the counter is at the highest id, and a deleted id is never given again.
+out="$(meetings_eval 'db.prepare("SELECT seq FROM sqlite_sequence WHERE name = '"'"'meetings_meeting'"'"'").get()')"; echo "$out"
+expect_in "meetings 002: sequence" '{"seq":3}' "$out"
+out="$(TTYBRAIN_HOME="$meetings_home" ttybrain meeting add "Next board" --about BOARD --date +1w)"; echo "$out"
+expect_in "meetings 002: next id" "M-4 Next board" "$out"
 
 # The fixture plugin (tests/fixtures/plugin-contracts), built with `ttybrain plugin build` and loaded on Node: first as a
 # folder in TTYBRAIN_PLUGINS, then packed and installed with `ttybrain plugin add <tgz>` through npm (offline: no dependencies).

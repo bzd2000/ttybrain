@@ -101,8 +101,9 @@ const AGENDA_COLUMNS = ["id", "meeting_id", "position", "text", "project_id", "a
 // Subjects, kinds and series. `attendee` and `agenda_item` referenced `meeting` with ON DELETE CASCADE, which a drop
 // of `meeting` would fire, so they are kept in copies and dropped first; then `meeting` is rebuilt (copy, drop,
 // create, copy back with named columns, kinds remapped: board stays, steering and other become project), and the
-// children are recreated without an ON DELETE action and copied back. Existing meetings get no subject and never
-// close themselves (auto_close 0). Foreign keys are checked at the migration's commit.
+// children are recreated without an ON DELETE action and copied back. `meeting.id` is AUTOINCREMENT from here on, so
+// the id of a deleted occurrence is never given again (the copy back sets the counter to the highest id). Existing
+// meetings get no subject and never close themselves (auto_close 0). Foreign keys are checked at the migration's commit.
 async function migration002(db: Kysely<any>): Promise<void> {
   await db.schema
     .createTable("series")
@@ -147,7 +148,7 @@ async function migration002(db: Kysely<any>): Promise<void> {
   await db.schema.dropTable("meeting").execute()
   await db.schema
     .createTable("meeting")
-    .addColumn("id", "integer", (c) => c.primaryKey())
+    .addColumn("id", "integer", (c) => c.primaryKey().autoIncrement()) // ids are never reused: refs, provenance, change sets and drafts keep meaning one meeting
     .addColumn("title", "text", (c) => c.notNull())
     .addColumn("date", "text", (c) => c.notNull())
     .addColumn("kind", "text", (c) => c.notNull().check(inList("kind", MEETING_KINDS)))

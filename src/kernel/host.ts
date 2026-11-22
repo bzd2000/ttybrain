@@ -42,6 +42,8 @@ export type PluginStatus = {
   dir?: string // the plugin's directory, for discovered plugins
 }
 
+export type UpkeepFailure = { plugin: string; text: string; hint?: string }
+
 export type Kernel = {
   paths: Paths
   config: Config
@@ -71,6 +73,9 @@ export type Kernel = {
   // start and when the day changes. Resolves to whether an upkeep changed any rows (a caller sharing a run, or one
   // made when nothing was due, gets false).
   upkeep(): Promise<boolean>
+  // The upkeep failures of this process so far, oldest first (`text`: `upkeep "<id>" failed: <message>`). The CLI
+  // prints those a command raised as warnings; they also stay on the plugin's status.
+  upkeepFailures(): readonly UpkeepFailure[]
   shutdown(): Promise<void>
 }
 
@@ -483,6 +488,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     else if (!p.error.split("; ").includes(text)) p.error = `${p.error}; ${text}`
     if (hint && !(p.hint ?? "").split("; ").includes(hint)) p.hint = p.hint === undefined ? hint : `${p.hint}; ${hint}`
   }
+  const upkeepFailures: UpkeepFailure[] = [] // every failure of this process, in order
   let upkeptOn: string | undefined
   let upkeeping: Promise<boolean> | undefined
   const runUpkeeps = async (): Promise<boolean> => {
@@ -495,7 +501,10 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
           if (outcome === "busy") return changed // skipped for the day
           if (outcome === "changed") changed = true
         } catch (e) {
-          noteError(s.id, `upkeep "${u.id}" failed: ${message(e)}`, e instanceof PmError ? e.hint : undefined)
+          const text = `upkeep "${u.id}" failed: ${message(e)}`
+          const hint = e instanceof PmError ? e.hint : undefined
+          noteError(s.id, text, hint)
+          upkeepFailures.push({ plugin: s.id, text, ...(hint ? { hint } : {}) })
         }
       }
     }
@@ -542,6 +551,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     requiresOf: (pluginId) => Object.keys(byId.get(pluginId)?.def?.requires ?? {}),
     checkOrigin: originCheck,
     upkeep,
+    upkeepFailures: () => [...upkeepFailures],
     shutdown: () => db.close(),
   }
 }

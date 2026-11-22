@@ -409,6 +409,8 @@ export class MigrationRunner {
       const a = after.get(key)
       if (same(a, b)) continue
       const obj = (a ?? b)!
+      // SQLite creates its sequence table with the first AUTOINCREMENT table; it belongs to no plugin (explain.ts).
+      if (obj.type === "table" && obj.name === "sqlite_sequence" && obj.sql === "CREATE TABLE sqlite_sequence(name,seq)") continue
       const change = !a ? "removed" : !b ? "created" : "changed"
       // Implicit indexes for UNIQUE / PRIMARY KEY constraints are named by SQLite; they belong to their table.
       const auto = obj.name.startsWith("sqlite_autoindex_") && obj.sql === null

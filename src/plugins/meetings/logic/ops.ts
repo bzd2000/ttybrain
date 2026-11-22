@@ -37,7 +37,8 @@ const AddMeeting = Type.Object({
 const EditMeeting = Type.Object({ ref: Ref, title: Type.Optional(NonBlank()), date: Type.Optional(NonBlank()), kind: Type.Optional(KindInput), sinceDate: Clearable })
 const MeetingRef = Type.Object({ ref: Ref })
 const MoveMeeting = Type.Object({ ref: Ref, to: NonBlank() })
-const SetSubject = Type.Object({ meeting: Ref, about: NonBlank() })
+const SetSubject = Type.Object({ meeting: Type.Optional(Ref), allWithout: Type.Optional(Type.Boolean()), about: NonBlank() })
+const SubjectAll = Type.Object({ ref: Type.String(), about: Type.String(), meetings: Type.Array(MeetingRecord) })
 const UpcomingInput = Type.Object({ from: NonBlank(), to: NonBlank() })
 const UpcomingRow = Type.Object({
   ref: Type.String(),
@@ -256,19 +257,30 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         },
       },
       // Give a meeting its subject (design §5.5): a person makes it a 1:1, a project keeps board and makes anything
-      // else a project meeting. It closes itself from then on only when dated today or later (M4).
+      // else a project meeting. It closes itself from then on only when dated today or later (M4). With `allWithout`
+      // instead of `meeting`, every meeting that has no subject yet gets it, in date order, all in this one write;
+      // the output's `ref` is then the first meeting changed (the subject's ref when there was none).
       setSubject: {
         input: SetSubject,
-        output: MeetingRecord,
-        describe: async (i: SubjectInput) => `~ ${refOf(i.meeting, await before(i.meeting))} about ${i.about.trim()}`,
+        output: Type.Union([MeetingRecord, SubjectAll]),
+        describe: async (i: SubjectInput) =>
+          i.allWithout === true ? `~ meetings without a subject about ${i.about.trim()}` : `~ ${refOf(i.meeting ?? "", await before(i.meeting ?? ""))} about ${i.about.trim()}`,
         run: async (i: SubjectInput) => {
-          const m = await store.meeting(i.meeting)
+          if ((i.meeting === undefined) === (i.allWithout !== true))
+            throw new ValidationError("give either meeting or allWithout", { field: "meeting" })
           const subject = await store.subject(i.about)
-          const kind = subject.type === "person" ? "one_on_one" : m.kind === "board" ? "board" : "project"
-          const set: Record<string, unknown> = { subject_type: subject.type, subject_id: subject.id, kind, updated_at: now() }
-          if (m.date >= today()) set.auto_close = 1
-          await db.updateTable("meeting").set(set).where("id", "=", m.id).execute()
-          return store.meeting(m.ref)
+          const assign = async (m: Meeting) => {
+            const kind = subject.type === "person" ? "one_on_one" : m.kind === "board" ? "board" : "project"
+            const set: Record<string, unknown> = { subject_type: subject.type, subject_id: subject.id, kind, updated_at: now() }
+            if (m.date >= today()) set.auto_close = 1
+            await db.updateTable("meeting").set(set).where("id", "=", m.id).execute()
+            return store.meeting(m.ref)
+          }
+          if (i.meeting !== undefined) return assign(await store.meeting(i.meeting))
+          const ids = await db.selectFrom("meeting").select("id").where("subject_type", "is", null).orderBy("date").orderBy("id").execute()
+          const meetings: Meeting[] = []
+          for (const r of ids) meetings.push(await assign(await store.meeting(formatRef("M-", Number(r.id)))))
+          return { ref: meetings[0]?.ref ?? subject.ref, about: subject.ref, meetings }
         },
       },
       cancelMeeting: {

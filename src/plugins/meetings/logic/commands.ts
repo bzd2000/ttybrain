@@ -185,18 +185,18 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
     thing: "meeting",
     verb: "subject",
     summary: "say who or what a meeting is about: ttybrain meeting subject <M-n> <about>, or --all-without <about> for every meeting without one",
-    args: [{ name: "meeting", required: true }, { name: "about" }],
+    // Both positionals are optional to the dispatcher: with --all-without the only one is <about>.
+    args: [{ name: "meeting" }, { name: "about" }],
     flags: { "all-without": bool("every meeting that has no subject yet (then give only <about>)") },
     run: async ({ args, flags }) => {
       if (flags["all-without"]) {
         if (args.about !== undefined) throw new ValidationError(`unexpected argument "${args.about}"`, { hint: SUBJECT_USAGE })
-        const about = String(args.meeting)
-        await store.subject(about) // an unknown subject fails before any meeting changes
-        const ids = await ctx.data.selectFrom("meeting").select("id").where("subject_type", "is", null).orderBy("date").orderBy("id").execute()
-        const changed: MeetingRecord[] = []
-        for (const r of ids) changed.push(await write().setSubject!({ meeting: formatRef("M-", Number(r.id)), about }))
+        if (args.meeting === undefined) throw new ValidationError("missing argument <about>", { field: "about", hint: SUBJECT_USAGE })
+        const out: { meetings: MeetingRecord[] } = await write().setSubject!({ allWithout: true, about: args.meeting })
+        const changed = out.meetings
         return { json: changed, text: changed.length ? changed.map((m) => `${m.ref} about ${m.about} (${m.kind})`).join("\n") : "no meetings without a subject" }
       }
+      if (args.meeting === undefined) throw new ValidationError("missing argument <meeting>", { field: "meeting", hint: SUBJECT_USAGE })
       if (args.about === undefined) throw new ValidationError("missing argument <about>", { field: "about", hint: SUBJECT_USAGE })
       const m: MeetingRecord = await write().setSubject!({ meeting: args.meeting, about: args.about })
       return { json: m, text: `${m.ref} about ${m.about} (${m.kind})` }

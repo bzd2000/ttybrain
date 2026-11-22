@@ -134,6 +134,9 @@ describe("upgrading meetings 1.0.0 data", () => {
       series: null,
     })
     expect((await cli(upgraded, "meeting", "show", "M-1")).out).toContain("  kind: project\n  status: held\n")
+    // AUTOINCREMENT from 002 on: the copy back left the counter at the highest id, so the next meeting is M-6.
+    expect(upgraded.db.raw.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'meetings_meeting'").all([])).toEqual([{ seq: 5 }])
+    expect((await cli(upgraded, "meeting", "add", "Next board", "--about", "BOARD", "--date", "2026-12-18", "--json")).json.ref).toBe("M-6")
     expect((await cli(upgraded, "action", "list", "--meeting", "M-1", "--json")).json.map((a: any) => a.ref)).toEqual(["A-1"])
   })
 
@@ -147,6 +150,10 @@ describe("upgrading meetings 1.0.0 data", () => {
 
     const one = await cli(upgraded, "meeting", "subject", "M-5", "@tom")
     expect([one.code, one.out]).toEqual([0, "M-5 about @tom (one_on_one)\n"])
+    // One write for all of them (one transaction).
+    expect(await runWithContext(upgraded.context(), () => upgraded!.ops.describe("meetings", "setSubject", { allWithout: true, about: "#BOARD" }))).toBe(
+      "~ meetings without a subject about #BOARD",
+    )
     const all = await cli(upgraded, "meeting", "subject", "--all-without", "#BOARD")
     expect([all.code, all.out, all.err]).toEqual([0, ["M-1 about #BOARD (project)", "M-4 about #BOARD (project)", "M-3 about #BOARD (board)", "M-2 about #BOARD (project)", ""].join("\n"), ""])
     expect((await cli(upgraded, "meeting", "subject", "--all-without", "#BOARD")).out).toBe("no meetings without a subject\n")
@@ -161,6 +168,11 @@ describe("upgrading meetings 1.0.0 data", () => {
     expect([usage.code, usage.err]).toEqual([1, "error: missing argument <about>\nhint: usage: ttybrain meeting subject <M-n> <about>, or ttybrain meeting subject --all-without <about>\n"])
     const both = await cli(upgraded, "meeting", "subject", "--all-without", "M-1", "#CRM")
     expect(both.code).toBe(1)
+    const bare = await cli(upgraded, "meeting", "subject", "--all-without")
+    expect([bare.code, bare.err.split("\n")[0]]).toEqual([1, "error: missing argument <about>"])
+    // An unknown subject changes nothing, as one write.
+    const none = await cli(upgraded, "meeting", "subject", "--all-without", "#NOPE")
+    expect(none.code).toBe(2)
     const unknown = await cli(upgraded, "meeting", "subject", "M-1", "#NOPE")
     expect([unknown.code, unknown.err.split("\n")[0]]).toEqual([2, 'error: unknown project "#NOPE"'])
   })
