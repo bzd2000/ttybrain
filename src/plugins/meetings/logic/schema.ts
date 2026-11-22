@@ -240,11 +240,6 @@ async function migration003(db: Kysely<any>): Promise<void> {
 // The talk items that were on a meeting's agenda and still open when it was closed (kept for next time), in agenda
 // order. What was discussed in it is on the item itself (`talk_item.meeting_id`). No ON DELETE actions (rule 6); only
 // held meetings have rows, and held meetings are never deleted.
-// 1: the meeting was closed by the `auto-close` upkeep (0 for every meeting closed before, and for one closed by hand).
-async function migration005(db: Kysely<any>): Promise<void> {
-  await db.schema.alterTable("meeting").addColumn("closed_itself", "integer", (c) => c.notNull().defaultTo(0)).execute()
-}
-
 async function migration004(db: Kysely<any>): Promise<void> {
   await db.schema
     .createTable("talk_kept")
@@ -253,6 +248,12 @@ async function migration004(db: Kysely<any>): Promise<void> {
     .addColumn("position", "integer", (c) => c.notNull()) // its place on the agenda at close
     .addPrimaryKeyConstraint("talk_kept_pk", ["meeting_id", "talk_id"])
     .execute()
+}
+
+// `closed_itself` 1: the meeting was closed by the `auto-close` upkeep (0 for every meeting closed before, and for
+// one closed by hand).
+async function migration005(db: Kysely<any>): Promise<void> {
+  await db.schema.alterTable("meeting").addColumn("closed_itself", "integer", (c) => c.notNull().defaultTo(0)).execute()
 }
 
 export function registerSchema(ctx: PluginContext): void {

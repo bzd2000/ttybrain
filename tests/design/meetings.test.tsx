@@ -6,7 +6,11 @@
 // Overdue panel shows.
 import { afterEach, expect, test } from "bun:test"
 import { builtinPlugins } from "../builtins"
-import { fgAt, isSelected, line, seedMeetings } from "../design"
+import { bgAt, fgAt, isSelected, line, seedMeetings } from "../design"
+import { builtinTuiParts } from "../builtins"
+import { onMount } from "solid-js"
+import { defineTui, type TuiDef } from "../../src/kernel/tui/types"
+import { useOverlay } from "../../src/kernel/tui/overlay"
 import { makeTestKernel, type TestKernel } from "../helpers"
 import { renderTui, type RenderedTui } from "../tui"
 import { theme } from "../../src/kernel/tui/theme"
@@ -121,35 +125,99 @@ test("Meetings at 80×24: Talk and Act. give way, codes and names whole", async 
   expect(line(frame, 23)).toBe(" tab panel   enter open   n one-off   N series   s skip date   m move date")
 })
 
-test("New recurring meeting as designed: the rhythm read back as dates, Ends never; saved with its occurrences", async () => {
+// Opens the series form for the person whose record is open, as the person's Meetings tab will (Task 5): a global
+// action of this test's own (`w`), so the form opens over Karim's person view as the `series` design draws it.
+const meetingsPart = builtinTuiParts.find((p) => p.plugin === "meetings")!
+const opener: TuiDef = defineTui({
+  plugin: "meetings",
+  activate: (ui) => {
+    meetingsPart.activate(ui)
+    ui.globalAction({
+      id: "test-series",
+      key: "w",
+      label: "series",
+      overlay: (props: { close(): void }) => {
+        const overlay = useOverlay()
+        onMount(() => {
+          props.close()
+          void overlay.openForm("series", "series", { prefill: { about: "@karim" }, draftFor: "@karim" })
+        })
+        return null
+      },
+    })
+  },
+})
+
+test("New recurring meeting as designed (from Karim's person view): rows, read-back, title, footer and bar", async () => {
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
+  await seedMeetings(kernel)
+  tui = await renderTui(kernel, { width: 118, height: 36, parts: builtinTuiParts.map((p) => (p === meetingsPart ? opener : p)) })
+  const t = tui
+  await t.nav.open("@karim")
+  await until(t, (f) => f.includes("Karim Haddad"))
+  t.input.pressKey("w")
+  // The form has the keys once its bar shows.
+  await until(t, (f) => f.includes("Karim Haddad · person") && line(f, 35) === " tab field   ctrl+s save   esc cancel")
+  // It starts on Rhythm, with About, Title, Kind and Attendees filled in.
+  await t.input.typeText("every 2 weeks on wednesday")
+  let frame = await until(t, (f) => f.includes("→ Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …") && f.includes("Wed 25 Nov "))
+  const rows = frame.split("\n")
+  const top = rows.findIndex((l) => l.includes("New recurring meeting"))
+  const body = rows.slice(top, top + 11).map((l) => l.slice(l.indexOf(l.includes("╭") ? "╭" : l.includes("╰") ? "╰" : "│")).trimEnd())
+  // In the box: the text between `│ ` and ` │`, without trailing spaces; the borders as drawn.
+  const insideBox = (l: string) => (l.startsWith("│") ? l.slice(2, l.lastIndexOf("│")).trimEnd() : l)
+  expect(body[0]).toMatch(/^╭─ New recurring meeting ─+╮$/)
+  expect(body.slice(1, 9).map(insideBox)).toEqual([
+    "About           Karim Haddad · person",
+    "Title           1:1 Karim",
+    "Kind            1:1 (project · board)",
+    "Rhythm          every 2 weeks on wednesday",
+    "                → Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …",
+    "First date      Wed 25 Nov",
+    "Attendees       Karim Haddad",
+    "Ends            never",
+  ])
+  expect(body[9]).toMatch(/^╰─+ ctrl\+s save · esc cancel ─╯$/)
+  expect(rows.some((l) => /╰─+ ctrl\+s save · esc cancel ─╯/.test(l))).toBe(true)
+  expect(line(frame, 35)).toBe(" tab field   ctrl+s save   esc cancel")
+  const spans = await t.spans()
+  expect(fgAt(spans, "New recurring meeting")).toBe(theme.accent)
+  expect(fgAt(spans, "About ", "Karim Haddad · person")).toBe(theme.muted)
+  expect(fgAt(spans, " · person", "Karim Haddad · person")).toBe(theme.muted)
+  expect(fgAt(spans, "Karim Haddad", "Karim Haddad · person")).toBe(theme.text)
+  expect(fgAt(spans, "(project · board)")).toBe(theme.muted)
+  expect(fgAt(spans, "→ Wed 25 Nov")).toBe(theme.muted)
+  expect(fgAt(spans, "never")).toBe(theme.muted)
+  expect(fgAt(spans, "ctrl+s save · esc cancel")).toBe(theme.muted)
+  expect(bgAt(spans, "every 2 weeks on wednesday")).toBe(theme.selectedBg) // the focused field is the input
+
+  t.input.pressKey("s", { ctrl: true })
+  frame = await until(t, (f) => !f.includes("New recurring meeting"))
+  const made = kernel!.db.raw.prepare("SELECT date FROM meetings_meeting WHERE series_id = 8 ORDER BY date").all([]) as Array<{ date: string }>
+  expect(made.map((m) => m.date)).toEqual(["2026-11-25", "2026-12-09", "2026-12-23", "2027-01-06"])
+  expect(kernel!.db.raw.prepare("SELECT title, kind FROM meetings_series WHERE id = 8").all([])).toEqual([{ title: "1:1 Karim", kind: "one_on_one" }])
+})
+
+test("New recurring meeting from screen 5: Kind and Attendees follow About as it is typed, until changed", async () => {
   const { t } = await screen5()
   t.input.pressKey("N")
   let frame = await until(t, (f) => f.includes("New recurring meeting"))
-  expect(lineWith(frame, "New recurring meeting")).toMatch(/┌ New recurring meeting ─+┐|─New recurring meeting─/)
-  expect(lineWith(frame, "ctrl+s save · esc cancel")).toMatch(/─ ctrl\+s save · esc cancel ─┘/)
   expect(lineWith(frame, "Kind")).toMatch(/Kind +— \(1:1 · project · board\)/)
   expect(lineWith(frame, "Ends")).toContain("never")
-  expect(line(frame, 35)).toBe(" tab next field   ctrl+s save   esc cancel")
-  await t.input.typeText("@karim")
+  await t.input.typeText("#CRM")
+  frame = await until(t, (f) => /Kind +project \(1:1 · board\)/.test(f))
+  for (let i = 0; i < 4; i++) t.input.pressBackspace()
+  await t.input.typeText("@anna ") // a space after the ref: no suggestion to accept
+  frame = await until(t, (f) => /Kind +1:1 \(project · board\)/.test(f))
   t.input.pressTab()
-  await t.input.typeText("1:1 Karim")
-  t.input.pressTab()
-  t.input.pressArrow("right") // 1:1
-  t.input.pressTab()
-  await t.input.typeText("every 2 weeks on wednesday")
-  frame = await until(t, (f) => f.includes("→ Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …"))
-  const lines = frame.split("\n")
-  const at = lines.findIndex((l) => l.includes("› Rhythm"))
-  expect(lines[at + 1]).toContain("→ Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …")
-  expect(lineWith(frame, "Kind")).toMatch(/Kind +1:1 \(project · board\)/)
-  const spans = await t.spans()
-  expect(fgAt(spans, "→ Wed 25 Nov")).toBe(theme.muted)
-  expect(fgAt(spans, "(project · board)")).toBe(theme.muted)
-  expect(fgAt(spans, "never")).toBe(theme.muted)
-  expect(fgAt(spans, "ctrl+s save · esc cancel")).toBe(theme.muted)
-  t.input.pressKey("s", { ctrl: true })
-  frame = await until(t, (f) => !f.includes("New recurring meeting") && f.includes("Series · 8"))
-  expect(frame.split("\n").filter((l) => l.includes("1:1 Karim") && l.includes("every 2 wk Wed")).length).toBe(2)
-  const made = kernel!.db.raw.prepare("SELECT date FROM meetings_meeting WHERE series_id = 8 ORDER BY date").all([]) as Array<{ date: string }>
-  expect(made.map((m) => m.date)).toEqual(["2026-11-25", "2026-12-09", "2026-12-23", "2027-01-06"])
+  t.input.pressTab() // Kind: changed by hand, it stops following
+  t.input.pressArrow("right")
+  frame = await until(t, (f) => /Kind +project \(1:1 · board\)/.test(f))
+  t.input.pressTab({ shift: true })
+  t.input.pressTab({ shift: true }) // back to About
+  for (let i = 0; i < 6; i++) t.input.pressBackspace() // "@anna "
+  await t.input.typeText("@bob")
+  frame = await until(t, (f) => f.includes("Bob Willems"))
+  expect(lineWith(frame, "Kind")).toMatch(/Kind +project \(1:1 · board\)/)
+  expect(lineWith(frame, "Attendees")).toContain("Bob Willems")
 })

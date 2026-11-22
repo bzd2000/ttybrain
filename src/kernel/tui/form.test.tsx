@@ -168,6 +168,31 @@ function LooksForm(props: RecordFormProps) {
   )
 }
 
+// The designs' form look: a panel, a plain label column, the other fields as read (a ref by label and type, a date
+// as its day, a placeholder), a derived value, Tab labelled `field`.
+function LookForm(props: RecordFormProps) {
+  return (
+    <Form
+      title="Plan"
+      look={{ labelWidth: 14, tabLabel: "field" }}
+      footer="ctrl+s save · esc cancel"
+      start="title"
+      fields={[
+        { name: "about", label: "About", kind: "refs", show: "labelType", initial: "TH-1" },
+        { name: "title", label: "Title", kind: "text", required: true },
+        { name: "copy", label: "Copy", kind: "text", derive: (v) => (v.title ? `${v.title}!` : null) },
+        { name: "due", label: "Due", kind: "date", show: "day", initial: "2026-11-25" },
+        { name: "ends", label: "Ends", kind: "date", show: "day", placeholder: "never" },
+      ]}
+      submit={async (v) => {
+        submitted.push(v)
+        return { ok: true }
+      }}
+      close={props.close}
+    />
+  )
+}
+
 let overlay: Overlay | undefined
 function Home() {
   overlay = useOverlay()
@@ -184,6 +209,7 @@ const todoPart: TuiDef = defineTui({
     ui.recordForm("thing", { id: "owner-error", label: "Owner check", component: OwnerErrorForm })
     ui.recordForm("thing", { id: "links", label: "Links", component: LinksForm })
     ui.recordForm("thing", { id: "looks", label: "Looks", component: LooksForm })
+    ui.recordForm("thing", { id: "look", label: "Look", component: LookForm })
   },
 })
 
@@ -215,6 +241,42 @@ const lineWith = (frame: string, s: string) => frame.split("\n").find((l) => l.i
 const statusLine = (frame: string) => frame.trimEnd().split("\n").at(-1)!
 
 describe("forms", () => {
+  test("look: a panel with a plain label column; only the focused field is an input, the others as read", async () => {
+    const t = await open()
+    await runWithContext(kernel.context(), () => kernel.runtime("todo")!.self().write.addThing!({ title: "Write spec" }))
+    void overlay!.openForm("thing", "look")
+    let frame = await t.frame()
+    for (let i = 0; i < 20 && !frame.includes("Write spec · thing"); i++) {
+      await sleep(20)
+      frame = await t.frame()
+    }
+    const box = (l: string) => l.slice(l.indexOf("│") + 2, l.lastIndexOf("│")).trimEnd()
+    expect(frame.split("\n").find((l) => l.includes("Plan"))).toMatch(/╭─ Plan ─+╮/)
+    expect(box(lineWith(frame, "About"))).toBe("About           Write spec · thing")
+    expect(box(lineWith(frame, "Due"))).toBe("Due             Wed 25 Nov")
+    expect(box(lineWith(frame, "Ends"))).toBe("Ends            never")
+    expect(frame).toMatch(/╰─+ ctrl\+s save · esc cancel ─╯/)
+    expect(statusLine(frame).trim()).toBe("tab field   ctrl+s save   esc cancel")
+    // A phrase as long as the series design's shows whole (the look's inputs are wider).
+    await t.input.typeText("every 2 weeks on wednesday")
+    frame = await t.frame()
+    expect(box(lineWith(frame, "Title"))).toBe("Title           every 2 weeks on wednesday")
+    for (let i = 0; i < 26; i++) t.input.pressBackspace()
+    await t.input.typeText("abc")
+    frame = await t.frame()
+    expect(box(lineWith(frame, "Title"))).toBe("Title           abc")
+    expect(box(lineWith(frame, "Copy"))).toBe("Copy            abc!") // derived, until edited
+    t.input.pressTab()
+    await t.input.typeText("?")
+    t.input.pressTab({ shift: true })
+    await t.input.typeText("d")
+    frame = await t.frame()
+    expect(box(lineWith(frame, "Copy"))).toBe("Copy            abc!?") // edited: no longer follows
+    t.input.pressKey("s", { ctrl: true })
+    await t.settle()
+    expect(submitted).toEqual([{ about: "TH-1", title: "abcd", copy: "abc!?", due: "2026-11-25", ends: null }])
+  })
+
   test("labels, a live note, a placeholder, a footer on the border, and the field focused first", async () => {
     const t = await open()
     void overlay!.openForm("thing", "looks")

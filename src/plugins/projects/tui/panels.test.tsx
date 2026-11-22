@@ -87,7 +87,7 @@ describe("overview panels", () => {
     expect(lineWith(frame, "IAM")).toContain("never")
     const erp = lineWith(frame, "ERP")
     expect(erp).toContain("Vendor B contract not signed")
-    expect(erp).toContain("upd 9d ago")
+    expect(erp).not.toContain("upd") // the 2026-11-20 home design has no "updated" column
     expect(frame.indexOf("ERP")).toBeLessThan(frame.indexOf("IAM"))
     // An on-hold project does not need attention, even without a health update.
     expect(frame).not.toContain("BI2")

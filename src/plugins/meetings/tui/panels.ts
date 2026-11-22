@@ -33,6 +33,8 @@ export function registerPanels(ui: TuiContext): void {
     id: "upcoming-meetings",
     title: PANEL_TITLE,
     priority: 5,
+    // The design's left column: 1.35 : 1 beside the panels that follow.
+    lead: 1.35,
     count: false,
     empty: PANEL_EMPTY,
     note: "r recurring",
@@ -59,7 +61,7 @@ export function registerPanels(ui: TuiContext): void {
         run: async (ref, { overlay }) => {
           const m = await find(ref)
           const about = m === undefined || m.subject === null ? undefined : await upcoming.subjectRef(m.subject)
-          await overlay.openForm("talk_item", "talk", about === undefined || about === null ? {} : { prefill: { about } })
+          await overlay.openForm("talk_item", "talk", about === undefined || about === null ? {} : { prefill: { about }, draftFor: about })
         },
       },
     ],

@@ -57,7 +57,10 @@ export type OverviewDetail = { title: string; rows: OverviewRow[] }
 // `keys`: keys on the selected row. `detail`: a block under the rows for the selected row, a blank line, its title
 // and at most `rows` rows (more end in `+N more`), with its own columns and keys; its lines are kept free whether
 // or not the selected row has one, so the panel does not change height as the selection moves. ↓ on the panel's
-// last row moves the selection into the block (its keys and Enter act on its rows), ↑ on its first row back.
+// last row moves the selection into the block (its keys and Enter act on its rows), ↑ on its first row back; on a
+// row of the panel, the detail's keys act on the block's first row (shown selected). `lead` (the first panel by
+// priority only): it takes the left column of a block at the top, `lead` : 1 of the width, with the next panels
+// stacked on its right while they fit its height; the others follow in the grid below.
 export type OverviewPanelDef = {
   id: string
   title: string
@@ -68,12 +71,14 @@ export type OverviewPanelDef = {
   count?: boolean
   columns?: OverviewColumn[]
   header?: string[]
+  lead?: number
   keys?: OverviewKeyDef[]
   detail?: { rows: number; columns?: OverviewColumn[]; keys?: OverviewKeyDef[]; load(ref: string): Promise<OverviewDetail | null> }
   load(): Promise<OverviewRow[]>
 }
 export type ListColumnDef = { id: string; title: string; width: number; value(ref: string): Promise<string | null> }
-export type RecordFormProps = { recordRef?: string; prefill?: Record<string, string>; origin?: Origin; close(savedRef?: string): void }
+// `draftFor`: what a new record's form is for (its draft key names it: a talk item for @anna keeps its own draft).
+export type RecordFormProps = { recordRef?: string; prefill?: Record<string, string>; origin?: Origin; draftFor?: string; close(savedRef?: string): void }
 export type RecordFormDef = { id: string; label: string; component: Component<RecordFormProps> }
 export type GlobalActionDef = { id: string; key: string; label: string; overlay: Component<{ close(): void }> }
 // `tone`: the badge's colour (text colour by default).

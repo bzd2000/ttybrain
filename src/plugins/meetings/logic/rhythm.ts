@@ -108,8 +108,8 @@ function nthWeekday(y: number, m: number, nth: number, day: number): string {
 }
 
 // How the series form reads a rhythm back (the `series` design): the next four dates from `from` (today when empty),
-// `→ Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …`; the phrases it understands when it is not one; nothing while it is empty
-// or the first date does not parse.
+// `→ Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …`; nothing while it is empty, not a rhythm (yet: it is being typed; saving
+// one says which phrases it understands) or the first date does not parse.
 export function rhythmPreview(every: string | null | undefined, from: string | null | undefined, today: string): string | undefined {
   if (every === null || every === undefined || every.trim() === "") return undefined
   let first = today
@@ -124,9 +124,19 @@ export function rhythmPreview(every: string | null | undefined, from: string | n
   try {
     r = parseRhythm(every)
   } catch {
-    return "weekly on mon, every 2 weeks on wed, monthly on the 4th tue, monthly on the last fri, monthly on day 15"
+    return undefined
   }
   // A year ahead holds four dates of any rhythm.
   const dates = rhythmDates(r, first, first, addDays(first, 366)).slice(0, 4)
   return `→ ${dates.map((d, i) => (i === 0 ? dayDate(d) : shortDate(d))).join(", ")} …`
+}
+
+// The first date a rhythm gives from `today` on (the series form's default first date); undefined when it is not one.
+export function rhythmFirst(every: string | null | undefined, today: string): string | undefined {
+  if (every === null || every === undefined || every.trim() === "") return undefined
+  try {
+    return rhythmDates(parseRhythm(every), today, today, addDays(today, 366))[0]
+  } catch {
+    return undefined
+  }
 }

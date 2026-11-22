@@ -22,7 +22,11 @@
 //   Reopened with a draft that differs from the initial values, the form first shows <DraftPrompt> and takes no
 //   keys until `r` (restore), `x` (discard) or Esc (close, keeping the draft); an equal draft is deleted silently.
 // - `footer`: muted text on the form's bottom border, right-aligned (`ctrl+s save · esc cancel`); `start`: the field
-//   focused first. A field's `note` is worked out from the current values of the own fields (Field.tsx).
+//   focused first. A field's `derive` sets its value from the others until it is edited.
+// - `look` (as the screen designs draw a form): a rounded panel with the title padded on its top border, a muted
+//   label column `labelWidth` wide (no `›` or `*`), only the focused field as an input and the others as read (a
+//   field's `show`: refs by label, with their type, a date as its day; the placeholder when empty), and Tab's hint
+//   labelled `tabLabel` (`tab field`). A field's `note` is worked out from the current values of the own fields (Field.tsx).
 import { createEffect, createMemo, onCleanup, createSignal, For, onMount, Show, useContext } from "solid-js"
 import { runWithContext } from "../../context"
 import { parseDate } from "../../dates"
@@ -36,11 +40,13 @@ import { PluginScope, useApp } from "../scope"
 import { theme } from "../theme"
 import type { FieldDef } from "../../fields"
 import { DraftPrompt } from "./DraftPrompt"
-import { Field, type FieldSpec, type Suggestion } from "./Field"
+import { Field, type FieldDisplay, type FieldSpec, type Suggestion } from "./Field"
+import { dayDate } from "../format"
 
 export type { FieldSpec } from "./Field"
 
 export type FormValues = Record<string, string | null>
+export type FormLook = { labelWidth: number; tabLabel?: string }
 // A failure may name the field to show its error under (`field`), for an error that names none itself (an
 // operation's NotFoundError for one of the values, say); a ValidationError's own `field` is used otherwise.
 export type SubmitResult = { ok: true; ref?: string } | { ok: false; error: unknown; field?: string }
@@ -79,6 +85,7 @@ export function Form(props: {
   footer?: string
   // The name of the field focused first (default: the first field), as when the first is filled in already.
   start?: string
+  look?: FormLook
   submit(values: FormValues): Promise<SubmitResult>
   close(savedRef?: string): void
 }) {
@@ -158,6 +165,7 @@ export function Form(props: {
     const d = offer()
     if (!d) return
     setOffer(undefined)
+    for (const name of Object.keys(d.values)) touch(name)
     setValues((all) => ({ ...all, ...pick(d.values, Object.keys(all)) }))
   }
   const discardDraft = () => {
@@ -168,6 +176,58 @@ export function Form(props: {
   const current = () => fields()[index()]
   const valueOf = (name: string) => values()[name] ?? null
   const setValue = (name: string, v: string | null) => setValues((all) => ({ ...all, [name]: v }))
+
+  // --- derived values: a field with `derive` follows the others until it is edited (or restored from a draft) ---
+  const [touched, setTouched] = createSignal(new Set<string>())
+  const touch = (name: string) => setTouched((t) => (t.has(name) ? t : new Set([...t, name])))
+  createEffect(() => {
+    const v = values()
+    for (const f of props.fields) {
+      if (!f.derive || touched().has(f.name)) continue
+      const d = f.derive(v)
+      if (d !== undefined && d !== (v[f.name] ?? null)) setValue(f.name, d)
+    }
+  })
+
+  // --- the look's values as read: refs resolved to their labels (and type), dates as their day ---
+  const refWords = (v: string | null) => (v ?? "").split(/[\s,]+/).filter((w) => w !== "")
+  const resolved = useQuery(
+    async () => {
+      const out = new Map<string, { label: string; type: string }>()
+      if (!props.look) return out
+      for (const f of props.fields)
+        if (f.show === "label" || f.show === "labelType")
+          for (const w of refWords(valueOf(f.name))) {
+            const def = kernel.records.typeOfRef(w)
+            if (!def || out.has(w)) continue
+            try {
+              out.set(w, { label: await kernel.records.label(w), type: def.name })
+            } catch {}
+          }
+      return out
+    },
+    { key: () => (props.look ? props.fields.filter((f) => f.show === "label" || f.show === "labelType").map((f) => valueOf(f.name)).join("\n") : "") },
+  )
+  const displayOf = (f: FieldSpec): FieldDisplay | undefined => {
+    if (!props.look) return undefined
+    const raw = (valueOf(f.name) ?? "").trim()
+    if (raw === "") return [{ text: f.placeholder ?? "", muted: true }]
+    if (f.show === "day") {
+      try {
+        return [{ text: dayDate(parseDate(raw, today)) }]
+      } catch {
+        return [{ text: raw }]
+      }
+    }
+    if (f.show === "label" || f.show === "labelType") {
+      const words = refWords(raw)
+      const found = words.map((w) => resolved.data()?.get(w))
+      const text = words.map((w, i) => found[i]?.label ?? w).join(", ")
+      const type = found[0]?.type
+      return f.show === "labelType" && type !== undefined ? [{ text }, { text: ` · ${type}`, muted: true }] : [{ text }]
+    }
+    return [{ text: raw }]
+  }
 
   // --- record autocomplete: open after typing in a record field, closed once a suggestion is accepted ---
   const [suggesting, setSuggesting] = createSignal(false)
@@ -198,6 +258,7 @@ export function Form(props: {
     if (!f || !s) return false
     // A refs field: the last word becomes the ref, and a space follows for the next one.
     const value = valueOf(f.name) ?? ""
+    touch(f.name) // before the value: a derive must not run on it again
     setValue(f.name, f.kind === "refs" ? `${value.slice(0, value.length - lastWord(value).length)}${s.ref} ` : s.ref)
     setSuggesting(false)
     return true
@@ -316,6 +377,7 @@ export function Form(props: {
     const choices: Array<string | null> = f.required ? [...(f.values ?? [])] : [null, ...(f.values ?? [])]
     if (choices.length === 0) return
     const at = Math.max(0, choices.indexOf(valueOf(f.name)))
+    touch(f.name)
     setValue(f.name, choices[(at + d + choices.length) % choices.length]!)
   }
 
@@ -338,7 +400,7 @@ export function Form(props: {
     if (offer()) return // the draft prompt shows its own
     const longtext = current()?.kind === "longtext"
     const drop = keys.hints([
-      { key: "Tab", label: "next field" },
+      { key: "Tab", label: props.look?.tabLabel ?? "next field" },
       ...(longtext ? [{ key: "Enter", label: "new line" }] : []),
       { key: "Ctrl+S", label: "save" },
       { key: "Esc", label: "cancel" },
@@ -384,7 +446,7 @@ export function Form(props: {
     }
   }, { whileTyping: true })
 
-  const labelWidth = () => Math.max(0, ...fields().map((f) => f.label.length + (f.required ? 1 : 0))) + 2
+  const labelWidth = () => props.look?.labelWidth ?? Math.max(0, ...fields().map((f) => f.label.length + (f.required ? 1 : 0))) + 2
 
   // A plugin's fieldEditor for an extra field, in that plugin's scope.
   const customEditor = (f: FieldSpec, focused: () => boolean) => {
@@ -402,13 +464,15 @@ export function Form(props: {
   return (
     <box
       border
+      borderStyle={props.look ? "rounded" : undefined}
+      titleColor={props.look ? theme.accent : undefined}
       borderColor={theme.accent}
       backgroundColor={theme.panel}
       flexDirection="column"
       minWidth={60}
       paddingLeft={1}
       paddingRight={1}
-      title={props.title}
+      title={props.look ? ` ${props.title} ` : props.title}
     >
       <Show when={ready() ? offer() : undefined}>
         {(d: () => Draft<FormValues>) => <DraftPrompt savedAt={d().savedAt} restore={restore} discard={discardDraft} close={() => props.close()} />}
@@ -426,12 +490,15 @@ export function Form(props: {
               labelWidth={labelWidth()}
               preview={datePreview(f)?.text}
               note={noteOf(f)}
+              plain={props.look !== undefined}
+              display={displayOf(f)}
               previewError={datePreview(f)?.error}
               error={fieldErrors()[f.name]}
               suggestions={index() === i() ? suggestions() : []}
               picked={picked()}
               onInput={(v) => {
                 if (v === (valueOf(f.name) ?? "")) return // the echo of a value set here (an accepted suggestion)
+                touch(f.name)
                 setValue(f.name, v)
                 if (f.kind === "record" || f.kind === "refs") {
                   setSuggesting(true)

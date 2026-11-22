@@ -11,6 +11,7 @@
 // adds the `↑↓ select` and `Enter open` hints. With `listId`, the columns other plugins registered for that list (registry `columns(listId)`) are
 // appended and filled through their `value(ref)`. While a text field holds text focus, the Table takes no keys,
 // nor keys a handler before it (its screen's) already claimed with preventDefault().
+import type { KeyEvent } from "@opentui/core"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { useQuery } from "../data"
 import { displayWidth, truncate } from "../format"
@@ -43,6 +44,31 @@ export type TableProps = {
   listId?: string
   // The column titles row (default true).
   header?: boolean
+  // Where the table takes its keys from: a parent that routes them (one keyboard listener for many tables);
+  // without it, its own useScreenKeys.
+  keySource?: KeySource
+  // Shows the selected row's background while the table is not focused too (a row a parent's key acts on).
+  selectionShown?: boolean
+}
+
+// Keys a parent hands to its blocks: `add` registers a handler, the returned function removes it.
+export type KeySource = { add(handler: (key: KeyEvent) => void): () => void }
+
+// A KeySource and the function that hands a key to every handler it holds, in the order they were added.
+export function createKeySource(): KeySource & { dispatch(key: KeyEvent): void } {
+  const handlers: Array<(key: KeyEvent) => void> = []
+  return {
+    add(handler) {
+      handlers.push(handler)
+      return () => {
+        const i = handlers.indexOf(handler)
+        if (i >= 0) handlers.splice(i, 1)
+      }
+    },
+    dispatch(key) {
+      for (const h of [...handlers]) h(key)
+    },
+  }
 }
 
 // The gap between columns.
@@ -201,7 +227,7 @@ export function Table(props: TableProps) {
   const visible = () => lines().slice(offset())
 
   // --- keys and hints ---
-  useScreenKeys((key) => {
+  const onKey = (key: KeyEvent) => {
     // A key an earlier handler claimed (the screen around the table) is not the table's.
     if (props.focused === false || keys.typing() || key.defaultPrevented) return
     const ch = printable(key)
@@ -213,7 +239,9 @@ export function Table(props: TableProps) {
       props.onOpen?.(ref)
     } else return
     key.preventDefault()
-  })
+  }
+  if (props.keySource) onCleanup(props.keySource.add(onKey))
+  else useScreenKeys(onKey)
   createEffect(() => {
     if (!focused() || !props.onOpen || flat().length === 0) return
     onCleanup(
@@ -245,7 +273,7 @@ export function Table(props: TableProps) {
   )
 
   const Row = (rp: { row: TableRow }) => {
-    const on = () => rp.row.ref === selected() && focused()
+    const on = () => rp.row.ref === selected() && (focused() || props.selectionShown === true)
     return (
       <box flexDirection="row" height={1} flexShrink={0} gap={GAP} backgroundColor={on() ? theme.selectedBg : theme.bg}>
         <For each={columns()}>

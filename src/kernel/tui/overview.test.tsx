@@ -137,17 +137,22 @@ test("a panel's header row, its note on the bottom border, and the selected row'
   expect(lines(f)[top + 9]).toMatch(/^ ╰─+ r round ─╯/)
 })
 
-test("keys act on the selected row; a detail key does nothing there", async () => {
+test("keys act on the selected row; on a row, a detail key acts on the detail block's first row (shown selected)", async () => {
   const ran: Ran = []
   kernel = await makeTestKernel({ plugins: [thingPlugin] })
   tui = await renderTui(kernel, { parts: [part(ran)], width: 100, height: 30 })
   await until(tui, (f) => f.includes("gadget 2"))
   tui.input.pressArrow("down") // T-2
   await until(tui, (f) => f.includes("Before T-2"))
+  expect(isSelected(await tui.spans(), "gadget 3")).toBe(true)
+  expect(isSelected(await tui.spans(), "thing 2")).toBe(true)
   tui.input.pressKey("t")
   tui.input.pressKey("x")
   await tui.settle()
-  expect(ran).toEqual([["t", "T-2"]])
+  expect(ran).toEqual([
+    ["t", "T-2"],
+    ["x", "GD-3"],
+  ])
   // ↓ on the last row, which has no detail, stays there.
   tui.input.pressArrow("down")
   tui.input.pressArrow("down")
@@ -181,7 +186,7 @@ test("↓ past the last row selects in its detail block: the detail's keys and E
   await tui.settle()
   spans = await tui.spans()
   expect(isSelected(spans, "thing 1")).toBe(true)
-  expect(isSelected(spans, "gadget 1")).toBe(false)
+  expect(isSelected(spans, "gadget 1")).toBe(true) // the target of the detail keys again
   tui.input.pressArrow("down")
   await tui.settle()
   tui.input.pressEnter()

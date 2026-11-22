@@ -172,10 +172,12 @@ describe("talk item form", () => {
     t.input.pressEscape()
     await until(t, (f) => !f.includes("New talk item"))
 
-    void overlay!.openForm("talk_item", "talk", { prefill: { about: "@marie" } })
-    frame = await until(t, (f) => f.includes("New talk item") && f.includes("restore"))
-    t.input.pressKey("x") // the cancelled form's draft is offered first: discard it
-    frame = await until(t, (f) => !f.includes("restore"))
+    // The cancelled form kept its draft; one for @marie (draftFor) has its own key, so none is offered.
+    void overlay!.openForm("talk_item", "talk", { prefill: { about: "@marie" }, draftFor: "@marie" })
+    frame = await until(t, (f) => f.includes("New talk item"))
+    await t.settle()
+    frame = await t.frame()
+    expect(frame).not.toContain("restore")
     expect(lineWith(frame, "Text")).toContain("› Text*")
     await t.input.typeText("Sales lead walkthrough")
     t.input.pressTab()

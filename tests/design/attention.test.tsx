@@ -40,9 +40,11 @@ const cols = (widths: number[], texts: string[]) =>
 const inside = (frame: string, i: number, side: 0 | 1) => (line(frame, i).split("│")[1 + 2 * side] ?? "").slice(1).trimEnd()
 
 // At 118 wide the left panel has 54 cells inside, the right one 53.
+// Beside the lead panel (Upcoming meetings, 1.35 : 1) the right column has 45 cells inside.
 const ACTIONS_L = [5, 32, 7, 7]
-const ACTIONS_R = [5, 31, 7, 7]
-const PROJECTS = [2, 6, 30, 12]
+const ACTIONS_SIDE = [5, 23, 7, 7]
+const PROJECTS = [2, 6, 43]
+const PROJECTS_SIDE = [2, 6, 35]
 const MILESTONES = [6, 38, 8]
 const RISKS = [5, 6, 33, 6]
 const STAKEHOLDERS = [17, 24, 10]
@@ -55,18 +57,18 @@ test("Attention as designed", async () => {
   tui = await renderTui(kernel, { width: 118, height: 36 })
   const frame = await until(tui, (f) => f.includes("Marie Dubois") && f.includes("Send revised budget to Peter") && f.includes("I-5"))
 
-  // Row 1: Upcoming meetings (none in the next 7 days: no header, no note) and Overdue actions.
+  // The lead block: Upcoming meetings (none in the next 7 days: no header, no note) and Overdue actions beside it.
   expect(line(frame, 1)).toMatch(/^ ╭─ Upcoming meetings · next 7 days ─+╮ ╭─ Overdue actions · 3 ─+╮$/)
   expect([2, 3, 4].map((i) => inside(frame, i, 0))).toEqual(["No meetings in the next 7 days.", "", ""])
   expect([2, 3, 4].map((i) => inside(frame, i, 1))).toEqual([
-    cols(ACTIONS_R, ["A-1", "Send revised budget to Peter", "CRM", "-3d"]),
-    cols(ACTIONS_R, ["A-2", "Book vendor demo slot", "ERP", "-2d"]),
-    cols(ACTIONS_R, ["A-3", "Review test strategy", "DWH", "-1d"]),
+    cols(ACTIONS_SIDE, ["A-1", "Send revised budget to…", "CRM", "-3d"]),
+    cols(ACTIONS_SIDE, ["A-2", "Book vendor demo slot", "ERP", "-2d"]),
+    cols(ACTIONS_SIDE, ["A-3", "Review test strategy", "DWH", "-1d"]),
   ])
   expect(line(frame, 5)).toMatch(/^ ╰─+╯ ╰─+╯$/)
 
-  // Row 2: Due this week and Projects needing attention (no count, no on-hold BI2); the pair starts on the same
-  // line and closes on the same line.
+  // Then the grid. Row 1: Due this week and Projects needing attention (no count, no on-hold BI2, no "updated"
+  // column since the 2026-11-20 home design); the pair starts on the same line and closes on the same line.
   expect(line(frame, 6)).toMatch(/^ ╭─ Due this week · 3 ─+╮ ╭─ Projects needing attention ─+╮$/)
   expect([7, 8, 9, 10].map((i) => inside(frame, i, 0))).toEqual([
     cols(ACTIONS_L, ["A-4", "Prepare SteerCo deck input", "CRM", "Fri"]),
@@ -75,10 +77,10 @@ test("Attention as designed", async () => {
     "",
   ])
   expect([7, 8, 9, 10].map((i) => inside(frame, i, 1))).toEqual([
-    cols(PROJECTS, ["●", "ERP", "Vendor B contract not signed", "upd 9d ago"]),
-    cols(PROJECTS, ["●", "CRM", "Design slipping 2 weeks, wait…", "upd 2d ago"]),
-    cols(PROJECTS, ["●", "HRP", "Key user availability", "upd 5d ago"]),
-    cols(PROJECTS, ["○", "IAM", "Health not updated", "31d ago"]),
+    cols(PROJECTS, ["●", "ERP", "Vendor B contract not signed"]),
+    cols(PROJECTS, ["●", "CRM", "Design slipping 2 weeks, waiting on integr…"]),
+    cols(PROJECTS, ["●", "HRP", "Key user availability"]),
+    cols(PROJECTS, ["○", "IAM", "Health not updated · 31d ago"]),
   ])
   expect(line(frame, 11)).toMatch(/^ ╰─+╯ ╰─+╯$/)
 
@@ -141,7 +143,7 @@ test("Attention as designed", async () => {
   await tui.settle()
   spans = await tui.spans()
   expect(fgAt(spans, "Overdue actions", 1)).toBe(theme.accent)
-  expect(isSelected(spans, "Send revised budget to Peter")).toBe(true)
+  expect(isSelected(spans, "Send revised budget to")).toBe(true)
 })
 
 // The panels' columns are minimums that grow to their longest text: a 16-character code, four-digit ids and a long
@@ -159,7 +161,7 @@ for (const [width, height] of [[118, 36], [80, 24]] as const)
     const at = (re: RegExp) => frame.split("\n").filter((l) => re.test(l))
     expect(at(/ A-1000 .+ DATAPLATFORM2027 +-2d /).length).toBe(1) // overdue
     expect(at(/ A-1001 .+ DATAPLATFORM2027 +Fri /).length).toBe(1) // due this week
-    expect(at(/ ● +DATAPLATFORM2027 .+ upd 2d ago /).length).toBe(1) // needing attention
+    expect(at(/ ● +DATAPLATFORM2027 Ingest blocked/).length).toBe(1) // needing attention
     expect(at(/│ DATAPLATFORM2027 .+ -3d /).length).toBe(1) // the late milestone
     expect(at(/ R-1000 +DATAPLATFORM2027 .+ risk /).length).toBe(1) // the high risk
     expect(at(/ Alexandra Vandenberghe +never /).length).toBe(1) // the stakeholder: whole name and age
@@ -172,16 +174,23 @@ for (const [width, height] of [[118, 36], [80, 24]] as const)
 // the bottom border, and the design's bar. Seeded with the meeting designs' data, today Fri 20 Nov 2026. Ids follow
 // the seed (A-2 is the design's A-31, A-4 its A-44). The CRM steering's action (A-1, the design's A-27) is overdue,
 // so its count reads `1 · 1 late` where the design, against its own Overdue panel, draws a plain `1`.
-const MEETINGS = [10, 16, 7, 7, 10]
-const BEFORE = [5, 40, 7]
+const MEETINGS = [10, 24, 7, 7, 10]
+const BEFORE = [5, 48, 7]
+// The right column of the lead block: the text of line `i` after the lead panel, and inside its panel.
+const rightOf = (frame: string, i: number) => line(frame, i).slice(line(frame, 1).indexOf("╮ ╭") + 2)
+const rightInside = (frame: string, i: number) => {
+  const s = rightOf(frame, i)
+  return s.startsWith("│") ? s.slice(2, s.lastIndexOf("│")).trimEnd() : s
+}
 
 test("Attention: Upcoming meetings as designed (2026-11-20 home)", async () => {
   kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
   await seedMeetings(kernel)
   tui = await renderTui(kernel, { width: 118, height: 36 })
-  const frame = await until(tui, (f) => f.includes("Before 1:1 Anna") && f.includes("Ask HR about the AWS training budget") && f.includes("5 items"))
+  const frame = await until(tui, (f) => f.includes("Before 1:1 Anna") && f.includes("Ask HR about the AWS training budget") && f.includes("5 items") && f.includes("Marie Dubois"))
 
   expect(line(frame, 0)).toMatch(/^ ttybrain ·  1 Attention ▾ +● 2 new in inbox +Fri 20 Nov 2026$/)
+  // The lead block: Upcoming meetings on the left (1.35 : 1), the next panels stacked on its right.
   expect(line(frame, 1)).toMatch(/^ ╭─ Upcoming meetings · next 7 days ─+╮ ╭─ Overdue actions · 3 ─+╮$/)
   expect([2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => inside(frame, i, 0))).toEqual([
     cols(MEETINGS, ["Date", "Meeting", "About", "To talk", "Your act."]),
@@ -195,12 +204,40 @@ test("Attention: Upcoming meetings as designed (2026-11-20 home)", async () => {
     cols(BEFORE, ["A-2", "Review her test strategy draft", "-4d"]),
     cols(BEFORE, ["A-4", "Ask HR about the AWS training budget", "Mon"]),
   ])
-  expect(line(frame, 12)).toMatch(/^ ╰─+ r recurring ─╯ (│|╰)/)
+  expect(line(frame, 12)).toMatch(/^ ╰─+ r recurring ─╯ ╰─+╯$/)
+  const right = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => rightInside(frame, i))
+  expect(right.map((r, i) => (r.startsWith("╰") || r.startsWith("╭") ? r.replace(/─+/g, "─") : r))).toEqual([
+    cols(ACTIONS_SIDE, ["A-1", "Send revised budget to…", "CRM", "-6d"]),
+    cols(ACTIONS_SIDE, ["A-2", "Review her test strate…", "Anna", "-4d"]),
+    cols(ACTIONS_SIDE, ["A-3", "Book vendor demo slot", "ERP", "-3d"]),
+    "╰─╯",
+    "╭─ Due this week · 0 ─╮",
+    "Nothing due this week.",
+    "╰─╯",
+    "╭─ Projects needing attention ─╮",
+    cols(PROJECTS_SIDE, ["●", "ERP", "Vendor B contract not signed"]),
+    cols(PROJECTS_SIDE, ["●", "CRM", "Design slipping 2 weeks"]),
+  ])
+  // Then the grid with the other panels (design §3: Attention keeps them).
+  expect(line(frame, 13)).toMatch(/^ ╭─ Late milestones · 0 ─+╮ ╭─ High risks & issues · 0 ─+╮$/)
+  expect([inside(frame, 14, 0), inside(frame, 14, 1)]).toEqual(["No late milestones and none in the next 14 days.", "No open high-severity risks or issues."])
+  expect(line(frame, 15)).toMatch(/^ ╰─+╯ ╰─+╯$/)
+  expect(line(frame, 16)).toMatch(/^ ╭─ Stakeholders to contact ─+╮ ╭─ Inbox · 2 ─+╮$/)
+  expect([17, 18].map((i) => [inside(frame, i, 0), inside(frame, i, 1)])).toEqual([
+    [cols([17, 10], ["Marie Dubois", "49d"]), "I-1 @anna wants to swap the 1:1 to Tuesday"],
+    ["last contact over 30 days, high influence first", "I-2 #ERP vendor B sent the revised offer"],
+  ])
+  expect(line(frame, 19)).toMatch(/^ ╰─+╯ ╰─+╯$/)
+  for (let i = 20; i < 35; i++) expect(line(frame, i)).toBe("")
   expect(line(frame, 35)).toBe(" tab panel   enter open   x done   t to talk   i capture   g or 1-6 screens   ? help")
 
   const spans = await tui.spans()
   expect(isSelected(spans, "1:1 Anna r")).toBe(true)
+  // The first of the selected meeting's actions is what `x` marks done: shown selected too.
+  expect(isSelected(spans, "Review her test strategy draft")).toBe(true)
+  expect(isSelected(spans, "Ask HR about")).toBe(false)
   expect(fgAt(spans, "Upcoming meetings", 1)).toBe(theme.accent)
+  expect(fgAt(spans, "Overdue actions", 1)).toBe(theme.muted)
   expect(fgAt(spans, "Date", 2)).toBe(theme.muted)
   expect(fgAt(spans, "r ", "1:1 Bob")).toBe(theme.muted)
   expect(fgAt(spans, "1:1 Bob", 5)).toBe(theme.text)
@@ -215,6 +252,15 @@ test("Attention: Upcoming meetings as designed (2026-11-20 home)", async () => {
   expect(fgAt(spans, "-4d", 10)).toBe(theme.red)
   expect(fgAt(spans, "Mon", 11)).toBe(theme.text)
   expect(fgAt(spans, "r recurring", 12)).toBe(theme.muted)
+  // The Overdue panel's third column is the first link: a code cyan, a person's first name magenta.
+  expect(fgAt(spans, "CRM     -6d", 2)).toBe(theme.cyan)
+  expect(fgAt(spans, "Anna    -4d", 3)).toBe(theme.magenta)
+  expect(fgAt(spans, "-6d", 2)).toBe(theme.red)
+  expect(fgAt(spans, "●", 10)).toBe(theme.red)
+  expect(fgAt(spans, "●", 11)).toBe(theme.amber)
+  expect(fgAt(spans, "ERP", 10)).toBe(theme.cyan)
+  expect(fgAt(spans, "Marie Dubois", 17)).toBe(theme.magenta)
+  expect(fgAt(spans, "49d", 17)).toBe(theme.amber)
 })
 
 test("Attention's Upcoming meetings: Enter opens the meeting, t adds to its talk-list, x in the action block marks it done", async () => {

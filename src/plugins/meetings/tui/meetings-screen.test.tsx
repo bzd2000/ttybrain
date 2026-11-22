@@ -50,7 +50,8 @@ const select = async (t: RenderedTui, title: string) => {
 
 // Today Fri 13 Nov 2026. M-1 1:1 Anna today (this week), M-2 CRM sync Mon 16 (next week), M-3 Data sync Tue 24 (the
 // week after, about DATAPLATFORM2027), M-4 Old review Mon 2 Nov (past when added: never closes itself), M-5 Board
-// October 20 Oct (held, its subject taken away as a meeting from before subjects), M-6 Far off 10 Dec (not shown).
+// October 20 Oct (held, its subject taken away as a meeting from before subjects), M-6 Far off 10 Dec (not shown),
+// M-7 Missed close Thu 5 Nov (closes itself, but the upkeep that would have closed it on 8 Nov never ran).
 async function small(width = 118, height = 36): Promise<RenderedTui> {
   kernel = await makeTestKernel({ plugins: builtinPlugins })
   await inCtx(async () => {
@@ -65,8 +66,11 @@ async function small(width = 118, height = 36): Promise<RenderedTui> {
     await w.addMeeting!({ about: "#CRM", title: "Board October", date: "2026-10-20", kind: "board" })
     await w.closeMeeting!({ ref: "M-5" })
     await w.addMeeting!({ about: "#CRM", title: "Far off", date: "2026-12-10" })
+    await w.addMeeting!({ about: "#CRM", title: "Missed close", date: "2026-11-05" })
   })
   kernel.db.raw.prepare("UPDATE meetings_meeting SET subject_type = NULL, subject_id = NULL WHERE id = 5").run([])
+  // Today's upkeep ran before the first write above, so nothing closes M-7 before the screen shows it.
+  kernel.db.raw.prepare("UPDATE meetings_meeting SET auto_close = 1 WHERE id = 7").run([])
   tui = await renderTui(kernel, { width, height })
   tui.input.pressKey("5")
   await until(tui, (f) => f.includes("No subject") && f.includes("Data sync"))
@@ -88,12 +92,13 @@ describe("Meetings screen", () => {
   test("this week, next week, the week after; then Not closed and No subject (with how to give one), later dates left out", async () => {
     const t = await small()
     const frame = await t.frame()
-    const order = ["This week · 13 Nov", "1:1 Anna", "Next week · 16–20 Nov", "CRM sync", "Week after · 23–27 Nov", "Data sync", "Not closed · 1", "Old review", "No subject · 1", "Board October"]
+    const order = ["This week · 13–15 Nov", "1:1 Anna", "Next week · 16–20 Nov", "CRM sync", "Week after · 23–27 Nov", "Data sync", "Not closed · 2", "Old review", "Missed close", "No subject · 1", "Board October"]
     const at = order.map((s) => indexOf(frame, s))
     expect(at.every((i) => i > 0)).toBe(true)
     expect(at).toEqual([...at].sort((a, b) => a - b))
     expect(frame).not.toContain("Far off")
     expect(frame).not.toContain("Held, closes itself")
+    expect(lineWith(frame, "Missed close")).toMatch(/Thu 5 +Missed close +CRM +— +— /)
     expect(lineWith(frame, "Old review")).toMatch(/Mon 2 +Old review +CRM +— +— /)
     expect(lineWith(frame, "Board October")).toMatch(/Tue 20 +Board October +— +— +— /)
     expect(frame).toContain("give it one: ttybrain meeting subject M-5 <ref>")

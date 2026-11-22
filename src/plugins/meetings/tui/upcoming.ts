@@ -4,6 +4,7 @@
 // its subject, to it, or to an earlier meeting of its series). Read through the plugin's own reads and tables and the
 // people, projects and actions views; a plugin that is not loaded shows nothing for its part.
 import { addDays, dayDate, dueLabel, weekEnd, type Cell, type Tone, type useRuntime } from "@ttybrain/api/tui"
+import { CLOSE_AFTER_DAYS } from "../logic/close"
 import { GONE, makeStore } from "../logic/records"
 import type { MeetingKind, SubjectType } from "../logic/schema"
 
@@ -51,12 +52,14 @@ export function makeUpcoming(rt: Runtime) {
     return withRows(meetings)
   }
 
-  // The planned meetings before `before` that never close themselves, and every meeting without a subject.
+  // The planned meetings before `before` that never close themselves or missed closing themselves (dated more than
+  // CLOSE_AFTER_DAYS before it: the upkeep has not run), and every meeting without a subject.
   async function unclosed(before: string): Promise<{ notClosed: Upcoming[]; noSubject: Upcoming[] }> {
+    const overdue = addDays(before, -CLOSE_AFTER_DAYS)
     const rows = await db
       .selectFrom("meeting")
       .select(["id", "title", "date", "kind", "series_id", "auto_close", "subject_type", "status"])
-      .where((eb) => eb.or([eb("subject_type", "is", null), eb.and([eb("status", "=", "planned"), eb("auto_close", "=", 0), eb("date", "<", before)])]))
+      .where((eb) => eb.or([eb("subject_type", "is", null), eb.and([eb("status", "=", "planned"), eb.or([eb.and([eb("auto_close", "=", 0), eb("date", "<", before)]), eb("date", "<", overdue)])])]))
       .where("status", "!=", "cancelled")
       .orderBy("date")
       .orderBy("id")

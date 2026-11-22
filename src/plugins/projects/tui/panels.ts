@@ -20,7 +20,8 @@ export function registerPanels(ui: TuiContext): void {
     priority: 30,
     empty: "No project needs attention.",
     count: false,
-    columns: [2, CODE(6), "grow", 12],
+    // The 2026-11-20 home design: mark, code, comment (no "updated" column).
+    columns: [2, CODE(6), "grow"],
     load: async () => {
       const today = ui.clock.today()
       return (await overview.projectsNeedingAttention()).map((p): OverviewRow => {
@@ -36,8 +37,9 @@ export function registerPanels(ui: TuiContext): void {
           cells: [
             dot,
             code(p.code),
-            stale ? { text: "Health not updated", tone: "muted" } : { text: p.health_comment ?? "" },
-            stale ? { text: age, tone: "amber" } : { text: `upd ${age}`, tone: "muted" },
+            stale
+              ? { text: `Health not updated · ${age}`, parts: [{ text: "Health not updated · ", tone: "muted" }, { text: age, tone: "amber" }] }
+              : { text: p.health_comment ?? "" },
           ],
         }
       })

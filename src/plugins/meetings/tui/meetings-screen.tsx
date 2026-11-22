@@ -3,7 +3,8 @@
 //   week: "This week · 20–22 Nov" (when it has any), "Next week · 23–27 Nov", "Week after · 30 Nov–4 Dec" (its rows'
 //   title and Talk muted). A one-off meeting's title ends with a muted `one-off`. After them, muted: "Held, closes
 //   itself <day> · n" (planned meetings of the last 3 days that close themselves: date amber, Talk `notes` when they
-//   have notes), "Not closed · n" (past planned meetings that never close themselves, date red) and "No subject · n"
+//   have notes), "Not closed · n" (past planned meetings that never close themselves, or that missed closing
+//   themselves because no write-capable start ran the upkeep; date red) and "No subject · n"
 //   (meetings from before subjects, M7; a muted line under the table says how to give one a subject). Groups that
 //   would be empty are left out.
 // - "Series · n" (right): Series · About · Rhythm (short), the series that have not ended: 1:1s, then project, then
@@ -132,8 +133,9 @@ export function MeetingsScreen() {
       ["Week after", addDays(monday, 14), end],
     ]
     for (const [name, from, to] of weeks) {
+      // A week reads Monday to Friday (`23–27 Nov`); this week from today to Sunday (`20–22 Nov`).
       const fri = addDays(mondayOf(from), 4)
-      const label = rangeLabel(from, from > fri ? to : fri)
+      const label = rangeLabel(from, name === "This week" || from > fri ? to : fri)
       await add(`${name} · ${label}`, ahead.filter((m) => m.date >= from && m.date <= to), "accent", { dim: name === "Week after", oneOff: true }, false)
     }
     for (const closes of [...new Set(held.map((m) => m.closes_on!))].sort())
@@ -230,6 +232,7 @@ export function MeetingsScreen() {
               onOpen={(ref) => void nav.open(ref)}
               focused={keys.active() && focus() === 0}
               empty={EMPTY}
+              listId="meetings"
             />
             <Show when={q.data()!.noSubject}>{(ref: () => string) => <text fg={theme.muted} flexShrink={0} wrapMode="none">{subjectHint(ref())}</text>}</Show>
           </Show>

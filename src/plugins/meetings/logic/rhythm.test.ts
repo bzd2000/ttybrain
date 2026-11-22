@@ -8,8 +8,8 @@ describe("rhythmPreview (the series form's read-back)", () => {
     expect(rhythmPreview("monthly on the last fri", "2026-11-01", "2026-11-20")).toBe("→ Fri 27 Nov, 25 Dec, 29 Jan, 26 Feb …")
     expect(rhythmPreview("weekly on mon", "2026-12-01", "2026-11-20")).toBe("→ Mon 7 Dec, 14 Dec, 21 Dec, 28 Dec …")
   })
-  test("not a rhythm: the phrases it understands; empty or an unreadable first date: nothing", () => {
-    expect(rhythmPreview("fortnightly", null, "2026-11-20")).toBe("weekly on mon, every 2 weeks on wed, monthly on the 4th tue, monthly on the last fri, monthly on day 15")
+  test("not a rhythm (yet), empty, or an unreadable first date: nothing", () => {
+    expect(rhythmPreview("every 2 wee", null, "2026-11-20")).toBeUndefined()
     expect(rhythmPreview("  ", null, "2026-11-20")).toBeUndefined()
     expect(rhythmPreview("weekly on mon", "someday", "2026-11-20")).toBeUndefined()
   })

@@ -10,10 +10,14 @@
 // `keys` act on its selected row, and its `detail` shows a block for the selected row under the rows (↓ on the last
 // row moves into it, ↑ on its first row back; its own `keys` and Enter act on its rows). The status bar shows
 // `tab panel`, `enter open`, then the focused panel's detail keys and its own (while it has rows), the global
-// actions' and `g or 1-6 screens`, `? help` (the Attention design draws no `q quit`).
+// actions' and `g or 1-6 screens`, `? help` (the Attention design draws no `q quit`). On a row of the panel, the
+// detail block's first row is the one its keys act on (shown selected). A first panel with `lead` takes the left
+// column of the top block (overviewLayout.ts). The screen has one key handler: it routes keys to the focused panel,
+// whose tables take theirs through it (Table `keySource`).
 import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useQuery, type Query } from "../data"
+import type { KeyEvent } from "@opentui/core"
 import { printable, useKeys, useScreenKeys } from "../keys"
 import { notify } from "../messages"
 import { useNav } from "../nav"
@@ -24,7 +28,7 @@ import { theme } from "../theme"
 import type { OverviewColumn, OverviewKeyDef, OverviewPanelDef, OverviewRow } from "../types"
 import { layoutOverview, MAX_ROWS, type PanelPlace } from "./overviewLayout"
 import { Panel } from "./Panel"
-import { fitWidth, Table, type TableColumn, type TableGroup, type TableRow } from "./Table"
+import { createKeySource, fitWidth, Table, type KeySource, type TableColumn, type TableGroup, type TableRow } from "./Table"
 
 export { MAX_ROWS } from "./overviewLayout"
 const MAX_COLUMN = 16
@@ -52,41 +56,64 @@ export function OverviewScreen() {
   const dims = useTerminalDimensions()
   const panels = app.registry.panels()
   const queries = panels.map((p) => useQuery(() => p.load()))
+  const sources = panels.map(() => createKeySource())
   const [focus, setFocus] = createSignal(0)
   useScreenKeys((key) => {
-    if (key.name !== "tab" || key.shift || panels.length === 0) return
-    key.preventDefault()
-    setFocus((i) => (i + 1) % panels.length)
+    if (panels.length === 0) return
+    if (key.name === "tab" && !key.shift) {
+      key.preventDefault()
+      setFocus((i) => (i + 1) % panels.length)
+      return
+    }
+    sources[focus()]!.dispatch(key)
   })
   const places = createMemo(() =>
     layoutOverview(
       panels.map((p, i) => {
         const rows = queries[i]!.data()
-        return { rows: rows?.length, empty: p.empty, footer: p.footer, headings: rows === undefined ? 0 : headingLines(rows.slice(0, MAX_ROWS)), extra: extraLines(p) }
+        return {
+          rows: rows?.length,
+          empty: p.empty,
+          footer: p.footer,
+          headings: rows === undefined ? 0 : headingLines(rows.slice(0, MAX_ROWS)),
+          extra: extraLines(p),
+          ...(i === 0 && p.lead !== undefined ? { lead: p.lead } : {}),
+        }
       }),
       dims().height - FRAME_LINES,
       dims().width,
     ),
   )
-  const isGrid = createMemo(() => places().every((p) => p.row !== undefined))
-  // The panel indexes per grid row (left, then right), or per column when they are balanced.
+  const indexes = (pick: (p: PanelPlace) => boolean) => panels.map((_, i) => i).filter((i) => pick(places()[i]!))
+  const lead = createMemo(() => indexes((p) => p.part === "lead"), undefined, { equals: (a, b) => a.join() === b.join() })
+  const side = createMemo(() => indexes((p) => p.part === "side"), undefined, { equals: (a, b) => a.join() === b.join() })
+  const rest = () => panels.map((_, i) => i).filter((i) => places()[i]!.part === undefined)
+  const isGrid = createMemo(() => rest().every((i) => places()[i]!.row !== undefined))
+  // The panel indexes per grid row (left, then right), or per column when they are balanced (lead block apart).
   const groups = createMemo(
     () => {
       const of = (key: (p: PanelPlace) => number | undefined, n: number) =>
-        Array.from({ length: n }, (_, k) => panels.map((_, i) => i).filter((i) => key(places()[i]!) === k))
-      return isGrid() ? of((p) => p.row, Math.ceil(panels.length / 2)) : of((p) => p.column, 2)
+        Array.from({ length: n }, (_, k) => rest().filter((i) => key(places()[i]!) === k))
+      const rows = Math.max(0, ...rest().map((i) => (places()[i]!.row ?? -1) + 1))
+      return isGrid() ? of((p) => p.row, rows) : of((p) => p.column, 2)
     },
     undefined,
     { equals: sameIndexes },
   )
   const Item = (props: { i: number }) => (
     <PluginScope kernel={app.kernel} plugin={panels[props.i]!.plugin} label={panels[props.i]!.title}>
-      <OverviewPanel def={panels[props.i]!} query={queries[props.i]!} place={places()[props.i]!} focused={keys.active() && focus() === props.i} />
+      <OverviewPanel
+        def={panels[props.i]!}
+        query={queries[props.i]!}
+        place={places()[props.i]!}
+        focused={keys.active() && focus() === props.i}
+        keySource={sources[props.i]!}
+      />
     </PluginScope>
   )
-  // A grid row's cell, or a column: half the width.
-  const Half = (props: { indexes: number[] }) => (
-    <box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0} overflow="hidden">
+  // A grid row's cell, or a column: half the width (the lead block's columns: the lead's weight against 1).
+  const Half = (props: { indexes: number[]; weight?: number }) => (
+    <box flexDirection="column" flexGrow={props.weight ?? 1} flexBasis={0} minHeight={0} overflow="hidden">
       <For each={props.indexes}>{(i) => <Item i={i} />}</For>
     </box>
   )
@@ -100,15 +127,21 @@ export function OverviewScreen() {
   })
   return (
     <Show when={panels.length > 0} fallback={<text fg={theme.muted}>No panels yet: plugins add them here.</text>}>
-      <Show
-        when={isGrid()}
-        fallback={
-          <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1} flexGrow={1} minHeight={0} overflow="hidden">
-            <For each={groups()}>{(indexes) => <Half indexes={indexes} />}</For>
+      <box flexDirection="column" paddingLeft={1} paddingRight={1} flexGrow={1} minHeight={0} overflow="hidden">
+        <Show when={lead().length > 0}>
+          <box flexDirection="row" gap={1} flexShrink={0}>
+            <Half indexes={lead()} weight={panels[0]!.lead} />
+            <Half indexes={side()} />
           </box>
-        }
-      >
-        <box flexDirection="column" paddingLeft={1} paddingRight={1} flexGrow={1} minHeight={0} overflow="hidden">
+        </Show>
+        <Show
+          when={isGrid()}
+          fallback={
+            <box flexDirection="row" gap={1} flexGrow={1} minHeight={0} overflow="hidden">
+              <For each={groups()}>{(list) => <Half indexes={list} />}</For>
+            </box>
+          }
+        >
           <For each={groups()}>
             {(pair) => (
               <box flexDirection="row" gap={1} flexShrink={0}>
@@ -117,8 +150,8 @@ export function OverviewScreen() {
               </box>
             )}
           </For>
-        </box>
-      </Show>
+        </Show>
+      </box>
     </Show>
   )
 }
@@ -153,7 +186,7 @@ function runKey(k: OverviewKeyDef, ref: string, overlay: ReturnType<typeof useOv
     .catch((e: unknown) => notify(errorText(e), "error"))
 }
 
-function OverviewPanel(props: { def: PanelEntry; query: Query<OverviewRow[]>; place: PanelPlace; focused: boolean }) {
+function OverviewPanel(props: { def: PanelEntry; query: Query<OverviewRow[]>; place: PanelPlace; focused: boolean; keySource: KeySource }) {
   const nav = useNav()
   const keys = useKeys()
   const overlay = useOverlay()
@@ -201,24 +234,28 @@ function OverviewPanel(props: { def: PanelEntry; query: Query<OverviewRow[]>; pl
   // With a detail block the rows take their own lines only, so the block follows them.
   const tableHeight = () => (props.def.header ? 1 : 0) + shownRows().length + headingLines(shownRows())
 
-  useScreenKeys((key) => {
+  // Runs first (registered before the tables): moves in and out of the detail block, and the keys of the panel and
+  // its detail. On a row of the panel the detail's keys act on its first row (shown selected).
+  const onKey = (key: KeyEvent) => {
     if (!props.focused || keys.typing() || key.defaultPrevented) return
     const ch = printable(key)
     const down = key.name === "down" || ch === "j"
     const up = key.name === "up" || ch === "k"
     const rows = shownRows()
+    const target = () => (inDetail() ? detailSelected() : detailShownRows()[0]?.ref)
     if (down && !inDetail() && rows.length > 0 && selected() === rows[rows.length - 1]!.ref && detailShownRows().length > 0) setInDetail(true)
     else if (up && inDetail() && detailSelected() === detailShownRows()[0]?.ref) setInDetail(false)
     else {
       if (ch === undefined) return
-      const own = inDetail() ? spec?.keys?.find((k) => k.key === ch) : undefined
-      const ref = own ? detailSelected() : selected()
-      const k = own ?? props.def.keys?.find((k) => k.key === ch)
+      const own = props.def.keys?.find((k) => k.key === ch)
+      const forDetail = spec?.keys?.find((k) => k.key === ch)
+      const [k, ref] = inDetail() ? (forDetail ? [forDetail, target()] : [own, selected()]) : own ? [own, selected()] : [forDetail, target()]
       if (!k || ref === undefined) return
       runKey(k, ref, overlay)
     }
     key.preventDefault()
-  })
+  }
+  onCleanup(props.keySource.add(onKey))
 
   const rowsTable = () => (
     <Table
@@ -227,6 +264,7 @@ function OverviewPanel(props: { def: PanelEntry; query: Query<OverviewRow[]>; pl
       header={props.def.header !== undefined}
       empty={props.def.empty}
       focused={props.focused && !inDetail()}
+      keySource={props.keySource}
       onSelect={setSelected}
       onOpen={(ref) => void nav.open(ref)}
     />
@@ -264,6 +302,9 @@ function OverviewPanel(props: { def: PanelEntry; query: Query<OverviewRow[]>; pl
                     rows={detailShown()}
                     header={false}
                     focused={props.focused && inDetail()}
+                    selectionShown={props.focused}
+                    selectedRef={inDetail() ? undefined : detailShownRows()[0]?.ref}
+                    keySource={props.keySource}
                     onSelect={setDetailSelected}
                     onOpen={(ref) => void nav.open(ref)}
                   />

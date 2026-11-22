@@ -48,7 +48,7 @@ export { DraftPrompt } from "./components/DraftPrompt"
 export { act, useQuery, useRecord, useRuntime, useToday, type ActResult, type Query, type RecordInfo } from "./data"
 // Building blocks.
 export { Field, type FieldKind, type FieldSpec } from "./components/Field"
-export { Form, numberValue, type FormValues, type SubmitResult } from "./components/Form"
+export { Form, numberValue, type FormLook, type FormValues, type SubmitResult } from "./components/Form"
 export { KeyHints } from "./components/KeyHints"
 export { Menu, type MenuItem } from "./components/Menu"
 export { Panel } from "./components/Panel"
