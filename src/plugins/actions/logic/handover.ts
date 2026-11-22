@@ -1,13 +1,18 @@
 // The one-time handover of the actions the projects plugin used to own (design §4, "Moving existing actions").
 // projects exposes its rows through the read `legacyActions`; this step copies every one with the same id and
-// timestamps, records the import in `handover`, and projects then empties its table once `importedLegacy` says so
+// timestamps (its project, for person and meeting as links), records the import in `handover`, and projects then empties its table once `importedLegacy` says so
 // (projects' own step). Each step is its own transaction, so at every commit there is one live copy: this import
 // commits first, and projects shows none of its rows meanwhile. Provenance (kernel_record_origin, record type
 // "action") and change-set history name the same refs, so they carry over unchanged.
 import { currentContext, formatRef, ValidationError, type PluginContext } from "@ttybrain/api"
 
-const COLUMNS = ["id", "title", "due_date", "status", "done_date", "owner_id", "project_id", "for_person_id", "meeting_id", "notes", "created_at", "updated_at"] as const
-type LegacyAction = Record<(typeof COLUMNS)[number], unknown>
+const COLUMNS = ["id", "title", "due_date", "status", "done_date", "owner_id", "notes", "created_at", "updated_at"] as const
+const LINKS = [
+  ["project", "project_id"],
+  ["person", "for_person_id"],
+  ["meeting", "meeting_id"],
+] as const
+type LegacyAction = Record<(typeof COLUMNS)[number] | (typeof LINKS)[number][1], unknown>
 
 // Actions added before the import (projects off at the upgrade) get ids above RESERVED (ops.ts), so the moved ids
 // cannot be taken. Should one be taken anyway, nothing moves and nothing is changed: deleting an action would also
@@ -36,6 +41,10 @@ export function registerHandover(ctx: PluginContext): void {
     if (taken.size > 0) throw collision([...taken].sort((a, b) => a - b).map((n) => formatRef("A-", n)))
     for (const a of actions) {
       await db.insertInto("action").values(Object.fromEntries(COLUMNS.map((c) => [c, a[c] ?? null]))).execute()
+      // The legacy project, for person and meeting become links, in that order (as migration 002 does).
+      for (const [type, column] of LINKS)
+        if (a[column] !== null && a[column] !== undefined)
+          await db.insertInto("link").values({ action_id: a.id, record_type: type, record_id: a[column] }).execute()
       await db.insertInto("handover_row").values({ source: "projects", id: a.id, updated_at: a.updated_at }).execute()
     }
     await db.insertInto("handover").values({ source: "projects", rows: actions.length, imported_at: currentContext().now }).execute()

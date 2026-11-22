@@ -15,7 +15,7 @@ import { registerViews } from "./views"
 export const actions = definePlugin({
   id: "actions",
   name: "Actions",
-  version: "1.0.0",
+  version: "2.0.0",
   apiVersion: 1,
   // All optional: people.person (owner and for names), projects.project (codes) and its legacyActions read (the
   // handover), meetings (meeting titles and dates).

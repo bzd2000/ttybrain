@@ -60,8 +60,10 @@ const placeholder = (f: FlagDef) =>
     ? `<${f.placeholder}>`
     : f.values ? `<${f.values.join("|")}>` : f.type === "date" ? "<date>" : f.type === "number" ? "<number>" : f.type === "list" ? "<a,b>" : "<value>"
 
+const valueOf = (f: FlagDef) => `${placeholder(f)}${f.repeatable ? "..." : ""}`
+
 export function flagSignature(name: string, f: FlagDef): string {
-  const long = f.type === "boolean" ? `--${name}` : `--${name} ${placeholder(f)}`
+  const long = f.type === "boolean" ? `--${name}` : `--${name} ${valueOf(f)}`
   return f.short ? `-${f.short}, ${long}` : long
 }
 
@@ -81,7 +83,7 @@ export function signature(def: CommandDef): string {
 // `ttybrain widget add <title> [--due <date>]`
 export function usage(def: CommandDef): string {
   const flags = Object.entries(def.flags ?? {}).map(([name, f]) => {
-    const s = f.type === "boolean" ? `--${name}` : `--${name} ${placeholder(f)}`
+    const s = f.type === "boolean" ? `--${name}` : `--${name} ${valueOf(f)}`
     return f.required ? s : `[${s}]`
   })
   return ["ttybrain", signature(def), ...flags].join(" ")
@@ -126,7 +128,7 @@ export function parseCommand(argv: string[], def: CommandDef, today: string): Pa
   const own = def.flags ?? {}
   const all = { ...GLOBAL_FLAGS, ...own }
   const positionals: string[] = []
-  const raw: Record<string, string | true> = {}
+  const raw: Record<string, string | true | string[]> = {}
   for (const t of tokens(argv, all)) {
     if (t.kind === "positional") positionals.push(t.value)
     if (t.kind !== "option") continue
@@ -138,7 +140,8 @@ export function parseCommand(argv: string[], def: CommandDef, today: string): Pa
     } else {
       // `--due --json`: parseArgs would take "--json" as the value; that is a missing value, not a date.
       if (t.value === undefined || (!t.inlineValue && t.value.startsWith("--"))) throw new ValidationError(`${t.rawName} needs a value`, { field: t.name })
-      raw[t.name] = t.value
+      const prev = raw[t.name]
+      raw[t.name] = f.repeatable ? [...(Array.isArray(prev) ? prev : []), t.value] : t.value
     }
   }
   const str = (v: unknown) => (typeof v === "string" ? v : undefined)
@@ -151,7 +154,7 @@ export function parseCommand(argv: string[], def: CommandDef, today: string): Pa
         if (f.required) throw new ValidationError(`missing flag --${name}`, { field: name, hint: `usage: ${usage(def)}` })
         continue
       }
-      flags[name] = v === true ? true : convert(name, f, v, today)
+      flags[name] = v === true ? true : Array.isArray(v) ? v.flatMap((x) => (f.type === "list" ? (convert(name, f, x, today) as string[]) : [convert(name, f, x, today)])) : convert(name, f, v, today)
     }
   }
   return { global, positionals, flags }

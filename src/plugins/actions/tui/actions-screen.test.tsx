@@ -278,4 +278,21 @@ describe("actions screen", () => {
     for (const l of lines(frame)) expect(l.length).toBeLessThanOrEqual(80)
     expect(lineWith(frame, "Reply to vendor").indexOf(" CRM ")).toBe(long.indexOf(" DATAPLATFORM2027 "))
   })
+
+  test("a linked meeting, project or person that is gone: the action is still listed (Review Focus 4)", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      await write("people").addPerson!({ name: "Gone Person", handle: "gone", is_stakeholder: true })
+      await write("projects").addProject!({ code: "TMP", name: "Short-lived" })
+      await write("meetings").addMeeting!({ title: "SteerCo", date: "2026-11-10" })
+      await write("actions").addAction!({ title: "Follow up the steerco", due: "2026-11-16", meeting: "M-1" })
+      await write("actions").addAction!({ title: "Close the project", due: "2026-11-16", project: "TMP", forPerson: "gone" })
+    })
+    kernel.db.raw.exec("DELETE FROM meetings_meeting; DELETE FROM projects_project; DELETE FROM people_person")
+    tui = await renderTui(kernel, { width: 120, height: 32 })
+    tui.input.pressKey("4")
+    const frame = await untilThat(tui, (f) => f.includes("Close the project"))
+    expect(lineWith(frame, "Follow up the")).toContain("A-1")
+    expect(lineWith(frame, "Close the project")).toContain("A-2")
+  })
 })

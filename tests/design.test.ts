@@ -43,7 +43,13 @@ test("seedDesign seeds the designs' people, projects, actions, meetings and inbo
       "BI2:on_hold",
     ])
 
-    const open = await db("actions").selectFrom("action").select(["due_date", "project_id"]).where("status", "=", "open").execute()
+    // Each action's project: its project link (the designs give an action one at most).
+    const open = await db("actions")
+      .selectFrom("action as a")
+      .leftJoin("link as l", (j: any) => j.onRef("l.action_id", "=", "a.id").on("l.record_type", "=", "project"))
+      .select(["a.due_date", "l.record_id as project_id"])
+      .where("a.status", "=", "open")
+      .execute()
     expect(open).toHaveLength(46)
     expect(open.filter((a: any) => a.due_date !== null && a.due_date < "2026-11-12")).toHaveLength(3) // overdue
     expect(open.filter((a: any) => a.due_date >= "2026-11-12" && a.due_date <= "2026-11-15")).toHaveLength(3) // this week

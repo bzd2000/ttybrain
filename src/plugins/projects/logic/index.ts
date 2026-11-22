@@ -22,7 +22,7 @@ export const projects = definePlugin({
   version: "2.0.0", // 2: the projects.project view has no open_actions (actions are the actions plugin's)
   apiVersion: 1,
   requires: { people: "^1" }, // person references (owners, involvement) are people's records
-  reads: { people: "^1", meetings: "^1", actions: "^1" }, // people.person (owners, involvement); meetings.meeting for meeting titles, actions.action for open-action counts (both optional)
+  reads: { people: "^1", meetings: "^1", actions: "^2" }, // people.person (owners, involvement); meetings.meeting for meeting titles, actions.action and actions.link for open-action counts (both optional)
   activate(ctx) {
     const store = makeStore(ctx)
     registerSchema(ctx)

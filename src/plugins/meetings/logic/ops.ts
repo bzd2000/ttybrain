@@ -206,7 +206,7 @@ export function registerOps(ctx: PluginContext, store: Store): void {
           if (m.status === "held") throw new ValidationError(`${m.ref} is already held`)
           await store.openMeeting(m.ref) // a cancelled meeting cannot be held
           const held = await setStatus(m, "held")
-          const actions = await db.selectFrom("actions.action").select("id").where("meeting_id", "=", m.id).execute()
+          const actions = await db.selectFrom("actions.link").select("action_id").where("record_type", "=", "meeting").where("record_id", "=", m.id).execute()
           const decisions = await db.selectFrom("projects.decision").select("id").where("meeting_id", "=", m.id).execute()
           return { ...held, logged: { actions: actions.length, decisions: decisions.length } }
         },

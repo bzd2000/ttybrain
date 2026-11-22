@@ -4,11 +4,14 @@ import { ValidationError } from "../errors"
 
 // `list` is comma-separated → string[]; `date` accepts the date input forms and is parsed to ISO.
 // `values` restricts a string flag to those values (shown in help as `<a|b|c>`). `placeholder` names the value
-// in help (`--project <code>`); the default comes from the type.
+// in help (`--project <code>`); the default comes from the type. `repeatable` (not for booleans) takes the flag any
+// number of times: its value is the array of every occurrence, each converted, in order (`--link a --link b`; a
+// repeatable list flag gives one flat array).
 export type FlagDef = {
   type: "string" | "boolean" | "number" | "date" | "list"
   description: string
   required?: boolean
+  repeatable?: boolean
   short?: string
   values?: string[]
   placeholder?: string

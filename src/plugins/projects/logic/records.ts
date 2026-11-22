@@ -48,16 +48,18 @@ export function makeStore(ctx: PluginRuntime) {
     archived: Number(r.archived) === 1,
   })
 
-  // The open actions per project id, from actions.action; none while the actions plugin is not loaded.
+  // The open actions linked to each project id, from actions.action and actions.link; none while the actions plugin
+  // is not loaded.
   async function openActions(projectId?: number): Promise<Map<number, number>> {
     try {
       let q = db
-        .selectFrom("actions.action")
-        .select((eb) => ["project_id", eb.fn.countAll().as("n")])
-        .where("status", "=", "open")
-        .where("project_id", "is not", null)
-      if (projectId !== undefined) q = q.where("project_id", "=", projectId)
-      return new Map((await q.groupBy("project_id").execute()).map((r) => [Number(r.project_id), Number(r.n)]))
+        .selectFrom("actions.link as l")
+        .innerJoin("actions.action as a", "a.id", "l.action_id")
+        .select((eb) => ["l.record_id", eb.fn.count("a.id").distinct().as("n")])
+        .where("l.record_type", "=", "project")
+        .where("a.status", "=", "open")
+      if (projectId !== undefined) q = q.where("l.record_id", "=", projectId)
+      return new Map((await q.groupBy("l.record_id").execute()).map((r) => [Number(r.record_id), Number(r.n)]))
     } catch (e) {
       if (e instanceof ViewUnavailableError) return new Map()
       throw e

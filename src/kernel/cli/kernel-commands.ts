@@ -238,6 +238,7 @@ const helpCommandJson = (def: CommandDef) => ({
     type: f.type,
     description: f.description,
     required: f.required === true,
+    ...(f.repeatable ? { repeatable: true } : {}),
     ...(f.short ? { short: f.short } : {}),
     ...(f.values ? { values: f.values } : {}),
     ...(f.placeholder !== undefined ? { placeholder: f.placeholder } : {}),

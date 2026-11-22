@@ -144,9 +144,19 @@ function expectedList(rows: Legacy[]) {
       meeting_id: r.meeting_id,
       meeting: r.meeting_id === null ? null : `M-${r.meeting_id}`,
       notes: r.notes,
+      // The three columns became links (migration 002): project, person, meeting, in that order. Meetings is not
+      // loaded here, so the meeting's ref is the kernel's `meeting:<id>`.
+      links: [
+        ...(r.project_id === null ? [] : [{ type: "project", id: r.project_id, ref: code[r.project_id]! }]),
+        ...(r.for_person_id === null ? [] : [{ type: "person", id: r.for_person_id, ref: handle[r.for_person_id] ?? "—" }]),
+        ...(r.meeting_id === null ? [] : [{ type: "meeting", id: r.meeting_id, ref: `meeting:${r.meeting_id}` }]),
+      ],
     }))
 }
 const COLUMNS = "id, title, due_date, status, done_date, owner_id, project_id, for_person_id, meeting_id, notes, created_at, updated_at"
+// The moved rows in the legacy shape: the action's columns, and its links back as the three columns.
+const link = (type: string) => `(SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = '${type}') AS`
+const MOVED = `id, title, due_date, status, done_date, owner_id, ${link("project")} project_id, ${link("person")} for_person_id, ${link("meeting")} meeting_id, notes, created_at, updated_at`
 const steps = (k: Kernel) => all(k, `SELECT plugin, id FROM kernel_plugin_migration WHERE id LIKE 'upgrade:%' ORDER BY plugin, id`)
 const DONE = [
   { plugin: "actions", id: "upgrade:from-projects" },
@@ -174,7 +184,7 @@ describe("actions: the handover from projects", () => {
       ["actions", "ok", null],
       ["inbox", "ok", null],
     ])
-    expect(all(k, `SELECT ${COLUMNS} FROM actions_action ORDER BY id`)).toEqual(rows)
+    expect(all(k, `SELECT ${MOVED} FROM actions_action a ORDER BY id`)).toEqual(rows)
     expect(all(k, `SELECT count(*) AS n FROM projects_action`)).toEqual([{ n: 0 }])
     expect(steps(k)).toEqual(DONE)
     expect(all(k, `SELECT source, rows FROM actions_handover`)).toEqual([{ source: "projects", rows: 300 }])
@@ -228,7 +238,7 @@ describe("actions: the handover from projects", () => {
     await close(off)
 
     const on = await boot(ALL)
-    expect(all(on, `SELECT ${COLUMNS} FROM actions_action ORDER BY id`)).toEqual(rows)
+    expect(all(on, `SELECT ${MOVED} FROM actions_action a ORDER BY id`)).toEqual(rows)
     expect(all(on, `SELECT count(*) AS n FROM projects_action`)).toEqual([{ n: 0 }])
     expect(steps(on)).toEqual(DONE)
     expect((await ok(on, "action", "list", "--json")).json).toEqual(expectedList(rows))
@@ -245,9 +255,19 @@ describe("actions: the handover from projects", () => {
     await close(off)
 
     const on = await boot(ALL)
-    expect(all(on, `SELECT ${COLUMNS} FROM actions_action ORDER BY id`)).toEqual(rows)
+    expect(all(on, `SELECT ${MOVED} FROM actions_action a ORDER BY id`)).toEqual(rows)
     expect(all(on, `SELECT count(*) AS n FROM projects_action`)).toEqual([{ n: 0 }])
     expect(steps(on)).toEqual(DONE)
+    // The import ran after migration 002, so it wrote links, not the old columns.
+    const expected = rows.flatMap((r) => [
+      ...(r.project_id === null ? [] : [{ action_id: r.id, record_type: "project", record_id: r.project_id }]),
+      ...(r.for_person_id === null ? [] : [{ action_id: r.id, record_type: "person", record_id: r.for_person_id }]),
+      ...(r.meeting_id === null ? [] : [{ action_id: r.id, record_type: "meeting", record_id: r.meeting_id }]),
+    ])
+    expect(expected.length).toBeGreaterThan(3)
+    expect(all(on, `SELECT action_id, record_type, record_id FROM actions_link ORDER BY action_id, id`)).toEqual(expected)
+    expect(all(on, `PRAGMA foreign_key_check`)).toEqual([])
+    expect((await ok(on, "action", "list", "--json")).json).toEqual(expectedList(rows))
   })
 
   test("a row that cannot be moved: nothing moves, projects' rows stay, the step says why and runs again at the next start", async () => {
@@ -283,9 +303,9 @@ describe("actions: the handover from projects", () => {
     await close(off)
 
     const k = await boot(ALL)
-    expect(k.plugins.find((p) => p.id === "actions")).toEqual({ id: "actions", version: "1.0.0", source: "built-in", status: "ok" })
+    expect(k.plugins.find((p) => p.id === "actions")).toEqual({ id: "actions", version: "2.0.0", source: "built-in", status: "ok" })
     expect(steps(k)).toEqual(DONE)
-    expect(all(k, `SELECT ${COLUMNS} FROM actions_action WHERE id < 1000000 ORDER BY id`)).toEqual(rows)
+    expect(all(k, `SELECT ${MOVED} FROM actions_action a WHERE id < 1000000 ORDER BY id`)).toEqual(rows)
     expect(all(k, `SELECT id, title FROM actions_action WHERE id > 1000000 ORDER BY id`)).toEqual([
       { id: 1000001, title: "New while projects was off" },
       { id: 1000002, title: "Another" },
@@ -342,7 +362,7 @@ describe("actions: the handover from projects", () => {
 
     const again = await boot(ALL)
     expect(all(again, `SELECT id, title FROM projects_action`)).toEqual([{ id: 6, title: "Written later with id 6" }])
-    expect(all(again, `SELECT ${COLUMNS} FROM actions_action ORDER BY id`)).toEqual(rows) // nothing imported twice
+    expect(all(again, `SELECT ${MOVED} FROM actions_action a ORDER BY id`)).toEqual(rows) // nothing imported twice
     const projectsStatus = again.plugins.find((p) => p.id === "projects")!
     expect(projectsStatus.status).toBe("ok")
     expect(projectsStatus.error).toBe(

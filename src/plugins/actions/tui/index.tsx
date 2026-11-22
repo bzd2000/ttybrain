@@ -26,25 +26,27 @@ export const actionsTui = defineTui({
     ui.recordForm("action", { id: "action", label: "Action", component: ActionForm })
     ui.recordForm("action", { id: "due", label: "Due date", component: DueForm }) // after the full form: Enter opens that one
 
-    // The project's actions, all of them, as the tab lists them.
+    // The actions linked to the project, all of them, as the tab lists them.
     ui.recordTab("project", {
       id: "actions",
       title: "Actions",
       order: 60,
       count: async (recordRef) => {
         const found = await ui.records.resolve(recordRef)
-        return found === null || found.type !== "project" ? null : n(ui.data.selectFrom("action").where("project_id", "=", found.id))
+        return found === null || found.type !== "project" ? null : n(ui.data.selectFrom("action as a").where(makeStore(ui).linkedTo([found])))
       },
       component: ProjectActions,
     })
-    // The open actions the person owns or that are for them.
+    // The open actions the person owns or that are linked to them.
     ui.recordTab("person", {
       id: "actions",
       title: "Actions",
       order: 50,
       count: async (recordRef) => {
-        const id = (await makeStore(ui).person(recordRef)).id
-        return n(ui.data.selectFrom("action").where("status", "=", "open").where((eb: any) => eb.or([eb("owner_id", "=", id), eb("for_person_id", "=", id)])))
+        const store = makeStore(ui)
+        const id = (await store.person(recordRef)).id
+        const linked = store.linkedTo([{ type: "person", id }])
+        return n(ui.data.selectFrom("action as a").where("a.status", "=", "open").where((eb: any) => eb.or([eb("a.owner_id", "=", id), linked(eb)])))
       },
       component: PersonActions,
     })

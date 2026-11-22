@@ -20,7 +20,7 @@ const viewCols = (kernel: TestKernel, name: string) =>
 describe("meetings plugin skeleton", () => {
   test("meetings loads after projects and people and publishes its views", async () => {
     k = await makeTestKernel({ plugins: [meetings, projects, people, actions] })
-    expect(meetings.requires).toEqual({ projects: "^2", people: "^1", actions: "^1" })
+    expect(meetings.requires).toEqual({ projects: "^2", people: "^1", actions: "^2" })
     expect(viewCols(k, "meeting")).toEqual(["id", "title", "date", "kind", "status"])
     expect(viewCols(k, "agenda_item")).toEqual(["id", "meeting_id", "position", "text", "project_id", "ask"])
     expect(viewCols(k, "attendee")).toEqual(["meeting_id", "person_id"])

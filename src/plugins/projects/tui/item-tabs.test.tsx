@@ -280,7 +280,7 @@ describe("actions tab", () => {
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, "Call vendor")
     expect(lineWith(frame, "Call vendor")).toContain("me")
-    expect(await rows("action", ["title", "owner_id", "project_id"])).toEqual([{ title: "Call vendor", owner_id: null, project_id: 1 }])
+    expect(kernel!.db.raw.prepare("SELECT title, owner_id, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'project') AS project_id FROM actions_action a ORDER BY id").all([])).toEqual([{ title: "Call vendor", owner_id: null, project_id: 1 }])
   })
 
   test("x on an action sets it to done; the tab counts all actions, so it stays", async () => {
@@ -343,7 +343,7 @@ describe("meeting-linked forms", () => {
     await type(tui, "Send the minutes")
     tui.input.pressKey("s", { ctrl: true })
     await untilThat(tui, (f) => !f.includes("New action"))
-    expect(await rows("action", ["title", "meeting_id", "project_id"])).toEqual([{ title: "Send the minutes", meeting_id: 1, project_id: 1 }])
+    expect(kernel!.db.raw.prepare("SELECT title, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'meeting') AS meeting_id, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'project') AS project_id FROM actions_action a ORDER BY id").all([])).toEqual([{ title: "Send the minutes", meeting_id: 1, project_id: 1 }])
     void overlay!.openForm("decision", "decision", { prefill: { meeting: "M-2", project: "#CRM" } })
     frame = await until(tui, "New decision")
     expect(frame).toContain("New decision · M-2")

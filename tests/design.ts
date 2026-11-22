@@ -326,8 +326,10 @@ export async function seedLongRefs(kernel: Kernel): Promise<void> {
     await projects.setHealth!({ project: "DATAPLATFORM2027", health: "red", comment: "Ingest blocked", date: "2026-11-10" })
     await projects.addMilestone!({ project: "DATAPLATFORM2027", title: "Ingest live", due: "2026-11-09" })
     await projects.addInvolvement!({ project: "DATAPLATFORM2027", person: "alexandra", role: "sponsor" })
-    const first = await actions.addAction!({ title: "Unblock ingest", project: "DATAPLATFORM2027", due: "2026-11-10" })
+    // Moved before it is linked (a link references the action's id).
+    const first = await actions.addAction!({ title: "Unblock ingest", due: "2026-11-10" })
     kernel.db.raw.exec(`UPDATE actions_action SET id = 1000 WHERE id = ${Number(first.ref.slice(2))}`)
+    await actions.editAction!({ ref: "A-1000", project: "DATAPLATFORM2027" })
     await actions.addAction!({ title: "Confirm cluster size", project: "DATAPLATFORM2027", due: "2026-11-13" })
     const risk = await projects.addRisk!({ project: "DATAPLATFORM2027", title: "Ingest vendor late", type: "risk", severity: "high" })
     kernel.db.raw.exec(`UPDATE projects_risk SET id = 1000 WHERE id = ${Number(risk.ref.slice(2))}`)

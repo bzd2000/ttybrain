@@ -67,7 +67,7 @@ export function ProjectActions(props: { recordRef: string }) {
     async () => {
       const found = await rt.records.resolve(props.recordRef)
       if (found === null || found.type !== "project") return []
-      return (await store.actionQuery().where("a.project_id", "=", found.id).execute()).map(store.toAction).sort(byOpenThenDue)
+      return (await store.toActions(await store.actionQuery().where(store.linkedTo([found])).execute())).sort(byOpenThenDue)
     },
     { key: () => props.recordRef },
   )

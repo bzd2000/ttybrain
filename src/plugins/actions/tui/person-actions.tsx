@@ -65,7 +65,8 @@ export function PersonActions(props: { recordRef: string }) {
     async (): Promise<{ personId: number; stakeholder: boolean; actions: ActionRecord[] }> => {
       const person = await store.person(props.recordRef)
       const flags = await rt.data.selectFrom("people.person").select("is_stakeholder").where("id", "=", person.id).executeTakeFirstOrThrow()
-      const actions = (await store.actionQuery().where((eb) => eb.or([eb("a.owner_id", "=", person.id), eb("a.for_person_id", "=", person.id)])).execute()).map(store.toAction)
+      const linked = store.linkedTo([{ type: "person", id: person.id }])
+      const actions = await store.toActions(await store.actionQuery().where((eb) => eb.or([eb("a.owner_id", "=", person.id), linked(eb)])).execute())
       return { personId: person.id, stakeholder: Number(flags.is_stakeholder) === 1, actions: actions.sort(byOpenThenDone) }
     },
     { key: () => props.recordRef },

@@ -92,8 +92,8 @@ export function ActionsScreen() {
   // One query: every action with the people's names, the meeting titles (when the meetings plugin is there) and
   // the inbox origins of those without a for person, the origins in a single batch.
   const q = useQuery(async () => {
-    const raw = await store.actionQuery().execute()
-    const recs = raw.map(store.toAction)
+    const loaded = await store.load(await store.actionQuery().execute())
+    const recs = loaded.map((x) => x.rec)
     const titles = new Map<string, string>()
     if (rt.records.hasType("meeting")) {
       // The meeting's date from the meetings plugin's published view (optional): `SteerCo 28 Oct`.
@@ -119,13 +119,12 @@ export function ActionsScreen() {
       "action",
       recs.filter((r) => r.for === null && !(r.meeting !== null && titles.has(r.meeting))).map((r) => r.id),
     )
-    return recs.map((rec, i): Row => {
-      const r = raw[i] as any
+    return loaded.map(({ rec, ...x }): Row => {
       const origin = origins.get(rec.id)
-      const forName: string | null = rec.for_person_id === null ? null : String(r.for_name ?? (r.for_handle ? `@${r.for_handle}` : ""))
+      const forName: string | null = rec.for_person_id === null ? null : (x.forName ?? "")
       const meeting = rec.meeting === null ? undefined : titles.get(rec.meeting)
       const forFrom = forName ? { text: forName, person: true } : { text: meeting || (origin?.type === "inbox" ? `inbox ${origin.ref}` : "") || "—", person: false }
-      return { rec, ownerName: firstName(r.owner_name, r.owner_handle), forFrom }
+      return { rec, ownerName: firstName(x.ownerName, x.ownerHandle), forFrom }
     })
   })
 

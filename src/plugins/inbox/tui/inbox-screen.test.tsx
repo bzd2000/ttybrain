@@ -113,7 +113,7 @@ describe("inbox screen", () => {
     expect(frame).toContain("call about")
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, (f) => f.includes("→ Action A-1") && !f.includes("New action"))
-    const action = await inCtx(async () => (await (kernel!.runtime("actions")!.data as any).selectFrom("action").select(["title", "project_id"]).executeTakeFirst()) as any)
+    const action = kernel!.db.raw.prepare("SELECT title, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'project') AS project_id FROM actions_action a").all([])[0] as any
     expect(action).toEqual({ title: "call about", project_id: 1 })
     const it = await item("I-1")
     expect([it.status, it.summary, it.processed_by]).toEqual(["processed", "Action A-1", "you"])

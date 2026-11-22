@@ -83,10 +83,10 @@ describe("actions", () => {
       meeting_id: null,
       meeting: null,
       notes: null,
+      links: [{ type: "person", id: 1, ref: "@peter" }],
     })
-    expect(viewRows("action")).toEqual([
-      { id: 1, title: "Send roadmap", due_date: "2026-11-20", status: "open", done_date: null, owner_id: null, project_id: null, for_person_id: 1, meeting_id: null },
-    ])
+    expect(viewRows("action")).toEqual([{ id: 1, title: "Send roadmap", due_date: "2026-11-20", status: "open", done_date: null, owner_id: null }])
+    expect(viewRows("link")).toEqual([{ id: 1, action_id: 1, record_type: "person", record_id: 1 }])
     await ok("action", "add", "Call vendor", "--due", "2026-11-01", "--project", "CRM", "--owner", "bob") // A-2: overdue
     await ok("action", "add", "Book room", "--due", "sun") // A-3: 2026-11-15, this week
     await ok("action", "add", "Draft plan", "--due", "2026-12-01") // A-4: later

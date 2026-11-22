@@ -206,7 +206,7 @@ describe("meeting tabs", () => {
     await t.input.typeText("Send the budget")
     t.input.pressKey("s", { ctrl: true })
     await until(t, (f) => !f.includes("New action · M-2"))
-    const rows = await inCtx(async () => await data("actions").selectFrom("action").select(["title", "meeting_id", "project_id"]).orderBy("id").execute())
+    const rows = kernel!.db.raw.prepare("SELECT title, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'meeting') AS meeting_id, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'project') AS project_id FROM actions_action a ORDER BY id").all([])
     expect(rows.at(-1)).toEqual({ title: "Send the budget", meeting_id: 2, project_id: 1 })
   })
 
