@@ -84,6 +84,7 @@ describe("talk-lists", () => {
       project: null,
       added_date: "2026-11-20",
       position: 1,
+      carried: false,
       status: "open",
       meeting: null,
     })
@@ -95,6 +96,7 @@ describe("talk-lists", () => {
       project: "#ERP",
       added_date: "2026-11-20",
       position: 2,
+      carried: false,
       status: "open",
       meeting: null,
     })
@@ -120,17 +122,31 @@ describe("talk-lists", () => {
     const list = await r(k, "talkList", { about: "@anna" })
     expect(list).toEqual({
       open: [
-        { ref: "T-3", id: 3, about: "@anna", text: "Holiday planning around go-live", project: null, added_date: "2026-11-20", position: 1, status: "open", meeting: null },
-        { ref: "T-2", id: 2, about: "@anna", text: "Vendor B's architecture", project: null, added_date: "2026-11-20", position: 2, status: "open", meeting: null },
+        { ref: "T-3", id: 3, about: "@anna", text: "Holiday planning around go-live", project: null, added_date: "2026-11-20", position: 1, carried: false, status: "open", meeting: null },
+        { ref: "T-2", id: 2, about: "@anna", text: "Vendor B's architecture", project: null, added_date: "2026-11-20", position: 2, carried: false, status: "open", meeting: null },
       ],
       carried: [],
     })
 
-    // Reopening puts it back at the end.
-    expect(await w(k, "reopenTalk", { ref: "T-1" })).toMatchObject({ ref: "T-1", status: "open", position: 3 })
+    // Reopening puts it back at the place it had (2), or at the end when the list is shorter now.
+    expect(await w(k, "reopenTalk", { ref: "T-1" })).toMatchObject({ ref: "T-1", status: "open", position: 2 })
+    expect(stored(k).slice(0, 3)).toEqual([
+      ["T-1", "person:1", 2, "open", null],
+      ["T-2", "person:1", 3, "open", null],
+      ["T-3", "person:1", 1, "open", null],
+    ])
+    await w(k, "dropTalk", { ref: "T-2" }) // at 3
+    await w(k, "dropTalk", { ref: "T-1" })
+    expect(await w(k, "reopenTalk", { ref: "T-2" })).toMatchObject({ ref: "T-2", position: 2 }) // min(3, 1 + 1)
+    expect(await w(k, "reopenTalk", { ref: "T-1" })).toMatchObject({ ref: "T-1", position: 2 })
+    expect(stored(k).slice(0, 3)).toEqual([
+      ["T-1", "person:1", 2, "open", null],
+      ["T-2", "person:1", 3, "open", null],
+      ["T-3", "person:1", 1, "open", null],
+    ])
 
     expect(await d(k, "addTalk", { about: "@anna", text: "x", project: "ERP" })).toBe('+ talk @anna "x" #ERP')
-    expect(await d(k, "moveTalk", { ref: "T-1", to: 1 })).toBe("~ T-1 position 3 → 1")
+    expect(await d(k, "moveTalk", { ref: "T-1", to: 1 })).toBe("~ T-1 position 2 → 1")
     expect(await d(k, "dropTalk", { ref: "t-1" })).toBe("~ T-1 dropped")
     expect(await d(k, "discussTalk", { ref: "T-1", meeting: "M-4" })).toBe("~ T-1 discussed in M-4")
     expect(await d(k, "reopenTalk", { ref: "T-1" })).toBe("~ T-1 reopened")
@@ -143,13 +159,21 @@ describe("talk-lists", () => {
     expect([nobody.name, nobody.message]).toEqual(["NotFoundError", 'unknown person "@nobody"'])
     const tag = await failure(w(k, "addTalk", { about: "@anna", text: "x", project: "@bob" }))
     expect([tag.name, tag.message]).toEqual(["NotFoundError", 'unknown project "@BOB"'])
+    const own = await failure(w(k, "addTalk", { about: "#CRM", text: "x", project: "ERP" }))
+    expect([own.name, own.message, own.field, own.hint]).toEqual([
+      "ValidationError",
+      "a project tag is for a person's item; #CRM's own items are on its meetings already",
+      "project",
+      "leave out the project, or add the item to the person's talk-list",
+    ])
     await w(k, "addTalk", { about: "@anna", text: "one" })
     const move = await failure(w(k, "moveTalk", { ref: "T-1", to: 2 }))
     expect([move.name, move.message, move.field, move.hint]).toEqual(["ValidationError", "@anna's talk-list has 1 open item", "to", "use 1 to 1"])
     const missing = await failure(w(k, "dropTalk", { ref: "T-9" }))
     expect([missing.name, missing.message]).toEqual(["NotFoundError", 'unknown talk item "T-9"'])
     await w(k, "dropTalk", { ref: "T-1" })
-    expect((await failure(w(k, "dropTalk", { ref: "T-1" }))).message).toBe("T-1 is dropped")
+    const dropped = await failure(w(k, "dropTalk", { ref: "T-1" }))
+    expect([dropped.message, dropped.hint]).toEqual(["T-1 is dropped", "reopen it first: ttybrain talk reopen T-1"])
     expect((await failure(w(k, "moveTalk", { ref: "T-1", to: 1 }))).message).toBe("T-1 is dropped")
     expect((await failure(w(k, "discussTalk", { ref: "T-1" }))).message).toBe("T-1 is dropped")
     await w(k, "reopenTalk", { ref: "T-1" })
@@ -166,7 +190,6 @@ describe("talk-lists", () => {
     await w(k, "addTalk", { about: "#ERP", text: "Vendor shortlist" }) // T-3
     await w(k, "addTalk", { about: "#ERP", text: "Licence costs" }) // T-4
     await w(k, "addTalk", { about: "@bob", text: "Test data for ERP", project: "ERP" }) // T-5
-    await w(k, "addTalk", { about: "#CRM", text: "Not for ERP", project: "ERP" }) // T-6: a project's own item; its tag shows nowhere else
 
     expect(refs((await r(k, "talkList", { about: "@anna" })).open)).toEqual(["T-1", "T-2"])
     // The project's list: its own items, then those tagged with it on people's lists.
@@ -243,7 +266,7 @@ describe("talk-lists", () => {
     expect(list.carriedFrom).toBe("2026-11-09")
     expect(refs(list.open)).toEqual(["T-3", "T-4"])
     expect(list.carried).toEqual([
-      { ref: "T-1", id: 1, about: "@anna", text: "Workload: two projects at once", project: null, added_date: "2026-11-02", position: 1, status: "open", meeting: null },
+      { ref: "T-1", id: 1, about: "@anna", text: "Workload: two projects at once", project: null, added_date: "2026-11-02", position: 1, carried: true, status: "open", meeting: null },
     ])
     // No held meeting with Bob: nothing is carried.
     expect(await r(k, "talkList", { about: "@bob" })).toEqual({ open: [], carried: [] })
@@ -253,13 +276,33 @@ describe("talk-lists", () => {
     expect(shown.out).toBe(
       [
         "@anna · 2 open, 1 carried",
-        "2. T-3  Added on the day of the meeting  —  2026-11-09",
-        "3. T-4  AWS training budget              —  2026-11-20",
+        "1. T-3  Added on the day of the meeting  —  2026-11-09",
+        "2. T-4  AWS training budget              —  2026-11-20",
         "carried over from 2026-11-09",
-        "1. T-1  Workload: two projects at once   —  2026-11-02",
+        "↻  T-1  Workload: two projects at once   —  2026-11-02",
         "",
       ].join("\n"),
     )
+    expect(list.open.map((t: any) => [t.ref, t.position, t.carried])).toEqual([
+      ["T-3", 1, false],
+      ["T-4", 2, false],
+    ])
+    expect((await cli(k, "talk", "list", "@anna", "--json")).json.map((t: any) => [t.ref, t.position, t.carried])).toEqual([
+      ["T-3", 1, false],
+      ["T-4", 2, false],
+      ["T-1", 1, true],
+    ])
+
+    // A move stays inside the item's group: the carried item keeps its slot on the list.
+    expect((await cli(k, "talk", "move", "T-4", "--to", "1")).out).toBe("T-4 moved to 1\n")
+    expect(stored(k).filter((t) => t[3] === "open").map((t) => [t[0], t[2]])).toEqual([
+      ["T-1", 1],
+      ["T-3", 3],
+      ["T-4", 2],
+    ])
+    expect(refs((await r(k, "talkList", { about: "@anna" })).open)).toEqual(["T-4", "T-3"])
+    const carriedMove = await failure(w(k, "moveTalk", { ref: "T-1", to: 2 }))
+    expect([carriedMove.message, carriedMove.hint]).toEqual(["@anna's talk-list has 1 carried item", "use 1 to 1"])
   })
 
   test("the CLI: talk add, list, move, done, drop", async () => {
@@ -291,8 +334,8 @@ describe("talk-lists", () => {
 
     const json = await cli(k, "talk", "list", "@anna", "--json")
     expect(json.json).toEqual([
-      { ref: "T-1", id: 1, about: "@anna", text: "AWS training budget for next year", project: null, added_date: "2026-11-20", position: 1, status: "open", meeting: null },
-      { ref: "T-2", id: 2, about: "@anna", text: "Her view on Vendor B", project: "#ERP", added_date: "2026-11-20", position: 2, status: "open", meeting: null },
+      { ref: "T-1", id: 1, about: "@anna", text: "AWS training budget for next year", project: null, added_date: "2026-11-20", position: 1, carried: false, status: "open", meeting: null },
+      { ref: "T-2", id: 2, about: "@anna", text: "Her view on Vendor B", project: "#ERP", added_date: "2026-11-20", position: 2, carried: false, status: "open", meeting: null },
     ])
 
     expect((await cli(k, "talk", "move", "T-2", "--to", "1")).out).toBe("T-2 moved to 1\n")
@@ -303,7 +346,7 @@ describe("talk-lists", () => {
     expect((await cli(k, "talk", "drop", "T-1")).out).toBe("T-1 dropped\n")
     expect((await cli(k, "talk", "list", "@anna")).out).toBe("no open talk items for @anna\n")
     const drop = await cli(k, "talk", "drop", "T-1", "--json")
-    expect([drop.code, drop.json.error.message]).toEqual([1, "T-1 is dropped"])
+    expect([drop.code, drop.json.error.message, drop.json.error.hint]).toEqual([1, "T-1 is dropped", "reopen it first: ttybrain talk reopen T-1"])
     const unknown = await cli(k, "talk", "add", "@nobody", "x")
     expect([unknown.code, unknown.err]).toEqual([2, 'error: unknown person "@nobody"\n'])
 
@@ -313,6 +356,8 @@ describe("talk-lists", () => {
       ["T-3", "project:1", 1, "open", null],
       ["T-4", "person:2", 1, "open", null],
     ])
+    expect((await cli(k, "talk", "reopen", "T-2")).out).toBe("T-2 reopened at 1\n")
+    expect((await cli(k, "talk", "reopen", "T-2")).err).toBe("error: T-2 is open\n")
   })
 
   test("Review Focus 4: a deleted person, an archived or deleted project: items stay listed, shown by stored ref or —", async () => {
@@ -321,6 +366,7 @@ describe("talk-lists", () => {
     await w(k, "addTalk", { about: "@bob", text: "Bob's item", project: "#ERP" }) // T-1
     await w(k, "addTalk", { about: "#CRM", text: "CRM item" }) // T-2
     await w(k, "addTalk", { about: "@anna", text: "Anna's item", project: "#CRM" }) // T-3
+    await w(k, "addMeeting", { about: "@bob", title: "1:1 Bob", date: "2026-11-25" }) // M-2
     await w(k, "archiveProject", { project: "CRM" }, "projects")
     k.db.raw.prepare("DELETE FROM people_person WHERE handle = 'bob'").run([])
     k.db.raw.prepare("DELETE FROM projects_project WHERE code = 'ERP'").run([])
@@ -352,12 +398,33 @@ describe("talk-lists", () => {
       project: "—",
       added_date: "2026-11-20",
       position: 1,
+      carried: false,
       status: "open",
       meeting: null,
     })
     // The item can still be worked on.
     expect(await w(k, "dropTalk", { ref: "T-1" })).toMatchObject({ ref: "T-1", about: "—", status: "dropped" })
     expect(await runWithContext(k.context(), () => k.records.label("T-1"))).toBe("Bob's item")
+    // A meeting about someone gone shows the same.
+    expect(await r(k, "upcoming", { from: "today", to: "+7d" })).toMatchObject({ meetings: [{ ref: "M-1", about: "#CRM" }, { ref: "M-2", about: "—" }] })
+  })
+
+  test("skipping or cancelling a meeting reopens what was ticked in it, near its old place", async () => {
+    const k = await boot()
+    await w(k, "addMeeting", { about: "@anna", title: "1:1 Anna", date: "2026-11-23" }) // M-1
+    await w(k, "addMeeting", { about: "@anna", title: "1:1 Anna", date: "2026-11-30" }) // M-2
+    for (const text of ["one", "two", "three"]) await w(k, "addTalk", { about: "@anna", text })
+    await w(k, "discussTalk", { ref: "T-2", meeting: "M-1" })
+    await w(k, "discussTalk", { ref: "T-3", meeting: "M-2" })
+    await w(k, "skipMeeting", { ref: "M-1" })
+    expect(stored(k)).toEqual([
+      ["T-1", "person:1", 1, "open", null],
+      ["T-2", "person:1", 2, "open", null],
+      ["T-3", "person:1", null, "discussed", 2],
+    ])
+    // T-3 was ticked when it was second on the list (T-2 was off it then): back at 2.
+    await w(k, "cancelMeeting", { ref: "M-2" })
+    expect(refs((await r(k, "talkList", { about: "@anna" })).open)).toEqual(["T-1", "T-3", "T-2"])
   })
 
   test("T-n record type, the published view, and an occurrence an item was discussed in is never removed", async () => {

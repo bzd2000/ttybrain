@@ -16,6 +16,7 @@ import {
   type Static,
 } from "@ttybrain/api"
 import type { Store } from "./records"
+import type { Talks } from "./talk"
 import { KindInput, MeetingKind, MeetingRecord, MeetingStatus, type MeetingRecord as Meeting, type SubjectType } from "./schema"
 import { dateField as date, kindFor, normalizeKind, shownDate } from "./series"
 import { sinceFor, type SinceResult } from "./since"
@@ -87,7 +88,7 @@ const clean = (v: string | null | undefined) => (blank(v) ? null : v!.trim())
 const items = (n: number) => (n === 0 ? "no items" : `only ${n} ${n === 1 ? "item" : "items"}`)
 const uniq = <T>(xs: T[]) => [...new Set(xs)]
 
-export function registerOps(ctx: PluginContext, store: Store): void {
+export function registerOps(ctx: PluginContext, store: Store, talks: Talks): void {
   const db = ctx.data
 
   // The meeting as it is now, for a describe line; undefined when the ref does not resolve.
@@ -124,6 +125,12 @@ export function registerOps(ctx: PluginContext, store: Store): void {
   async function setStatus(m: Meeting, status: "held" | "cancelled"): Promise<Meeting> {
     await db.updateTable("meeting").set({ status, updated_at: now() }).where("id", "=", m.id).execute()
     return store.meeting(m.ref)
+  }
+
+  // A skipped or cancelled meeting takes place nowhere: the talk items ticked in it are open again.
+  async function dropMeeting(m: Meeting): Promise<Meeting> {
+    await talks.reopenDiscussedIn(m.id)
+    return setStatus(m, "cancelled")
   }
 
   // A meeting's subject type, or null for one that has none yet (from before subjects existed).
@@ -240,7 +247,7 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         input: MeetingRef,
         output: MeetingRecord,
         describe: async (i: { ref: string }) => `~ ${refOf(i.ref, await before(i.ref))} skipped`,
-        run: async (i: { ref: string }) => setStatus(await store.openMeeting(i.ref), "cancelled"),
+        run: async (i: { ref: string }) => dropMeeting(await store.openMeeting(i.ref)),
       },
       // Move a planned meeting to another date (M3): an occurrence keeps the series date it was made for.
       moveMeeting: {
@@ -287,7 +294,7 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         input: MeetingRef,
         output: MeetingRecord,
         describe: async (i: { ref: string }) => `~ ${refOf(i.ref, await before(i.ref))} cancelled`,
-        run: async (i: { ref: string }) => setStatus(await store.openMeeting(i.ref), "cancelled"),
+        run: async (i: { ref: string }) => dropMeeting(await store.openMeeting(i.ref)),
       },
       closeMeeting: {
         input: MeetingRef,

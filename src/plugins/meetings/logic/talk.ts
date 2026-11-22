@@ -1,10 +1,11 @@
 // Talk-lists (design §5.3, rulings M5, M8, M12). A talk item is something to raise with a person or about a project
-// (its subject), with an optional project tag. While open it has a place on its subject's list (positions 1..n,
-// dense through add, move, drop, discuss and reopen); discussing it (in a meeting, or elsewhere) or dropping it takes
-// it off the list. A person's item tagged with a project is also on that project's list and its meetings' agendas,
-// until it is discussed in either place. The "carried" group is the open items added before the subject's last held
-// meeting. Subjects and tags are soft references shown through the record registry: one that no longer resolves
-// shows as `—` (or `<type>:<id>` while its plugin is not loaded), and the item stays listed (Review Focus 4).
+// (its subject), with an optional project tag (a person's items only). While open it has a place on its subject's
+// list; the list shows two groups, the items added since the subject's last held meeting and those carried over from
+// before it, and an item's `position` is its rank in its group (moves stay inside the group). Discussing an item (in a
+// meeting, or elsewhere) or dropping it takes it off the list; reopening puts it back near the place it had. A person's
+// item tagged with a project is also on that project's list and its meetings' agendas, until it is discussed in either
+// place. Subjects and tags are soft references shown through the people and projects views: `—` once the record is
+// gone, `<type>:<id>` while no plugin registers the type; the item stays listed (Review Focus 4).
 import { currentContext, formatRef, NonBlank, normalizeCode, NotFoundError, parseRef, Type, ValidationError, type PluginContext, type Static } from "@ttybrain/api"
 import type { Store, Subject } from "./records"
 import { TalkRecord, type SubjectType, type TalkRecord as Talk } from "./schema"
@@ -24,8 +25,21 @@ type EditInput = Static<typeof EditTalk>
 type MoveInput = Static<typeof MoveTalk>
 type DiscussInput = Static<typeof DiscussTalk>
 
-const COLUMNS = ["id", "subject_type", "subject_id", "text", "project_id", "added_date", "position", "status", "meeting_id"] as const
-type Row = { id: number; subject_type: SubjectType; subject_id: number; text: string; project_id: number | null; added_date: string; position: number | null; status: Talk["status"]; meeting_id: number | null }
+const COLUMNS = ["id", "subject_type", "subject_id", "text", "project_id", "added_date", "position", "last_position", "status", "meeting_id"] as const
+type Row = {
+  id: number
+  subject_type: SubjectType
+  subject_id: number
+  text: string
+  project_id: number | null
+  added_date: string
+  position: number | null
+  last_position: number | null
+  status: Talk["status"]
+  meeting_id: number | null
+}
+// A subject's open items split into the two groups the list shows, in list order.
+type Groups = { since?: string; open: Row[]; carried: Row[] }
 
 const today = () => currentContext().today
 const now = () => currentContext().now
@@ -35,6 +49,7 @@ const shownRef = (input: string, prefix: string) => {
   const n = parseRef(input, prefix)
   return n === null ? input.trim() : formatRef(prefix, n)
 }
+const talkRef = (r: Row) => formatRef("T-", r.id)
 
 export function makeTalks(ctx: PluginContext, store: Store) {
   const db = ctx.data
@@ -46,46 +61,11 @@ export function makeTalks(ctx: PluginContext, store: Store) {
     project_id: r.project_id === null ? null : Number(r.project_id),
     added_date: String(r.added_date),
     position: r.position === null ? null : Number(r.position),
+    last_position: r.last_position === null ? null : Number(r.last_position),
     status: r.status as Talk["status"],
     meeting_id: r.meeting_id === null ? null : Number(r.meeting_id),
   })
   const select = () => db.selectFrom("talk_item").select([...COLUMNS])
-
-  // The display ref of a subject or tag through the record registry: `@anna`, `#CRM`; `person:<id>` when its type is
-  // not registered (its plugin is off); `—` when the record is gone.
-  async function shown(type: SubjectType, id: number, memo: Map<string, Promise<string>>): Promise<string> {
-    const key = `${type}:${id}`
-    if (!memo.has(key))
-      memo.set(
-        key,
-        ctx.records.refOf(type, id).catch(() => "—"),
-      )
-    return memo.get(key)!
-  }
-
-  async function records(rows: Row[], memo = new Map<string, Promise<string>>()): Promise<Talk[]> {
-    const out: Talk[] = []
-    for (const r of rows)
-      out.push({
-        ref: formatRef("T-", r.id),
-        id: r.id,
-        about: await shown(r.subject_type, r.subject_id, memo),
-        text: r.text,
-        project: r.project_id === null ? null : await shown("project", r.project_id, memo),
-        added_date: r.added_date,
-        position: r.position,
-        status: r.status,
-        meeting: r.meeting_id === null ? null : formatRef("M-", r.meeting_id),
-      })
-    return out
-  }
-
-  async function row(input: string): Promise<Row> {
-    const id = await store.talkId(input)
-    if (id === null) throw new NotFoundError(`unknown talk item "${shownRef(input, "T-")}"`, { hint: 'run "ttybrain talk list"' })
-    return toRow(await select().where("id", "=", id).executeTakeFirstOrThrow())
-  }
-  const item = async (input: string) => (await records([await row(input)]))[0]!
 
   // A subject's own open items, in list order.
   const ownOpen = async (type: SubjectType, id: number) =>
@@ -108,16 +88,64 @@ export function makeTalks(ctx: PluginContext, store: Store) {
       .executeTakeFirst()
     return m ? String(m.date) : undefined
   }
+  // The open items of a subject in their two groups: carried = added before its last held meeting.
+  async function groups(type: SubjectType, id: number): Promise<Groups> {
+    const rows = await ownOpen(type, id)
+    const since = await lastHeld(type, id)
+    const old = (r: Row) => since !== undefined && r.added_date < since
+    return { since, open: rows.filter((r) => !old(r)), carried: rows.filter(old) }
+  }
 
-  // A subject's talk-list: its own open items, then (for a project) people's items tagged with it; split into those
-  // added since its last held meeting and those carried over from before it. `own` leaves the tagged items out.
+  type Memo = { refs: Map<string, Promise<string>>; groups: Map<string, Promise<Groups>> }
+  const memo = (): Memo => ({ refs: new Map(), groups: new Map() })
+  const cached = <T>(m: Map<string, Promise<T>>, key: string, make: () => Promise<T>) => {
+    if (!m.has(key)) m.set(key, make())
+    return m.get(key)!
+  }
+
+  async function records(rows: Row[], m = memo()): Promise<Talk[]> {
+    const out: Talk[] = []
+    for (const r of rows) {
+      const shown = (type: SubjectType, id: number) => cached(m.refs, `${type}:${id}`, () => store.subjectRef(type, id))
+      let position: number | null = null
+      let carried = false
+      if (r.status === "open") {
+        const g = await cached(m.groups, `${r.subject_type}:${r.subject_id}`, () => groups(r.subject_type, r.subject_id))
+        carried = g.carried.some((c) => c.id === r.id)
+        position = (carried ? g.carried : g.open).findIndex((c) => c.id === r.id) + 1
+      }
+      out.push({
+        ref: talkRef(r),
+        id: r.id,
+        about: await shown(r.subject_type, r.subject_id),
+        text: r.text,
+        project: r.project_id === null ? null : await shown("project", r.project_id),
+        added_date: r.added_date,
+        position,
+        carried,
+        status: r.status,
+        meeting: r.meeting_id === null ? null : formatRef("M-", r.meeting_id),
+      })
+    }
+    return out
+  }
+
+  async function row(input: string): Promise<Row> {
+    const id = await store.talkId(input)
+    if (id === null) throw new NotFoundError(`unknown talk item "${shownRef(input, "T-")}"`, { hint: 'run "ttybrain talk list"' })
+    return toRow(await select().where("id", "=", id).executeTakeFirstOrThrow())
+  }
+  const item = async (input: string) => (await records([await row(input)]))[0]!
+
+  // A subject's talk-list: its own open items in their two groups; a project's open group then has people's items
+  // tagged with it (unnumbered there: their place is on their person's list). `own` leaves the tagged items out.
   async function list(subject: Pick<Subject, "type" | "id">, opts: { own?: boolean } = {}): Promise<TalkList> {
-    const rows = [...(await ownOpen(subject.type, subject.id)), ...(subject.type === "project" && !opts.own ? await taggedOpen(subject.id) : [])]
-    const since = await lastHeld(subject.type, subject.id)
-    const all = await records(rows)
-    const carried = since === undefined ? [] : all.filter((t) => t.added_date < since)
-    const open = all.filter((t) => !carried.includes(t))
-    return since === undefined || carried.length === 0 ? { open, carried } : { open, carried, carriedFrom: since }
+    const g = await groups(subject.type, subject.id)
+    const tagged = subject.type === "project" && !opts.own ? await taggedOpen(subject.id) : []
+    const m = memo()
+    const open = await records([...g.open, ...tagged], m)
+    const carried = await records(g.carried, m)
+    return carried.length === 0 ? { open, carried } : { open, carried, carriedFrom: g.since! }
   }
 
   // A meeting's talk items (M5). A 1:1 or project meeting: the subject's open items (for a project, then people's
@@ -129,48 +157,73 @@ export function makeTalks(ctx: PluginContext, store: Store) {
     if (subject.subject_type === null) return { meeting: m.ref, items: [] }
     const type = subject.subject_type as SubjectType
     const id = Number(subject.subject_id)
-    const here =
-      m.kind === "board"
-        ? []
-        : (await select().where("meeting_id", "=", m.id).where("status", "=", "discussed").orderBy("updated_at").orderBy("id").execute()).map(toRow)
+    const here = m.kind === "board" ? [] : await discussedIn(m.id)
     const own = (r: Row) => r.subject_type === type && r.subject_id === id
     const tagged = type === "project" ? await taggedOpen(id) : []
     const rows = [...here.filter(own), ...(await ownOpen(type, id)), ...here.filter((r) => !own(r)), ...tagged]
     return { meeting: m.ref, items: await records(rows) }
   }
-
-  return { row, item, list, agenda, records, ownOpen }
-}
-
-export function registerTalk(ctx: PluginContext, store: Store, talks: Talks): void {
-  const db = ctx.data
-  const listName = async (r: Row) => `${(await talks.records([r]))[0]!.about}'s talk-list`
+  const discussedIn = async (meetingId: number) =>
+    (await select().where("meeting_id", "=", meetingId).where("status", "=", "discussed").orderBy("updated_at").orderBy("id").execute()).map(toRow)
 
   // Gives a subject's open items positions 1..n in the given order. Two passes, so the unique position never clashes.
   async function reorder(ids: number[]): Promise<void> {
     for (const [i, id] of ids.entries()) await db.updateTable("talk_item").set({ position: -(i + 1) }).where("id", "=", id).execute()
     for (const [i, id] of ids.entries()) await db.updateTable("talk_item").set({ position: i + 1 }).where("id", "=", id).execute()
   }
-  const openIds = async (r: Pick<Row, "subject_type" | "subject_id">) => (await talks.ownOpen(r.subject_type, r.subject_id)).map((t) => t.id)
+  const openIds = async (r: Pick<Row, "subject_type" | "subject_id">) => (await ownOpen(r.subject_type, r.subject_id)).map((t) => t.id)
+
+  // Back onto its subject's list near the place it had: at min(that place, the end).
+  async function reopen(r: Row): Promise<void> {
+    const ids = await openIds(r)
+    const at = Math.min(r.last_position ?? ids.length + 1, ids.length + 1)
+    await db.updateTable("talk_item").set({ status: "open", position: null, meeting_id: null, status_date: null, updated_at: now() }).where("id", "=", r.id).execute()
+    ids.splice(at - 1, 0, r.id)
+    await reorder(ids)
+  }
+  // A meeting that will not take place (skipped or cancelled): what was ticked in it is open again.
+  async function reopenDiscussedIn(meetingId: number): Promise<void> {
+    for (const r of await discussedIn(meetingId)) await reopen(r)
+  }
+
+  return { row, item, list, agenda, records, groups, reorder, openIds, reopen, reopenDiscussedIn }
+}
+
+export function registerTalk(ctx: PluginContext, store: Store, talks: Talks): void {
+  const db = ctx.data
+  const aboutOf = (r: Row) => store.subjectRef(r.subject_type, r.subject_id)
 
   function mustBeOpen(r: Row): void {
-    if (r.status === "dropped") throw new ValidationError(`${formatRef("T-", r.id)} is dropped`, { hint: `reopen it first` })
-    if (r.status === "discussed")
-      throw new ValidationError(`${formatRef("T-", r.id)} is already discussed${r.meeting_id === null ? "" : ` (${formatRef("M-", r.meeting_id)})`}`)
+    const hint = `reopen it first: ttybrain talk reopen ${talkRef(r)}`
+    if (r.status === "dropped") throw new ValidationError(`${talkRef(r)} is dropped`, { hint })
+    if (r.status === "discussed") throw new ValidationError(`${talkRef(r)} is already discussed${r.meeting_id === null ? "" : ` (${formatRef("M-", r.meeting_id)})`}`, { hint })
   }
-  // Takes an open item off its list (discussed or dropped) and closes the gap.
+  // Takes an open item off its list (discussed or dropped), remembering its place, and closes the gap.
   async function close(r: Row, set: { status: "discussed" | "dropped"; meeting_id: number | null }): Promise<void> {
-    await db.updateTable("talk_item").set({ ...set, position: null, status_date: today(), updated_at: now() }).where("id", "=", r.id).execute()
-    await reorder(await openIds(r))
+    await db
+      .updateTable("talk_item")
+      .set({ ...set, position: null, last_position: r.position, status_date: today(), updated_at: now() })
+      .where("id", "=", r.id)
+      .execute()
+    await talks.reorder(await talks.openIds(r))
   }
   const before = async (input: string) => {
     try {
-      return await talks.row(input)
+      return (await talks.records([await talks.row(input)]))[0]
     } catch {
       return undefined
     }
   }
-  const projectTag = async (v: string | null | undefined) => (blank(v) ? null : await store.projectId(v!))
+  // A project tag, for a person's item only: a project's own items are on its meetings already.
+  async function projectTag(subject: { type: SubjectType; ref: string }, v: string | null | undefined): Promise<number | null> {
+    if (blank(v)) return null
+    if (subject.type === "project")
+      throw new ValidationError(`a project tag is for a person's item; ${subject.ref}'s own items are on its meetings already`, {
+        field: "project",
+        hint: "leave out the project, or add the item to the person's talk-list",
+      })
+    return store.projectId(v!)
+  }
 
   ctx.expose({
     read: {
@@ -200,8 +253,8 @@ export function registerTalk(ctx: PluginContext, store: Store, talks: Talks): vo
         },
         run: async (i: AddInput) => {
           const subject = await store.subject(i.about)
-          const project_id = await projectTag(i.project)
-          const position = (await openIds({ subject_type: subject.type, subject_id: subject.id })).length + 1
+          const project_id = await projectTag(subject, i.project)
+          const position = (await talks.openIds({ subject_type: subject.type, subject_id: subject.id })).length + 1
           const t = now()
           const res = await db
             .insertInto("talk_item")
@@ -212,6 +265,7 @@ export function registerTalk(ctx: PluginContext, store: Store, talks: Talks): vo
               project_id,
               added_date: today(),
               position,
+              last_position: null,
               status: "open",
               meeting_id: null,
               status_date: null,
@@ -236,26 +290,37 @@ export function registerTalk(ctx: PluginContext, store: Store, talks: Talks): vo
           const r = await talks.row(i.ref)
           const set: Record<string, unknown> = { updated_at: now() }
           if (i.text !== undefined) set.text = i.text.trim()
-          if (i.project !== undefined) set.project_id = await projectTag(i.project)
+          if (i.project !== undefined) set.project_id = await projectTag({ type: r.subject_type, ref: await aboutOf(r) }, i.project)
           await db.updateTable("talk_item").set(set).where("id", "=", r.id).execute()
           return talks.item(i.ref)
         },
       },
+      // To another rank within its group (the open items, or the carried ones).
       moveTalk: {
         input: MoveTalk,
         output: TalkRecord,
         describe: async (i: MoveInput) => {
-          const r = await before(i.ref)
-          return `~ ${shownRef(i.ref, "T-")} position ${r?.position != null ? `${r.position} → ` : "→ "}${i.to}`
+          const t = await before(i.ref)
+          return `~ ${shownRef(i.ref, "T-")} position ${t?.position != null ? `${t.position} → ` : "→ "}${i.to}`
         },
         run: async (i: MoveInput) => {
           const r = await talks.row(i.ref)
-          if (r.status !== "open") throw new ValidationError(`${formatRef("T-", r.id)} is ${r.status}`)
-          const ids = await openIds(r)
-          if (i.to > ids.length) throw new ValidationError(`${await listName(r)} has ${plural(ids.length, "open item")}`, { field: "to", hint: `use 1 to ${ids.length}` })
-          ids.splice(ids.indexOf(r.id), 1)
-          ids.splice(i.to - 1, 0, r.id)
-          await reorder(ids)
+          mustBeOpen(r)
+          const g = await talks.groups(r.subject_type, r.subject_id)
+          const carried = g.carried.some((c) => c.id === r.id)
+          const group = (carried ? g.carried : g.open).map((c) => c.id)
+          if (i.to > group.length)
+            throw new ValidationError(`${await aboutOf(r)}'s talk-list has ${plural(group.length, carried ? "carried item" : "open item")}`, {
+              field: "to",
+              hint: `use 1 to ${group.length}`,
+            })
+          // The group's items change places among the slots the group holds on the list; the other group stays put.
+          const all = await talks.openIds(r)
+          const slots = all.map((id, n) => (group.includes(id) ? n : -1)).filter((n) => n >= 0)
+          group.splice(group.indexOf(r.id), 1)
+          group.splice(i.to - 1, 0, r.id)
+          for (const [n, slot] of slots.entries()) all[slot] = group[n]!
+          await talks.reorder(all)
           await db.updateTable("talk_item").set({ updated_at: now() }).where("id", "=", r.id).execute()
           return talks.item(i.ref)
         },
@@ -266,7 +331,7 @@ export function registerTalk(ctx: PluginContext, store: Store, talks: Talks): vo
         describe: async (i: { ref: string }) => `~ ${shownRef(i.ref, "T-")} dropped`,
         run: async (i: { ref: string }) => {
           const r = await talks.row(i.ref)
-          if (r.status !== "open") throw new ValidationError(`${formatRef("T-", r.id)} is ${r.status}`)
+          mustBeOpen(r)
           await close(r, { status: "dropped", meeting_id: null })
           return talks.item(i.ref)
         },
@@ -288,23 +353,22 @@ export function registerTalk(ctx: PluginContext, store: Store, talks: Talks): vo
             const id = s.subject_id === null ? null : Number(s.subject_id)
             const onIt =
               (type === r.subject_type && id === r.subject_id) || (type === "project" && r.subject_type === "person" && r.project_id !== null && r.project_id === id)
-            if (!onIt) throw new ValidationError(`${formatRef("T-", r.id)} is not on ${m.ref}'s agenda`, { field: "meeting" })
+            if (!onIt) throw new ValidationError(`${talkRef(r)} is not on ${m.ref}'s agenda`, { field: "meeting" })
             meeting_id = m.id
           }
           await close(r, { status: "discussed", meeting_id })
           return talks.item(i.ref)
         },
       },
-      // Back onto its subject's list, at the end (M5: ticking a discussed item again).
+      // Back onto its subject's list near the place it had (M5: ticking a discussed item again).
       reopenTalk: {
         input: TalkRef,
         output: TalkRecord,
         describe: async (i: { ref: string }) => `~ ${shownRef(i.ref, "T-")} reopened`,
         run: async (i: { ref: string }) => {
           const r = await talks.row(i.ref)
-          if (r.status === "open") throw new ValidationError(`${formatRef("T-", r.id)} is open`)
-          const position = (await openIds(r)).length + 1
-          await db.updateTable("talk_item").set({ status: "open", position, meeting_id: null, status_date: null, updated_at: now() }).where("id", "=", r.id).execute()
+          if (r.status === "open") throw new ValidationError(`${talkRef(r)} is open`)
+          await talks.reopen(r)
           return talks.item(i.ref)
         },
       },

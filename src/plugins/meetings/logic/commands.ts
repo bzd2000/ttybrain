@@ -48,13 +48,15 @@ function meetingText(m: MeetingRecord): string {
   return blocks.join("\n\n")
 }
 
-// One subject's talk-list as text: a heading, then one line per item (its place on the list, ref, text, project tag
-// or `—`, date added); the carried group under its own line. On a project's list, a person's item tagged with the
-// project has no number (its place is on that person's list) and shows whose it is instead of the tag.
+// One subject's talk-list as text: a heading, then one line per item (its rank, ref, text, project tag or `—`, date
+// added); the carried group under its own line, marked `↻` instead of numbered (as the talk mock). On a project's list,
+// a person's item tagged with the project has no number (its place is on that person's list) and shows whose it is
+// instead of the tag.
 function talkBlock(about: string, list: TalkList): string {
   const row = (t: TalkRecord) => {
     const own = t.about === about
-    return [own && t.position !== null ? `${t.position}.` : "", t.ref, t.text, own ? (t.project ?? "—") : t.about, t.added_date]
+    const mark = !own ? "" : t.carried ? "↻" : `${t.position}.`
+    return [mark, t.ref, t.text, own ? (t.project ?? "—") : t.about, t.added_date]
   }
   const open = list.open.map(row)
   const carried = list.carried.map(row)
@@ -141,10 +143,21 @@ export function registerCommands(ctx: PluginContext, store: Store, talks: Talks)
 
   ctx.command({
     thing: "talk",
-    verb: "move",
-    summary: "move a talk item to another place on its list",
+    verb: "reopen",
+    summary: "put a discussed or dropped talk item back on its list, near the place it had",
     args: [{ name: "item", required: true }],
-    flags: { to: { type: "number", description: "the new place (1 is first)", required: true } },
+    run: async ({ args }) => {
+      const t: TalkRecord = await write().reopenTalk!({ ref: args.item })
+      return { json: t, text: `${t.ref} reopened at ${t.position}` }
+    },
+  })
+
+  ctx.command({
+    thing: "talk",
+    verb: "move",
+    summary: "move a talk item to another place within its group on the list (the open items, or the carried ones)",
+    args: [{ name: "item", required: true }],
+    flags: { to: { type: "number", description: "the new place in its group (1 is first)", required: true } },
     run: async ({ args, flags }) => {
       const t: TalkRecord = await write().moveTalk!({ ref: args.item, to: flags.to })
       return { json: t, text: `${t.ref} moved to ${t.position}` }

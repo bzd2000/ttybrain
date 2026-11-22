@@ -42,7 +42,7 @@ export const MeetingRecord = Type.Object({
   notes: Text,
   attendees: Type.Array(Text), // @handles, by name
   agenda: Type.Array(AgendaItem),
-  about: Opt, // the subject: @handle or #CODE (`person:<id>` when it no longer resolves); null before one is given
+  about: Opt, // the subject: @handle or #CODE (`—` once it is gone, `person:<id>` while no plugin registers the type); null before one is given
   series: Opt, // S-n, for an occurrence of a series
 })
 export type MeetingRecord = Static<typeof MeetingRecord>
@@ -69,13 +69,15 @@ export const TalkRecord = Type.Object({
   text: Text,
   project: Opt, // the project tag: #CODE (`—` once it is gone), null for none
   added_date: Text,
-  position: Type.Union([Type.Integer(), Type.Null()]), // 1..n on the subject's list while open, null otherwise
+  // While open: its rank in its group on the subject's list (the open items 1..k, the carried ones 1..c); null otherwise.
+  position: Type.Union([Type.Integer(), Type.Null()]),
+  carried: Type.Boolean(), // open, and added before the subject's last held meeting
   status: TalkStatus,
   meeting: Opt, // M-n it was discussed in
 })
 export type TalkRecord = Static<typeof TalkRecord>
 
-const inList =(col: string, xs: readonly string[]) => sql.raw(`${col} in (${xs.map((x) => `'${x}'`).join(", ")})`)
+const inList = (col: string, xs: readonly string[]) => sql.raw(`${col} in (${xs.map((x) => `'${x}'`).join(", ")})`)
 
 // 001 as meetings 1.0.0 shipped it (kept as is: applied databases have it; the upgrade test builds one with it).
 export async function migration001(db: Kysely<any>): Promise<void> {
@@ -208,7 +210,8 @@ async function migration002(db: Kysely<any>): Promise<void> {
 }
 
 // Talk items. `id` is AUTOINCREMENT, like `meeting`'s: an id is never given again. `position` is the item's place on
-// its subject's list while it is open (1..n, unique per subject), null once discussed or dropped. `meeting_id` is the
+// its subject's list while it is open (1..n, unique per subject; the open and carried groups share it), null once
+// discussed or dropped; `last_position` keeps the place it had then, so reopening puts it back there. `meeting_id` is the
 // meeting it was discussed in (no ON DELETE action, rule 6; meetings deletes only occurrences that hold nothing).
 async function migration003(db: Kysely<any>): Promise<void> {
   await db.schema
@@ -220,6 +223,7 @@ async function migration003(db: Kysely<any>): Promise<void> {
     .addColumn("project_id", "integer") // soft reference to a projects project: the tag
     .addColumn("added_date", "text", (c) => c.notNull())
     .addColumn("position", "integer")
+    .addColumn("last_position", "integer") // the position it had when it was discussed or dropped
     .addColumn("status", "text", (c) => c.notNull().defaultTo("open").check(inList("status", TALK_STATUSES)))
     .addColumn("meeting_id", "integer", (c) => c.references("meeting.id"))
     .addColumn("status_date", "text") // the day it was discussed or dropped

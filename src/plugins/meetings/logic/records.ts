@@ -18,6 +18,7 @@ import type { AgendaItem, MeetingRecord, SeriesRecord, SubjectType } from "./sch
 
 // How many records a "did you mean" looks through (a person's whole team and stakeholders, every project).
 const TAG_CANDIDATES = 1000
+export const GONE = "—" // a soft reference whose record no longer exists
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
 
 export type Subject = { type: SubjectType; id: number; ref: string }
@@ -121,14 +122,15 @@ export function makeStore(ctx: PluginRuntime) {
     return found.id
   }
 
-  // The display ref of a subject: `@handle`, `#CODE`, or `person:<id>` / `project:<id>` when it no longer resolves
-  // (deleted, or its plugin is not loaded).
+  // The display ref of a subject or project tag, through the people and projects views: `@handle`, `#CODE`; `—` when
+  // the record is gone; `person:<id>` / `project:<id>` while no plugin registers the type (as actions' links show).
   async function subjectRef(type: SubjectType, id: number): Promise<string> {
     const row =
       type === "person"
         ? await unlessUnavailable(undefined as { v: unknown } | undefined, () => db.selectFrom("people.person").select("handle as v").where("id", "=", id).executeTakeFirst())
         : await unlessUnavailable(undefined as { v: unknown } | undefined, () => db.selectFrom("projects.project").select("code as v").where("id", "=", id).executeTakeFirst())
-    return row ? `${type === "person" ? "@" : "#"}${row.v}` : `${type}:${id}`
+    if (row) return `${type === "person" ? "@" : "#"}${row.v}`
+    return ctx.records.hasType(type) ? GONE : `${type}:${id}`
   }
 
   // What a meeting or series is about: `@anna` or `anna` (a person), `#CRM` or `CRM` (a project). A bare word that
