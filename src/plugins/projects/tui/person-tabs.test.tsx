@@ -23,7 +23,7 @@ afterEach(async () => {
 const write = (plugin = "projects") => kernel!.runtime(plugin)!.self().write as Record<string, (i: any) => Promise<any>>
 const inCtx = <T,>(fn: () => Promise<T>) => runWithContext(kernel!.context(), fn)
 const rows = <T = any,>(table: string, cols: string[]) =>
-  inCtx(async () => (await (kernel!.runtime("projects")!.data as any).selectFrom(table).select(cols).orderBy("id").execute()) as T[])
+  inCtx(async () => (await (kernel!.runtime(table === "action" ? "actions" : "projects")!.data as any).selectFrom(table).select(cols).orderBy("id").execute()) as T[])
 
 const lines = (frame: string) => frame.split("\n")
 const lineWith = (frame: string, s: string) => lines(frame).find((l) => l.includes(s)) ?? ""
@@ -56,14 +56,14 @@ async function seed() {
     await w.addInvolvement!({ project: "CRM", person: "@marie", role: "sponsor" })
     await w.addInvolvement!({ project: "CRM", person: "@anna", role: "architect" })
     await w.archiveProject!({ project: "ERP" })
-    await w.addAction!({ title: "Send revised budget", due: "2026-11-10", forPerson: "@marie" })
-    await w.addAction!({ title: "Review contract", due: "2026-11-20", owner: "@marie", project: "CRM" })
-    await w.addAction!({ title: "Collect quotes", owner: "@marie" })
-    await w.addAction!({ title: "Sign off scope", forPerson: "@marie" })
-    await w.completeAction!({ ref: "A-4", date: "2026-11-01" })
-    await w.addAction!({ title: "Book workshop", owner: "@marie", forPerson: "@marie" })
-    await w.completeAction!({ ref: "A-5", date: "2026-11-12" })
-    await w.addAction!({ title: "Bob's own", owner: "@bob" })
+    await write("actions").addAction!({ title: "Send revised budget", due: "2026-11-10", forPerson: "@marie" })
+    await write("actions").addAction!({ title: "Review contract", due: "2026-11-20", owner: "@marie", project: "CRM" })
+    await write("actions").addAction!({ title: "Collect quotes", owner: "@marie" })
+    await write("actions").addAction!({ title: "Sign off scope", forPerson: "@marie" })
+    await write("actions").completeAction!({ ref: "A-4", date: "2026-11-01" })
+    await write("actions").addAction!({ title: "Book workshop", owner: "@marie", forPerson: "@marie" })
+    await write("actions").completeAction!({ ref: "A-5", date: "2026-11-12" })
+    await write("actions").addAction!({ title: "Bob's own", owner: "@bob" })
   })
 }
 
@@ -144,7 +144,7 @@ describe("projects' person tabs", () => {
       await write("people").addPerson!({ name: "Marie Dubois", handle: "marie", is_stakeholder: true })
       await write().addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
       await write().addInvolvement!({ project: "DATAPLATFORM2027", person: "@marie", role: "sponsor" })
-      await write().addAction!({ title: "Review contract", owner: "@marie", project: "DATAPLATFORM2027" })
+      await write("actions").addAction!({ title: "Review contract", owner: "@marie", project: "DATAPLATFORM2027" })
     })
     tui = await renderTui(kernel, { width: 80, height: 24 })
     await tui.nav.open("@marie")
@@ -227,7 +227,7 @@ describe("projects' person tabs", () => {
     t.input.pressEscape()
     await until(t, (f) => !f.includes("New action"))
 
-    await inCtx(() => write().deleteAction!({ ref: "A-6" }))
+    await inCtx(() => write("actions").deleteAction!({ ref: "A-6" }))
     frame = await until(t, (f) => f.includes("No actions yet"))
     expect(frame).toContain("No actions yet. Press n to add one.")
   })

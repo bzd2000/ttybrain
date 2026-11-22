@@ -62,8 +62,8 @@ async function seed() {
     await p.setHealth!({ project: "CRM", health: "amber", comment: "Design slipping 2 weeks", date: "2026-11-02" })
     await p.addMilestone!({ project: "CRM", title: "Design approved", due: "2026-12-10" }) // MS-1
     await p.addRisk!({ project: "CRM", title: "Budget overrun ~12%", type: "issue", severity: "high" }) // R-1
-    await p.addAction!({ title: "Send revised budget to Peter", project: "CRM", due: "2026-11-10" }) // A-1, overdue
-    await p.addAction!({ title: "Share integration specs", project: "CRM", meeting: "M-1" }) // A-2, from M-1
+    await write("actions").addAction!({ title: "Send revised budget to Peter", project: "CRM", due: "2026-11-10" }) // A-1, overdue
+    await write("actions").addAction!({ title: "Share integration specs", project: "CRM", meeting: "M-1" }) // A-2, from M-1
     await w.closeMeeting!({ ref: "M-1" })
     await w.addMeeting!({ title: "Steering committee Q4", date: "2026-12-04", kind: "steering", attendees: ["peter", "marie"] }) // M-2
     await w.addAgendaItem!({ meeting: "M-2", text: "Minutes & open actions" })
@@ -206,7 +206,7 @@ describe("meeting tabs", () => {
     await t.input.typeText("Send the budget")
     t.input.pressKey("s", { ctrl: true })
     await until(t, (f) => !f.includes("New action · M-2"))
-    const rows = await inCtx(async () => await data("projects").selectFrom("action").select(["title", "meeting_id", "project_id"]).orderBy("id").execute())
+    const rows = await inCtx(async () => await data("actions").selectFrom("action").select(["title", "meeting_id", "project_id"]).orderBy("id").execute())
     expect(rows.at(-1)).toEqual({ title: "Send the budget", meeting_id: 2, project_id: 1 })
   })
 
@@ -231,7 +231,7 @@ describe("meeting tabs", () => {
       extra: async () => {
         await write().editAgendaItem!({ meeting: "M-2", item: 2, ask: long })
         // More overdue actions, so the sections do not fit.
-        for (const day of ["01", "02", "03", "04", "05"]) await write("projects").addAction!({ title: `Overdue ${day}`, project: "CRM", due: `2026-11-${day}` })
+        for (const day of ["01", "02", "03", "04", "05"]) await write("actions").addAction!({ title: `Overdue ${day}`, project: "CRM", due: `2026-11-${day}` })
       },
     })
     await select(t, "2.  CRM")
@@ -344,8 +344,8 @@ describe("meeting tabs", () => {
 
     // Logged against M-2 (A-2 belongs to M-1): the panel follows; the tabs have no counts (as designed).
     await inCtx(async () => {
-      await write("projects").addAction!({ title: "Book the room", owner: "peter", due: "2026-11-20", meeting: "M-2" }) // A-3
-      await write("projects").addAction!({ title: "Circulate the pack", meeting: "M-2" }) // A-4
+      await write("actions").addAction!({ title: "Book the room", owner: "peter", due: "2026-11-20", meeting: "M-2" }) // A-3
+      await write("actions").addAction!({ title: "Circulate the pack", meeting: "M-2" }) // A-4
       await write("projects").addDecision!({ title: "Go with vendor B", project: "CRM", meeting: "M-2" }) // DE-1
     })
     frame = await until(t, (f) => f.includes("DE-1 Go with vendor B"))
@@ -393,7 +393,7 @@ describe("meeting tabs", () => {
       extra: async () => {
         await write().setNotes!({ meeting: "M-1", markdown: "Opened at 10:00\nBudget discussed" })
         // A-2 is already logged against M-1: 24 more make 25.
-        for (let i = 3; i <= 26; i++) await write("projects").addAction!({ title: `Follow-up ${i}`, meeting: "M-1" })
+        for (let i = 3; i <= 26; i++) await write("actions").addAction!({ title: `Follow-up ${i}`, meeting: "M-1" })
       },
     })
     const frame = await until(t, (f) => f.includes("+19 more"))

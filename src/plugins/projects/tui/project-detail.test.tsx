@@ -113,7 +113,7 @@ describe("project detail", () => {
   test("at 80 columns the tabs drop zero counts, then window around the active tab with ‹ › instead of cutting words", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await seed()
-    await inCtx(() => write().addAction!({ title: "Call", project: "CRM" }))
+    await inCtx(() => write("actions").addAction!({ title: "Call", project: "CRM" }))
     tui = await renderTui(kernel, { width: 80, height: 24 })
     tui.input.pressKey("2")
     await tui.frame()

@@ -20,7 +20,7 @@ export function budget(opts: { get?: string; set?: string } = {}): PluginDef {
     name: "Budget",
     version: "1.0.0",
     apiVersion: 1,
-    requires: { projects: "^1" },
+    requires: { projects: "^2" },
     activate(ctx) {
       ctx.migration("001", async (db) => {
         await db.schema

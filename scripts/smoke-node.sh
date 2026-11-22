@@ -38,9 +38,10 @@ out="$(ttybrain inbox add "x #CRM")"; echo "$out"
 expect_in "inbox add" "I-1" "$out"
 # The built-ins are discovered from dist-node/plugins/*/package.json (written by the build).
 out="$(ttybrain plugin list)"; echo "$out"
-for p in people projects meetings inbox; do
+for p in people actions meetings inbox; do
   echo "$out" | grep -Eq "^$p +1\.0\.0 +built-in +ok" || fail "plugin list: expected \"$p 1.0.0 built-in ok\", got: $out"
 done
+echo "$out" | grep -Eq "^projects +2\.0\.0 +built-in +ok" || fail "plugin list: expected \"projects 2.0.0 built-in ok\", got: $out"
 
 set +e
 ttybrain project show NOPE

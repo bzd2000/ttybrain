@@ -72,7 +72,7 @@ async function seed() {
     await w.addPerson!({ name: "Bob Maes", handle: "bob", is_team: true })
     await w.addNote!({ person: "@marie", kind: "interaction", date: "2026-10-03", text: "Budget talk" })
     await write("projects").addInvolvement!({ project: "CRM", person: "@marie", role: "sponsor" })
-    await write("projects").addAction!({ title: "Send revised budget", due: "2026-11-10", forPerson: "@marie" })
+    await write("actions").addAction!({ title: "Send revised budget", due: "2026-11-10", forPerson: "@marie" })
     await w.addNote!({ person: "@bob", kind: "one_on_one", date: "2026-11-12", text: "Talked about training" })
     await w.addGoal!({ person: "@bob", title: "PM training 2027" })
   })
@@ -366,7 +366,7 @@ describe("People screen: the detail panel", () => {
 
   test("panel shows a team member's actions, 1:1 notes and goals", async () => {
     const t = await open()
-    await inCtx(() => write("projects").addAction!({ title: "Book trainer", owner: "@bob", due: "2026-11-20" }))
+    await inCtx(() => write("actions").addAction!({ title: "Book trainer", owner: "@bob", due: "2026-11-20" }))
     for (let i = 0; i < 4; i++) t.input.pressKey("j") // luc → marie → nadia → anna → bob
     const frame = await until(t, (f) => f.includes("1:1 notes") && f.includes("Book trainer"))
     expect(lines(frame).find(titleLine)).toContain("Bob Maes")

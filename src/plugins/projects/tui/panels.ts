@@ -1,48 +1,19 @@
-// The projects plugin's Attention panels: overdue actions, due this week, projects needing attention, late and
-// upcoming milestones, high risks and issues, with the designs' column widths (growing for long codes and ids) and cyan project codes. They read
-// through the same makeOverview the `overview` report uses.
+// The projects plugin's Attention panels: projects needing attention, late and upcoming milestones, high risks and
+// issues, with the designs' column widths (growing for long codes and ids) and cyan project codes. They read through
+// the same makeOverview the `overview` report uses. The action panels (priorities 10 and 20) are the actions plugin's.
 import { daysBetween, dueLabel, shortDate, type Cell, type OverviewRow, type TuiContext } from "@ttybrain/api/tui"
 import { makeItems } from "../logic/items"
-import { ATTENTION_DAYS, makeOverview, MILESTONE_DAYS, type OverviewAction } from "../logic/overview"
+import { ATTENTION_DAYS, makeOverview, MILESTONE_DAYS } from "../logic/overview"
 import { makeStore } from "../logic/records"
 
-const dash: Cell = { text: "—", tone: "muted" }
 const code = (text: string): Cell => ({ text, tone: "cyan" })
-const project = (ref: string | null): Cell => (ref === null ? dash : code(ref.slice(1)))
 // Ids and codes start at the designs' widths and grow to their longest text (codes up to 16), so they stay whole.
 const ID = { min: 5, max: 8 }
 const CODE = (min: number) => ({ min, max: 16 })
-// id, title, project, due.
-const ACTION_COLUMNS = [ID, "grow", CODE(7), 7] as const
 
 export function registerPanels(ui: TuiContext): void {
   const store = makeStore(ui)
   const overview = makeOverview(ui, store, makeItems(ui, store))
-
-  const actionRows = (list: OverviewAction[], tone: Cell["tone"]): OverviewRow[] => {
-    const today = ui.clock.today()
-    return list.map(({ a }) => ({
-      ref: a.ref,
-      cells: [{ text: a.ref, tone: "muted" }, { text: a.title }, project(a.project), { text: dueLabel(a.due_date, today), tone }],
-    }))
-  }
-
-  ui.overviewPanel({
-    id: "overdue-actions",
-    title: "Overdue actions",
-    priority: 10,
-    empty: "No overdue actions.",
-    columns: [...ACTION_COLUMNS],
-    load: async () => actionRows(await overview.overdueActions(), "red"),
-  })
-  ui.overviewPanel({
-    id: "due-this-week",
-    title: "Due this week",
-    priority: 20,
-    empty: "Nothing due this week.",
-    columns: [...ACTION_COLUMNS],
-    load: async () => actionRows(await overview.dueThisWeek(), undefined),
-  })
   ui.overviewPanel({
     id: "projects-needing-attention",
     title: "Projects needing attention",

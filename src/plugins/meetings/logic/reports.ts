@@ -172,7 +172,7 @@ export function registerReports(ctx: PluginContext, store: Store): void {
     order: 40,
     run: async (m: Meeting) => {
       const rows = await db
-        .selectFrom("projects.action as a")
+        .selectFrom("actions.action as a")
         .leftJoin("projects.project as p", "p.id", "a.project_id")
         .leftJoin("people.person as o", "o.id", "a.owner_id")
         .select(["a.id", "a.title", "a.due_date", "a.owner_id", "p.code", "o.handle"])

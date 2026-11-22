@@ -13,7 +13,7 @@ export const people = definePlugin({
   name: "People",
   version: "1.0.0",
   apiVersion: 1,
-  reads: { projects: "^1" }, // projects.involvement and projects.project, for each person's projects
+  reads: { projects: "^2", actions: "^1" }, // projects.involvement and projects.project for each person's projects; actions.action for follow-ups
   activate(ctx) {
     const store = makeStore(ctx)
     registerSchema(ctx)

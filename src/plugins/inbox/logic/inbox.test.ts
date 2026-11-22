@@ -3,6 +3,7 @@ import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { runWithContext } from "../../../kernel/context"
 import { runCli } from "../../../kernel/cli/dispatch"
 import { people } from "../../people/logic/index"
+import { actions } from "../../actions/logic/index"
 import { projects } from "../../projects/logic/index"
 import { inbox } from "./index"
 
@@ -29,7 +30,7 @@ async function ok(...argv: string[]) {
 
 describe("inbox", () => {
   beforeEach(async () => {
-    k = await makeTestKernel({ plugins: [people, projects, inbox] })
+    k = await makeTestKernel({ plugins: [people, projects, actions, inbox] })
     await ok("person", "add", "Peter Janssens", "--handle", "peter", "--stakeholder")
     await ok("project", "add", "CRM", "CRM replatforming")
   })

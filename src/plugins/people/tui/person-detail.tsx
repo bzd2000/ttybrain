@@ -113,7 +113,7 @@ export function PersonDetail(props: { recordRef: string; rows?: number }) {
       const actions = (column: "for_person_id" | "owner_id") =>
         store.unlessUnavailable([] as Array<{ id: unknown; title: unknown; due_date: unknown }>, () =>
           rt.data
-            .selectFrom("projects.action as a")
+            .selectFrom("actions.action as a")
             .select(["a.id", "a.title", "a.due_date"])
             .where(`a.${column}`, "=", p.id)
             .where("a.status", "=", "open")

@@ -6,6 +6,7 @@ import { runWithContext } from "../../../kernel/context"
 import { defineTui, type TuiDef } from "../../../kernel/tui/api"
 import { useOverlay, type Overlay } from "../../../kernel/tui/overlay"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { actionsTui } from "../../actions/tui/index"
 import { projectsTui } from "./index"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -37,7 +38,7 @@ afterEach(async () => {
 const write = (plugin = "projects") => kernel!.runtime(plugin)!.self().write as Record<string, (i: any) => Promise<any>>
 const inCtx = <T,>(fn: () => Promise<T>) => runWithContext(kernel!.context(), fn)
 const rows = <T,>(table: string, cols: string[]) =>
-  inCtx(async () => (await (kernel!.runtime("projects")!.data as any).selectFrom(table).select(cols).orderBy("id").execute()) as T[])
+  inCtx(async () => (await (kernel!.runtime(table === "action" ? "actions" : "projects")!.data as any).selectFrom(table).select(cols).orderBy("id").execute()) as T[])
 
 async function seed(extra?: () => Promise<void>) {
   await inCtx(async () => {
@@ -284,8 +285,8 @@ describe("actions tab", () => {
 
   test("x on an action sets it to done; the tab counts all actions, so it stays", async () => {
     const t = await open(5, async () => {
-      await write().addAction!({ title: "One", project: "CRM" })
-      await write().addAction!({ title: "Two", project: "CRM", owner: "@peter" })
+      await write("actions").addAction!({ title: "One", project: "CRM" })
+      await write("actions").addAction!({ title: "Two", project: "CRM", owner: "@peter" })
     })
     let frame = await until(t, "Actions 2")
     expect(lineWith(frame, "Two")).toContain("@peter")
@@ -332,7 +333,7 @@ describe("meeting-linked forms", () => {
       await write("meetings").addMeeting!({ title: "SteerCo Q4", date: "2026-12-04", projects: ["CRM"] })
       await write("meetings").addMeeting!({ title: "Board", date: "2026-12-10", kind: "board" })
     })
-    tui = await renderTui(kernel, { parts: [part], width: 120, height: 32 })
+    tui = await renderTui(kernel, { parts: [part, actionsTui], width: 120, height: 32 })
     tui.input.pressKey("3")
     expect(await tui.frame()).toContain("home screen")
     void overlay!.openForm("action", "action", { prefill: { meeting: "M-1", project: "#CRM" } })

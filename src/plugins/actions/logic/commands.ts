@@ -1,9 +1,9 @@
-// `ttybrain action list|add|edit|done|cancel|delete` (plugin reference §2). Reads go through ctx.data (own tables,
-// people through people.person); writes only through ctx.self().write.*. An empty owner is me, shown as `me`.
+// `ttybrain action list|add|edit|done|cancel|delete`. Reads go through ctx.data (the own table, people through
+// people.person, projects through projects.project); writes only through ctx.self().write.*. An empty owner is me,
+// shown as `me`.
 import { addDays, currentContext, formatTable, parseRef, ValidationError, weekEnd, type FlagDef, type PluginContext } from "@ttybrain/api"
-import type { ActionRecord, Items } from "./items"
-import { isMe } from "./ops-actions"
-import type { Store } from "./records"
+import { byDue, isMe } from "./ops"
+import type { ActionRecord, Store } from "./records"
 
 const text = (description: string, placeholder?: string): FlagDef => ({ type: "string", description, ...(placeholder ? { placeholder } : {}) })
 const bool = (description: string): FlagDef => ({ type: "boolean", description })
@@ -30,7 +30,7 @@ const GROUPS = ["Overdue", "Earlier", "This week", "Next week", "Later", "No dat
 
 const line = (a: ActionRecord) => `${a.ref} ${a.title} (${a.owner ?? "me"}${a.due_date ? `, due ${a.due_date}` : ""}${a.status !== "open" ? `, ${a.status}` : ""})`
 
-export function registerActionCommands(ctx: PluginContext, store: Store, items: Items): void {
+export function registerCommands(ctx: PluginContext, store: Store): void {
   const write = () => ctx.self().write
 
   ctx.command({
@@ -47,7 +47,7 @@ export function registerActionCommands(ctx: PluginContext, store: Store, items: 
     },
     run: async ({ flags }) => {
       const today = currentContext().today
-      let q = items.actionQuery()
+      let q = store.actionQuery()
       if (flags.open || flags.overdue) q = q.where("a.status", "=", "open")
       if (flags.overdue) q = q.where("a.due_date", "<", today)
       if (flags.owner !== undefined) {
@@ -61,9 +61,7 @@ export function registerActionCommands(ctx: PluginContext, store: Store, items: 
         if (n === null) throw new ValidationError(`invalid meeting "${String(flags.meeting).trim()}"`, { field: "meeting", hint: "a meeting ref, e.g. M-4" })
         q = q.where("a.meeting_id", "=", n)
       }
-      const list = (await q.orderBy("a.id").execute())
-        .map(items.toAction)
-        .sort((a, b) => (a.due_date === b.due_date ? a.id - b.id : a.due_date === null ? 1 : b.due_date === null ? -1 : a.due_date < b.due_date ? -1 : 1))
+      const list = (await q.orderBy("a.id").execute()).map(store.toAction).sort(byDue)
       if (list.length === 0) return { json: list, text: "no actions" }
       const blocks = GROUPS.map((g) => {
         const rows = list

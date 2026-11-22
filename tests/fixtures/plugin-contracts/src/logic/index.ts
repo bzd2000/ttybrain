@@ -18,8 +18,8 @@ export default definePlugin({
   name: "Contracts",
   version: "0.1.0",
   apiVersion: 1,
-  requires: { projects: "^1" },
-  reads: { projects: "^1" },
+  requires: { projects: "^2" },
+  reads: { projects: "^2" },
   activate(ctx) {
     // FAILURE: activate
     ctx.migration("1-contract", async (db) => {

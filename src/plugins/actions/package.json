@@ -1,0 +1,8 @@
+{
+  "name": "@ttybrain/plugin-actions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "logic/index.ts",
+  "ttybrain": { "plugin": true, "id": "actions", "tui": "tui/index.tsx" }
+}

@@ -62,7 +62,7 @@ type Runtime = ReturnType<typeof useRuntime>
 async function loggedLines(rt: Runtime, store: Store, m: MeetingRecord): Promise<CellPart[][]> {
   const actions = await store.unlessUnavailable([] as Array<{ id: unknown; title: unknown; due_date: unknown; owner_id: unknown; handle: unknown }>, () =>
     rt.data
-      .selectFrom("projects.action as a")
+      .selectFrom("actions.action as a")
       .leftJoin("people.person as o", "o.id", "a.owner_id")
       .select(["a.id", "a.title", "a.due_date", "a.owner_id", "o.handle"])
       .where("a.meeting_id", "=", m.id)

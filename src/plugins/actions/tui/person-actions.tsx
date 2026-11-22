@@ -20,9 +20,8 @@ import {
   type TableColumn,
   type TableRow,
 } from "@ttybrain/api/tui"
-import { makeItems, type ActionRecord } from "../logic/items"
-import { makeStore } from "../logic/records"
-import { ITEM_KINDS } from "./item-tab"
+import { makeStore, type ActionRecord } from "../logic/records"
+import { cells, complete as completeOf } from "./project-actions"
 
 export const EMPTY = "No actions yet. Press n to add one."
 const HINTS: Hint[] = [
@@ -39,7 +38,6 @@ const columns = (codes: string[]): TableColumn[] => [
   { id: "as", title: "As", width: 5 },
   { id: "due", title: "Due", width: 6 },
 ]
-const ACTIONS = ITEM_KINDS.actions!
 
 // Open by due date (none last), then the closed ones by done date, newest first; ties by id.
 function byOpenThenDone(a: ActionRecord, b: ActionRecord): number {
@@ -57,7 +55,6 @@ function byOpenThenDone(a: ActionRecord, b: ActionRecord): number {
 export function PersonActions(props: { recordRef: string }) {
   const rt = useRuntime()
   const store = makeStore(rt)
-  const items = makeItems(rt, store)
   const nav = useNav()
   const overlay = useOverlay()
   const keys = useKeys()
@@ -68,7 +65,7 @@ export function PersonActions(props: { recordRef: string }) {
     async (): Promise<{ personId: number; stakeholder: boolean; actions: ActionRecord[] }> => {
       const person = await store.person(props.recordRef)
       const flags = await rt.data.selectFrom("people.person").select("is_stakeholder").where("id", "=", person.id).executeTakeFirstOrThrow()
-      const actions = (await items.actionQuery().where((eb) => eb.or([eb("a.owner_id", "=", person.id), eb("a.for_person_id", "=", person.id)])).execute()).map(items.toAction)
+      const actions = (await store.actionQuery().where((eb) => eb.or([eb("a.owner_id", "=", person.id), eb("a.for_person_id", "=", person.id)])).execute()).map(store.toAction)
       return { personId: person.id, stakeholder: Number(flags.is_stakeholder) === 1, actions: actions.sort(byOpenThenDone) }
     },
     { key: () => props.recordRef },
@@ -77,7 +74,7 @@ export function PersonActions(props: { recordRef: string }) {
     const data = q.data()
     if (data === undefined) return []
     return data.actions.map((a) => {
-      const shared = ACTIONS.cells(a, today())
+      const shared = cells(a, today())
       return {
         ref: a.ref,
         cells: {
@@ -107,9 +104,9 @@ export function PersonActions(props: { recordRef: string }) {
     if (saved !== undefined) setWant(saved)
   }
   const complete = async (a: ActionRecord) => {
-    const x = ACTIONS.complete!(a, today())
+    const x = completeOf(a, today())
     if (x === undefined) return
-    await act(() => (rt.self().write[x.op]! as (i: Record<string, unknown>) => Promise<unknown>)(x.input))
+    await act(() => rt.self().write.completeAction!(x))
   }
   const openProject = (ref: string) => {
     const project = (q.data()?.actions ?? []).find((a) => a.ref === ref)?.project

@@ -1,4 +1,4 @@
-// The project detail's item tabs (Milestones, Deliverables, Risks & issues, Decisions, Actions) as ONE component
+// The project detail's item tabs (Milestones, Deliverables, Risks & issues, Decisions) as ONE component
 // configured per kind: how its rows load and sort, its columns, the form to add and edit with, what `x` does and
 // which operation `Del` calls. Keys: n add (the form gets the project prefilled), e edit, x complete, Del delete.
 import { createMemo, createSignal, Show } from "solid-js"
@@ -114,27 +114,6 @@ export const ITEM_KINDS: Record<string, ItemKind> = {
     columns: [REF, { id: "date", title: "Date", width: 6 }, { id: "title", title: "Decision", width: "grow" }, { id: "by", title: "Decided by", width: 16 }],
     cells: (r) => ({ ref: r.ref, date: shortDate(r.date), title: r.title, by: r.decided_by ?? "—" }),
     deleteOp: "deleteDecision",
-  },
-  actions: {
-    kind: "action",
-    title: "Actions",
-    noun: "actions",
-    load: async (items, pid) =>
-      (await items.actionQuery().where("a.project_id", "=", pid).execute())
-        .map(items.toAction)
-        .sort((a, b) => Number(a.status !== "open") - Number(b.status !== "open") || byDate("due_date")(a, b)),
-    columns: [REF, { id: "title", title: "Action", width: "grow" }, { id: "owner", title: "Owner", width: 14 }, { id: "for", title: "For", width: 14 }, { id: "due", title: "Due", width: 6 }, { id: "status", title: "Status", width: 9 }],
-    cells: (r, today) => ({
-      ref: r.ref,
-      title: r.title,
-      owner: person(r.owner, "me"),
-      for: person(r.for),
-      due: red(dueLabel(r.due_date, today), r.status === "open" && r.due_date !== null && r.due_date < today),
-      status: r.status,
-    }),
-    complete: (r, today) => (r.status === "open" ? { op: "completeAction", input: { ref: r.ref, date: today } } : undefined),
-    completeHint: "done",
-    deleteOp: "deleteAction",
   },
 }
 

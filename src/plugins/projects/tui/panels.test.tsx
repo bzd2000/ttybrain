@@ -52,8 +52,8 @@ describe("overview panels", () => {
   test("overdue panel", async () => {
     const t = await open(async () => {
       await write().addProject!({ code: "CRM", name: "Customer platform" })
-      await write().addAction!({ title: "Send revised budget to Peter", due: "2026-11-10", project: "CRM" })
-      await write().addAction!({ title: "Prepare deck", due: "2026-11-13", project: "CRM" })
+      await write("actions").addAction!({ title: "Send revised budget to Peter", due: "2026-11-10", project: "CRM" })
+      await write("actions").addAction!({ title: "Prepare deck", due: "2026-11-13", project: "CRM" })
     })
     const frame = await shot(t)
     const line = lineWith(frame, "Send revised budget")
@@ -67,8 +67,8 @@ describe("overview panels", () => {
 
   test("due this week shows the weekday and leaves out later actions", async () => {
     const t = await open(async () => {
-      await write().addAction!({ title: "Sunday thing", due: "2026-11-15" })
-      await write().addAction!({ title: "Next week thing", due: "2026-11-17" })
+      await write("actions").addAction!({ title: "Sunday thing", due: "2026-11-15" })
+      await write("actions").addAction!({ title: "Next week thing", due: "2026-11-17" })
     })
     const frame = await shot(t)
     expect(lineWith(frame, "Sunday thing")).toContain("Sun")
@@ -165,7 +165,7 @@ describe("overview panels", () => {
     await inCtx(async () => {
       const w = write()
       for (const c of ["AAA", "BBB", "CCC", "DDD", "EEE", "FFF"]) await w.addProject!({ code: c, name: c })
-      for (let i = 0; i < 6; i++) await w.addAction!({ title: `Overdue ${i}`, due: "2026-11-10", project: "AAA" })
+      for (let i = 0; i < 6; i++) await write("actions").addAction!({ title: `Overdue ${i}`, due: "2026-11-10", project: "AAA" })
       for (let i = 0; i < 6; i++) await w.addRisk!({ project: "AAA", type: "risk", title: `Risk ${i}`, severity: "high" })
       for (let i = 0; i < 6; i++) await write("inbox").capture!({ text: `item ${i}` })
     })
@@ -198,7 +198,7 @@ describe("overview panels", () => {
 
   test("Enter on overdue row opens the action form", async () => {
     const t = await open(async () => {
-      await write().addAction!({ title: "Send revised budget", due: "2026-11-10" })
+      await write("actions").addAction!({ title: "Send revised budget", due: "2026-11-10" })
     })
     expect(await shot(t)).toContain("Send revised budget")
     t.input.pressEnter()

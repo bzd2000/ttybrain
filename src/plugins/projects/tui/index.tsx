@@ -1,8 +1,6 @@
 // The projects plugin's tui part: the Projects screen (slot 2), the project's record forms (project, health) and
-// tabs, and the person's Projects & roles and Actions tabs.
+// tabs, and the person's Projects & roles tab. The Actions screen and tabs are the actions plugin's.
 import { defineTui } from "@ttybrain/api/tui"
-import { ActionsScreen } from "./actions-screen"
-import { DueForm } from "./due-form"
 import { HealthForm, InvolvementForm, ProjectForm } from "./forms"
 import { makeStore } from "../logic/records"
 import { FORM_LABELS, ITEM_FORMS } from "./item-forms"
@@ -12,7 +10,6 @@ import { ProjectContext } from "./project-context"
 import { ProjectPeople } from "./project-people"
 import { ProjectSummary } from "./project-summary"
 import { registerPanels } from "./panels"
-import { PersonActions } from "./person-actions"
 import { PersonProjects } from "./person-projects"
 import { ProjectsScreen } from "./projects-screen"
 
@@ -36,17 +33,6 @@ export const projectsTui = defineTui({
         return Number(row.n)
       },
     })
-    ui.screen({
-      id: "actions",
-      title: "Actions",
-      slot: 4,
-      component: ActionsScreen,
-      // The open actions.
-      count: async () => {
-        const row = await ui.data.selectFrom("action").select((eb) => eb.fn.countAll().as("n")).where("status", "=", "open").executeTakeFirstOrThrow()
-        return Number(row.n)
-      },
-    })
     registerPanels(ui)
     // The header shows an open project as `› CRM CRM replatforming`, the code cyan.
     ui.recordCrumb("project", { tone: "cyan" })
@@ -56,9 +42,8 @@ export const projectsTui = defineTui({
 
     for (const kind of KINDS) ui.recordForm(kind, { id: kind, label: FORM_LABELS[kind], component: ITEM_FORMS[kind] })
 
-    ui.recordForm("action", { id: "due", label: "Due date", component: DueForm }) // after the full form: Enter opens that one
-
-    // The project's record tabs; the item tabs (orders 20-60) sit between Overview and People.
+    // The project's record tabs; the item tabs (orders 20-50, and actions' Actions tab at 60) sit between Overview
+    // and People.
     ui.recordTab("project", { id: "summary", title: "Overview", order: 10, component: ProjectSummary })
     // The item tabs; each count is the project's items of that kind, all of them, as the tab lists them.
     const itemTab = (id: string, order: number, open: (id: number) => Promise<number>) => {
@@ -79,7 +64,6 @@ export const projectsTui = defineTui({
     itemTab("deliverables", 30, (pid) => n(ui.data.selectFrom("deliverable").where("project_id", "=", pid)))
     itemTab("risks", 40, (pid) => n(ui.data.selectFrom("risk").where("project_id", "=", pid)))
     itemTab("decisions", 50, (pid) => n(ui.data.selectFrom("decision").where("project_id", "=", pid)))
-    itemTab("actions", 60, (pid) => n(ui.data.selectFrom("action").where("project_id", "=", pid)))
     ui.recordTab("project", {
       id: "people",
       title: "People",
@@ -94,7 +78,7 @@ export const projectsTui = defineTui({
     })
     ui.recordTab("project", { id: "context", title: "Context", order: 80, component: ProjectContext })
 
-    // The person's tabs after people's own (Summary 10, Notes 20, Goals 30).
+    // The person's tab after people's own (Summary 10, Notes 20, Goals 30); actions' Actions tab follows (50).
     const personId = async (recordRef: string) => (await makeStore(ui).person(recordRef)).id
     ui.recordTab("person", {
       id: "projects",
@@ -103,17 +87,6 @@ export const projectsTui = defineTui({
       // The person's involvements.
       count: async (recordRef) => n(ui.data.selectFrom("involvement").where("person_id", "=", await personId(recordRef))),
       component: PersonProjects,
-    })
-    ui.recordTab("person", {
-      id: "actions",
-      title: "Actions",
-      order: 50,
-      // The open actions the person owns or that are for them.
-      count: async (recordRef) => {
-        const id = await personId(recordRef)
-        return n(ui.data.selectFrom("action").where("status", "=", "open").where((eb: any) => eb.or([eb("owner_id", "=", id), eb("for_person_id", "=", id)])))
-      },
-      component: PersonActions,
     })
   },
 })

@@ -42,8 +42,8 @@ describe("projects", () => {
     await k.cleanup()
   })
 
-  test("declares the views it reads: people's and meetings'", () => {
-    expect(projects.reads).toEqual({ people: "^1", meetings: "^1" })
+  test("declares the views it reads: people's, meetings' and actions'", () => {
+    expect(projects.reads).toEqual({ people: "^1", meetings: "^1", actions: "^1" })
     expect(projects.requires).toEqual({ people: "^1" })
   })
 

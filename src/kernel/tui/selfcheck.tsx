@@ -157,7 +157,7 @@ async function checkLoaderPath(clock: ReturnType<typeof fixedClock>): Promise<vo
       const parts = await loadTuiParts(kernel)
       check(parts.errors.length === 0, `tui entries failed to load: ${parts.errors.map((e) => e.error).join("; ")}`)
       const ids = parts.builtin.map((p) => p.plugin).sort().join(",")
-      check(ids === "inbox,meetings,people,projects" && parts.external.length === 0, `unexpected tui parts: ${ids}`)
+      check(ids === "actions,inbox,meetings,people,projects" && parts.external.length === 0, `unexpected tui parts: ${ids}`)
       const registry = bootTui(kernel, parts.builtin, { builtin: true, external: parts.external })
       check(registry.errors().length === 0, `tui parts failed to boot: ${registry.errors().map((e) => e.error).join("; ")}`)
       check(registry.screenBySlot(2)?.id !== undefined && registry.globalActions().some((a) => a.key === "i"), "the built-in tui parts registered nothing")

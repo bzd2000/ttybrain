@@ -1,7 +1,7 @@
-// The record forms of the five item kinds (milestone, deliverable, risk, decision, action), add and edit, from one
-// factory configured per kind. Field names are the operations' input names, so a ValidationError lands under its
+// The record forms of the four item kinds (milestone, deliverable, risk, decision), add and edit, from one factory
+// configured per kind (the action form is the actions plugin's). Field names are the operations' input names, so a ValidationError lands under its
 // field. With `prefill.project` the project is set and its field left out (without it a new record has a Project
-// field, required except for a decision); a new action or decision with `prefill.meeting` is linked to that meeting
+// field, required except for a decision); a new decision with `prefill.meeting` is linked to that meeting
 // (no field; the title names it); a new record's other fields start from `prefill` by name. `origin` goes to act(),
 // so the kernel records provenance. An edit sends only the changed fields.
 import { createEffect, Show, untrack } from "solid-js"
@@ -94,21 +94,6 @@ const KINDS: Record<Kind, KindForm> = {
     editOp: "editDecision",
     required: ["title", "date"],
   },
-  action: {
-    kind: "action",
-    label: "Action",
-    fields: (r, _t, hasProject) => [
-      { name: "title", label: "Title", kind: "text", required: true, initial: r?.title },
-      { name: "due", label: "Due", kind: "date", initial: r?.due_date },
-      { name: "owner", label: "Owner (empty = me)", kind: "record", recordType: "person", initial: r?.owner },
-      ...(hasProject ? [] : [{ name: "project", label: "Project", kind: "record" as const, recordType: "project", initial: r?.project }]),
-      { name: "forPerson", label: "For", kind: "record", recordType: "person", initial: r?.for },
-      { name: "notes", label: "Notes", kind: "longtext", initial: r?.notes },
-    ],
-    addOp: "addAction",
-    editOp: "editAction",
-    required: ["title"],
-  },
 }
 
 // Loads the record behind `recordRef` (null without one); a ref that does not load closes the form.
@@ -131,19 +116,19 @@ function itemForm(spec: KindForm) {
       <WithRecord kind={spec.kind} recordRef={props.recordRef} close={props.close}>
         {(r) => {
           const project = props.prefill?.project
-          // A kind that carries its project (everything but the action's optional one) takes it from the prefill.
+          // A kind that carries its project takes it from the prefill.
           // A new record starts from the prefill (the inbox's "process by hand" passes the item's text as title).
           const prefill = r === null ? (props.prefill ?? {}) : {}
           const own = spec.fields(r, today, project !== undefined)
-          // A new record without a prefilled project asks for one (the action's form has its own field).
+          // A new record without a prefilled project asks for one.
           if (r === null && project === undefined && !own.some((f) => f.name === "project")) {
             const at = own.findIndex((f) => f.name === "title") + 1
             own.splice(at, 0, { name: "project", label: "Project", kind: "record", recordType: "project", required: spec.kind !== "decision" })
           }
           const fields = own.map((f) => (prefill[f.name] === undefined ? f : { ...f, initial: prefill[f.name] }))
           const noun = spec.label.toLowerCase()
-          // The action and decision forms may be opened from a meeting: no field, the meeting is passed on and named in the title.
-          const meeting = r === null && (spec.kind === "action" || spec.kind === "decision") ? props.prefill?.meeting : undefined
+          // The decision form may be opened from a meeting: no field, the meeting is passed on and named in the title.
+          const meeting = r === null && spec.kind === "decision" ? props.prefill?.meeting : undefined
           const save = async (run: () => Promise<any>, verb: string): Promise<SubmitResult> => {
             const res = await act(run, { origin: props.origin, ok: (out) => `${verb} ${(out as { ref: string }).ref}` })
             return res.ok ? { ok: true, ref: (res.value as { ref: string }).ref } : res
@@ -152,7 +137,7 @@ function itemForm(spec: KindForm) {
             save(async () => {
               const input: Record<string, unknown> = {}
               if (project !== undefined) input.project = project
-              else if (spec.kind !== "decision" && spec.kind !== "action") input.project = ""
+              else if (spec.kind !== "decision") input.project = ""
               if (meeting !== undefined) input.meeting = meeting
               for (const f of fields) {
                 if (f.name === "done") continue
@@ -197,6 +182,5 @@ export const MilestoneForm = itemForm(KINDS.milestone)
 export const DeliverableForm = itemForm(KINDS.deliverable)
 export const RiskForm = itemForm(KINDS.risk)
 export const DecisionForm = itemForm(KINDS.decision)
-export const ActionForm = itemForm(KINDS.action)
-export const ITEM_FORMS = { milestone: MilestoneForm, deliverable: DeliverableForm, risk: RiskForm, decision: DecisionForm, action: ActionForm }
+export const ITEM_FORMS = { milestone: MilestoneForm, deliverable: DeliverableForm, risk: RiskForm, decision: DecisionForm }
 export const FORM_LABELS = Object.fromEntries(Object.values(KINDS).map((k) => [k.kind, k.label])) as Record<Kind, string>

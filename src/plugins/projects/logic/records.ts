@@ -6,6 +6,7 @@ import {
   NotFoundError,
   suggest,
   ValidationError,
+  ViewUnavailableError,
   type PluginContext,
   type PluginRuntime,
 } from "@ttybrain/api"
@@ -24,7 +25,8 @@ export function makeStore(ctx: PluginRuntime) {
   // The published columns plus the unpublished ones a record carries.
   const recordQuery = () => projectQuery(db).select(["p.effort_note", "p.context_updated_at"])
 
-  const toProject = (r: any): ProjectRecord => ({
+  // A project row (recordQuery) as a record; its open actions come from the actions plugin (openActions).
+  const toProject = (r: any, openActions: number): ProjectRecord => ({
     ref: `#${r.code}`,
     id: Number(r.id),
     code: String(r.code),
@@ -40,11 +42,32 @@ export function makeStore(ctx: PluginRuntime) {
     health_date: str(r.health_date),
     next_milestone_title: str(r.next_milestone_title),
     next_milestone_due: str(r.next_milestone_due),
-    open_actions: Number(r.open_actions),
+    open_actions: openActions,
     open_risks: Number(r.open_risks),
     context_updated_at: str(r.context_updated_at),
     archived: Number(r.archived) === 1,
   })
+
+  // The open actions per project id, from actions.action; none while the actions plugin is not loaded.
+  async function openActions(projectId?: number): Promise<Map<number, number>> {
+    try {
+      let q = db
+        .selectFrom("actions.action")
+        .select((eb) => ["project_id", eb.fn.countAll().as("n")])
+        .where("status", "=", "open")
+        .where("project_id", "is not", null)
+      if (projectId !== undefined) q = q.where("project_id", "=", projectId)
+      return new Map((await q.groupBy("project_id").execute()).map((r) => [Number(r.project_id), Number(r.n)]))
+    } catch (e) {
+      if (e instanceof ViewUnavailableError) return new Map()
+      throw e
+    }
+  }
+  // Rows of recordQuery as records.
+  async function toProjects(rows: any[]): Promise<ProjectRecord[]> {
+    const open = rows.length === 1 ? await openActions(Number(rows[0].id)) : await openActions()
+    return rows.map((r) => toProject(r, open.get(Number(r.id)) ?? 0))
+  }
 
   async function codes(): Promise<string[]> {
     return (await db.selectFrom("project").select("code").orderBy("code").execute()).map((r) => String(r.code))
@@ -66,7 +89,7 @@ export function makeStore(ctx: PluginRuntime) {
   }
 
   async function projectById(id: number): Promise<ProjectRecord> {
-    return toProject(await recordQuery().where("p.id", "=", id).executeTakeFirstOrThrow())
+    return (await toProjects([await recordQuery().where("p.id", "=", id).executeTakeFirstOrThrow()]))[0]!
   }
 
   async function project(input: string): Promise<ProjectRecord> {
@@ -146,7 +169,7 @@ export function makeStore(ctx: PluginRuntime) {
     }))
   }
 
-  return { recordQuery, toProject, codes, codeId, projectId, projectById, project, activeProject, context, person, activePerson, personLabel, codeLabel, involvement }
+  return { recordQuery, toProjects, codes, codeId, projectId, projectById, project, activeProject, context, person, activePerson, personLabel, codeLabel, involvement }
 }
 
 export function registerRecordTypes(ctx: PluginContext, store: Store): void {

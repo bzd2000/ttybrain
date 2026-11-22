@@ -1,7 +1,8 @@
 // The published views: projects.project (with the computed health and next-milestone columns),
-// projects.health_update, projects.involvement and one per item table (milestone, deliverable, risk, decision,
-// action). They are a versioned contract; other plugins join them,
-// never the tables. View queries take no bound parameters, so constants are literals (eb.lit / sql.lit).
+// projects.health_update, projects.involvement and one per item table (milestone, deliverable, risk, decision).
+// They are a versioned contract; other plugins join them, never the tables. projects.project version 2 has no
+// open_actions: actions are the actions plugin's (actions.action). View queries take no bound parameters, so
+// constants are literals (eb.lit / sql.lit).
 import { sql, type ExpressionBuilder, type Kysely, type PluginContext } from "@ttybrain/api"
 
 // A project's columns as the view publishes them, over the plugin's own tables. The store extends it with the
@@ -29,7 +30,7 @@ export function projectQuery(db: Kysely<any>) {
       .orderBy("m.id")
       .limit(sql.lit(1))
       .as(as)
-  const openCount = (eb: Eb, table: "action" | "risk", as: string) =>
+  const openCount = (eb: Eb, table: "risk", as: string) =>
     eb
       .selectFrom(`${table} as x`)
       .select((e) => e.fn.countAll().as("n"))
@@ -52,7 +53,6 @@ export function projectQuery(db: Kysely<any>) {
       (eb) => latestHealth(eb, "date", "health_date"),
       (eb) => nextMilestone(eb, "title", "next_milestone_title"),
       (eb) => nextMilestone(eb, "due_date", "next_milestone_due"),
-      (eb) => openCount(eb, "action", "open_actions"),
       (eb) => openCount(eb, "risk", "open_risks"),
       (eb) => eb("p.archived_at", "is not", null).as("archived"),
     ])
@@ -60,7 +60,7 @@ export function projectQuery(db: Kysely<any>) {
 
 export function registerViews(ctx: PluginContext): void {
   ctx.publish("project", {
-    version: 1,
+    version: 2,
     columns: {
       id: "integer",
       code: "text",
@@ -75,7 +75,6 @@ export function registerViews(ctx: PluginContext): void {
       health_date: "date",
       next_milestone_title: "text",
       next_milestone_due: "date",
-      open_actions: "integer",
       open_risks: "integer",
       archived: "boolean",
     },
@@ -138,23 +137,5 @@ export function registerViews(ctx: PluginContext): void {
     version: 1,
     columns: { id: "integer", project_id: "integer", date: "date", title: "text", decided_by: "text", meeting_id: "integer" },
     query: (db) => db.selectFrom("decision").select(["id", "project_id", "date", "title", "decided_by", "meeting_id"]),
-  })
-
-  // No `overdue` column: that depends on "today", which a view can't take; consumers compare due_date with their own.
-  ctx.publish("action", {
-    version: 1,
-    columns: {
-      id: "integer",
-      title: "text",
-      due_date: "date",
-      status: "text",
-      done_date: "date",
-      owner_id: "integer",
-      project_id: "integer",
-      for_person_id: "integer",
-      meeting_id: "integer",
-    },
-    query: (db) =>
-      db.selectFrom("action").select(["id", "title", "due_date", "status", "done_date", "owner_id", "project_id", "for_person_id", "meeting_id"]),
   })
 }

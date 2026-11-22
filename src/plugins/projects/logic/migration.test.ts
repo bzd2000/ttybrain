@@ -54,11 +54,11 @@ describe("projects migration 002: codes of up to 16 characters", () => {
       await w("projects").addDeliverable!({ project: "ERP2", title: "Cutover plan", milestone: "MS-1", owner: "@anna" })
       await w("projects").addRisk!({ project: "CRM", title: "Vendor lock-in", type: "risk", severity: "high", owner: "@anna" })
       await w("projects").addDecision!({ project: "DATAHUB1", title: "Use Postgres" })
-      await w("projects").addAction!({ title: "Call vendor", project: "CRM", owner: "@anna" })
-      await w("projects").addAction!({ title: "No project" })
-      await w("projects").addAction!({ title: "Plan cutover", project: "ERP2" })
       await w("projects").addInvolvement!({ project: "ERP2", person: "@anna", role: "lead" })
     })
+    // Actions as an older build wrote them (they are the actions plugin's now; this boot has none, so they stay).
+    k.db.raw.exec(`INSERT INTO projects_action (title, status, owner_id, project_id, created_at, updated_at) VALUES
+      ('Call vendor', 'open', 1, 1, 'n', 'n'), ('No project', 'open', NULL, NULL, 'n', 'n'), ('Plan cutover', 'open', NULL, 2, 'n', 'n')`)
     const data = dump()
     const fks = foreignKeys()
     const idx = indexes()
@@ -79,10 +79,10 @@ describe("projects migration 002: codes of up to 16 characters", () => {
       "projects_project",
     ])
     // The published view reads the rebuilt table, links included.
-    expect(rows(`SELECT code, open_actions, open_risks FROM "projects__pub_project" ORDER BY code`)).toEqual([
-      { code: "CRM", open_actions: 1, open_risks: 1 },
-      { code: "DATAHUB1", open_actions: 0, open_risks: 0 },
-      { code: "ERP2", open_actions: 1, open_risks: 0 },
+    expect(rows(`SELECT code, open_risks FROM "projects__pub_project" ORDER BY code`)).toEqual([
+      { code: "CRM", open_risks: 1 },
+      { code: "DATAHUB1", open_risks: 0 },
+      { code: "ERP2", open_risks: 0 },
     ])
 
     // Codes stay unique; a 16-character code goes in, a 17-character one is refused by the CHECK itself.

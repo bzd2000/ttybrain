@@ -31,8 +31,7 @@ import {
   type TableGroup,
   type TableRow,
 } from "@ttybrain/api/tui"
-import { makeItems, type ActionRecord } from "../logic/items"
-import { makeStore } from "../logic/records"
+import { makeStore, type ActionRecord } from "../logic/records"
 import { parseActionFilter, type ActionFilter } from "./action-filter"
 
 export const EMPTY = "No open actions. Press n to add one."
@@ -82,7 +81,7 @@ function passes(r: Row, f: ActionFilter, owner: { handle: string | null; name: s
 
 export function ActionsScreen() {
   const rt = useRuntime()
-  const items = makeItems(rt, makeStore(rt))
+  const store = makeStore(rt)
   const nav = useNav()
   const overlay = useOverlay()
   const keys = useKeys()
@@ -93,8 +92,8 @@ export function ActionsScreen() {
   // One query: every action with the people's names, the meeting titles (when the meetings plugin is there) and
   // the inbox origins of those without a for person, the origins in a single batch.
   const q = useQuery(async () => {
-    const raw = await items.actionQuery().execute()
-    const recs = raw.map(items.toAction)
+    const raw = await store.actionQuery().execute()
+    const recs = raw.map(store.toAction)
     const titles = new Map<string, string>()
     if (rt.records.hasType("meeting")) {
       // The meeting's date from the meetings plugin's published view (optional): `SteerCo 28 Oct`.

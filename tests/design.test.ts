@@ -43,7 +43,7 @@ test("seedDesign seeds the designs' people, projects, actions, meetings and inbo
       "BI2:on_hold",
     ])
 
-    const open = await db("projects").selectFrom("action").select(["due_date", "project_id"]).where("status", "=", "open").execute()
+    const open = await db("actions").selectFrom("action").select(["due_date", "project_id"]).where("status", "=", "open").execute()
     expect(open).toHaveLength(46)
     expect(open.filter((a: any) => a.due_date !== null && a.due_date < "2026-11-12")).toHaveLength(3) // overdue
     expect(open.filter((a: any) => a.due_date >= "2026-11-12" && a.due_date <= "2026-11-15")).toHaveLength(3) // this week

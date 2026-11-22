@@ -1,4 +1,4 @@
-// pm works with any built-in switched off, and with all four off (design §3.6): the CLI lists only what is
+// pm works with any built-in switched off, and with all five off (design §3.6): the CLI lists only what is
 // loaded, `ttybrain plugin list` shows the disabled and skipped plugins, and the TUI renders Overview. Boots discover
 // the real built-in folder; the config disables the plugins.
 import { afterEach, expect, test } from "bun:test"
@@ -11,9 +11,9 @@ import { bootKernel, type Kernel } from "../src/kernel/host"
 import { loadTuiParts } from "../src/kernel/tui/load"
 import { renderTui, type RenderedTui } from "./tui"
 
-const BUILTINS = ["people", "projects", "meetings", "inbox"]
+const BUILTINS = ["people", "projects", "actions", "meetings", "inbox"]
 // The hard `requires` chain: disabling one skips these too.
-const DEPENDANTS: Record<string, string[]> = { people: ["projects", "meetings"], projects: ["meetings"], meetings: [], inbox: [] }
+const DEPENDANTS: Record<string, string[]> = { people: ["projects", "meetings"], projects: ["meetings"], actions: ["meetings"], meetings: [], inbox: [] }
 const KERNEL_THINGS = ["help", "guide", "plugin", "report"]
 
 let home: string | undefined
@@ -57,7 +57,7 @@ async function thingsByPlugin(): Promise<Map<string, Set<string>>> {
   return map
 }
 
-const cases: Array<[string, string[]]> = [...BUILTINS.map((id): [string, string[]] => [id, [id]]), ["all four", BUILTINS]]
+const cases: Array<[string, string[]]> = [...BUILTINS.map((id): [string, string[]] => [id, [id]]), ["all five", BUILTINS]]
 
 test.each(cases)("pm works with %s disabled", async (_name, disabled) => {
   const owners = await thingsByPlugin()
@@ -89,6 +89,7 @@ test.each(cases)("pm works with %s disabled", async (_name, disabled) => {
     expect(rows.find((r) => r.id === "meetings")?.error).toBe('requires "projects" which failed')
   }
   if (_name === "projects") expect(rows.find((r) => r.id === "meetings")?.error).toBe('requires "projects", which is disabled')
+  if (_name === "actions") expect(rows.find((r) => r.id === "meetings")?.error).toBe('requires "actions", which is disabled')
 
   // The TUI renders Overview with the parts that load.
   const parts = await loadTuiParts(k)
