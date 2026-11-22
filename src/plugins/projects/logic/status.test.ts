@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { runCli } from "../../../kernel/cli/dispatch"
 import { runWithContext } from "../../../kernel/context"
+import { actions } from "../../actions/logic/index"
 import { people } from "../../people/logic/index"
 import { projects } from "./index"
 
@@ -30,6 +31,8 @@ const inCtx = <T>(fn: () => Promise<T>) => runWithContext(k.context(), fn)
 // Runs ops as if today were `today` (seeding history through the ops themselves).
 const onDay = <T>(today: string, fn: () => Promise<T>) => runWithContext({ actor: "me", today, now: `${today}T09:00:00` }, fn)
 const status = (input: Record<string, unknown>) => inCtx(() => api().read.projectStatus!({ project: "CRM", since: "2026-10-14", ...input }))
+// The status's actions part, from the actions plugin.
+const projectActions = (input: Record<string, unknown>) => inCtx(() => k.ops.api("actions")!.read.projectActions!({ project: "CRM", ...input }))
 const refs = (list: Array<{ ref: string }>) => list.map((r) => r.ref)
 
 // A fixed dataset: today is 2026-11-13, since 2026-10-14 (today − 30).
@@ -79,7 +82,7 @@ async function seed() {
 
 describe("projects: projectStatus and the project-status report", () => {
   beforeEach(async () => {
-    k = await makeTestKernel({ plugins: [people, projects] })
+    k = await makeTestKernel({ plugins: [people, projects, actions] })
     await seed()
   })
   afterEach(async () => {
@@ -102,9 +105,9 @@ describe("projects: projectStatus and the project-status report", () => {
     expect(refs(s.deliverables)).toEqual(["D-1", "D-4"])
     expect(refs(s.risks)).toEqual(["R-2", "R-5", "R-3", "R-1"])
     expect(refs(s.decisions)).toEqual(["DE-1"])
-    expect(refs(s.actions.overdue)).toEqual(["A-1"])
-    expect(s.actions.fromMeeting).toEqual([])
-    expect(refs((await status({ previousMeeting: "M-4" })).actions.fromMeeting)).toEqual(["A-5"])
+    expect(refs((await projectActions({})).overdue)).toEqual(["A-1"])
+    expect((await projectActions({})).fromMeeting).toEqual([])
+    expect(refs((await projectActions({ previousMeeting: "M-4" })).fromMeeting)).toEqual(["A-5"])
   })
 
   test("since and reference move the windows; health is fresh once updated on or after since", async () => {
@@ -114,7 +117,7 @@ describe("projects: projectStatus and the project-status report", () => {
     const later = await status({ reference: "2026-11-14" })
     expect(refs(later.milestones.upcoming)).toEqual(["MS-3", "MS-4", "MS-5"])
     expect(refs(later.deliverables)).toEqual(["D-1", "D-2", "D-4"])
-    expect(refs(later.actions.overdue)).toEqual(["A-1", "A-2"])
+    expect(refs((await projectActions({ reference: "2026-11-14" })).overdue)).toEqual(["A-1", "A-2"])
     await inCtx(() => api().write.setHealth!({ project: "CRM", health: "green", date: "2026-10-14" }))
     expect((await status({})).project).toMatchObject({ health: "green", healthDate: "2026-10-14", healthComment: null, healthStale: false })
     const none = await inCtx(() => api().read.projectStatus!({ project: "ERP", since: "2026-10-14" }))
@@ -125,7 +128,7 @@ describe("projects: projectStatus and the project-status report", () => {
   })
 
   test("project-status takes reference and previousMeeting", async () => {
-    await inCtx(() => api().write.addAction!({ title: "From M-1", project: "CRM", meeting: "M-1" }))
+    await inCtx(() => k.ops.api("actions")!.write.addAction!({ title: "From M-1", project: "CRM", meeting: "M-1" }))
     await ok("milestone", "add", "CRM", "Far away", "--due", "2027-01-20") // MS-7
     const rowsOf = (j: any, title: string) => j.sections.find((s: any) => s.title === title).rows
     const plain = (await ok("report", "status", "CRM", "--json")).json
@@ -176,7 +179,7 @@ describe("projects: projectStatus and the project-status report", () => {
 
 describe("projects: the overview report", () => {
   beforeEach(async () => {
-    k = await makeTestKernel({ plugins: [people, projects] })
+    k = await makeTestKernel({ plugins: [people, projects, actions] })
   })
   afterEach(async () => {
     await k.cleanup()

@@ -4,7 +4,8 @@ import { formatTable } from "../../../kernel/api"
 import { runCli } from "../../../kernel/cli/dispatch"
 import { runWithContext } from "../../../kernel/context"
 import { people } from "../../people/logic/index"
-import { projects } from "./index"
+import { projects } from "../../projects/logic/index"
+import { actions } from "./index"
 
 let k: TestKernel
 
@@ -26,15 +27,15 @@ async function ok(...argv: string[]) {
   if (r.code !== 0) throw new Error(`ttybrain ${argv.join(" ")} → exit ${r.code}: ${r.out}${r.err}`)
   return r
 }
-const api = () => k.ops.api("projects")!
+const api = () => k.ops.api("actions")!
 const inCtx = <T>(fn: () => Promise<T>) => runWithContext(k.context(), fn)
-const rows = (table: string) => k.db.raw.prepare(`SELECT * FROM "projects_${table}" ORDER BY id`).all([]) as any[]
-const viewRows = (name: string) => k.db.raw.prepare(`SELECT * FROM "projects__pub_${name}" ORDER BY 1`).all([]) as any[]
+const rows = (table: string) => k.db.raw.prepare(`SELECT * FROM "actions_${table}" ORDER BY id`).all([]) as any[]
+const viewRows = (name: string) => k.db.raw.prepare(`SELECT * FROM "actions__pub_${name}" ORDER BY 1`).all([]) as any[]
 const COLUMNS = ["ref", "title", "project", "owner", "for", "due", "status"]
 
-describe("projects: actions", () => {
+describe("actions", () => {
   beforeEach(async () => {
-    k = await makeTestKernel({ plugins: [people, projects] })
+    k = await makeTestKernel({ plugins: [people, projects, actions] })
     await ok("project", "add", "CRM", "CRM replatforming")
     await ok("person", "add", "Peter Stone", "--handle", "peter", "--stakeholder")
     await ok("person", "add", "Bob", "--team")
@@ -82,10 +83,10 @@ describe("projects: actions", () => {
       meeting_id: null,
       meeting: null,
       notes: null,
+      links: [{ type: "person", id: 1, ref: "@peter" }],
     })
-    expect(viewRows("action")).toEqual([
-      { id: 1, title: "Send roadmap", due_date: "2026-11-20", status: "open", done_date: null, owner_id: null, project_id: null, for_person_id: 1, meeting_id: null },
-    ])
+    expect(viewRows("action")).toEqual([{ id: 1, title: "Send roadmap", due_date: "2026-11-20", status: "open", done_date: null, owner_id: null }])
+    expect(viewRows("link")).toEqual([{ id: 1, action_id: 1, record_type: "person", record_id: 1 }])
     await ok("action", "add", "Call vendor", "--due", "2026-11-01", "--project", "CRM", "--owner", "bob") // A-2: overdue
     await ok("action", "add", "Book room", "--due", "sun") // A-3: 2026-11-15, this week
     await ok("action", "add", "Draft plan", "--due", "2026-12-01") // A-4: later
@@ -164,7 +165,7 @@ describe("projects: actions", () => {
     await ok("action", "add", "Send roadmap", "--for", "peter", "--due", "fri")
     expect(await k.records.resolveAny("A-1")).toEqual({ type: "action", id: 1 })
     expect(await k.records.label("A-1")).toBe("Send roadmap")
-    const d = (op: string, input: unknown) => inCtx(() => k.ops.describe("projects", op, input))
+    const d = (op: string, input: unknown) => inCtx(() => k.ops.describe("actions", op, input))
     expect(await d("addAction", { title: "Tell Peter", forPerson: "peter", due: "fri" })).toBe('+ action "Tell Peter" (me, for @peter, due 2026-11-20)')
     expect(await d("addAction", { title: "Spec", owner: "bob", project: "CRM" })).toBe('+ action "Spec" (@bob, CRM)')
     expect(await d("editAction", { ref: "A-1", title: "x", due: "mon" })).toBe("~ A-1 title, due")

@@ -1,7 +1,9 @@
 // The read operation behind the prep block (spec §8): projectStatus({ project, since, reference?, previousMeeting? }).
-// Every "today"-dependent rule compares with `reference` (default: the context's today), never SQLite's clock.
+// Every "today"-dependent rule compares with `reference` (default: the context's today), never SQLite's clock. The
+// actions part (overdue, from the previous meeting) is the actions plugin's (its projectActions read and its
+// "actions" section on project-status); `previousMeeting` is validated here and used there.
 import { addDays, NonBlank, parseRef, Type, ValidationError, type PluginContext, type Static } from "@ttybrain/api"
-import { ActionRecord, DecisionRecord, DeliverableRecord, MilestoneRecord, RiskRecord, type Items } from "./items"
+import { DecisionRecord, DeliverableRecord, MilestoneRecord, RiskRecord, type Items } from "./items"
 import { date, today } from "./ops-project"
 import type { Store } from "./records"
 
@@ -27,7 +29,6 @@ export const ProjectStatus = Type.Object({
   deliverables: Type.Array(DeliverableRecord),
   risks: Type.Array(RiskRecord),
   decisions: Type.Array(DecisionRecord),
-  actions: Type.Object({ overdue: Type.Array(ActionRecord), fromMeeting: Type.Array(ActionRecord) }),
 })
 export type StatusInput = Static<typeof StatusInput>
 export type ProjectStatus = Static<typeof ProjectStatus>
@@ -45,10 +46,9 @@ export function registerStatusOps(ctx: PluginContext, store: Store, items: Items
     const p = await store.project(i.project)
     const since = date(i.since, "since")
     const reference = i.reference !== undefined ? date(i.reference, "reference") : today()
-    let meeting: number | null = null
     if (i.previousMeeting !== undefined) {
-      meeting = parseRef(i.previousMeeting, "M-")
-      if (meeting === null) throw new ValidationError(`invalid meeting "${i.previousMeeting.trim()}"`, { field: "previousMeeting", hint: "a meeting ref, e.g. M-4" })
+      if (parseRef(i.previousMeeting, "M-") === null)
+        throw new ValidationError(`invalid meeting "${i.previousMeeting.trim()}"`, { field: "previousMeeting", hint: "a meeting ref, e.g. M-4" })
     }
 
     const milestones = (await items.milestoneQuery().where("m.project_id", "=", p.id).orderBy("m.due_date").orderBy("m.id").execute())
@@ -77,8 +77,6 @@ export function registerStatusOps(ctx: PluginContext, store: Store, items: Items
       await items.decisionQuery().where("d.project_id", "=", p.id).where("d.date", ">=", since).orderBy("d.date").orderBy("d.id").execute()
     ).map(items.toDecision)
 
-    const open = (await items.actionQuery().where("a.project_id", "=", p.id).where("a.status", "=", "open").execute()).map(items.toAction).sort(byDue)
-
     return {
       project: {
         ref: p.ref,
@@ -92,10 +90,6 @@ export function registerStatusOps(ctx: PluginContext, store: Store, items: Items
       deliverables,
       risks,
       decisions,
-      actions: {
-        overdue: open.filter((a) => a.due_date !== null && a.due_date < reference),
-        fromMeeting: meeting === null ? [] : open.filter((a) => a.meeting_id === meeting),
-      },
     }
   }
 
@@ -105,7 +99,7 @@ export function registerStatusOps(ctx: PluginContext, store: Store, items: Items
         input: StatusInput,
         output: ProjectStatus,
         toolDescription:
-          "The data behind a project's status/prep block since a date: health (and whether it is stale), milestones completed and coming up, deliverables changed or due soon, open risks and issues, decisions, overdue actions and those from the previous meeting.",
+          "The data behind a project's status/prep block since a date: health (and whether it is stale), milestones completed and coming up, deliverables changed or due soon, open risks and issues and decisions (the actions plugin's projectActions has the actions).",
         run: projectStatus,
       },
     },

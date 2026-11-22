@@ -21,6 +21,13 @@ const widgets: PluginDef = definePlugin({
     })
     ctx.command({
       thing: "widget",
+      verb: "tag",
+      summary: "tag a widget",
+      flags: { tag: { type: "string", repeatable: true, description: "a tag" }, size: { type: "number", repeatable: true, description: "sizes" } },
+      run: async ({ flags }) => ({ json: { tag: flags.tag ?? null, size: flags.size ?? null }, text: "" }),
+    })
+    ctx.command({
+      thing: "widget",
       verb: "delete",
       summary: "delete a widget",
       args: [{ name: "id", required: true }],
@@ -124,6 +131,16 @@ describe("runCli: plugin commands", () => {
     expect(JSON.parse(r.out)).toEqual({ title: "x", due: null, size: 3, tags: ["a", "b", "c"] })
   })
 
+  test("a repeatable flag collects every occurrence, each converted, in order", async () => {
+    expect(JSON.parse((await cli(["widget", "tag", "--tag", "b", "--tag", "a", "--size", "2", "--size", "1", "--json"])).out)).toEqual({ tag: ["b", "a"], size: [2, 1] })
+    expect(JSON.parse((await cli(["widget", "tag", "--tag", "one", "--json"])).out)).toEqual({ tag: ["one"], size: null })
+    expect(JSON.parse((await cli(["widget", "tag", "--size", "x", "--json"])).out).error.message).toBe('--size must be a number, not "x"')
+    const help = await cli(["widget", "tag", "--help"])
+    expect(help.out).toStartWith("usage: ttybrain widget tag [--tag <value>...] [--size <number>...]\n")
+    const json = JSON.parse((await cli(["help", "--json"])).out).commands.find((c: { command: string }) => c.command === "widget tag")
+    expect(json.flags[0]).toEqual({ name: "tag", type: "string", description: "a tag", required: false, repeatable: true })
+  })
+
   test("a destructive command needs --yes", async () => {
     const r = await cli(["widget", "delete", "1"])
     expect(r.code).toBe(1)
@@ -182,7 +199,7 @@ describe("runCli: plugin commands", () => {
   test("a thing without a verb lists its verbs", async () => {
     const r = await cli(["widget"])
     expect(r.code).toBe(1)
-    expect(r.err).toBe('error: "widget" needs a verb\nhint: one of: add, delete, fail, busy, invalid, crash, origin, echo\n')
+    expect(r.err).toBe('error: "widget" needs a verb\nhint: one of: add, tag, delete, fail, busy, invalid, crash, origin, echo\n')
   })
 
   test("an unknown flag, a missing value, a bad number, a bad date and a missing argument are validation errors", async () => {

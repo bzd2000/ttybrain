@@ -64,7 +64,7 @@ describe("inbox screen", () => {
       await at("2026-10-30T08:00:00", () => write("inbox").capture!({ text: "old processed" })) // I-4
       await at("2026-11-01T10:00:00", () => write("inbox").markProcessed!({ ref: "I-4", summary: "long ago", by: "cli" }))
       await at("2026-11-11T08:00:00", () => write("inbox").capture!({ text: "send the plan" })) // I-5
-      await inCtx(() => write("projects").addAction!({ title: "Send the plan" }), { type: "inbox", ref: "I-5" })
+      await inCtx(() => write("actions").addAction!({ title: "Send the plan" }), { type: "inbox", ref: "I-5" })
       await at("2026-11-13T08:30:00", () => write("inbox").markProcessed!({ ref: "I-5", summary: "Action A-1", by: "you" }))
     })
     const frame = await t.frame()
@@ -111,13 +111,14 @@ describe("inbox screen", () => {
     t.input.pressKey("a")
     frame = await until(t, (f) => f.includes("New action"))
     expect(frame).toContain("call about")
+    expect(lineWith(frame, "Links")).toContain("#CRM") // the item's project, prefilled in the links field
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, (f) => f.includes("→ Action A-1") && !f.includes("New action"))
-    const action = await inCtx(async () => (await (kernel!.runtime("projects")!.data as any).selectFrom("action").select(["title", "project_id"]).executeTakeFirst()) as any)
+    const action = kernel!.db.raw.prepare("SELECT title, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'project') AS project_id FROM actions_action a").all([])[0] as any
     expect(action).toEqual({ title: "call about", project_id: 1 })
     const it = await item("I-1")
     expect([it.status, it.summary, it.processed_by]).toEqual(["processed", "Action A-1", "you"])
-    expect(await inCtx(() => kernel!.runtime("projects")!.provenance.originOf("action", 1))).toEqual({ type: "inbox", ref: "I-1" })
+    expect(await inCtx(() => kernel!.runtime("actions")!.provenance.originOf("action", 1))).toEqual({ type: "inbox", ref: "I-1" })
     expect(lineWith(frame, "→ Action A-1")).toContain("✓ you        → Action A-1")
     expect(frame).toContain("New · 0")
   })

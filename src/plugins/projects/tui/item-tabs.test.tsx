@@ -6,6 +6,7 @@ import { runWithContext } from "../../../kernel/context"
 import { defineTui, type TuiDef } from "../../../kernel/tui/api"
 import { useOverlay, type Overlay } from "../../../kernel/tui/overlay"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { actionsTui } from "../../actions/tui/index"
 import { projectsTui } from "./index"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -37,7 +38,7 @@ afterEach(async () => {
 const write = (plugin = "projects") => kernel!.runtime(plugin)!.self().write as Record<string, (i: any) => Promise<any>>
 const inCtx = <T,>(fn: () => Promise<T>) => runWithContext(kernel!.context(), fn)
 const rows = <T,>(table: string, cols: string[]) =>
-  inCtx(async () => (await (kernel!.runtime("projects")!.data as any).selectFrom(table).select(cols).orderBy("id").execute()) as T[])
+  inCtx(async () => (await (kernel!.runtime(table === "action" ? "actions" : "projects")!.data as any).selectFrom(table).select(cols).orderBy("id").execute()) as T[])
 
 async function seed(extra?: () => Promise<void>) {
   await inCtx(async () => {
@@ -279,20 +280,21 @@ describe("actions tab", () => {
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, "Call vendor")
     expect(lineWith(frame, "Call vendor")).toContain("me")
-    expect(await rows("action", ["title", "owner_id", "project_id"])).toEqual([{ title: "Call vendor", owner_id: null, project_id: 1 }])
+    expect(kernel!.db.raw.prepare("SELECT title, owner_id, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'project') AS project_id FROM actions_action a ORDER BY id").all([])).toEqual([{ title: "Call vendor", owner_id: null, project_id: 1 }])
   })
 
-  test("x on an action sets it to done; the tab counts all actions, so it stays", async () => {
+  test("x on an action sets it to done; it stays listed, the tab counts the open ones", async () => {
     const t = await open(5, async () => {
-      await write().addAction!({ title: "One", project: "CRM" })
-      await write().addAction!({ title: "Two", project: "CRM", owner: "@peter" })
+      await write("actions").addAction!({ title: "One", project: "CRM" })
+      await write("actions").addAction!({ title: "Two", project: "CRM", owner: "@peter" })
     })
     let frame = await until(t, "Actions 2")
-    expect(lineWith(frame, "Two")).toContain("@peter")
+    expect(lineWith(frame, "Two")).toContain("Peter")
     t.input.pressKey("x")
     frame = await until(t, "done ")
     expect(lineWith(frame, "One")).toContain("done")
-    expect(frame).toContain("Actions 2")
+    frame = await until(t, "Actions 1")
+    expect(frame).toContain("Actions · 1 open")
     expect((await rows<any>("action", ["status"]))[0].status).toBe("done")
   })
 })
@@ -332,7 +334,7 @@ describe("meeting-linked forms", () => {
       await write("meetings").addMeeting!({ title: "SteerCo Q4", date: "2026-12-04", projects: ["CRM"] })
       await write("meetings").addMeeting!({ title: "Board", date: "2026-12-10", kind: "board" })
     })
-    tui = await renderTui(kernel, { parts: [part], width: 120, height: 32 })
+    tui = await renderTui(kernel, { parts: [part, actionsTui], width: 120, height: 32 })
     tui.input.pressKey("3")
     expect(await tui.frame()).toContain("home screen")
     void overlay!.openForm("action", "action", { prefill: { meeting: "M-1", project: "#CRM" } })
@@ -342,7 +344,7 @@ describe("meeting-linked forms", () => {
     await type(tui, "Send the minutes")
     tui.input.pressKey("s", { ctrl: true })
     await untilThat(tui, (f) => !f.includes("New action"))
-    expect(await rows("action", ["title", "meeting_id", "project_id"])).toEqual([{ title: "Send the minutes", meeting_id: 1, project_id: 1 }])
+    expect(kernel!.db.raw.prepare("SELECT title, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'meeting') AS meeting_id, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'project') AS project_id FROM actions_action a ORDER BY id").all([])).toEqual([{ title: "Send the minutes", meeting_id: 1, project_id: 1 }])
     void overlay!.openForm("decision", "decision", { prefill: { meeting: "M-2", project: "#CRM" } })
     frame = await until(tui, "New decision")
     expect(frame).toContain("New decision · M-2")

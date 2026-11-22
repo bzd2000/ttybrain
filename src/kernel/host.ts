@@ -17,7 +17,7 @@ import { discoverPlugins, type PluginCandidate, type PluginSource } from "./load
 import { EventBus } from "./events"
 import { FieldRegistry } from "./fields"
 import { GuideRegistry } from "./guide"
-import { MigrationRunner, ownerOf, ownTablesOf, type Migration } from "./migrations"
+import { MigrationRunner, ownerOf, ownTablesOf, type DataStep, type Migration } from "./migrations"
 import { OperationRegistry } from "./operations"
 import { resolvePaths, type Paths } from "./paths"
 import { assertPluginId } from "./plugin-id"
@@ -37,6 +37,7 @@ export type PluginStatus = {
   source: PluginSource
   status: "ok" | "failed" | "disabled"
   error?: string
+  hint?: string // what to do about `error`, when a failed data step's error carried one (a PmError's hint)
   tui?: string // file URL of the plugin's tui entry (ttybrain.tui)
   dir?: string // the plugin's directory, for discovered plugins
 }
@@ -87,14 +88,16 @@ type Slot = {
   def?: PluginDef // missing for a candidate that failed before boot or is disabled
   status: "pending" | "ok" | "failed" | "disabled"
   error?: string
+  hint?: string
   migrations: Migration[]
+  steps: DataStep[] // ctx.upgrade, in registration order
   off: Array<() => void> // event subscriptions
   ctx?: PluginContext
   runtime?: PluginRuntime
 }
 
 // The context keys a runtime carries: everything but the registrations (PluginRuntime).
-const RUNTIME_KEYS: Array<keyof PluginRuntime> = ["id", "data", "config", "clock", "use", "self", "records", "tags", "reports", "provenance"]
+const RUNTIME_KEYS: Array<keyof PluginRuntime> = ["id", "data", "config", "clock", "use", "read", "self", "records", "tags", "reports", "provenance"]
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -175,7 +178,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const all = discover ? [...given, ...(await discoverPlugins(paths, config, discover))] : given
   const activateTimeoutMs = discover?.timeoutMs ?? DEFAULT_ACTIVATE_TIMEOUT_MS
   const slots: Slot[] = all.map((p): Slot => {
-    const base = { status: "pending" as Slot["status"], migrations: [], off: [] }
+    const base = { status: "pending" as Slot["status"], migrations: [], steps: [], off: [] }
     if (isDef(p)) return { ...base, id: p.id, version: p.version, source: "built-in", def: p }
     const slot: Slot = { ...base, id: p.def?.id ?? p.id, version: p.def?.version ?? p.version ?? "", source: p.source, dir: p.dir }
     if (p.tui !== undefined) slot.tui = p.tui
@@ -284,6 +287,14 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
       ownerOf: (name) => ownerOf(db, name),
     }
     const required = new Set(Object.keys(def.requires ?? {}))
+    const reads = def.reads ?? {}
+    // The read operations of a plugin in `reads` or `requires`, while it is loaded (and, for `reads`, in range).
+    const readOps = (other: string) => {
+      const d = byId.get(other)
+      if (!(required.has(other) || Object.hasOwn(reads, other)) || d?.status !== "ok") return undefined
+      if (Object.hasOwn(reads, other) && !satisfies(d.version, reads[other]!)) return undefined
+      return ops.api(other)?.read
+    }
     return {
       id,
       data: db.pluginDb(id, access),
@@ -301,7 +312,13 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         live()
         ops.expose(id, o)
       },
+      upgrade: (sid, run) => {
+        live()
+        if (!sid || s.steps.some((t) => t.id === sid)) throw new ValidationError(`data step id "${sid}" is empty or duplicated`)
+        s.steps.push({ id: sid, run })
+      },
       use: (other) => (required.has(other) ? ops.api(other) : undefined),
+      read: readOps,
       self: () => ops.api(id) ?? { read: {}, write: {} },
       recordType: (def) => {
         live()
@@ -403,17 +420,45 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   // Registrations made later (a timer left by activate) would be half-applied: a view would never be created.
   sealed = true
 
+  const context = (origin?: Origin): OpContext => ({ actor: "me", today: clock.today(), now: clock.now(), ...(origin ? { origin } : {}) })
+
+  // 6. Data steps (ctx.upgrade), now that every plugin's tables, views and reads are in place: the pending steps of
+  // the loaded plugins in load order, each in its own write transaction; then once more those that said "later", so
+  // two plugins can hand data over whichever loads first. A step that throws is rolled back and stays pending; its
+  // plugin stays loaded and its error is listed with it. Nothing pending: no write lock is taken. Another process
+  // holding the write lock: the steps are left for the next boot rather than waited for (a read-only command must
+  // not wait on a write it did not ask for).
+  let busy = false
+  const runSteps = async (todo: Array<{ s: Slot; step: DataStep }>) => {
+    const later: typeof todo = []
+    for (const t of todo) {
+      if (busy) break
+      if (t.s.status !== "ok") continue
+      try {
+        const outcome = await runWithContext(context(), () => runner.runStep(t.s.id, t.step))
+        if (outcome === "busy") busy = true
+        else if (outcome === "later") later.push(t)
+      } catch (e) {
+        const text = `data step "${t.step.id}" failed: ${message(e)}`
+        t.s.error = t.s.error === undefined ? text : `${t.s.error}; ${text}`
+        if (e instanceof PmError && e.hint) t.s.hint = t.s.hint === undefined ? e.hint : `${t.s.hint}; ${e.hint}`
+      }
+    }
+    return later
+  }
+  const pendingSteps = order.flatMap((s) => (s.status === "ok" ? runner.pendingSteps(s.id, s.steps).map((step) => ({ s, step })) : []))
+  if (pendingSteps.length > 0) await runSteps(await runSteps(pendingSteps))
+
   const plugins: PluginStatus[] = order.map((s) => ({
     id: s.id,
     version: s.version,
     source: s.source,
     status: s.status === "pending" ? "failed" : s.status,
     ...(s.error !== undefined ? { error: s.error } : {}),
+    ...(s.hint !== undefined ? { hint: s.hint } : {}),
     ...(s.tui !== undefined ? { tui: s.tui } : {}),
     ...(s.dir !== undefined ? { dir: s.dir } : {}),
   }))
-
-  const context = (origin?: Origin): OpContext => ({ actor: "me", today: clock.today(), now: clock.now(), ...(origin ? { origin } : {}) })
 
   return {
     paths,

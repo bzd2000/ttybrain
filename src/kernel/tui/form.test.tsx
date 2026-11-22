@@ -116,6 +116,21 @@ function NotesForm(props: RecordFormProps) {
   )
 }
 
+// A refs field: several refs, the one being typed autocompleted by its record type's prefix.
+function LinksForm(props: RecordFormProps) {
+  return (
+    <Form
+      title="Link records"
+      fields={[{ name: "links", label: "Links", kind: "refs", initial: "#CRM" }]}
+      submit={async (v) => {
+        submitted.push(v)
+        return { ok: true }
+      }}
+      close={props.close}
+    />
+  )
+}
+
 // A submit that fails with a plain error, naming the field to show it under.
 function OwnerErrorForm(props: RecordFormProps) {
   return (
@@ -145,6 +160,7 @@ const todoPart: TuiDef = defineTui({
     ui.recordForm("thing", { id: "assign", label: "Assign", component: AssignForm })
     ui.recordForm("thing", { id: "notes", label: "Notes", component: NotesForm })
     ui.recordForm("thing", { id: "owner-error", label: "Owner check", component: OwnerErrorForm })
+    ui.recordForm("thing", { id: "links", label: "Links", component: LinksForm })
   },
 })
 
@@ -355,6 +371,36 @@ describe("forms", () => {
     t.input.pressKey("s", { ctrl: true })
     await t.frame()
     expect(submitted).toEqual([{ owner: "@anna", size: "large" }])
+  })
+
+  test("refs field autocompletes the ref being typed by its prefix and keeps the others", async () => {
+    const t = await open([...builtinPlugins, todoPlugin])
+    await runWithContext(kernel.context(), async () => {
+      await kernel.runtime("people")!.self().write.addPerson!({ name: "Anna Peeters", handle: "anna" })
+      await kernel.runtime("projects")!.self().write.addProject!({ code: "CRM", name: "CRM replatforming" })
+      await kernel.runtime("projects")!.self().write.addProject!({ code: "ERP", name: "ERP vendor selection" })
+    })
+    overlay!.openForm("thing", "links")
+    expect(lineWith(await t.frame(), "Links")).toContain("#CRM")
+    // A word without a record prefix suggests nothing.
+    await t.input.typeText(" an")
+    expect(await t.frame()).not.toContain("@anna Anna Peeters")
+    await t.input.typeText(" @an")
+    let frame = await t.frame()
+    expect(frame).toContain("@anna Anna Peeters")
+    expect(frame).not.toContain("#ERP")
+    t.input.pressTab()
+    frame = await t.frame()
+    expect(frame).not.toContain("@anna Anna Peeters")
+    expect(lineWith(frame, "Links")).toContain("#CRM an @anna ")
+    await t.input.typeText("#er")
+    expect(await t.frame()).toContain("#ERP ERP vendor selection")
+    t.input.pressTab()
+    expect(lineWith(await t.frame(), "Links")).toContain("#CRM an @anna #ERP ")
+    // Tab without suggestions moves on (here: the only field, so it stays).
+    t.input.pressKey("s", { ctrl: true })
+    await t.frame()
+    expect(submitted).toEqual([{ links: "#CRM an @anna #ERP " }])
   })
 
   test(

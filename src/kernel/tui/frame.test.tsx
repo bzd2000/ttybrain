@@ -65,6 +65,13 @@ function PlainScreen() {
   onMount(() => keys.hints([{ key: "Enter", label: "open" }]))
   return <text>plain screen</text>
 }
+// A screen whose design draws no global or frame hints: `globals: false` and `frame: []` leave them out (the keys
+// still work).
+function BareScreen() {
+  const keys = useKeys()
+  onMount(() => keys.hints([{ key: "n", label: "new" }], { exact: true, frame: [], globals: false }))
+  return <text>bare screen</text>
+}
 function Tab(props: { recordRef: string }) {
   return <text>{`tab of ${props.recordRef}`}</text>
 }
@@ -85,6 +92,7 @@ const thingPart: TuiDef = defineTui({
   activate(ui) {
     ui.screen({ id: "things", title: "Things", slot: 2, component: ThingsScreen, records: ["thing"] })
     ui.screen({ id: "plain", title: "Plain", slot: 3, component: PlainScreen })
+    ui.screen({ id: "bare", title: "Bare", slot: 4, component: BareScreen })
     ui.recordTab("thing", { id: "main", title: "Main", order: 1, component: Tab })
     ui.recordTab("gadget", { id: "main", title: "Main", order: 1, component: Tab })
     ui.recordCrumb("thing", {
@@ -215,7 +223,17 @@ test("an exact bar: the screen's hints only, the global actions', and the frame 
   // Without exact: every registered hint, the global actions', then all of the frame's.
   t.input.pressKey("3")
   frame = await until(t, (f) => f.includes("plain screen"))
-  expect(line(frame, 19).trim()).toBe("enter open   w act   g or 1-3 screens   ? help   q quit")
+  expect(line(frame, 19).trim()).toBe("enter open   w act   g or 1-4 screens   ? help   q quit")
+  // `globals: false`: no global actions' hints either; the action's key still works.
+  t.input.pressKey("4")
+  frame = await until(t, (f) => f.includes("bare screen"))
+  expect(line(frame, 19).trim()).toBe("n new")
+  t.input.pressKey("w")
+  frame = await until(t, (f) => f.includes("act overlay"))
+  t.input.pressEscape()
+  frame = await until(t, (f) => f.includes("bare screen") && !f.includes("act overlay"))
+  t.input.pressKey("3")
+  frame = await until(t, (f) => f.includes("plain screen"))
   // An overlay's bar is its own.
   t.input.pressKey("w")
   frame = await until(t, (f) => f.includes("act overlay"))

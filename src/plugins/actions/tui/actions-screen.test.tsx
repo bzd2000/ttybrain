@@ -24,12 +24,12 @@ afterEach(async () => {
   kernel = undefined
 })
 
-const write = (plugin = "projects") => kernel!.runtime(plugin)!.self().write as Record<string, (i: any) => Promise<any>>
+const write = (plugin = "actions") => kernel!.runtime(plugin)!.self().write as Record<string, (i: any) => Promise<any>>
 const inCtx = <T,>(fn: () => Promise<T>) => runWithContext(kernel!.context(), fn)
 const lines = (frame: string) => frame.split("\n")
 const lineWith = (frame: string, s: string) => lines(frame).find((l) => l.includes(s)) ?? ""
 const indexOf = (frame: string, s: string) => lines(frame).findIndex((l) => l.includes(s))
-const rows = <T,>(cols: string[]) => inCtx(async () => (await (kernel!.runtime("projects")!.data as any).selectFrom("action").select(cols).orderBy("id").execute()) as T[])
+const rows = <T,>(cols: string[]) => inCtx(async () => (await (kernel!.runtime("actions")!.data as any).selectFrom("action").select(cols).orderBy("id").execute()) as T[])
 
 async function untilThat(t: RenderedTui, ok: (f: string) => boolean): Promise<string> {
   let frame = await t.frame()
@@ -50,13 +50,13 @@ async function seed() {
     await write("people").addPerson!({ name: "Peter Janssens", handle: "peter", is_stakeholder: true })
     await write("people").addPerson!({ name: "Anna Smits", handle: "anna" })
     const w = write()
-    await w.addProject!({ code: "CRM", name: "Customer platform" })
-    await w.addAction!({ title: "Reply to vendor", due: "2026-11-09", project: "CRM", forPerson: "peter" })
-    await w.addAction!({ title: "Prepare budget", due: "2026-11-13", owner: "anna" })
-    await w.addAction!({ title: "Review plan", due: "2026-11-15" })
-    await w.addAction!({ title: "Draft scope", due: "2026-11-16" })
-    await w.addAction!({ title: "Plan rollout", due: "2026-11-30" })
-    await w.addAction!({ title: "Someday maybe" })
+    await write("projects").addProject!({ code: "CRM", name: "Customer platform" })
+    await write("actions").addAction!({ title: "Reply to vendor", due: "2026-11-09", project: "CRM", forPerson: "peter" })
+    await write("actions").addAction!({ title: "Prepare budget", due: "2026-11-13", owner: "anna" })
+    await write("actions").addAction!({ title: "Review plan", due: "2026-11-15" })
+    await write("actions").addAction!({ title: "Draft scope", due: "2026-11-16" })
+    await write("actions").addAction!({ title: "Plan rollout", due: "2026-11-30" })
+    await write("actions").addAction!({ title: "Someday maybe" })
   })
 }
 
@@ -79,7 +79,7 @@ describe("actions screen", () => {
     expect(frame).toContain("Actions · 6 open")
     const overdue = lineWith(frame, "Reply to vendor")
     expect(overdue).toContain("me")
-    expect(overdue).toContain("Peter")
+    expect(overdue).toContain("CRM @peter")
     expect(overdue).toContain("CRM")
     expect(overdue).toContain("9 Nov")
     expect(lineWith(frame, "Prepare budget")).toContain("Anna")
@@ -125,8 +125,8 @@ describe("actions screen", () => {
   test("status:done lists done actions in one group, newest first", async () => {
     const t = await open()
     await inCtx(async () => {
-      await write().completeAction!({ ref: "A-2", date: "2026-11-12" })
-      await write().completeAction!({ ref: "A-3", date: "2026-11-13" })
+      await write("actions").completeAction!({ ref: "A-2", date: "2026-11-12" })
+      await write("actions").completeAction!({ ref: "A-3", date: "2026-11-13" })
     })
     t.input.pressKey("/")
     await type(t, "status:done")
@@ -218,7 +218,8 @@ describe("actions screen", () => {
     expect(isSelected(await t.spans(), "Draft scope")).toBe(true) // the row now at that index
   })
 
-  test("for/from shows inbox origin", async () => {
+  // Linked to replaces the 2026-11-13 For / from column: an inbox origin is no link, so the action shows `—`.
+  test("an action from the inbox without links shows —", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await seed()
     await inCtx(async () => void (await write("inbox").capture!({ text: "call the vendor" })))
@@ -230,8 +231,31 @@ describe("actions screen", () => {
     tui = await renderTui(kernel, { width: 120, height: 32 })
     tui.input.pressKey("4")
     const frame = await untilThat(tui, (f) => f.includes("From the inbox"))
-    expect(lineWith(frame, "From the inbox")).toContain("inbox I-1")
-    expect(lineWith(frame, "Prepare budget")).toContain("—")
+    expect(lineWith(frame, "From the inbox")).toMatch(/me\s+—\s+—/)
+  })
+
+  // The design's `@anna #CRM mine`: links by ref (a @handle also matches the owner), mine = owner:me.
+  test("filter by links and mine", async () => {
+    const t = await open()
+    const filtered = async (text: string, footer = `status:open ${text}`) => {
+      t.input.pressKey("/")
+      await type(t, text)
+      t.input.pressEnter()
+      return untilThat(t, (f) => f.includes(footer))
+    }
+    let frame = await filtered("#CRM @peter")
+    expect(frame).toContain("Reply to vendor")
+    expect(frame).not.toContain("Prepare budget")
+    t.input.pressEscape()
+    await untilThat(t, (f) => f.includes(" status:open ─"))
+    frame = await filtered("@anna") // Anna owns A-2
+    expect(frame).toContain("Prepare budget")
+    expect(frame).not.toContain("Reply to vendor")
+    t.input.pressEscape()
+    await untilThat(t, (f) => f.includes(" status:open ─"))
+    frame = await filtered("mine", "status:open owner:me")
+    expect(frame).toContain("Reply to vendor")
+    expect(frame).not.toContain("Prepare budget")
   })
 
   test("an action from a meeting shows the meeting title", async () => {
@@ -239,7 +263,7 @@ describe("actions screen", () => {
     await seed()
     await inCtx(async () => {
       await write("meetings").addMeeting!({ title: "SteerCo Q4", date: "2026-12-04" }) // M-1
-      await write().addAction!({ title: "Send the minutes", meeting: "M-1" })
+      await write("actions").addAction!({ title: "Send the minutes", meeting: "M-1" })
     })
     tui = await renderTui(kernel, { width: 120, height: 32 })
     tui.input.pressKey("4")
@@ -253,7 +277,7 @@ describe("actions screen", () => {
     await seed()
     await inCtx(async () => {
       await write("meetings").addMeeting!({ title: "季度指导委员会会议", date: "2026-12-04" }) // 18 cells
-      await write().addAction!({ title: "Send the minutes", meeting: "M-1" })
+      await write("actions").addAction!({ title: "Send the minutes", meeting: "M-1" })
     })
     tui = await renderTui(kernel, { width: 120, height: 32 })
     tui.input.pressKey("4")
@@ -264,10 +288,10 @@ describe("actions screen", () => {
   test("a 16-character project code is shown whole at 80x24", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await inCtx(async () => {
-      await write().addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
-      await write().addProject!({ code: "CRM", name: "Customer platform" })
-      await write().addAction!({ title: "Kickoff", due: "2026-11-16", project: "DATAPLATFORM2027" })
-      await write().addAction!({ title: "Reply to vendor", due: "2026-11-16", project: "CRM" })
+      await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+      await write("projects").addProject!({ code: "CRM", name: "Customer platform" })
+      await write("actions").addAction!({ title: "Kickoff", due: "2026-11-16", project: "DATAPLATFORM2027" })
+      await write("actions").addAction!({ title: "Reply to vendor", due: "2026-11-16", project: "CRM" })
     })
     tui = await renderTui(kernel, { width: 80, height: 24 })
     tui.input.pressKey("4")
@@ -277,5 +301,22 @@ describe("actions screen", () => {
     expect(long).toContain("Mon")
     for (const l of lines(frame)) expect(l.length).toBeLessThanOrEqual(80)
     expect(lineWith(frame, "Reply to vendor").indexOf(" CRM ")).toBe(long.indexOf(" DATAPLATFORM2027 "))
+  })
+
+  test("a linked meeting, project or person that is gone: the action is still listed (Review Focus 4)", async () => {
+    kernel = await makeTestKernel({ plugins: builtinPlugins })
+    await inCtx(async () => {
+      await write("people").addPerson!({ name: "Gone Person", handle: "gone", is_stakeholder: true })
+      await write("projects").addProject!({ code: "TMP", name: "Short-lived" })
+      await write("meetings").addMeeting!({ title: "SteerCo", date: "2026-11-10" })
+      await write("actions").addAction!({ title: "Follow up the steerco", due: "2026-11-16", meeting: "M-1" })
+      await write("actions").addAction!({ title: "Close the project", due: "2026-11-16", project: "TMP", forPerson: "gone" })
+    })
+    kernel.db.raw.exec("DELETE FROM meetings_meeting; DELETE FROM projects_project; DELETE FROM people_person")
+    tui = await renderTui(kernel, { width: 120, height: 32 })
+    tui.input.pressKey("4")
+    const frame = await untilThat(tui, (f) => f.includes("Close the project"))
+    expect(lineWith(frame, "Follow up the")).toContain("A-1")
+    expect(lineWith(frame, "Close the project")).toContain("A-2")
   })
 })

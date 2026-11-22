@@ -1,9 +1,9 @@
 // projects' reports: `project-status` (`ttybrain report status <project>`, the prep block, built from projectStatus) and
-// `overview` (`ttybrain report overview`, the Attention screen as text). Other plugins add sections to both (meetings
-// to the status report, people and inbox to the overview); the kernel owns neither.
-import { addDays, dueLabel, parseRef, shortDate, Type, ValidationError, ViewUnavailableError, type Cell, type Mark, type PluginContext, type ReportCompact, type ReportTone } from "@ttybrain/api"
+// `overview` (`ttybrain report overview`, the Attention screen as text). Other plugins add sections to both (actions
+// to both, meetings to the status report, people and inbox to the overview); the kernel owns neither.
+import { addDays, parseRef, shortDate, Type, ValidationError, ViewUnavailableError, type Cell, type Mark, type PluginContext, type ReportCompact, type ReportTone } from "@ttybrain/api"
 import type { Items } from "./items"
-import { makeOverview, type OverviewAction } from "./overview"
+import { makeOverview } from "./overview"
 import { date, today } from "./ops-project"
 import type { Store } from "./records"
 import type { ProjectStatus, StatusInput } from "./status"
@@ -12,7 +12,6 @@ const SINCE_DAYS = 30 // the status report's default "since": today − 30
 
 type Row = Record<string, Cell>
 const healthTone = (health: string | null): NonNullable<Mark["tone"]> => (health === "green" || health === "amber" || health === "red" ? health : "muted")
-const me = (owner: string | null) => owner ?? "me"
 // The compact forms' wording: readable enum values (`in review`) and first names.
 const label = (v: string) => v.replace(/_/g, " ")
 const firstName = (name: string) => name.split(/\s+/)[0] || name
@@ -71,7 +70,7 @@ function registerStatusReport(ctx: PluginContext, store: Store): void {
     let n = names.get(params)
     if (!n) {
       n = status(params).then(async (s) => {
-        const owners = [...s.deliverables, ...s.actions.overdue, ...s.actions.fromMeeting].map((x) => x.owner)
+        const owners = s.deliverables.map((x) => x.owner)
         const handles = [...new Set(owners.filter((h): h is string => h !== null && h.startsWith("@")).map((h) => h.slice(1)))]
         const rows = handles.length === 0 ? [] : await ctx.data.selectFrom("people.person").select(["handle", "name"]).where("handle", "in", handles).execute()
         return new Map(rows.map((r) => [`@${String(r.handle)}`, firstName(String(r.name))]))
@@ -185,30 +184,6 @@ function registerStatusReport(ctx: PluginContext, store: Store): void {
       empty: `No decisions since ${shortDate(p.since)}.`,
     },
   }))
-  section("actions", 60, (s, _p, who) => {
-    const t = today()
-    const seen = new Set<string>()
-    const rows: Row[] = []
-    const marks: Mark[] = []
-    const lines: ReportCompact["lines"] = []
-    for (const [why, list] of [
-      ["overdue", s.actions.overdue],
-      ["previous meeting", s.actions.fromMeeting],
-    ] as const)
-      for (const a of list)
-        if (!seen.has(a.ref)) {
-          seen.add(a.ref)
-          rows.push({ ID: a.ref, Action: a.title, Owner: me(a.owner), Due: a.due_date, Why: why })
-          marks.push({ icon: "!", ...(why === "overdue" ? { tone: "red" as const } : {}) })
-          // The compact form lists only what is overdue today, in red (`! A-27 Send revised budget to Peter
-          // me · -3d`); the table keeps everything due before the reference and the previous meeting's actions.
-          if (a.due_date !== null && a.due_date < t) {
-            const owner = a.owner === null ? "me" : person(who, a.owner)
-            lines.push({ icon: { text: "!", tone: "red" }, text: [{ text: `${a.ref} ${a.title}` }], aside: { text: `${owner} · ${dueLabel(a.due_date, t)}`, tone: "red" } })
-          }
-        }
-    return { title: "Actions", columns: ["ID", "Action", "Owner", "Due", "Why"], rows, marks, empty: "No overdue actions.", compact: { title: "Overdue actions", lines } }
-  })
 }
 
 function registerOverview(ctx: PluginContext, store: Store, items: Items): void {
@@ -217,21 +192,7 @@ function registerOverview(ctx: PluginContext, store: Store, items: Items): void 
     ctx.reportSection("overview", { id, order, run })
   const overview = makeOverview(ctx, store, items)
 
-  const actionRow = ({ a, owner }: OverviewAction): Row => ({ ID: a.ref, Action: a.title, Project: a.project?.slice(1) ?? null, Owner: owner, Due: a.due_date })
-  const ACTION_COLUMNS = ["ID", "Action", "Project", "Owner", "Due"]
-
-  section("overdue-actions", 10, async () => ({
-    title: "Overdue actions",
-    columns: ACTION_COLUMNS,
-    rows: (await overview.overdueActions()).map(actionRow),
-    empty: "No overdue actions.",
-  }))
-  section("due-this-week", 20, async () => ({
-    title: "Due this week",
-    columns: ACTION_COLUMNS,
-    rows: (await overview.dueThisWeek()).map(actionRow),
-    empty: "Nothing due this week.",
-  }))
+  // overdue-actions (10) and due-this-week (20) are the actions plugin's.
   section("projects-needing-attention", 30, async () => ({
     title: "Projects needing attention",
     columns: ["Project", "Name", "Health", "Updated", "Comment"],

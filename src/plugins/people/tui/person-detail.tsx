@@ -109,24 +109,33 @@ export function PersonDetail(props: { recordRef: string; rows?: number }) {
           .orderBy("pr.code")
           .execute(),
       )
-      // Open actions for the person (a stakeholder's follow-ups) or owned by them (a team member's).
-      const actions = (column: "for_person_id" | "owner_id") =>
-        store.unlessUnavailable([] as Array<{ id: unknown; title: unknown; due_date: unknown }>, () =>
-          rt.data
-            .selectFrom("projects.action as a")
-            .select(["a.id", "a.title", "a.due_date"])
-            .where(`a.${column}`, "=", p.id)
-            .where("a.status", "=", "open")
-            .execute(),
-        )
+      // Open actions linked to the person (a stakeholder's follow-ups) or owned by them (a team member's).
+      const actions = (as: "linked" | "owner") =>
+        store.unlessUnavailable([] as Array<{ id: unknown; title: unknown; due_date: unknown }>, () => {
+          const q = rt.data.selectFrom("actions.action as a").select(["a.id", "a.title", "a.due_date"]).where("a.status", "=", "open")
+          return (
+            as === "owner"
+              ? q.where("a.owner_id", "=", p.id)
+              : q.where((eb) =>
+                  eb.exists(
+                    eb
+                      .selectFrom("actions.link as l")
+                      .select("l.action_id")
+                      .whereRef("l.action_id", "=", "a.id")
+                      .where("l.record_type", "=", "person")
+                      .where("l.record_id", "=", p.id),
+                  ),
+                )
+          ).execute()
+        })
       const toAction = async (r: { id: unknown; title: unknown; due_date: unknown }) => ({
         id: Number(r.id),
         ref: await rt.records.refOf("action", Number(r.id)),
         title: String(r.title),
         due: r.due_date === null ? null : String(r.due_date),
       })
-      const openActions = async (column: "for_person_id" | "owner_id") =>
-        Promise.all((await actions(column)).map(toAction)).then((xs) => xs.sort(byDue).slice(0, limit))
+      const openActions = async (as: "linked" | "owner") =>
+        Promise.all((await actions(as)).map(toAction)).then((xs) => xs.sort(byDue).slice(0, limit))
       const notes = async (oneOnOne: boolean) => {
         let query = store.noteQuery().where("n.person_id", "=", p.id)
         if (oneOnOne) query = query.where("n.kind", "=", "one_on_one")
@@ -137,9 +146,9 @@ export function PersonDetail(props: { recordRef: string; rows?: number }) {
       return {
         p,
         projects: involvements.map((r) => ({ code: String(r.code), role: r.role === null ? "" : String(r.role) })),
-        followUps: stakeholder ? await openActions("for_person_id") : [],
+        followUps: stakeholder ? await openActions("linked") : [],
         interactions: stakeholder ? await notes(false) : [],
-        owned: member ? await openActions("owner_id") : [],
+        owned: member ? await openActions("owner") : [],
         oneOnOnes: member ? await notes(true) : [],
         goals: p.is_team
           ? (await store.goalQuery().where("g.person_id", "=", p.id).where("g.status", "=", "open").execute())

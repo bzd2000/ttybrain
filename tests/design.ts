@@ -96,6 +96,7 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
   const at = <T>(now: string, fn: () => Promise<T>) => runWithContext({ ...kernel.context(), today: now.slice(0, 10), now }, fn)
   const people = w("people")
   const projects = w("projects")
+  const actions = w("actions")
   const meetings = w("meetings")
   const inbox = w("inbox")
 
@@ -219,11 +220,11 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
     await meetings.addAgendaItem!({ meeting: m2.ref, text: "AOB" })
 
     // The overdue actions and two due this week (the third comes from the inbox below).
-    await projects.addAction!({ title: "Send revised budget to Peter", project: "CRM", forPerson: "peter", due: "2026-11-09" })
-    await projects.addAction!({ title: "Book vendor demo slot", project: "ERP", owner: "bob", meeting: m1.ref, due: "2026-11-10" })
-    await projects.addAction!({ title: "Review test strategy", project: "DWH", owner: "anna", due: "2026-11-11" })
-    await projects.addAction!({ title: "Prepare SteerCo deck input", project: "CRM", meeting: m2.ref, due: "2026-11-13" })
-    await projects.addAction!({ title: "Confirm licence count", project: "IAM", owner: "karim", due: "2026-11-13" })
+    await actions.addAction!({ title: "Send revised budget to Peter", project: "CRM", forPerson: "peter", due: "2026-11-09" })
+    await actions.addAction!({ title: "Book vendor demo slot", project: "ERP", owner: "bob", meeting: m1.ref, due: "2026-11-10" })
+    await actions.addAction!({ title: "Review test strategy", project: "DWH", owner: "anna", due: "2026-11-11" })
+    await actions.addAction!({ title: "Prepare SteerCo deck input", project: "CRM", meeting: m2.ref, due: "2026-11-13" })
+    await actions.addAction!({ title: "Confirm licence count", project: "IAM", owner: "karim", due: "2026-11-13" })
   })
 
   // Inbox items already handled, and what was made from them (with the item as their origin).
@@ -235,14 +236,14 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
   const coffee = await at("2026-11-09T08:10:00", () => inbox.capture!({ text: "remember to buy coffee for the team" }))
   await at("2026-11-09T17:00:00", () => inbox.dismiss!({ ref: coffee.ref, by: "you" }))
   await handled("2026-11-09T14:20:00", "2026-11-10T08:30:00", "#CRM #DWH migration overlap, Bob to align with DWH team", async () => {
-    const action = await projects.addAction!({ title: "Align migration scope with DWH team", project: "CRM", owner: "bob", due: "2026-11-16" })
+    const action = await actions.addAction!({ title: "Align migration scope with DWH team", project: "CRM", owner: "bob", due: "2026-11-16" })
     const risk = await projects.addRisk!({ project: "CRM", title: "Data migration volume unknown", type: "risk", severity: "medium" })
     return `action ${action.ref} (Bob, Mon) · risk ${risk.ref} "Data migration volume unknown"`
   })
   await handled("2026-11-11T15:30:00", "2026-11-11T18:00:00", "1:1 @sofie wants project mgmt training next year, follow up with options", async () => {
     await people.addNote!({ person: "sofie", kind: "one_on_one", text: "Wants project mgmt training next year", date: "2026-11-11" })
     await people.addGoal!({ person: "sofie", title: "PM training 2027" })
-    const action = await projects.addAction!({ title: "Send training plan options", due: "2026-11-15" })
+    const action = await actions.addAction!({ title: "Send training plan options", due: "2026-11-15" })
     return `1:1 note on Sofie · goal "PM training 2027" · action ${action.ref} (me, Sun)`
   })
   await handled("2026-11-11T16:45:00", "2026-11-11T18:05:00", "#ERP decision: go with vendor B, signed off by steering", async () => {
@@ -253,8 +254,8 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
   await inCtx(async () => {
     // Next week; then 34 later actions, which bring the projects' open actions to ERP 7, CRM 9, HRP 4, DWH 6,
     // IAM 3, SEC 2, WMS 1; and 3 without a date.
-    await projects.addAction!({ title: "Invite Marie to design walkthrough", project: "CRM", forPerson: "marie", due: "2026-11-17" })
-    await projects.addAction!({ title: "Pilot user list", project: "HRP", owner: "sofie", due: "2026-11-18" })
+    await actions.addAction!({ title: "Invite Marie to design walkthrough", project: "CRM", forPerson: "marie", due: "2026-11-17" })
+    await actions.addAction!({ title: "Pilot user list", project: "HRP", owner: "sofie", due: "2026-11-18" })
     const later: Array<[code: string | undefined, titles: string[]]> = [
       ["CRM", ["Draft cutover plan", "Agree data retention rules", "Schedule key user training", "Review vendor SOW change", "Plan UAT scenarios"]],
       ["ERP", ["Collect reference calls", "Check vendor B financials", "Draft contract annex", "Plan data conversion workshop", "Align with Finance on licences", "Prepare go-live checklist"]],
@@ -281,8 +282,8 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
     ]
     let n = 0
     for (const [project, titles] of later)
-      for (const title of titles) await projects.addAction!({ title, due: addDays("2026-11-23", 3 * n++), ...(project && { project }) })
-    for (const title of ["Read architecture guidelines", "Think about PMO tooling", "Sort old meeting notes"]) await projects.addAction!({ title })
+      for (const title of titles) await actions.addAction!({ title, due: addDays("2026-11-23", 3 * n++), ...(project && { project }) })
+    for (const title of ["Read architecture guidelines", "Think about PMO tooling", "Sort old meeting notes"]) await actions.addAction!({ title })
 
     // Contact notes, giving the days since the last contact on 12 Nov (Sofie's 1:1 came from the inbox above).
     const notes: Array<[handle: string, kind: "interaction" | "one_on_one", text: string, date: string]> = [
@@ -318,15 +319,18 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
 export async function seedLongRefs(kernel: Kernel): Promise<void> {
   const w = (plugin: string) => kernel.runtime(plugin)!.self().write as Write
   const projects = w("projects")
+  const actions = w("actions")
   await runWithContext(kernel.context(), async () => {
     await w("people").addPerson!({ name: "Alexandra Vandenberghe", handle: "alexandra", is_stakeholder: true, influence: "high", interest: "high" })
     await projects.addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
     await projects.setHealth!({ project: "DATAPLATFORM2027", health: "red", comment: "Ingest blocked", date: "2026-11-10" })
     await projects.addMilestone!({ project: "DATAPLATFORM2027", title: "Ingest live", due: "2026-11-09" })
     await projects.addInvolvement!({ project: "DATAPLATFORM2027", person: "alexandra", role: "sponsor" })
-    const first = await projects.addAction!({ title: "Unblock ingest", project: "DATAPLATFORM2027", due: "2026-11-10" })
-    kernel.db.raw.exec(`UPDATE projects_action SET id = 1000 WHERE id = ${Number(first.ref.slice(2))}`)
-    await projects.addAction!({ title: "Confirm cluster size", project: "DATAPLATFORM2027", due: "2026-11-13" })
+    // Moved before it is linked (a link references the action's id).
+    const first = await actions.addAction!({ title: "Unblock ingest", due: "2026-11-10" })
+    kernel.db.raw.exec(`UPDATE actions_action SET id = 1000 WHERE id = ${Number(first.ref.slice(2))}`)
+    await actions.editAction!({ ref: "A-1000", project: "DATAPLATFORM2027" })
+    await actions.addAction!({ title: "Confirm cluster size", project: "DATAPLATFORM2027", due: "2026-11-13" })
     const risk = await projects.addRisk!({ project: "DATAPLATFORM2027", title: "Ingest vendor late", type: "risk", severity: "high" })
     kernel.db.raw.exec(`UPDATE projects_risk SET id = 1000 WHERE id = ${Number(risk.ref.slice(2))}`)
   })

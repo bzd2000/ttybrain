@@ -63,7 +63,8 @@ test("Meeting prep as designed", async () => {
   expect(fgAt(spans, "Steering committee Q4", 0)).toBe(theme.text)
   expect(fgAt(spans, " · Fri 4 Dec", 0)).toBe(theme.muted)
   expect(line(frame, 1)).toBe("")
-  expect(line(frame, 2)).toBe("  Agenda   Prep   Notes   Export")
+  // The actions plugin adds its Actions tab after Export (2026-11-20: every meeting gets one).
+  expect(line(frame, 2)).toBe("  Agenda   Prep   Notes   Export   Actions 1")
   expect(fgAt(spans, "Prep", 2)).toBe(theme.accent)
   expect(fgAt(spans, "Agenda", 2)).toBe(theme.muted)
 

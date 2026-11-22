@@ -2,13 +2,12 @@
 // and the current due date is shown in the label; submitting empty or an unchanged date writes nothing (`e` clears a date).
 import { createEffect, Show, untrack } from "solid-js"
 import { act, Form, longDate, useQuery, useRuntime, type RecordFormProps, type SubmitResult } from "@ttybrain/api/tui"
-import { makeItems } from "../logic/items"
 import { makeStore } from "../logic/records"
 
 export function DueForm(props: RecordFormProps) {
   const rt = useRuntime()
-  const items = makeItems(rt, makeStore(rt))
-  const q = useQuery(async () => (props.recordRef === undefined ? undefined : await items.find("action", props.recordRef)))
+  const store = makeStore(rt)
+  const q = useQuery(async () => (props.recordRef === undefined ? undefined : await store.find(props.recordRef)))
   createEffect(() => {
     if (props.recordRef === undefined || (q.error() !== undefined && q.data() === undefined)) props.close()
   })

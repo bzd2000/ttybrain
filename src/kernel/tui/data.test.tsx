@@ -14,7 +14,7 @@ import { defineTui, type TuiDef } from "./types"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-// A screen in the projects plugin listing its actions' titles through useQuery.
+// A screen in the actions plugin listing its actions' titles through useQuery.
 function ActionsList() {
   const rt = useRuntime()
   const q = useQuery(() => rt.data.selectFrom("action").select("title").orderBy("id").execute())
@@ -25,7 +25,7 @@ function ActionsList() {
   )
 }
 
-const screenPart = (component: () => any, plugin = "projects"): TuiDef =>
+const screenPart = (component: () => any, plugin = "actions"): TuiDef =>
   defineTui({ plugin, activate: (ui) => ui.screen({ id: "t", title: "Test", slot: 2, component }) })
 
 let kernel: TestKernel
@@ -50,10 +50,10 @@ async function second(): Promise<Kernel> {
 }
 
 const addAction = (k: Kernel, title: string) =>
-  runWithContext(k.context(), () => k.runtime("projects")!.self().write.addAction!({ title }))
+  runWithContext(k.context(), () => k.runtime("actions")!.self().write.addAction!({ title }))
 
 const actionCount = async () =>
-  (await runWithContext(kernel.context(), () => kernel.runtime("projects")!.data.selectFrom("action").select("id").execute())).length
+  (await runWithContext(kernel.context(), () => kernel.runtime("actions")!.data.selectFrom("action").select("id").execute())).length
 
 const statusLine = (frame: string) => frame.trimEnd().split("\n").at(-1)!
 
@@ -73,7 +73,7 @@ describe("TUI data", () => {
     tui = await renderTui(kernel, { parts: [screenPart(ActionsList)], refreshMs: 60_000 })
     tui.input.pressKey("2")
     expect(await tui.frame()).not.toContain("row Mine")
-    const res = await act(() => kernel.runtime("projects")!.self().write.addAction!({ title: "Mine" }), { ok: (r: any) => `added ${r.ref}` })
+    const res = await act(() => kernel.runtime("actions")!.self().write.addAction!({ title: "Mine" }), { ok: (r: any) => `added ${r.ref}` })
     expect(res).toMatchObject({ ok: true, value: { ref: "A-1" } })
     await sleep(20)
     const frame = await tui.frame()
@@ -138,7 +138,7 @@ describe("TUI data", () => {
       const b = await second()
       b.db.raw.exec("BEGIN IMMEDIATE")
       setTimeout(() => b.db.raw.exec("ROLLBACK"), 1500)
-      const pending = act(() => kernel.runtime("projects")!.self().write.addAction!({ title: "Busy" }), { ok: (r: any) => `added ${r.ref}` })
+      const pending = act(() => kernel.runtime("actions")!.self().write.addAction!({ title: "Busy" }), { ok: (r: any) => `added ${r.ref}` })
       let seen = false
       for (let i = 0; i < 100 && !seen; i++) {
         await sleep(50)
@@ -171,7 +171,7 @@ describe("TUI data", () => {
       const q = useQuery(() => rt.data.selectFrom("action").select("title").execute())
       return <text>{`overlay rows: ${(q.data() ?? []).map((r: { title: string }) => r.title).join(",")}`}</text>
     }
-    const part = defineTui({ plugin: "projects", activate: (ui) => ui.globalAction({ id: "peek", key: "z", label: "Peek", overlay: Overlay }) })
+    const part = defineTui({ plugin: "actions", activate: (ui) => ui.globalAction({ id: "peek", key: "z", label: "Peek", overlay: Overlay }) })
     tui = await renderTui(kernel, { parts: [part] })
     tui.input.pressKey("z")
     expect(await tui.frame()).toContain("overlay rows: Seen in overlay")
@@ -181,7 +181,7 @@ describe("TUI data", () => {
     function Broken(): any {
       throw new Error("boom")
     }
-    const part = defineTui({ plugin: "projects", activate: (ui) => ui.globalAction({ id: "broken", key: "z", label: "Broken", overlay: Broken }) })
+    const part = defineTui({ plugin: "actions", activate: (ui) => ui.globalAction({ id: "broken", key: "z", label: "Broken", overlay: Broken }) })
     tui = await renderTui(kernel, { parts: [part, screenPart(() => <text>test screen</text>, "inbox")] })
     tui.input.pressKey("z")
     expect(await tui.frame()).toContain("⚠ Broken: boom")
@@ -196,7 +196,7 @@ describe("TUI data", () => {
 
   test("act outside a write reports the error and returns it", async () => {
     tui = await renderTui(kernel, { parts: builtinTuiParts })
-    const res = await act(() => kernel.runtime("projects")!.self().write.addAction!({ title: "  " }))
+    const res = await act(() => kernel.runtime("actions")!.self().write.addAction!({ title: "  " }))
     expect(res.ok).toBe(false)
     expect(statusLine(await tui.frame())).toContain("title")
     expect(await actionCount()).toBe(0)
@@ -204,7 +204,7 @@ describe("TUI data", () => {
 
   test("act with two write ops where the second throws leaves no trace of the first", async () => {
     tui = await renderTui(kernel, { parts: builtinTuiParts })
-    const w = kernel.runtime("projects")!.self().write as Record<string, (i: any) => Promise<any>>
+    const w = kernel.runtime("actions")!.self().write as Record<string, (i: any) => Promise<any>>
     const res = await act(async () => {
       await w.addAction!({ title: "First" })
       return w.addAction!({ title: "  " })
@@ -217,7 +217,7 @@ describe("TUI data", () => {
     tui = await renderTui(kernel, { parts: [screenPart(ActionsList)], refreshMs: 60_000 })
     tui.input.pressKey("2")
     await tui.frame()
-    const w = kernel.runtime("projects")!.self().write as Record<string, (i: any) => Promise<any>>
+    const w = kernel.runtime("actions")!.self().write as Record<string, (i: any) => Promise<any>>
     const res = await act(async () => {
       await w.addAction!({ title: "One" })
       return w.addAction!({ title: "Two" })
@@ -234,7 +234,7 @@ describe("TUI data", () => {
     tui = await renderTui(kernel, { parts: builtinTuiParts })
     let changed = 0
     kernel.events.on("record.changed", () => void changed++)
-    const rt = kernel.runtime("projects")!
+    const rt = kernel.runtime("actions")!
     const res = await act(() => rt.data.insertInto("action").values({ title: "sneaky", created_at: "2026-11-13T09:00:00", updated_at: "2026-11-13T09:00:00" }).execute())
     expect(res.ok).toBe(false)
     expect(res.ok ? "" : (res.error as Error).message).toBe("data changes must run inside a write operation")
@@ -247,7 +247,7 @@ describe("TUI data", () => {
 
   test("act checks its origin before it writes", async () => {
     tui = await renderTui(kernel, { parts: builtinTuiParts })
-    const w = kernel.runtime("projects")!.self().write
+    const w = kernel.runtime("actions")!.self().write
     let ran = false
     const res = await act(async () => ((ran = true), w.addAction!({ title: "From nowhere" })), { origin: { type: "inbox", ref: "I-99" } })
     expect(res.ok).toBe(false)

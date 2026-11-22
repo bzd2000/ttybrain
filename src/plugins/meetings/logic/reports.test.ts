@@ -3,6 +3,7 @@ import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { runCli } from "../../../kernel/cli/dispatch"
 import { runWithContext } from "../../../kernel/context"
 import { people } from "../../people/logic/index"
+import { actions } from "../../actions/logic/index"
 import { projects } from "../../projects/logic/index"
 import { meetings } from "./index"
 
@@ -38,7 +39,7 @@ const ASK = "Approve 2-week shift of design milestone"
 // The mockup meeting (M-2, Steering committee Q4 on 2026-12-04) and the held SteerCo Q3 (M-1) before it.
 // Today is 2026-11-13; CRM's since is M-1's date, 2026-10-28.
 async function seed() {
-  k = await makeTestKernel({ plugins: [meetings, projects, people] })
+  k = await makeTestKernel({ plugins: [meetings, projects, people, actions] })
   await w("people", "addPerson", { name: "Peter Janssens", handle: "peter" })
   await w("people", "addPerson", { name: "Marie Dubois", handle: "marie" })
   await w("projects", "addProject", { code: "CRM", name: "CRM replatforming" })
@@ -46,8 +47,8 @@ async function seed() {
   await w("projects", "setHealth", { project: "CRM", health: "amber", comment: "Design slipping 2 weeks", date: "2026-11-02" })
   await w("projects", "addMilestone", { project: "CRM", title: "Design approved", due: "2026-12-10" }) // MS-1
   await w("projects", "addRisk", { project: "CRM", title: "Budget overrun ~12%", type: "issue", severity: "high" }) // R-1
-  await w("projects", "addAction", { title: "Send revised budget to Peter", project: "CRM", due: "2026-11-10" }) // A-1, overdue
-  await w("projects", "addAction", { title: "Share integration specs", project: "CRM", meeting: "M-1" }) // A-2, from M-1
+  await w("actions", "addAction", { title: "Send revised budget to Peter", project: "CRM", due: "2026-11-10" }) // A-1, overdue
+  await w("actions", "addAction", { title: "Share integration specs", project: "CRM", meeting: "M-1" }) // A-2, from M-1
   await w("meetings", "closeMeeting", { ref: "M-1" })
   await w("meetings", "addMeeting", { title: "Steering committee Q4", date: "2026-12-04", kind: "steering", attendees: ["peter", "marie"] }) // M-2
   await w("meetings", "addAgendaItem", { meeting: "M-2", text: "Minutes & open actions" })
@@ -161,7 +162,7 @@ describe("meetings reports", () => {
     await w("meetings", "setNotes", { meeting: "M-1", markdown: "Design re-planned.\n\n- budget to follow" })
     await w("projects", "addDecision", { title: "Phase 1 excludes marketing automation", project: "CRM", date: "2026-10-28", meeting: "M-1" }) // DE-1
     await w("projects", "addDecision", { title: "Not from this meeting", project: "CRM", date: "2026-10-28" }) // DE-2
-    await w("projects", "addAction", { title: "Book the venue", owner: "peter", due: "2026-11-20", meeting: "M-1" }) // A-3, no project
+    await w("actions", "addAction", { title: "Book the venue", owner: "peter", due: "2026-11-20", meeting: "M-1" }) // A-3, no project
     expect((await ok("report", "minutes", "M-1")).out).toBe(
       [
         "# Minutes · SteerCo Q3 · 2026-10-28",
@@ -248,7 +249,7 @@ describe("meetings reports", () => {
   test("prep's compact forms: only actions overdue today; decisions 'since last meeting' only from that meeting", async () => {
     await seed()
     // Due before the meeting (4 Dec), not yet overdue today (13 Nov).
-    await w("projects", "addAction", { title: "Draft cutover plan", project: "CRM", due: "2026-11-20" }) // A-3
+    await w("actions", "addAction", { title: "Draft cutover plan", project: "CRM", due: "2026-11-20" }) // A-3
     const section = async (title: string) => ((await read("prep", { meeting: "M-2" })) as any[])[1].sections.find((s: any) => s.title === title)
     const actions = await section("Actions")
     expect(actions.compact).toEqual({

@@ -64,7 +64,7 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
       // The own tables (the same query as the view), so a listed row has the same shape as `project show`.
       let q = store.recordQuery().where("p.archived_at", flags.archived ? "is not" : "is", null)
       if (flags.status !== undefined) q = q.where("p.status", "=", String(flags.status))
-      const rows = (await q.orderBy("p.code").execute()).map(store.toProject).filter((p) => flags.health === undefined || p.health === flags.health)
+      const rows = (await store.toProjects(await q.orderBy("p.code").execute())).filter((p) => flags.health === undefined || p.health === flags.health)
       const table = rows.map((p) => ({
         health: dot(p.health),
         code: p.code,

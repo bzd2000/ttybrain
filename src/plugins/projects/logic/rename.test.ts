@@ -30,7 +30,7 @@ beforeEach(async () => {
     await write("people").addPerson!({ name: "Anna Smit", handle: "anna", is_team: true })
     await write().addProject!({ code: "CRM", name: "CRM replatforming" })
     await write().addProject!({ code: "ERP", name: "ERP upgrade" })
-    await write().addAction!({ title: "Call vendor", project: "CRM" })
+    await write("actions").addAction!({ title: "Call vendor", project: "CRM" })
     await write().addRisk!({ project: "CRM", title: "Vendor lock-in", type: "risk", severity: "high" })
     await write().addInvolvement!({ project: "CRM", person: "@anna", role: "lead" })
     await write("meetings").addMeeting!({ title: "SteerCo", date: "2026-11-20", kind: "steering" })

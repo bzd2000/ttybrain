@@ -52,7 +52,7 @@ async function seed() {
     await w.addPerson!({ name: "Bob Maes", handle: "bob", is_team: true })
     await w.addNote!({ person: "@marie", kind: "interaction", date: "2026-10-03", text: "Budget talk" })
     await write("projects").addInvolvement!({ project: "CRM", person: "@marie", role: "sponsor" })
-    await write("projects").addAction!({ title: "Send revised budget", due: "2026-11-10", forPerson: "@marie" })
+    await write("actions").addAction!({ title: "Send revised budget", due: "2026-11-10", forPerson: "@marie" })
     await w.addNote!({ person: "@bob", kind: "one_on_one", date: "2026-11-12", text: "Talked about training" })
     await w.addGoal!({ person: "@bob", title: "PM training 2027" })
   })

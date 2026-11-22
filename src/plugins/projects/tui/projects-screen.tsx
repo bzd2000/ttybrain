@@ -116,7 +116,7 @@ export function ProjectsScreen() {
   const today = useToday()
 
   // One query: the record query carries the health, next milestone and open counts per project.
-  const q = useQuery(async () => (await store.recordQuery().execute()).map(store.toProject))
+  const q = useQuery(async () => store.toProjects(await store.recordQuery().execute()))
   const highQ = useQuery(async () => {
     const rows = await rt.data.selectFrom("risk").select("project_id").where("status", "=", "open").where("severity", "=", "high").execute()
     return new Set(rows.map((r) => Number(r.project_id)))

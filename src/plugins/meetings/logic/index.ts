@@ -15,8 +15,9 @@ export const meetings = definePlugin({
   name: "Meetings",
   version: "1.0.0",
   apiVersion: 1,
-  requires: { projects: "^1", people: "^1" },
-  reads: { projects: "^1", people: "^1" }, // projects.project (agenda codes), people.person (attendee names)
+  requires: { projects: "^2", people: "^1", actions: "^2" },
+  // projects.project (agenda codes), people.person (attendee names), actions.action and actions.link (the actions linked to a meeting)
+  reads: { projects: "^2", people: "^1", actions: "^2" },
   activate(ctx) {
     const store = makeStore(ctx)
     registerSchema(ctx)

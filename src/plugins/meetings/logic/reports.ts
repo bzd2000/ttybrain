@@ -172,13 +172,31 @@ export function registerReports(ctx: PluginContext, store: Store): void {
     order: 40,
     run: async (m: Meeting) => {
       const rows = await db
-        .selectFrom("projects.action as a")
-        .leftJoin("projects.project as p", "p.id", "a.project_id")
+        .selectFrom("actions.link as l")
+        .innerJoin("actions.action as a", "a.id", "l.action_id")
         .leftJoin("people.person as o", "o.id", "a.owner_id")
-        .select(["a.id", "a.title", "a.due_date", "a.owner_id", "p.code", "o.handle"])
-        .where("a.meeting_id", "=", m.id)
+        .select(["a.id", "a.title", "a.due_date", "a.owner_id", "o.handle"])
+        .where("l.record_type", "=", "meeting")
+        .where("l.record_id", "=", m.id)
         .orderBy("a.id")
         .execute()
+      // Each action's project: its first project link (the order the links were made in).
+      const code = new Map<number, string | null>()
+      if (rows.length > 0) {
+        const links = await db
+          .selectFrom("actions.link as l")
+          .leftJoin("projects.project as p", "p.id", "l.record_id")
+          .select(["l.action_id", "p.code"])
+          .where("l.record_type", "=", "project")
+          .where(
+            "l.action_id",
+            "in",
+            rows.map((r) => Number(r.id)),
+          )
+          .orderBy("l.id")
+          .execute()
+        for (const l of links) if (!code.has(Number(l.action_id))) code.set(Number(l.action_id), l.code === null ? null : String(l.code))
+      }
       const owner = (r: (typeof rows)[number]) => (r.owner_id === null ? "me" : r.handle === null ? `person:${r.owner_id}` : `@${r.handle}`)
       const out: Row[] = []
       for (const r of rows)
@@ -187,7 +205,7 @@ export function registerReports(ctx: PluginContext, store: Store): void {
           Action: String(r.title),
           Owner: owner(r),
           Due: r.due_date === null ? null : String(r.due_date),
-          Project: r.code === null ? null : String(r.code),
+          Project: code.get(Number(r.id)) ?? null,
         })
       return { title: "Actions", columns: ["ID", "Action", "Owner", "Due", "Project"], rows: out, empty: "No actions." }
     },

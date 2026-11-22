@@ -32,10 +32,18 @@ export interface PluginContext {
   readonly config: Config
   readonly clock: Clock
   migration(id: string, up: (db: Kysely<any>) => Promise<void>): void
+  // A one-time data step (docs/architecture.md, "Data steps"): run at boot once every plugin's migrations and views
+  // are in place, in its own write transaction, with this context (data changes allowed, schema changes not).
+  // "done" records it so it never runs again; "later" commits nothing and leaves it pending; a throw rolls it back,
+  // keeps it pending and shows the error with the plugin, which stays loaded.
+  upgrade(id: string, run: () => Promise<"done" | "later">): void
   publish(name: string, def: ViewDef): void
   expose(ops: { read?: Record<string, ReadOp>; write?: Record<string, WriteOp> }): void
   // Another plugin's exposed operations; undefined unless it is in `requires`.
   use(pluginId: string): PluginApi | undefined
+  // Another plugin's read operations, for a plugin in `reads` or `requires`; undefined while it is not loaded, or is
+  // loaded at a version outside the `reads` range (as for its views).
+  read(pluginId: string): PluginApi["read"] | undefined
   self(): PluginApi
   recordType(def: Omit<RecordTypeDef, "plugin">): void
   readonly records: {
@@ -81,4 +89,4 @@ export interface PluginContext {
 }
 
 // The read/write side of a context, without registrations: what a plugin's TUI part gets (`kernel.runtime(id)`).
-export type PluginRuntime = Pick<PluginContext, "id" | "data" | "config" | "clock" | "use" | "self" | "records" | "tags" | "reports" | "provenance">
+export type PluginRuntime = Pick<PluginContext, "id" | "data" | "config" | "clock" | "use" | "read" | "self" | "records" | "tags" | "reports" | "provenance">

@@ -178,7 +178,7 @@ describe("Meetings screen", () => {
     const t = await open()
     await inCtx(async () => {
       const p = write("projects")
-      for (const title of ["Send the minutes", "Book the room", "Draft the budget"]) await p.addAction!({ title, meeting: "M-1" })
+      for (const title of ["Send the minutes", "Book the room", "Draft the budget"]) await write("actions").addAction!({ title, meeting: "M-1" })
       await p.addDecision!({ title: "Go with B", meeting: "M-1" })
     })
     await select(t, "SteerCo Q4")

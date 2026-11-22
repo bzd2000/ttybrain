@@ -15,14 +15,13 @@ Projects are referenced by code (\`CRM\` or \`#CRM\`): 2–16 upper-case letters
 const NOTES = `
 When you process a note (an inbox item, meeting notes, something the user tells you), turn each statement into the matching record. Pass \`--from-inbox I-<n>\` when it comes from an inbox item.
 
-- "X will do Y" or "I need to Y": add an action. \`ttybrain action add "Send the roadmap" --owner X --due fri [--project CRM] [--for peter]\`. Leave out \`--owner\` when the user does it: an empty owner is the user. Use \`--for\` for the stakeholder who is waiting on it.
+- "X will do Y" or "I need to Y": add an action (see Actions).
 - "We decided …", "agreed to …": add a decision. \`ttybrain decision add "Select vendor B" --project CRM [--decided-by "Steering committee"]\`.
 - A worry about what might go wrong: add a risk; a problem that is already happening: add an issue. \`ttybrain risk add CRM "Vendor delay" --type risk|issue --severity low|medium|high [--owner bob]\`. Close one that is resolved with \`ttybrain risk close R-<n>\`.
 - A signal about how the project is going ("on track", "slipping", "budget overrun"): record a health update. \`ttybrain project edit CRM --health green|amber|red --health-comment "…"\`.
 - "X is finished", "sent for review": update the deliverable's status. \`ttybrain deliverable status D-<n> in_progress|in_review|delivered\`. Find the deliverable with \`ttybrain deliverable list CRM\` first.
-- "That's done": complete the action with \`ttybrain action done A-<n>\`; one that is no longer needed: \`ttybrain action cancel A-<n>\`.
 - A concern or remark from a stakeholder: add a note on that person (see People).
-- Check what exists before you add: \`ttybrain action list --open --project CRM\`, \`ttybrain risk list CRM\`. Don't add the same thing twice.
+- Check what exists before you add: \`ttybrain risk list CRM\`, \`ttybrain decision list CRM\`. Don't add the same thing twice.
 - If the project, the person or the meaning is unclear, ask the user instead of guessing.
 `
 

@@ -3,6 +3,7 @@ import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { runCli } from "../../../kernel/cli/dispatch"
 import { runWithContext } from "../../../kernel/context"
 import { people } from "../../people/logic/index"
+import { actions } from "../../actions/logic/index"
 import { projects } from "../../projects/logic/index"
 import { meetings } from "./index"
 
@@ -31,7 +32,7 @@ async function ok(...argv: string[]) {
 const write = (plugin: string, op: string, input: unknown) => runWithContext(k!.context(), () => (k!.runtime(plugin)!.self() as any).write[op](input))
 
 async function boot() {
-  k = await makeTestKernel({ plugins: [meetings, projects, people] })
+  k = await makeTestKernel({ plugins: [meetings, projects, people, actions] })
   await write("people", "addPerson", { name: "Peter Janssens", handle: "peter" })
   await write("people", "addPerson", { name: "Marie Dubois", handle: "marie" })
   await write("projects", "addProject", { code: "CRM", name: "CRM replatforming" })

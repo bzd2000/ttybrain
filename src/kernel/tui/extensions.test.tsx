@@ -101,7 +101,7 @@ describe("listColumn and field extension points", () => {
       },
     })
     const t = await boot([owner])
-    await inCtx(() => ops("projects").write.addAction!({ title: "Call vendor", project: "CRM" }))
+    await inCtx(() => ops("actions").write.addAction!({ title: "Call vendor", project: "CRM" }))
     t.input.pressKey("4")
     const frame = await until(t, (f) => f.includes("FA-1"))
     expect(lineWith(frame, "Call vendor")).toContain("FA-1")

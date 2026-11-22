@@ -104,17 +104,21 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
 
   const problems = () => [
     ...registry.errors().map((e) => e.error),
-    ...kernel.plugins.filter((p) => p.status === "failed").map((p) => `${p.id}: ${p.error ?? "failed"}`),
+    // Failed plugins, and loaded ones with an error (a data step that failed: the plugin itself runs).
+    ...kernel.plugins
+      .filter((p) => p.status === "failed" || (p.status === "ok" && p.error !== undefined))
+      .flatMap((p) => [`${p.id}: ${p.error ?? "failed"}`, ...(p.hint !== undefined ? [`  hint: ${p.hint}`] : [])]),
   ]
   // On a screen (not in an overlay, not while typing) the bar is the screen's hints, then the global actions'
-  // (`i capture`), then the frame's (`g or 1-6 screens`, `? help`, `q quit`, or those an exact registration asks for).
+  // (`i capture`, unless an exact registration says `globals: false`), then the frame's (`g or 1-6 screens`,
+  // `? help`, `q quit`, or those an exact registration asks for).
   const lastSlot = Math.max(...screens.map((s) => s.slot))
   const hints = () => {
     const own = keys.hints()
     if (keys.top() !== SCREEN_LAYER || keys.textFocused()) return own
     const wanted = keys.frameKeys()
     const tail: Hint[] = [
-      ...registry.globalActions().map((a) => ({ key: a.key, label: a.label })),
+      ...(keys.globalHints() ? registry.globalActions().map((a) => ({ key: a.key, label: a.label })) : []),
       ...frameHints(lastSlot).filter((h) => wanted === undefined || wanted.includes(h.key)),
     ]
     const all = [...own, ...tail.filter((h) => !own.some((o) => o.key === h.key))]

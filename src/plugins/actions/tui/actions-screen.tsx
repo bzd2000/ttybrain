@@ -1,23 +1,20 @@
-// The Actions screen (slot 4, spec §9): every action in due-date groups.
+// The Actions screen (slot 4), as the 2026-11-20 design draws it: every action in due-date groups.
 // - Open actions in `Overdue · n`, `This week · n`, `Next week · n`, `Later · n` and `No date · n`, each by due date then id.
 //   `status:done|cancelled|all` lists one group, `Actions`, newest first.
-// - Columns: id, action, project code, owner (me or first name), For / from (the for person, else the meeting
-//   title, else `inbox I-n` when the action was created from the inbox, else —), due.
-// - Keys: x completes, d sets the due date, e edits, n adds, Enter opens the form, / filters (Enter applies, Esc clears).
+// - Columns (rows.ts): ID, Action, Owner (me or first name), Linked to (codes, @handles, meetings, cut whole), Due.
+// - Keys: x completes, d sets the due date, l edits the links, e edits, n adds, Enter opens the form, / filters
+//   (Enter applies, Esc clears).
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import {
   act,
   addDays,
   dayDate,
-  displayWidth,
   dueLabel,
-  fitWidth,
   Panel,
   printable,
   shortDate,
   Table,
   theme,
-  truncate,
   useKeys,
   useNav,
   useOverlay,
@@ -27,62 +24,62 @@ import {
   useToday,
   weekEnd,
   type Hint,
-  type TableColumn,
   type TableGroup,
   type TableRow,
 } from "@ttybrain/api/tui"
-import { makeItems, type ActionRecord } from "../logic/items"
 import { makeStore } from "../logic/records"
 import { parseActionFilter, type ActionFilter } from "./action-filter"
+import { actionCells, actionColumns, loadRows, type Row } from "./rows"
 
 export const EMPTY = "No open actions. Press n to add one."
 export const NO_MATCH = "No actions match the filter."
-// The design's bar (`↑↓ select  x done  d due  e edit  / filter  n new  i capture`); the global `i capture` and the
-// frame's `? help` come from the frame, and the kept `enter open` follows them.
+// The design's bar, exactly: `↑↓ select  x done  d due  l links  e edit  / filter  n new` (no global or frame hints;
+// their keys, and Enter, still work).
 const HINTS: Hint[] = [
   { key: "↑↓", label: "select" },
   { key: "x", label: "done" },
   { key: "d", label: "due" },
+  { key: "l", label: "links" },
   { key: "e", label: "edit" },
   { key: "/", label: "filter" },
   { key: "n", label: "new" },
 ]
-const KEPT_HINTS: Hint[] = [{ key: "Enter", label: "open" }]
-const FROM_WIDTH = 16
 const FILTER_HINTS: Hint[] = [
   { key: "Enter", label: "apply" },
   { key: "Esc", label: "clear" },
 ]
 
-// An action with what the screen shows besides its record: names and the for / from text.
-type Row = { rec: ActionRecord; ownerName: string | null; forFrom: { text: string; person: boolean } }
-
-const firstName = (name: unknown, handle: unknown) => (name ? String(name).split(/\s+/)[0]! : handle ? `@${handle}` : null)
 const byDue = (a: Row, b: Row) => {
   const [x, y] = [a.rec.due_date ?? "9999", b.rec.due_date ?? "9999"]
   return x < y ? -1 : x > y ? 1 : a.rec.id - b.rec.id
 }
 
-// The filter as the header shows it: `status:open owner:anna project:CRM words`.
-export const describeFilter = (f: ActionFilter) => [`status:${f.status}`, ...(f.owner ? [`owner:${f.owner}`] : []), ...(f.project ? [`project:${f.project}`] : []), ...f.text].join(" ")
+// The filter as the footer shows it: `status:open owner:anna project:CRM @anna words`.
+export const describeFilter = (f: ActionFilter) =>
+  [`status:${f.status}`, ...(f.owner ? [`owner:${f.owner}`] : []), ...(f.project ? [`project:${f.project}`] : []), ...f.links, ...f.text].join(" ")
 
-// Whether an action passes the filter's owner / project / words (the status is applied by the caller).
-function passes(r: Row, f: ActionFilter, owner: { handle: string | null; name: string | null }): boolean {
+const lower = (s: string | null | undefined) => (s ?? "").toLowerCase()
+
+// Whether an action passes the filter's owner / project / links / words (the status is applied by the caller). A
+// `@handle` matches its owner too; a project matches any of the action's project links.
+function passes(r: Row, f: ActionFilter): boolean {
   if (f.owner !== undefined) {
     const want = f.owner.replace(/^@/, "").toLowerCase()
     if (want === "me") {
       if (r.rec.owner_id !== null) return false
     } else if (r.rec.owner_id === null) return false
-    else if (!(owner.handle ?? "").toLowerCase().startsWith(want) && !(owner.name ?? "").toLowerCase().split(/\s+/).some((w) => w.startsWith(want))) return false
+    else if (!lower(r.ownerHandle).startsWith(want) && !lower(r.ownerName).split(/\s+/).some((w) => w.startsWith(want))) return false
   }
-  if (f.project !== undefined && (r.rec.project ?? "").replace(/^#/, "").toLowerCase() !== f.project.replace(/^#/, "").toLowerCase()) return false
+  const linked = (ref: string) => r.rec.links.some((l) => lower(l.ref) === lower(ref))
+  if (f.project !== undefined && !linked(`#${f.project.replace(/^#/, "")}`)) return false
+  if (!f.links.every((ref) => linked(ref) || (ref.startsWith("@") && lower(r.rec.owner) === lower(ref)))) return false
   const title = r.rec.title.toLowerCase()
   return f.text.every((w) => title.includes(w.toLowerCase()))
 }
 
 export function ActionsScreen() {
   const rt = useRuntime()
-  const items = makeItems(rt, makeStore(rt))
+  const store = makeStore(rt)
   const nav = useNav()
   const overlay = useOverlay()
   const keys = useKeys()
@@ -90,45 +87,8 @@ export function ActionsScreen() {
   const thisWeekEnd = () => weekEnd(today())
   const nextWeekEnd = () => addDays(thisWeekEnd(), 7)
 
-  // One query: every action with the people's names, the meeting titles (when the meetings plugin is there) and
-  // the inbox origins of those without a for person, the origins in a single batch.
-  const q = useQuery(async () => {
-    const raw = await items.actionQuery().execute()
-    const recs = raw.map(items.toAction)
-    const titles = new Map<string, string>()
-    if (rt.records.hasType("meeting")) {
-      // The meeting's date from the meetings plugin's published view (optional): `SteerCo 28 Oct`.
-      const dates = new Map<number, string>()
-      try {
-        for (const m of await (rt.data as any).selectFrom("meetings.meeting").select(["id", "date"]).execute()) dates.set(Number(m.id), String(m.date))
-      } catch {
-        // without the view the label is the title alone
-      }
-      for (const ref of new Set(recs.map((r) => r.meeting).filter((m): m is string => m !== null)))
-        try {
-          const title = await rt.records.label(ref)
-          const date = dates.get(Number(ref.replace(/^\D+/, "")))
-          // The date stays whole, the title gives way (the column is 16 wide).
-          const tail = date === undefined ? "" : ` ${shortDate(date)}`
-          const cut = truncate(title, Math.max(2, FROM_WIDTH - displayWidth(tail)))
-          titles.set(ref, `${cut === title ? title : `${cut.slice(0, -1).trimEnd()}…`}${tail}`)
-        } catch {
-          // a meeting that cannot be labelled falls through to the next source
-        }
-    }
-    const origins = await rt.provenance.originsOf(
-      "action",
-      recs.filter((r) => r.for === null && !(r.meeting !== null && titles.has(r.meeting))).map((r) => r.id),
-    )
-    return recs.map((rec, i): Row => {
-      const r = raw[i] as any
-      const origin = origins.get(rec.id)
-      const forName: string | null = rec.for_person_id === null ? null : String(r.for_name ?? (r.for_handle ? `@${r.for_handle}` : ""))
-      const meeting = rec.meeting === null ? undefined : titles.get(rec.meeting)
-      const forFrom = forName ? { text: forName, person: true } : { text: meeting || (origin?.type === "inbox" ? `inbox ${origin.ref}` : "") || "—", person: false }
-      return { rec, ownerName: firstName(r.owner_name, r.owner_handle), forFrom }
-    })
-  })
+  // One query: every action with its owner's name, its links and the titles and dates of its meetings.
+  const q = useQuery(async () => loadRows(rt, store, await store.actionQuery().execute()))
 
   const [filter, setFilter] = createSignal("")
   const [editing, setEditing] = createSignal(false)
@@ -141,35 +101,19 @@ export function ActionsScreen() {
     }),
   )
 
-  const all = () => q.data() ?? []
+  const all = () => q.data()?.rows ?? []
   const parsed = createMemo(() => parseActionFilter(filter()))
-  // owner handle / name by owner_id, for the owner filter (the owner cell shows the first name only).
-  const ownerOf = (r: Row) => ({ handle: r.rec.owner?.replace(/^@/, "") ?? null, name: r.ownerName })
   const shown = createMemo(() => {
     const f = parsed()
-    return all().filter((r) => (f.status === "all" || r.rec.status === f.status) && passes(r, f, ownerOf(r)))
+    return all().filter((r) => (f.status === "all" || r.rec.status === f.status) && passes(r, f))
   })
 
-  // `week`: 0 overdue, 1 this week, 2 next week (weekdays too), 3 later, 4 no date.
+  // `week`: 0 overdue, 1 this week, 2 next week (weekdays too), 3 later, 4 no date; -1 a closed or status list.
   const row = (r: Row, week: number): TableRow => {
-    const code = r.rec.project?.replace(/^#/, "")
     const due = r.rec.due_date
-    return {
-      ref: r.rec.ref,
-      cells: {
-        id: { text: r.rec.ref, tone: "muted" },
-        title: r.rec.title,
-        project: code ? { text: code, tone: "cyan" } : { text: "—", tone: "muted" },
-        owner: r.ownerName === null ? { text: "me", tone: "muted" } : r.ownerName,
-        from: r.forFrom.person ? { text: r.forFrom.text, tone: "magenta" } : { text: r.forFrom.text, tone: "muted" },
-        due:
-          week === 0
-            ? { text: due === null ? "—" : shortDate(due), tone: "red" }
-            : week === 2 && due !== null
-              ? dayDate(due).split(" ")[0]!
-              : dueLabel(due, today()),
-      },
-    }
+    const cell =
+      week === 0 ? { text: due === null ? "—" : shortDate(due), tone: "red" as const } : week === 2 && due !== null ? dayDate(due).split(" ")[0]! : dueLabel(due, today())
+    return { ref: r.rec.ref, cells: actionCells(r, q.data()?.meetings ?? new Map(), today(), { due: cell }) }
   }
   const groups = createMemo((): TableGroup[] => {
     const list = shown()
@@ -195,17 +139,6 @@ export function ActionsScreen() {
     if (ref !== undefined && here.kind === "screen" && here.params?.selected !== ref) nav.replaceParams({ ...here.params, selected: ref })
   }
 
-  // The project column fits the longest code shown (6 to 16): codes are never cut.
-  const columns = (): TableColumn[] => [
-    { id: "id", title: "ID", width: 5 },
-    { id: "title", title: "Action", width: "grow", minWidth: 28 },
-    { id: "project", title: "Proj.", width: fitWidth(shown().map((r) => r.rec.project?.replace(/^#/, "") ?? ""), 6, 16) },
-    // Narrow terminals drop For / from first, then Owner; the action, its project code and its due date stay.
-    { id: "owner", title: "Owner", width: 9, drop: 1 },
-    { id: "from", title: "For / from", width: FROM_WIDTH, drop: 2 },
-    { id: "due", title: "Due", width: 7 },
-  ]
-
   const openForm = async (formId: string, recordRef?: string) => {
     const saved = await overlay.openForm("action", formId, recordRef === undefined ? {} : { recordRef })
     if (saved !== undefined && recordRef === undefined) setWant(saved)
@@ -216,7 +149,7 @@ export function ActionsScreen() {
   createEffect(() => {
     const on = editing() && keys.active()
     keys.textFocus(on)
-    onCleanup(keys.hints(on ? FILTER_HINTS : HINTS, on ? undefined : { exact: true, frame: ["?"], after: KEPT_HINTS }))
+    onCleanup(keys.hints(on ? FILTER_HINTS : HINTS, on ? undefined : { exact: true, frame: [], globals: false }))
   })
   const startFilter = () => {
     setDraft(filter())
@@ -245,6 +178,7 @@ export function ActionsScreen() {
     if (ch === "n") void openForm("action")
     else if (ch === "e" && a !== undefined) void openForm("action", a.ref)
     else if (ch === "d" && a !== undefined) void openForm("due", a.ref)
+    else if (ch === "l" && a !== undefined) void openForm("links", a.ref)
     else if (ch === "x" && a !== undefined) {
       if (a.status === "open") void complete(a.ref)
     } else if (ch === "/") startFilter()
@@ -272,7 +206,7 @@ export function ActionsScreen() {
         </Show>
         <Show when={q.data() !== undefined}>
           <Table
-            columns={columns()}
+            columns={actionColumns(shown())}
             groups={groups()}
             selectedRef={loaded(want()) ? want() : undefined}
             onSelect={select}

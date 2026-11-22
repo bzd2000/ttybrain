@@ -38,15 +38,42 @@ out="$(ttybrain inbox add "x #CRM")"; echo "$out"
 expect_in "inbox add" "I-1" "$out"
 # The built-ins are discovered from dist-node/plugins/*/package.json (written by the build).
 out="$(ttybrain plugin list)"; echo "$out"
-for p in people projects meetings inbox; do
+for p in people meetings inbox; do
   echo "$out" | grep -Eq "^$p +1\.0\.0 +built-in +ok" || fail "plugin list: expected \"$p 1.0.0 built-in ok\", got: $out"
 done
+for p in projects actions; do
+  echo "$out" | grep -Eq "^$p +2\.0\.0 +built-in +ok" || fail "plugin list: expected \"$p 2.0.0 built-in ok\", got: $out"
+done
+# Links: --link is repeatable, show lists them, link adds one.
+out="$(ttybrain action add "Linked" --link "#CRM" --link @anna)"; echo "$out"
+out="$(ttybrain action link A-2 A-1)"; echo "$out"
+expect_in "action link" "A-2 linked to A-1" "$out"
+out="$(ttybrain action show A-2)"; echo "$out"
+expect_in "action show links" "  links: #CRM, @anna, A-1" "$out"
 
 set +e
 ttybrain project show NOPE
 code=$?
 set -e
 [ "$code" -eq 2 ] || fail "project show NOPE: expected exit 2, got $code"
+
+# The handover of actions from projects on Node: a database with actions left in projects_action (as an older build
+# wrote them, with actions disabled), then a start with actions: they move with their ids, and projects' copy is gone.
+handover_home="$TTYBRAIN_HOME/handover-home"
+mkdir -p "$handover_home"
+TTYBRAIN_HOME="$handover_home" TTYBRAIN_CONFIG_JSON='{"plugins":{"disabled":["actions"]}}' ttybrain project add CRM "CRM" >/dev/null
+# db_eval runs a fixed JavaScript expression from this script against the scratch database (no outside input).
+db_eval() { node -e 'const { DatabaseSync } = require("node:sqlite"); const db = new DatabaseSync(process.argv[1]); const r = eval(process.argv[2]); if (r !== undefined) console.log(JSON.stringify(r))' "$handover_home/ttybrain.db" "$1"; }
+db_eval 'db.exec(`INSERT INTO projects_action (id, title, status, project_id, created_at, updated_at) VALUES (7, '"'"'Legacy seven'"'"', '"'"'open'"'"', 1, '"'"'2026-01-01T00:00:00'"'"', '"'"'2026-01-02T00:00:00'"'"'), (42, '"'"'Legacy 42'"'"', '"'"'done'"'"', NULL, '"'"'2026-01-03T00:00:00'"'"', '"'"'2026-01-04T00:00:00'"'"')`)'
+out="$(TTYBRAIN_HOME="$handover_home" ttybrain action list --json)"; echo "$out"
+expect_in "handover A-7" '"ref": "A-7"' "$out"
+expect_in "handover A-42" '"ref": "A-42"' "$out"
+out="$(TTYBRAIN_HOME="$handover_home" ttybrain action add "After the move" --json)"
+expect_in "handover next id" '"ref": "A-43"' "$out"
+out="$(db_eval '[db.prepare("SELECT count(*) AS n FROM projects_action").get().n, db.prepare("SELECT id, created_at, updated_at FROM actions_action WHERE id IN (7, 42) ORDER BY id").all()]')"; echo "$out"
+expect_in "handover projects emptied, timestamps kept" '[0,[{"id":7,"created_at":"2026-01-01T00:00:00","updated_at":"2026-01-02T00:00:00"},{"id":42,"created_at":"2026-01-03T00:00:00","updated_at":"2026-01-04T00:00:00"}]]' "$out"
+out="$(db_eval 'db.prepare("SELECT action_id, record_type, record_id FROM actions_link").all()')"; echo "$out"
+expect_in "handover project link" '[{"action_id":7,"record_type":"project","record_id":1}]' "$out"
 
 # The fixture plugin (tests/fixtures/plugin-contracts), built with `ttybrain plugin build` and loaded on Node: first as a
 # folder in TTYBRAIN_PLUGINS, then packed and installed with `ttybrain plugin add <tgz>` through npm (offline: no dependencies).
