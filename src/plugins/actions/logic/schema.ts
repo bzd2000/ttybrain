@@ -32,6 +32,7 @@ export function registerSchema(ctx: PluginContext): void {
       .createTable("handover")
       .addColumn("source", "text", (c) => c.primaryKey()) // the plugin the rows came from
       .addColumn("rows", "integer", (c) => c.notNull())
+      .addColumn("last_id", "integer") // the highest id imported (null: none), so the source drops only those
       .addColumn("imported_at", "text", (c) => c.notNull())
       .execute()
   })

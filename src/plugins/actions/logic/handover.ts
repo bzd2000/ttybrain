@@ -9,6 +9,21 @@ import { currentContext, formatRef, ValidationError, type PluginContext } from "
 const COLUMNS = ["id", "title", "due_date", "status", "done_date", "owner_id", "project_id", "for_person_id", "meeting_id", "notes", "created_at", "updated_at"] as const
 type LegacyAction = Record<(typeof COLUMNS)[number], unknown>
 
+// The newer actions that hold ids the moved ones keep. The way out, in order: save them, delete them, start again
+// (the move then runs), add them back (they get new ids, after the moved ones).
+export function collision(refs: string[]): ValidationError {
+  const one = refs.length === 1
+  const deletes = refs.map((r) => `ttybrain action delete ${r} --yes`).join("; ")
+  return new ValidationError(
+    `cannot move the projects plugin's actions: ${refs.join(", ")} ${one ? "already exists" : "already exist"} in the actions plugin (added while projects was off)`,
+    {
+      hint:
+        `save ${one ? "it" : "them"} (ttybrain action list --json), delete ${one ? "it" : "them"} (${deletes}), ` +
+        `start ttybrain again (the move then runs), then add ${one ? "it" : "them"} back (ttybrain action add): ${one ? "it gets a new id" : "they get new ids"}`,
+    },
+  )
+}
+
 export function registerHandover(ctx: PluginContext): void {
   ctx.upgrade("from-projects", async () => {
     // Without projects the rows wait in its table; they move on a later start that has both plugins.
@@ -22,14 +37,10 @@ export function registerHandover(ctx: PluginContext): void {
     const taken = new Set<number>()
     for (let i = 0; i < ids.length; i += 500)
       for (const r of await db.selectFrom("action").select("id").where("id", "in", ids.slice(i, i + 500)).execute()) taken.add(Number(r.id))
-    if (taken.size > 0) {
-      const refs = [...taken].sort((a, b) => a - b).map((n) => formatRef("A-", n))
-      throw new ValidationError(`cannot move the projects plugin's actions: ${refs.join(", ")} already exist in the actions plugin`, {
-        hint: "moved actions keep their ids: delete the newer actions with these ids (ttybrain action delete), then start ttybrain again",
-      })
-    }
+    if (taken.size > 0) throw collision([...taken].sort((a, b) => a - b).map((n) => formatRef("A-", n)))
     for (const a of actions) await db.insertInto("action").values(Object.fromEntries(COLUMNS.map((c) => [c, a[c] ?? null]))).execute()
-    await db.insertInto("handover").values({ source: "projects", rows: actions.length, imported_at: currentContext().now }).execute()
+    const lastId = ids.length === 0 ? null : Math.max(...ids)
+    await db.insertInto("handover").values({ source: "projects", rows: actions.length, last_id: lastId, imported_at: currentContext().now }).execute()
     return "done"
   })
 }

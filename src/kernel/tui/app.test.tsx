@@ -5,7 +5,7 @@ import { isSelected } from "../../../tests/design"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
 import { builtinPlugins, builtinTuiParts } from "../../../tests/builtins"
-import { definePlugin } from "../api"
+import { definePlugin, ValidationError } from "../api"
 import { fitHints } from "./frame"
 import { useKeys, useScreenKeys } from "./keys"
 import { runTui } from "./run"
@@ -126,7 +126,7 @@ describe("TUI shell", () => {
       apiVersion: 1,
       activate: (ctx) =>
         ctx.upgrade("s1", async () => {
-          throw new Error("boom")
+          throw new ValidationError("boom", { hint: "do this first" })
         }),
     })
     const k = await makeTestKernel({ plugins: [...builtinPlugins, stepper] })
@@ -137,6 +137,9 @@ describe("TUI shell", () => {
       const frame = await tui.frame()
       expect(frame).toContain("Plugin problems")
       expect(frame).toContain('stepper: data step "s1" failed: boom')
+      // The hint on the next line, under the problem.
+      const at = frame.split("\n").findIndex((l) => l.includes('stepper: data step "s1" failed: boom'))
+      expect(frame.split("\n")[at + 1]).toContain("  hint: do this first")
     } finally {
       tui?.destroy()
       tui = undefined

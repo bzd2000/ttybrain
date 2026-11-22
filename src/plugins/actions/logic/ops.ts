@@ -98,10 +98,14 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         toolDescription: "A project's open actions that are overdue on a date (default today), and those from a meeting (M-n).",
         run: projectActions,
       },
+      // Whether the projects plugin's actions were imported, and the highest id that was (null: there were none).
       importedLegacy: {
         input: Type.Object({}),
-        output: Type.Object({ imported: Type.Boolean() }),
-        run: async () => ({ imported: (await db.selectFrom("handover").select("source").where("source", "=", "projects").executeTakeFirst()) !== undefined }),
+        output: Type.Object({ imported: Type.Boolean(), lastId: Type.Union([Type.Integer(), Type.Null()]) }),
+        run: async () => {
+          const row = await db.selectFrom("handover").select("last_id").where("source", "=", "projects").executeTakeFirst()
+          return { imported: row !== undefined, lastId: row === undefined || row.last_id === null ? null : Number(row.last_id) }
+        },
       },
     },
     write: {

@@ -1,6 +1,6 @@
 // The handover of the actions this plugin used to own to the actions plugin (design 2026-11-20 §4). The rows stay
 // in `action` (migration 001) until the actions plugin has imported them through the read `legacyActions` (its own
-// data step); this step then empties the table, so there is one copy. Until then nothing in this plugin shows them.
+// data step); this step then deletes the rows it imported (ids up to the last one imported), so there is one copy. Until then nothing in this plugin shows them.
 // The emptied table is kept (plan ruling R2): a data step may not change the schema.
 import { Type, type PluginContext } from "@ttybrain/api"
 
@@ -35,8 +35,9 @@ export function registerHandover(ctx: PluginContext): void {
 
   ctx.upgrade("actions-handover", async () => {
     const actions = ctx.read("actions")?.importedLegacy
-    if (actions === undefined || !(await actions({})).imported) return "later"
-    await ctx.data.deleteFrom("action").execute()
+    const done = actions === undefined ? undefined : ((await actions({})) as { imported: boolean; lastId: number | null })
+    if (done === undefined || !done.imported) return "later"
+    if (done.lastId !== null) await ctx.data.deleteFrom("action").where("id", "<=", done.lastId).execute()
     return "done"
   })
 }

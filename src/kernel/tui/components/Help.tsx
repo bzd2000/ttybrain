@@ -48,7 +48,7 @@ export function Help(props: { hints: Hint[]; actions: Hint[]; problems: string[]
       <text> </text>
       <text fg={theme.muted}>Plugin problems</text>
       <Show when={props.problems.length > 0} fallback={<text fg={theme.text}>none</text>}>
-        <For each={props.problems}>{(p) => <text fg={theme.red}>{p}</text>}</For>
+        <For each={props.problems}>{(p) => <text fg={p.startsWith("  hint: ") ? theme.muted : theme.red}>{p}</text>}</For>
       </Show>
     </box>
   )

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test"
 import { readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { makeTestKernel, type TestKernel } from "../../tests/helpers"
-import { definePlugin, sql, Type, type PluginContext, type PluginDef } from "./api"
+import { definePlugin, sql, Type, ValidationError, type PluginContext, type PluginDef } from "./api"
 import { runCli } from "./cli/dispatch"
 import { fixedClock } from "./clock"
 import { runWithContext } from "./context"
@@ -235,6 +235,29 @@ describe("data steps", () => {
     expect(b.plugins[0]?.error).toStartWith('data step "s1" failed: ')
     expect(b.db.raw.prepare("SELECT name FROM sqlite_schema WHERE name = 'alpha_extra'").all([])).toEqual([])
     expect(recorded(b, "alpha")).toEqual(["001"])
+  })
+
+  test("a failed step's hint is kept: on the plugin's status, in plugin list (JSON field, text line)", async () => {
+    const failing: Step = async () => {
+      throw new ValidationError("rows are in the way", { hint: "move them first" })
+    }
+    const k = await first([plugin("alpha", failing), plugin("beta")])
+    expect(k.plugins.map((p) => [p.id, p.status, p.error ?? null, p.hint ?? null])).toEqual([
+      ["alpha", "ok", 'data step "s1" failed: rows are in the way', "move them first"],
+      ["beta", "ok", null, null],
+    ])
+    const { o, io: out } = io()
+    expect(await runCli(["plugin", "list", "--json"], k, out)).toBe(0)
+    expect(JSON.parse(o.out)).toEqual([
+      { id: "alpha", version: "1.0.0", source: "built-in", status: "ok", error: 'data step "s1" failed: rows are in the way', hint: "move them first" },
+      { id: "beta", version: "1.0.0", source: "built-in", status: "ok", error: null },
+    ])
+    const text = io()
+    expect(await runCli(["plugin", "list"], k, text.io)).toBe(0)
+    expect(text.o.out.trimEnd().split("\n").at(-1)).toBe("hint (alpha): move them first")
+    // A step error without a hint adds nothing.
+    const plain = await again(k.home, [plugin("alpha", async () => { throw new Error("boom") })])
+    expect(plain.plugins[0]).toEqual({ id: "alpha", version: "1.0.0", source: "built-in", status: "ok", error: 'data step "s1" failed: boom' })
   })
 
   test("ids: duplicated or empty ids fail the plugin; a migration may not use the upgrade: prefix", async () => {

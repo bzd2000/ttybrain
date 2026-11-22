@@ -37,6 +37,7 @@ export type PluginStatus = {
   source: PluginSource
   status: "ok" | "failed" | "disabled"
   error?: string
+  hint?: string // what to do about `error`, when a failed data step's error carried one (a PmError's hint)
   tui?: string // file URL of the plugin's tui entry (ttybrain.tui)
   dir?: string // the plugin's directory, for discovered plugins
 }
@@ -87,6 +88,7 @@ type Slot = {
   def?: PluginDef // missing for a candidate that failed before boot or is disabled
   status: "pending" | "ok" | "failed" | "disabled"
   error?: string
+  hint?: string
   migrations: Migration[]
   steps: DataStep[] // ctx.upgrade, in registration order
   off: Array<() => void> // event subscriptions
@@ -439,6 +441,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
       } catch (e) {
         const text = `data step "${t.step.id}" failed: ${message(e)}`
         t.s.error = t.s.error === undefined ? text : `${t.s.error}; ${text}`
+        if (e instanceof PmError && e.hint) t.s.hint = t.s.hint === undefined ? e.hint : `${t.s.hint}; ${e.hint}`
       }
     }
     return later
@@ -452,6 +455,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     source: s.source,
     status: s.status === "pending" ? "failed" : s.status,
     ...(s.error !== undefined ? { error: s.error } : {}),
+    ...(s.hint !== undefined ? { hint: s.hint } : {}),
     ...(s.tui !== undefined ? { tui: s.tui } : {}),
     ...(s.dir !== undefined ? { dir: s.dir } : {}),
   }))

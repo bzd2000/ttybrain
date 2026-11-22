@@ -49,6 +49,22 @@ code=$?
 set -e
 [ "$code" -eq 2 ] || fail "project show NOPE: expected exit 2, got $code"
 
+# The handover of actions from projects on Node: a database with actions left in projects_action (as an older build
+# wrote them, with actions disabled), then a start with actions: they move with their ids, and projects' copy is gone.
+handover_home="$TTYBRAIN_HOME/handover-home"
+mkdir -p "$handover_home"
+TTYBRAIN_HOME="$handover_home" TTYBRAIN_CONFIG_JSON='{"plugins":{"disabled":["actions"]}}' ttybrain project add CRM "CRM" >/dev/null
+# db_eval runs a fixed JavaScript expression from this script against the scratch database (no outside input).
+db_eval() { node -e 'const { DatabaseSync } = require("node:sqlite"); const db = new DatabaseSync(process.argv[1]); const r = eval(process.argv[2]); if (r !== undefined) console.log(JSON.stringify(r))' "$handover_home/ttybrain.db" "$1"; }
+db_eval 'db.exec(`INSERT INTO projects_action (id, title, status, project_id, created_at, updated_at) VALUES (7, '"'"'Legacy seven'"'"', '"'"'open'"'"', 1, '"'"'2026-01-01T00:00:00'"'"', '"'"'2026-01-02T00:00:00'"'"'), (42, '"'"'Legacy 42'"'"', '"'"'done'"'"', NULL, '"'"'2026-01-03T00:00:00'"'"', '"'"'2026-01-04T00:00:00'"'"')`)'
+out="$(TTYBRAIN_HOME="$handover_home" ttybrain action list --json)"; echo "$out"
+expect_in "handover A-7" '"ref": "A-7"' "$out"
+expect_in "handover A-42" '"ref": "A-42"' "$out"
+out="$(TTYBRAIN_HOME="$handover_home" ttybrain action add "After the move" --json)"
+expect_in "handover next id" '"ref": "A-43"' "$out"
+out="$(db_eval '[db.prepare("SELECT count(*) AS n FROM projects_action").get().n, db.prepare("SELECT id, created_at FROM actions_action WHERE id = 7").get()]')"; echo "$out"
+expect_in "handover projects emptied" '[0,{"id":7,"created_at":"2026-01-01T00:00:00"}]' "$out"
+
 # The fixture plugin (tests/fixtures/plugin-contracts), built with `ttybrain plugin build` and loaded on Node: first as a
 # folder in TTYBRAIN_PLUGINS, then packed and installed with `ttybrain plugin add <tgz>` through npm (offline: no dependencies).
 cp -R tests/fixtures/plugin-contracts "$TTYBRAIN_HOME/src-contracts"
