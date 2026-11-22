@@ -6,7 +6,7 @@
 // the previous meeting) and `importedLegacy` (the handover, handover.ts).
 import { currentContext, Deleted, NonBlank, parseDate, parseRef, Type, ValidationError, type PluginContext, type Static } from "@ttybrain/api"
 import { RESERVED } from "./handover"
-import { ActionRecord, type Loaded, type Store, type Target } from "./records"
+import { ActionRecord, GONE, type Loaded, type Store, type Target } from "./records"
 
 const Ref = NonBlank()
 const RefInput = Type.Object({ ref: Ref })
@@ -79,7 +79,12 @@ export function registerOps(ctx: PluginContext, store: Store): void {
   // `links`, each shorthand given replaces the current links of its type (empty: none). The shorthands come first,
   // so `project` is the action's first project link.
   async function linksFor(i: AddInput | EditInput, current: Target[]): Promise<Target[]> {
-    let rest = i.links === undefined ? current : await Promise.all(i.links.map((l) => store.target(l)))
+    // A link the action already has is kept as it is (an archived project among several stays linked).
+    const keepOrNew = async (l: string): Promise<Target> => {
+      const t = await store.lookup(l)
+      return t !== null && current.some((c) => same(c, t)) ? t : store.target(l)
+    }
+    let rest = i.links === undefined ? current : await Promise.all(i.links.map(keepOrNew))
     const shorthand: Target[] = []
     for (const [type, id] of [
       ["project", await projectOf(i.project)],
@@ -92,17 +97,17 @@ export function registerOps(ctx: PluginContext, store: Store): void {
     }
     return [...shorthand, ...rest]
   }
-  // The link an unlink names: by its display ref or `<type>:<id>` (so a record that is gone can be unlinked), else
-  // by resolving the ref.
+  // The link an unlink names: by its display ref or `<type>:<id>` (a record that is gone shows `—`, which names no
+  // link, so it is unlinked by `<type>:<id>`), else by resolving the ref.
   async function linkNamed(a: Loaded, to: string): Promise<Target | undefined> {
     const want = to.trim().toLowerCase()
-    const shown = a.rec.links.find((l) => l.ref.toLowerCase() === want || `${l.type}:${l.id}` === want)
+    const shown = a.rec.links.find((l) => (l.ref !== GONE && l.ref.toLowerCase() === want) || `${l.type}:${l.id}` === want)
     if (shown !== undefined) return { type: shown.type, id: shown.id }
     const t = await store.lookup(to)
     return t === null ? undefined : targetsOf(a).find((l) => same(l, t))
   }
   const touch = (id: number) => db.updateTable("action").set({ updated_at: now() }).where("id", "=", id).execute()
-  // The action behind a ref, refused while a project it is linked to is archived.
+  // The action behind a ref, refused while every project it is linked to is archived (unlinkAction skips this).
   const writable = async (ref: string): Promise<Loaded> => {
     const a = await store.loadOne(ref)
     store.guard(a)
@@ -246,7 +251,8 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         output: ActionRecord,
         describe: async (i: LinkInput) => `~ ${store.refOr(i.ref)} unlink ${await store.linkLabel(i.to)}`,
         run: async (i: LinkInput) => {
-          const loaded = await writable(i.ref)
+          // Always allowed: unlinking is how an action leaves an archived project.
+          const loaded = await store.loadOne(i.ref)
           const a = loaded.rec
           const t = await linkNamed(loaded, i.to)
           if (t === undefined) throw new ValidationError(`${a.ref} is not linked to ${await store.linkLabel(i.to)}`, { field: "to" })

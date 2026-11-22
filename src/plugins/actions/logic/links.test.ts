@@ -172,7 +172,10 @@ describe("actions: links", () => {
     expect(refs((await ok("action", "list", "--project", "CRM", "--link", "#ERP", "--json")).json)).toEqual(["A-2"])
     expect(refs((await ok("action", "list", "--for", "peter", "--json")).json)).toEqual(["A-3"])
     expect(refs((await ok("action", "list", "--meeting", "M-1", "--json")).json)).toEqual(["A-3"])
-    expect((await run("action", "list", "--link", "#NOPE", "--json")).code).toBe(1)
+    // The same error as add and edit give.
+    const unknown = await run("action", "list", "--link", "#NOPE", "--json")
+    expect([unknown.code, unknown.json.error]).toEqual([1, (await run("action", "add", "X", "--link", "#NOPE", "--json")).json.error])
+    expect((await run("action", "edit", "A-1", "--link", "#NOPE", "--json")).json.error).toEqual(unknown.json.error)
     // The text list keeps its columns: the first project and the first person linked.
     expect((await ok("action", "list", "--link", "#ERP")).out).toContain("A-2  Two    #ERP")
   })
@@ -188,7 +191,9 @@ describe("actions: links", () => {
     expect(a.links).toEqual([{ type: "project", id: 3, ref: "—" }, { type: "person", id: 3, ref: "—" }, M1, CRM])
     expect((await ok("action", "show", "A-1")).out).toContain("  links: —, —, M-1, #CRM\n")
     expect(refs((await ok("action", "list", "--json")).json)).toEqual(["A-1"])
-    // Still writable; a gone link is dropped with its stored ref or `<type>:<id>`.
+    // Still writable; a gone link is dropped with its stored ref or `<type>:<id>`, never by `—`.
+    const dash = await run("action", "unlink", "A-1", "—", "--json")
+    expect([dash.code, dash.json.error.message]).toEqual([1, "A-1 is not linked to —"])
     await ok("action", "unlink", "A-1", "M-1")
     await ok("action", "unlink", "A-1", "project:3")
     expect((await ok("action", "edit", "A-1", "--for", "", "--json")).json.links).toEqual([CRM])
@@ -197,23 +202,35 @@ describe("actions: links", () => {
     expect((await run("report", "overview", "--format", "json")).code).toBe(0)
   })
 
-  test("a linked project that is archived blocks writes on the action; unlinking needs it restored too", async () => {
-    await ok("action", "add", "Two projects", "--link", "#CRM", "--link", "#ERP", "--due", "2026-11-01") // A-1
+  test("archived projects: an action is frozen and hidden only when every project it is linked to is archived", async () => {
+    await ok("action", "add", "Mixed", "--link", "#CRM", "--link", "#ERP", "--due", "2026-11-01") // A-1: one live, one archived
+    await ok("action", "add", "All archived", "--link", "#ERP", "--due", "2026-11-01") // A-2
+    await ok("action", "add", "No project", "--due", "2026-11-01") // A-3
     await ok("project", "archive", "ERP")
-    expect((await ok("action", "show", "A-1", "--json")).json.links).toEqual([CRM, ERP])
+    const overdue = async () =>
+      (await ok("report", "overview", "--format", "json")).json.sections.find((s: any) => s.title === "Overdue actions").rows.map((r: any) => r.ID)
+    // Mixed: visible and editable; keeping the archived link in a --link list is fine.
+    expect(await overdue()).toEqual(["A-1", "A-3"])
+    expect((await ok("action", "edit", "A-1", "--title", "Mixed v2", "--json")).json.title).toBe("Mixed v2")
+    expect((await ok("action", "link", "A-1", "@bob", "--json")).json.links).toEqual([CRM, ERP, BOB])
+    expect((await ok("action", "edit", "A-1", "--link", "#ERP", "--link", "#CRM", "--json")).json.links).toEqual([ERP, CRM])
+    // All archived: every write but unlink is refused.
     for (const argv of [
-      ["action", "done", "A-1"],
-      ["action", "unlink", "A-1", "#ERP"],
-      ["action", "link", "A-1", "@bob"],
+      ["action", "done", "A-2"],
+      ["action", "edit", "A-2", "--title", "x"],
+      ["action", "link", "A-2", "@bob"],
     ]) {
       const r = await run(...argv, "--json")
       expect([argv.join(" "), r.code, r.json.error.hint]).toEqual([argv.join(" "), 1, "restore it first: ttybrain project restore ERP"])
     }
-    // Off the Attention overview while its project is archived.
-    await ok("action", "add", "Overdue on CRM", "--project", "CRM", "--due", "2026-11-01") // A-2
-    const overview = (await ok("report", "overview", "--format", "json")).json
-    const overdue = overview.sections.find((s: any) => s.title === "Overdue actions")
-    expect(overdue.rows.map((r: any) => r.ID)).toEqual(["A-2"])
+    // A new link to an archived project is refused.
+    const link = await run("action", "link", "A-3", "#ERP", "--json")
+    expect([link.code, link.json.error.message, link.json.error.hint]).toEqual([1, "#ERP is archived", "restore it first: ttybrain project restore ERP"])
+    // Unlinking is always allowed: from the mixed one, and from the all-archived one (which then has no project).
+    expect((await ok("action", "unlink", "A-1", "#ERP", "--json")).json.links).toEqual([CRM])
+    expect((await ok("action", "unlink", "A-2", "#ERP", "--json")).json.links).toEqual([])
+    expect(await overdue()).toEqual(["A-1", "A-2", "A-3"])
+    expect((await ok("action", "done", "A-2", "--json")).json.status).toBe("done")
   })
 
   test("readers: meetings' close count, minutes and the person's follow-ups go through the links", async () => {

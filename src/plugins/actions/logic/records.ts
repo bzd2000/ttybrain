@@ -61,7 +61,8 @@ export type PersonRef = { id: number; ref: string; handle: string; name: string;
 export type ProjectRef = { id: number; ref: string; code: string; archived: boolean }
 // A record an action links to, by record type name and id.
 export type Target = { type: string; id: number }
-// An action as loaded: the record, plus what screens show beside it (names) and whether a linked project is archived.
+// An action as loaded: the record, plus what screens show beside it (names), and `archived`: the first of its
+// projects when it has project links and every one of them is archived (else null).
 export type Loaded = { rec: ActionRecord; ownerName: string | null; ownerHandle: string | null; forName: string | null; archived: ProjectRef | null }
 export type Store = ReturnType<typeof makeStore>
 
@@ -146,7 +147,8 @@ export function makeStore(rt: PluginRuntime) {
       if (t.type === "project" || t.type === "person" || other.has(key)) continue
       try {
         other.set(key, await rt.records.refOf(t.type, t.id))
-      } catch {
+      } catch (e) {
+        if (!(e instanceof NotFoundError || e instanceof ValidationError)) throw e
         other.set(key, GONE)
       }
     }
@@ -187,7 +189,9 @@ export function makeStore(rt: PluginRuntime) {
         notes: str(r.notes),
         links: own,
       }
-      const archived = own.flatMap((l) => (l.type === "project" ? [projects.get(l.id)] : [])).find((p) => p?.archived) ?? null
+      // Archived only when every project it is linked to is archived (a gone project is not): then it is frozen.
+      const linked = own.filter((l) => l.type === "project").map((l) => projects.get(l.id))
+      const archived = linked.length > 0 && linked.every((p) => p?.archived) ? linked[0]! : null
       return { rec, ownerName: str(r.owner_name), ownerHandle: str(r.owner_handle), forName: person === null ? null : (people.get(person.id)?.name ?? null), archived }
     })
   }
@@ -245,7 +249,7 @@ export function makeStore(rt: PluginRuntime) {
     if (p.archived) throw archivedProject(p)
     return p
   }
-  // An action linked to an archived project accepts no writes until it is restored.
+  // An action whose projects are all archived accepts no writes (but unlinking) until one is restored.
   const guard = (a: Loaded): void => {
     if (a.archived !== null) throw archivedProject(a.archived)
   }
@@ -309,7 +313,8 @@ export function makeStore(rt: PluginRuntime) {
     const tryRef = async (r: string) => {
       try {
         return await rt.records.resolve(r)
-      } catch {
+      } catch (e) {
+        if (!(e instanceof NotFoundError || e instanceof ValidationError)) throw e
         return null
       }
     }
@@ -334,7 +339,8 @@ export function makeStore(rt: PluginRuntime) {
     if (t === null) return input.trim()
     try {
       return await rt.records.refOf(t.type, t.id)
-    } catch {
+    } catch (e) {
+      if (!(e instanceof NotFoundError || e instanceof ValidationError)) throw e
       return input.trim()
     }
   }

@@ -4,7 +4,7 @@
 // `--meeting` are shorthand for a link of that type.
 import { addDays, currentContext, formatTable, parseRef, ValidationError, weekEnd, type FlagDef, type PluginContext } from "@ttybrain/api"
 import { byDue, isMe } from "./ops"
-import { type ActionRecord, type Store, type Target } from "./records"
+import { LINK_HINT, type ActionRecord, type Store, type Target } from "./records"
 
 const text = (description: string, placeholder?: string): FlagDef => ({ type: "string", description, ...(placeholder ? { placeholder } : {}) })
 const bool = (description: string): FlagDef => ({ type: "boolean", description })
@@ -81,7 +81,7 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
         const targets: Target[] = []
         for (const ref of flags.link as string[]) {
           const t = await store.lookup(ref)
-          if (t === null) throw new ValidationError(`unknown record "${ref.trim()}"`, { field: "link", hint: "a record ref, e.g. #CRM, @anna or M-4" })
+          if (t === null) throw new ValidationError(`unknown record "${ref.trim()}"`, { field: "links", hint: LINK_HINT })
           targets.push(t)
         }
         q = q.where(store.linkedTo(targets))

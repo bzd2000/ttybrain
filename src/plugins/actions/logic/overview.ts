@@ -7,7 +7,7 @@ import type { ActionRecord, Store } from "./records"
 export type OverviewAction = { a: ActionRecord; owner: string }
 
 export function makeOverview(rt: PluginRuntime, store: Store) {
-  // Open actions with a due date, linked to no archived project, oldest due first.
+  // Open actions with a due date, oldest due first; those whose projects are all archived are left out.
   const openActions = async (): Promise<OverviewAction[]> => {
     const loaded = await store.load(await store.actionQuery().where("a.status", "=", "open").where("a.due_date", "is not", null).execute())
     return loaded
