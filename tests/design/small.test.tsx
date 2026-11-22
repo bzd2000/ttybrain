@@ -2,10 +2,11 @@
 // no project code or person name in view is cut with `…`, the header keeps the chip and the date, every panel
 // keeps its bottom border, nothing is wider than the terminal, and the status bar holds only whole hints (each
 // one is a hint the same screen shows at 160 columns). Several screens' own design tests assert more at 80×24
-// (column drops, exact lines); this file covers the shared rules once per screen. Today is Thu 12 Nov 2026.
+// (column drops, exact lines); this file covers the shared rules once per screen. Today is Thu 12 Nov 2026 with the
+// 2026-11-13 designs' data, Fri 20 Nov 2026 with the 2026-11-20 meeting designs' data (`meetings: true`).
 import { afterEach, expect, test } from "bun:test"
 import { builtinPlugins } from "../builtins"
-import { line, seedDesign, seedLongRefs } from "../design"
+import { line, seedDesign, seedLongRefs, seedMeetings } from "../design"
 import { makeTestKernel, type TestKernel } from "../helpers"
 import { renderTui, type RenderedTui } from "../tui"
 
@@ -32,6 +33,8 @@ const NAMES = [
   "Marie Dubois", "Luc Vermeulen", "Ingrid Claes", "Tom Maes", "Peter Janssens", "Nadia El Amrani", "Jan De Smet",
   "Anna Peeters", "Bob Willems", "Karim Haddad", "Mathias Wouters", "Sofie Lambert",
 ]
+// The meeting designs' codes and first names (the About columns).
+const MEETING_WORDS = ["CRM", "ERP", "BOARD", "Anna", "Bob", "Sofie", "Karim"]
 
 type Screen = {
   name: string
@@ -39,6 +42,7 @@ type Screen = {
   open: (t: RenderedTui) => Promise<string> // drives to the screen, returns the settled frame
   panels?: boolean // the screen draws bordered panels
   must: string[] // codes and names that show whole at 80×24
+  meetings?: boolean // seeded with the 2026-11-20 meeting designs' data (today Fri 20 Nov 2026)
 }
 
 const crm = async (t: RenderedTui) => {
@@ -49,7 +53,8 @@ const crm = async (t: RenderedTui) => {
 }
 
 const SCREENS: Screen[] = [
-  { name: "Attention", must: ["CRM", "ERP", "DWH", "IAM", "HRP", "Marie Dubois", "Luc Vermeulen"], chip: "1 Attention", panels: true, open: (t) => until(t, (f) => f.includes("Overdue actions")) },
+  // HRP is under "+2 more" since Upcoming meetings came first (2026-11-20 designs).
+  { name: "Attention", must: ["CRM", "ERP", "DWH", "IAM", "Marie Dubois", "Luc Vermeulen"], chip: "1 Attention", panels: true, open: (t) => until(t, (f) => f.includes("Overdue actions")) },
   {
     name: "Projects",
     must: CODES,
@@ -117,6 +122,41 @@ const SCREENS: Screen[] = [
     },
   },
   {
+    name: "Attention with upcoming meetings",
+    meetings: true,
+    must: ["Anna", "CRM", "Marie Dubois"],
+    chip: "1 Attention",
+    panels: true,
+    open: (t) => until(t, (f) => f.includes("Before 1:1 Anna") && f.includes("Marie Dubois")),
+  },
+  {
+    name: "Meetings",
+    meetings: true,
+    must: MEETING_WORDS,
+    chip: "5 Meetings",
+    panels: true,
+    open: async (t) => {
+      t.input.pressKey("5")
+      await until(t, (f) => f.includes("Held, closes itself") && f.split("BOARD").length > 2)
+      await t.settle()
+      return until(t, (f) => f.includes("Held, closes itself") && f.split("BOARD").length > 2)
+    },
+  },
+  {
+    name: "New recurring meeting",
+    meetings: true,
+    must: [],
+    chip: "5 Meetings",
+    open: async (t) => {
+      t.input.pressKey("5")
+      await until(t, (f) => f.includes("Series ·"))
+      t.input.pressKey("N")
+      await until(t, (f) => f.includes("New recurring meeting"))
+      await t.input.typeText("@karim")
+      return until(t, (f) => f.includes("@karim"))
+    },
+  },
+  {
     name: "Inbox",
     must: ["CRM"],
     chip: "6 Inbox",
@@ -156,8 +196,8 @@ const hints = (frame: string) =>
     .filter(Boolean)
 
 async function render(s: Screen, width: number, height: number): Promise<string> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: s.meetings ? "2026-11-20" : "2026-11-12" })
+  await (s.meetings ? seedMeetings(kernel) : seedDesign(kernel))
   tui = await renderTui(kernel, { width, height })
   const frame = await s.open(tui)
   tui.destroy()
@@ -181,7 +221,7 @@ for (const s of SCREENS) {
 
     // The header: ttybrain, the chip and the date.
     expect(line(frame, 0)).toContain(`ttybrain ·  ${s.chip}`)
-    expect(line(frame, 0)).toMatch(/Thu 12 Nov 2026$/)
+    expect(line(frame, 0)).toMatch(s.meetings ? /Fri 20 Nov 2026$/ : /Thu 12 Nov 2026$/)
 
     // Every panel top has its bottom border.
     if (s.panels) {

@@ -64,7 +64,7 @@ export function useMeetingWrites() {
     // A planned meeting after a confirmation; a held one fails in the operation (`M-4 is already held`).
     async close(m: MeetingRecord) {
       if (m.status === "planned" && !(await overlay.confirm(closeQuestion(m.ref)))) return
-      await act(() => rt.self().write.closeMeeting!({ ref: m.ref }), { ok: (out) => closedMessage(m.ref, out) })
+      await act(() => rt.self().write.closeMeeting!({ ref: m.ref }), { ok: closedMessage })
     },
     logAction: (m: MeetingRecord, project: string | null) => void overlay.openForm("action", "action", links(m, project)),
     logDecision: (m: MeetingRecord, project: string | null) => void overlay.openForm("decision", "decision", links(m, project)),

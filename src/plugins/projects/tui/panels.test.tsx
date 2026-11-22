@@ -172,6 +172,7 @@ describe("overview panels", () => {
     tui = await renderTui(kernel, { width: 80, height: 24 })
     let frame = await shot(tui)
     const titles = [
+      "Upcoming meetings · next 7 days",
       "Overdue actions · 6",
       "Due this week · 0",
       "Projects needing attention ─",
@@ -192,7 +193,7 @@ describe("overview panels", () => {
       frame = await shot(tui)
       for (const t of titles) expect(frame).toContain(t)
     }
-    // the 6th Tab focuses Inbox (last in priority order): its first row is selected and on screen
+    // the 7th Tab focuses Inbox (last in priority order): its first row is selected and on screen
     expect(isSelected(await tui.spans(), "item 0")).toBe(true)
   })
 
@@ -201,6 +202,7 @@ describe("overview panels", () => {
       await write("actions").addAction!({ title: "Send revised budget", due: "2026-11-10" })
     })
     expect(await shot(t)).toContain("Send revised budget")
+    t.input.pressTab() // past Upcoming meetings, first since the 2026-11-20 designs
     t.input.pressEnter()
     const frame = await shot(t)
     expect(frame).toContain("Edit A-1")

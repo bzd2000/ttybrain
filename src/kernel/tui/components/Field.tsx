@@ -3,6 +3,9 @@
 // keys themselves are handled by <Form>), and a longtext field, which is a <textarea> that keeps newlines (an
 // <input> strips them): Enter adds a line (<Form> leaves it to the textarea; in any other field it does nothing),
 // and its height follows its lines up to LONGTEXT_MAX_LINES; a value set from outside replaces its text. An `editor` element replaces the default editor.
+// An enum field with `labels` reads `<label> (<the other labels>)`, the others muted (`1:1 (project · board)`); a
+// `note` is a muted line under the field, worked out from the form's values as they are typed (a rhythm's next
+// dates); a `placeholder` shows, muted, in an empty input (`never`).
 import type { TextareaRenderable } from "@opentui/core"
 import { createEffect, For, onMount, Show, type JSX } from "solid-js"
 import { theme } from "../theme"
@@ -23,6 +26,12 @@ export type FieldSpec = {
   // The record type a record field autocompletes from (`kernel.records.byName(recordType).search`).
   recordType?: string
   initial?: string | null
+  // How an enum field's values read (by value); without it the value itself shows as `‹ value ›`.
+  labels?: Record<string, string>
+  // A muted line under the field from the form's current values (own fields, by name); undefined: none.
+  note?: (values: Record<string, string | null>) => string | undefined
+  // Shown, muted, while the input is empty.
+  placeholder?: string
 }
 
 export type Suggestion = { ref: string; label: string }
@@ -68,6 +77,8 @@ export function Field(props: {
   labelWidth: number
   // Shown right of the editor (a date field's `→ 2026-11-15`), dimmed or red when `previewError`.
   preview?: string
+  // The spec's note for the current values.
+  note?: string
   previewError?: boolean
   error?: string
   suggestions: Suggestion[]
@@ -94,6 +105,8 @@ export function Field(props: {
               <input
                 width={INPUT_WIDTH}
                 value={props.value ?? ""}
+                placeholder={props.spec.placeholder ?? ""}
+                placeholderColor={theme.muted}
                 focused={props.focused}
                 backgroundColor={theme.selectedBg}
                 focusedBackgroundColor={theme.selectedBg}
@@ -104,13 +117,29 @@ export function Field(props: {
               )
             }
           >
-            <text fg={props.focused ? theme.accent : theme.text}>{`‹ ${props.value ?? "—"} ›`}</text>
+            <Show when={props.spec.labels} fallback={<text fg={props.focused ? theme.accent : theme.text}>{`‹ ${props.value ?? "—"} ›`}</text>}>
+              {(labels: () => Record<string, string>) => {
+                const label = (v: string) => labels()[v] ?? v
+                const others = () => (props.spec.values ?? []).filter((v) => v !== props.value).map(label)
+                return (
+                  <box flexDirection="row" gap={1}>
+                    <text fg={props.focused ? theme.accent : theme.text}>{props.value === null ? "—" : label(props.value)}</text>
+                    <Show when={others().length > 0}>
+                      <text fg={theme.muted}>{`(${others().join(" · ")})`}</text>
+                    </Show>
+                  </box>
+                )
+              }}
+            </Show>
           </Show>
         </Show>
         <Show when={props.preview}>
           <text fg={props.previewError ? theme.red : theme.muted}>{props.preview}</text>
         </Show>
       </box>
+      <Show when={props.note}>
+        <text fg={theme.muted}>{`${indent()}${props.note}`}</text>
+      </Show>
       <Show when={props.error}>
         <text fg={theme.red}>{`${indent()}✗ ${props.error}`}</text>
       </Show>

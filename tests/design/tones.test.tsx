@@ -1,6 +1,7 @@
 // The colour rules on the screens and tabs the designs do not draw (docs/architecture.md "Look and feel"): project
-// codes cyan, people names magenta, ids and refs muted. The Meetings list, a meeting's Agenda tab, a person's Notes,
-// Projects & roles and Actions tabs, and a project's People tab. Seeded with the designs' example data (plus one
+// codes cyan, people names magenta, ids and refs muted. A meeting's Agenda and Notes tabs, a person's Notes, Goals,
+// Projects & roles and Actions tabs, and a project's People tab. (Screen 5, Meetings, is a designed screen since the
+// 2026-11-20 designs: its tones are asserted in meetings.test.tsx.) Seeded with the designs' example data (plus one
 // note on CRM), today Thu 12 Nov 2026, 118×36.
 import { afterEach, expect, test } from "bun:test"
 import { builtinPlugins } from "../builtins"
@@ -47,15 +48,6 @@ async function start(): Promise<RenderedTui> {
   await tui.settle()
   return tui
 }
-
-test("Meetings list: refs muted, agenda codes cyan", async () => {
-  const t = await start()
-  t.input.pressKey("5")
-  await until(t, (f) => f.includes("Steering committee Q4"))
-  const spans = await t.spans()
-  expect(fgAt(spans, "M-2", "Steering committee Q4")).toBe(theme.muted)
-  expect(fgAt(spans, "CRM", "Steering committee Q4")).toBe(theme.cyan)
-})
 
 test("a meeting's Agenda tab: codes cyan", async () => {
   const t = await start()

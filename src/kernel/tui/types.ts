@@ -3,6 +3,7 @@
 import type { Component } from "solid-js"
 import type { Origin } from "../context"
 import type { PluginRuntime } from "../plugin"
+import type { Overlay } from "./overlay"
 
 export type Tone = "red" | "amber" | "green" | "muted" | "accent" | "cyan" | "magenta" | undefined
 // `parts`: the text in differently coloured pieces (their texts joined are `text`); a part without a tone takes the
@@ -38,19 +39,37 @@ export type RecordTabDef = {
 // `group`: a row with one goes under that muted sub-heading (after a blank line); consecutive rows with the same
 // group share it. Rows without a group come first, under the panel title.
 export type OverviewRow = { ref: string; cells: Cell[]; group?: string }
+// A column width: a number of cells, `{ min, max }` (at least `min`, growing to the longest text shown up to `max`, so
+// codes and ids stay whole while the grow column gives way; `drop`: on a narrow terminal it gives way, higher numbers
+// first, as a Table column's `drop`) or "grow" (the width left over).
+export type OverviewColumn = number | "grow" | { min: number; max: number; drop?: number }
+// What a key on a panel row may use: the overlays (a form to open, a question to ask before act()).
+export type OverviewKeyContext = { overlay: Overlay }
+// A key on a panel's selected row: `run` gets that row's ref. Its hint (`key label`) shows while the panel has focus.
+export type OverviewKeyDef = { key: string; label: string; run(ref: string, ui: OverviewKeyContext): void | Promise<void> }
+// The block a panel shows under its rows for the selected row (null: none for that row): a muted title, then rows.
+export type OverviewDetail = { title: string; rows: OverviewRow[] }
 // `count: false` leaves the row count out of the panel title (default: `Title · n`, n counting the rows without a
-// group: `Title · 2` above a `Later` sub-heading). `columns`: each cell column's width, a number of cells,
-// `{ min, max }` (at least `min`, growing to the longest text shown up to `max`, so codes and ids stay whole while
-// the grow column gives way) or "grow" (the width left over); without it the columns fit their text and the widest
-// one grows.
+// group: `Title · 2` above a `Later` sub-heading). `columns`: each cell column's width (OverviewColumn); without it
+// the columns fit their text and the widest one grows. `header`: the column titles, a muted first row. `footer`: a
+// muted last line inside the panel; `note`: muted text on its bottom border, right-aligned (as a Panel footer), while
+// it has rows.
+// `keys`: keys on the selected row. `detail`: a block under the rows for the selected row, a blank line, its title
+// and at most `rows` rows (more end in `+N more`), with its own columns and keys; its lines are kept free whether
+// or not the selected row has one, so the panel does not change height as the selection moves. ↓ on the panel's
+// last row moves the selection into the block (its keys and Enter act on its rows), ↑ on its first row back.
 export type OverviewPanelDef = {
   id: string
   title: string
   priority: number
   empty: string
   footer?: string
+  note?: string
   count?: boolean
-  columns?: Array<number | "grow" | { min: number; max: number }>
+  columns?: OverviewColumn[]
+  header?: string[]
+  keys?: OverviewKeyDef[]
+  detail?: { rows: number; columns?: OverviewColumn[]; keys?: OverviewKeyDef[]; load(ref: string): Promise<OverviewDetail | null> }
   load(): Promise<OverviewRow[]>
 }
 export type ListColumnDef = { id: string; title: string; width: number; value(ref: string): Promise<string | null> }

@@ -336,6 +336,165 @@ export async function seedLongRefs(kernel: Kernel): Promise<void> {
   })
 }
 
+// The 2026-11-20 meeting designs' data (docs/superpowers/specs/2026-11-20-ttybrain-meeting-screens.html), as of
+// Fri 20 Nov 2026: use with `makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })`.
+// - People: Anna Peeters, Bob Willems, Sofie Lambert, Karim Haddad, Mathias Wouters (team); Marie Dubois, Peter
+//   Janssens (stakeholders; Marie last seen 2 Oct, 49 days ago). Projects CRM (amber), ERP (red), HRP, BOARD.
+// - Series S-1 … S-7 in the `meetings` mock's order: 1:1 Anna (every 2 weeks on Mon from 9 Nov), 1:1 Bob (Wed, from
+//   11 Nov), 1:1 Sofie (Mon, from 16 Nov), 1:1 Karim (Wed, from 4 Nov), CRM steering (monthly, 4th Tue, from 22 Sep),
+//   ERP steering (monthly, 1st Thu; its 3 Dec skipped), Board (BOARD, board, monthly, last Fri). Their past dates
+//   are held (Karim's Wed 18 Nov is not: it has notes and closes itself on Sat 21); the CRM kick-off (14 Sep) and the
+//   ERP vendor call (Thu 26 Nov) are one-off meetings. The Board of Fri 27 Nov has the `board` mock's five agenda items.
+// - Talk-lists: Anna 4 open (Tue … today, two tagged ERP and CRM) and 1 carried over from her 1:1 of 9 Nov (where 3
+//   were discussed); Bob 1, Karim 2, Sofie none; CRM 2 of its own (3 with Anna's CRM item), ERP 1 (2 with Anna's),
+//   the board 2.
+// - Actions as screen 4 draws them: Send revised budget to Peter (me, CRM @peter, CRM steering 27 Oct, 14 Nov),
+//   Review her test strategy draft (me, @anna, 1:1 Anna 9 Nov, 16 Nov), Book vendor demo slot (Bob, ERP, 17 Nov), Ask
+//   HR about the AWS training budget (me, @anna, Mon 23), Draft 2027 budget first view (me, BOARD, Board 27 Nov, Thu
+//   26), Renew domain certificates (me, Fri 27), Solution design v1 (Anna, CRM, Fri 27). Ids follow the seed.
+// - The inbox: 2 new items. Only through the plugins' write operations; a failing write throws.
+export async function seedMeetings(kernel: Kernel): Promise<void> {
+  const w = (plugin: string) => kernel.runtime(plugin)!.self().write as Write
+  // As if the clock read `day` (a series made then has its occurrences from that day on).
+  const on = <T>(day: string, fn: () => Promise<T>) => runWithContext({ ...kernel.context(), today: day, now: `${day}T09:00:00` }, fn)
+  const people = w("people")
+  const projects = w("projects")
+  const actions = w("actions")
+  const meetings = w("meetings")
+  const data = kernel.runtime("meetings")!.data
+  // The ref of the meeting titled `title` on `date`.
+  const meeting = (title: string, date: string) =>
+    runWithContext(kernel.context(), async () => {
+      const row = await data.selectFrom("meeting").select("id").where("title", "=", title).where("date", "=", date).executeTakeFirstOrThrow()
+      return `M-${Number(row.id)}`
+    })
+  const close = async (title: string, date: string) => {
+    const ref = await meeting(title, date)
+    await on(date, () => meetings.closeMeeting!({ ref }))
+  }
+
+  await on("2026-09-01", async () => {
+    const persons: Array<[name: string, handle: string, job: string, stakeholder: boolean]> = [
+      ["Anna Peeters", "anna", "Architect", false],
+      ["Bob Willems", "bob", "Integration lead", false],
+      ["Sofie Lambert", "sofie", "Business analyst", false],
+      ["Karim Haddad", "karim", "IAM engineer", false],
+      ["Mathias Wouters", "mathias", "Developer", false],
+      ["Marie Dubois", "marie", "Head of Sales", true],
+      ["Peter Janssens", "peter", "CFO, Finance", true],
+    ]
+    for (const [name, handle, job_title, stakeholder] of persons)
+      await people.addPerson!({ name, handle, job_title, is_stakeholder: stakeholder, is_team: !stakeholder, ...(stakeholder ? { influence: "high", interest: "high" } : {}) })
+    for (const [code, name] of [
+      ["CRM", "CRM replatforming"],
+      ["ERP", "ERP vendor selection"],
+      ["HRP", "HR self-service portal"],
+      ["BOARD", "Management board"],
+    ])
+      await projects.addProject!({ code, name })
+    for (const [project, person, role] of [
+      ["CRM", "peter", "sponsor"],
+      ["CRM", "marie", "business owner"],
+      ["CRM", "anna", "architect"],
+      ["CRM", "bob", "integration"],
+      ["ERP", "bob", "integration"],
+    ])
+      await projects.addInvolvement!({ project, person, role })
+  })
+
+  // CRM: the kick-off (one-off) and the monthly steering, held in September and October.
+  await on("2026-09-14", async () => {
+    await meetings.addMeeting!({ about: "#CRM", title: "Kick-off", date: "2026-09-14", attendees: ["peter", "marie", "anna", "bob"] })
+    await meetings.addSeries!({ about: "#CRM", title: "CRM steering", every: "monthly on the 4th tue", from: "2026-09-22", attendees: ["peter", "marie", "anna", "bob"] })
+  })
+  await close("Kick-off", "2026-09-14")
+  await close("CRM steering", "2026-09-22")
+  await close("CRM steering", "2026-10-27")
+  await on("2026-10-02", () => people.addNote!({ person: "marie", kind: "interaction", text: "Kick-off of the CRM key user group", date: "2026-10-02" }))
+
+  // The board: monthly, its October meeting held.
+  await on("2026-10-26", () => meetings.addSeries!({ about: "#BOARD", title: "Board", kind: "board", every: "monthly on the last fri", from: "2026-10-30", attendees: ["peter", "marie"] }))
+  await close("Board", "2026-10-30")
+
+  // Anna: an item from before her 1:1 of 9 Nov stays (carried), three were discussed in it.
+  await on("2026-11-02", async () => {
+    await meetings.addSeries!({ about: "@anna", title: "1:1 Anna", every: "every 2 weeks on mon", from: "2026-11-09" })
+    await meetings.addTalk!({ about: "@anna", text: "Workload: two projects at once" })
+    for (const text of ["Design review planning", "Conference in March", "Mentoring Mathias"]) await meetings.addTalk!({ about: "@anna", text })
+  })
+  const anna9 = await meeting("1:1 Anna", "2026-11-09")
+  await on("2026-11-09", async () => {
+    for (const ref of ["T-2", "T-3", "T-4"]) await meetings.discussTalk!({ ref, meeting: anna9 })
+  })
+  await close("1:1 Anna", "2026-11-09")
+
+  // Karim: held on 4 Nov; Wed 18 Nov has notes and is not closed yet. Bob and Sofie: their first 1:1s held.
+  await on("2026-11-04", () => meetings.addSeries!({ about: "@karim", title: "1:1 Karim", every: "every 2 weeks on wed", from: "2026-11-04" }))
+  await close("1:1 Karim", "2026-11-04")
+  await on("2026-11-11", () => meetings.addSeries!({ about: "@bob", title: "1:1 Bob", every: "every 2 weeks on wed", from: "2026-11-11" }))
+  await close("1:1 Bob", "2026-11-11")
+  await on("2026-11-16", () => meetings.addSeries!({ about: "@sofie", title: "1:1 Sofie", every: "every 2 weeks on mon", from: "2026-11-16" }))
+  await close("1:1 Sofie", "2026-11-16")
+  const karim18 = await meeting("1:1 Karim", "2026-11-18")
+  await on("2026-11-18", () => meetings.setNotes!({ meeting: karim18, markdown: "IAM wave 2 readiness: test accounts still missing." }))
+
+  // Health and the talk items of the week.
+  await on("2026-11-16", async () => {
+    await projects.setHealth!({ project: "HRP", health: "green", comment: "On track", date: "2026-11-16" })
+    await projects.setHealth!({ project: "BOARD", health: "green", comment: "On track", date: "2026-11-16" })
+    await people.addNote!({ person: "peter", kind: "interaction", text: "Worried about CRM budget", date: "2026-11-16" })
+  })
+  await on("2026-11-17", () => meetings.addTalk!({ about: "@anna", text: "AWS training budget for next year" }))
+  await on("2026-11-18", async () => {
+    await meetings.addTalk!({ about: "@anna", text: "Her view on Vendor B's architecture", project: "ERP" })
+    await projects.setHealth!({ project: "ERP", health: "red", comment: "Vendor B contract not signed", date: "2026-11-18" })
+    await projects.setHealth!({ project: "CRM", health: "amber", comment: "Design slipping 2 weeks", date: "2026-11-18" })
+    await meetings.addTalk!({ about: "#CRM", text: "Shift design milestone by 2 weeks" })
+    await meetings.addTalk!({ about: "#CRM", text: "Release contingency budget" })
+  })
+  await on("2026-11-19", async () => {
+    await meetings.addTalk!({ about: "@anna", text: "Feedback from Marie on the design demo", project: "CRM" })
+    await meetings.addTalk!({ about: "@bob", text: "Integration specs: three more days" })
+    await meetings.addTalk!({ about: "@karim", text: "Test accounts for IAM wave 2" })
+    await meetings.addTalk!({ about: "@karim", text: "On-call rota in December" })
+    await meetings.addTalk!({ about: "#ERP", text: "Vendor B reference calls" })
+    await meetings.addTalk!({ about: "#BOARD", text: "Hiring freeze impact on IAM wave 2" })
+    await meetings.addTalk!({ about: "#BOARD", text: "Security awareness: board sponsor?" })
+  })
+
+  await on("2026-11-20", async () => {
+    await meetings.addTalk!({ about: "@anna", text: "Holiday planning around go-live" })
+    // ERP: the monthly steering (its 3 Dec skipped for the vendor call) and the one-off vendor call.
+    await meetings.addSeries!({ about: "#ERP", title: "ERP steering", every: "monthly on the 1st thu", from: "2026-11-05", attendees: ["bob"] })
+    await meetings.addMeeting!({ about: "#ERP", title: "ERP vendor call", date: "2026-11-26", attendees: ["bob"] })
+    // The series made before today get their occurrences up to 8 weeks from today (an edit tops them up).
+    for (let n = 1; n <= 7; n++) await meetings.editSeries!({ ref: `S-${n}` })
+  })
+  const board = await meeting("Board", "2026-11-27")
+  const crm27 = await meeting("CRM steering", "2026-10-27")
+  await on("2026-11-20", async () => {
+    await meetings.skipMeeting!({ ref: await meeting("ERP steering", "2026-12-03") })
+    const items: Array<[text: string, project?: string, ask?: string]> = [
+      ["Minutes & open actions"],
+      ["CRM status", "CRM", "approve 2-week shift"],
+      ["ERP vendor decision", "ERP", "choose vendor B"],
+      ["HR portal pilot go/no-go", "HRP", "go for pilot"],
+      ["Budget 2027 first view"],
+    ]
+    for (const [text, project, ask] of items) await meetings.addAgendaItem!({ meeting: board, text, ...(project && { project }), ...(ask && { ask }) })
+
+    await actions.addAction!({ title: "Send revised budget to Peter", due: "2026-11-14", links: ["#CRM", "@peter", crm27] })
+    await actions.addAction!({ title: "Review her test strategy draft", due: "2026-11-16", links: ["@anna", anna9] })
+    await actions.addAction!({ title: "Book vendor demo slot", owner: "bob", due: "2026-11-17", links: ["#ERP"] })
+    await actions.addAction!({ title: "Ask HR about the AWS training budget", due: "2026-11-23", links: ["@anna"] })
+    await actions.addAction!({ title: "Draft 2027 budget first view", due: "2026-11-26", links: ["#BOARD", board] })
+    await actions.addAction!({ title: "Renew domain certificates", due: "2026-11-27" })
+    await actions.addAction!({ title: "Solution design v1", owner: "anna", due: "2026-11-27", links: ["#CRM"] })
+  })
+  await runWithContext({ ...kernel.context(), now: "2026-11-20T08:30:00" }, () => w("inbox").capture!({ text: "@anna wants to swap the 1:1 to Tuesday" }))
+  await runWithContext({ ...kernel.context(), now: "2026-11-20T08:45:00" }, () => w("inbox").capture!({ text: "#ERP vendor B sent the revised offer" }))
+}
+
 const CRM_CONTEXT = `# Background
 
 The legacy CRM (Siebel 8, on-prem) reaches end of support in Q3 2027. Sales and Customer Service run separate instances with duplicated accounts.

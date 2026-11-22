@@ -3,7 +3,8 @@
 // (a person or a project) and belong to a recurring `series`; kinds become one_on_one, project and board; the
 // children no longer cascade (rule 6), so the meetings plugin deletes them itself. 003 (design §5.3): talk items, the
 // things to raise with a person or about a project. 004 (design §5.3): the talk items a meeting kept open for next time
-// when it was closed, so a held meeting still shows what it covered.
+// when it was closed, so a held meeting still shows what it covered. 005: whether a held meeting closed itself (the
+// `auto-close` upkeep), so closing it again can say so.
 import { sql, Type, type Kysely, type PluginContext, type Static } from "@ttybrain/api"
 
 export const MEETING_KINDS = ["one_on_one", "project", "board"] as const
@@ -239,6 +240,11 @@ async function migration003(db: Kysely<any>): Promise<void> {
 // The talk items that were on a meeting's agenda and still open when it was closed (kept for next time), in agenda
 // order. What was discussed in it is on the item itself (`talk_item.meeting_id`). No ON DELETE actions (rule 6); only
 // held meetings have rows, and held meetings are never deleted.
+// 1: the meeting was closed by the `auto-close` upkeep (0 for every meeting closed before, and for one closed by hand).
+async function migration005(db: Kysely<any>): Promise<void> {
+  await db.schema.alterTable("meeting").addColumn("closed_itself", "integer", (c) => c.notNull().defaultTo(0)).execute()
+}
+
 async function migration004(db: Kysely<any>): Promise<void> {
   await db.schema
     .createTable("talk_kept")
@@ -254,4 +260,5 @@ export function registerSchema(ctx: PluginContext): void {
   ctx.migration("002", migration002)
   ctx.migration("003", migration003)
   ctx.migration("004", migration004)
+  ctx.migration("005", migration005)
 }

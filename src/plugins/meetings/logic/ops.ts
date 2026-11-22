@@ -200,7 +200,7 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks, clos
               notes: "",
               subject_type: subject.type,
               subject_id: subject.id,
-              auto_close: 1,
+              auto_close: day >= today() ? 1 : 0, // a past meeting never closes itself (as `meeting subject`, M4)
               created_at: t,
               updated_at: t,
             })
@@ -311,7 +311,11 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks, clos
         describe: async (i: { ref: string }) => `~ ${refOf(i.ref, await before(i.ref))} held`,
         run: async (i: { ref: string }) => {
           const m = await store.meeting(i.ref)
-          if (m.status === "held") throw new ValidationError(`${m.ref} is already held`)
+          if (m.status === "held") {
+            const row = await db.selectFrom("meeting").select("closed_itself").where("id", "=", m.id).executeTakeFirstOrThrow()
+            const hint = Number(row.closed_itself) === 1 ? `it closed itself ${CLOSE_AFTER_DAYS} days after its date; see ttybrain report minutes ${m.ref}` : undefined
+            throw new ValidationError(`${m.ref} is already held`, hint === undefined ? {} : { hint })
+          }
           await store.openMeeting(m.ref) // a cancelled meeting cannot be held
           return closer.close(m)
         },

@@ -21,6 +21,8 @@
 //   moment after typing stops and at once on Esc and on quit; a save deletes it, a cancel keeps it (`draft kept`).
 //   Reopened with a draft that differs from the initial values, the form first shows <DraftPrompt> and takes no
 //   keys until `r` (restore), `x` (discard) or Esc (close, keeping the draft); an equal draft is deleted silently.
+// - `footer`: muted text on the form's bottom border, right-aligned (`ctrl+s save · esc cancel`); `start`: the field
+//   focused first. A field's `note` is worked out from the current values of the own fields (Field.tsx).
 import { createEffect, createMemo, onCleanup, createSignal, For, onMount, Show, useContext } from "solid-js"
 import { runWithContext } from "../../context"
 import { parseDate } from "../../dates"
@@ -73,6 +75,10 @@ export function Form(props: {
   // The record type whose extra fields (kernel.fields) follow the own ones, and the record they start from.
   recordType?: string
   recordRef?: string
+  // Muted text on the bottom border, right-aligned.
+  footer?: string
+  // The name of the field focused first (default: the first field), as when the first is filled in already.
+  start?: string
   submit(values: FormValues): Promise<SubmitResult>
   close(savedRef?: string): void
 }) {
@@ -85,7 +91,7 @@ export function Form(props: {
     return f.kind === "enum" && f.required ? (f.values?.[0] ?? null) : null
   }
   const [values, setValues] = createSignal<FormValues>(Object.fromEntries(props.fields.map((f) => [f.name, initial(f)])))
-  const [index, setIndex] = createSignal(0)
+  const [index, setIndex] = createSignal(Math.max(0, props.fields.findIndex((f) => f.name === props.start)))
   const [fieldErrors, setFieldErrors] = createSignal<Record<string, string>>({})
   const [formError, setFormError] = createSignal<string | undefined>(undefined)
   const [saving, setSaving] = createSignal(false)
@@ -205,6 +211,16 @@ export function Form(props: {
       return { text: `→ ${parseDate(raw, today)}`, error: false }
     } catch {
       return { text: "invalid date", error: true }
+    }
+  }
+
+  // A field's note from the own fields' current values; one that throws shows none.
+  const noteOf = (f: FieldSpec): string | undefined => {
+    if (!f.note) return undefined
+    try {
+      return f.note(values())
+    } catch {
+      return undefined
     }
   }
 
@@ -409,6 +425,7 @@ export function Form(props: {
               editor={editor}
               labelWidth={labelWidth()}
               preview={datePreview(f)?.text}
+              note={noteOf(f)}
               previewError={datePreview(f)?.error}
               error={fieldErrors()[f.name]}
               suggestions={index() === i() ? suggestions() : []}
@@ -430,6 +447,14 @@ export function Form(props: {
       </Show>
       <Show when={formError()}>
         <text fg={theme.red}>{`✗ ${formError()}`}</text>
+      </Show>
+      <Show when={props.footer}>
+        {(f: () => string) => (
+          // On the bottom border row, one `─` before the corner (as a Panel footer).
+          <text position="absolute" bottom={-1} right={1} fg={theme.muted} bg={theme.panel} wrapMode="none">
+            {` ${f()} `}
+          </text>
+        )}
       </Show>
     </box>
   )

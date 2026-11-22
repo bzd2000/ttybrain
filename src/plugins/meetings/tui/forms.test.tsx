@@ -83,12 +83,11 @@ describe("meeting form", () => {
     const t = await open()
     void overlay!.openForm("meeting", "meeting", {})
     await until(t, (f) => f.includes("New meeting"))
+    await t.input.typeText("#CRM") // about
+    t.input.pressTab() // title
     await t.input.typeText("Board")
-    for (let i = 0; i < 4; i++) t.input.pressTab() // title → attendees
+    for (let i = 0; i < 3; i++) t.input.pressTab() // title → attendees
     await t.input.typeText("@marie @zorro")
-    t.input.pressTab() // projects
-    t.input.pressTab() // about
-    await t.input.typeText("#CRM")
     t.input.pressKey("s", { ctrl: true })
     const frame = await until(t, (f) => f.includes('unknown person "zorro"'))
     const lines = frame.split("\n")
@@ -104,8 +103,9 @@ describe("meeting form", () => {
     const calls = spy()
     void overlay!.openForm("meeting", "meeting", { recordRef: "M-1" })
     await until(t, (f) => f.includes("Edit M-1"))
+    t.input.pressTab() // about → title
     await t.input.typeText(" bis")
-    for (let i = 0; i < 4; i++) t.input.pressTab() // title → attendees
+    for (let i = 0; i < 3; i++) t.input.pressTab() // title → attendees
     await t.input.typeText(", @luc")
     t.input.pressKey("s", { ctrl: true })
     const frame = await until(t, (f) => statusLine(f).includes("saved M-1"))
@@ -133,9 +133,9 @@ describe("meeting form", () => {
     const t = await open()
     void overlay!.openForm("meeting", "meeting", {})
     await until(t, (f) => f.includes("New meeting"))
+    await t.input.typeText("@zorro") // about, first
+    t.input.pressTab()
     await t.input.typeText("1:1")
-    for (let i = 0; i < 6; i++) t.input.pressTab() // title → about
-    await t.input.typeText("@zorro")
     t.input.pressKey("s", { ctrl: true })
     let frame = await until(t, (f) => f.includes('unknown person "@zorro"'))
     const lines = frame.split("\n")
@@ -147,13 +147,43 @@ describe("meeting form", () => {
     void overlay!.openForm("meeting", "meeting", { recordRef: "M-1" })
     frame = await until(t, (f) => f.includes("Edit M-1"))
     expect(lineWith(frame, "About")).toContain("#CRM")
-    for (let i = 0; i < 5; i++) t.input.pressTab() // title → about
     for (let i = 0; i < 4; i++) t.input.pressBackspace()
     await t.input.typeText("@marie")
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, (f) => statusLine(f).includes("saved M-1"))
     expect(calls).toEqual([{ name: "setSubject", input: { meeting: "M-1", about: "@marie" } }])
     expect(await record("M-1")).toMatchObject({ about: "@marie", kind: "one_on_one" })
+  })
+})
+
+describe("talk item form", () => {
+  test("an unknown subject shows under About; a prefilled one starts on Text, and a project tag is saved", async () => {
+    const t = await open()
+    void overlay!.openForm("talk_item", "talk", {})
+    let frame = await until(t, (f) => f.includes("New talk item"))
+    expect(lineWith(frame, "About")).toContain("› About*")
+    await t.input.typeText("@zorro")
+    t.input.pressTab()
+    await t.input.typeText("Lunch")
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, (f) => f.includes('unknown person "@zorro"'))
+    const lines = frame.split("\n")
+    expect(lines[lines.findIndex((l) => l.includes("About")) + 1]).toContain('✗ unknown person "@zorro"')
+    t.input.pressEscape()
+    await until(t, (f) => !f.includes("New talk item"))
+
+    void overlay!.openForm("talk_item", "talk", { prefill: { about: "@marie" } })
+    frame = await until(t, (f) => f.includes("New talk item") && f.includes("restore"))
+    t.input.pressKey("x") // the cancelled form's draft is offered first: discard it
+    frame = await until(t, (f) => !f.includes("restore"))
+    expect(lineWith(frame, "Text")).toContain("› Text*")
+    await t.input.typeText("Sales lead walkthrough")
+    t.input.pressTab()
+    await t.input.typeText("CRM")
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, (f) => statusLine(f).includes("added T-1"))
+    const list: any = await inCtx(() => (kernel!.runtime("meetings")!.self().read as any).talkList({ about: "@marie" }))
+    expect(list.open.map((i: any) => [i.ref, i.text, i.project])).toEqual([["T-1", "Sales lead walkthrough", "#CRM"]])
   })
 })
 

@@ -225,6 +225,48 @@ describe("auto-close", () => {
     ])
   })
 
+  test("closing a meeting that closed itself: already held, and the hint says it closed itself", async () => {
+    const k = await boot("2026-11-18")
+    await w(k, "addMeeting", { about: "@karim", title: "1:1 Karim", date: "2026-11-18" }) // M-1
+    await w(k, "addMeeting", { about: "@anna", title: "1:1 Anna", date: "2026-11-18" }) // M-2, closed by hand
+    await w(k, "closeMeeting", { ref: "M-2" })
+    const sat = await later("2026-11-21")
+    await sat.upkeep()
+    const res = await cli(sat, "meeting", "close", "M-1")
+    expect([res.code, res.out, res.err]).toEqual([
+      1,
+      "",
+      "error: M-1 is already held\nhint: it closed itself 3 days after its date; see ttybrain report minutes M-1\n",
+    ])
+    // Closed by hand: no hint.
+    expect((await cli(sat, "meeting", "close", "M-2")).err).toBe("error: M-2 is already held\n")
+  })
+
+  test("a meeting added with a past date never closes itself; one dated today or later does (as meeting subject, M4)", async () => {
+    const k = await boot("2026-11-20")
+    await w(k, "addMeeting", { about: "@karim", title: "1:1 Karim", date: "2026-11-10" }) // M-1: past
+    await w(k, "addMeeting", { about: "@anna", title: "1:1 Anna", date: "today" }) // M-2
+    await w(k, "addMeeting", { about: "@bob", title: "1:1 Bob", date: "2026-11-25" }) // M-3
+    expect(sql(k, "SELECT id, auto_close FROM meetings_meeting ORDER BY id")).toEqual([
+      { id: 1, auto_close: 0 },
+      { id: 2, auto_close: 1 },
+      { id: 3, auto_close: 1 },
+    ])
+    const up = await r(k, "upcoming", { from: "2026-11-01", to: "2026-11-30" })
+    expect(up.meetings.map((m: any) => [m.ref, m.closes_on])).toEqual([
+      ["M-1", null],
+      ["M-2", "2026-11-23"],
+      ["M-3", "2026-11-28"],
+    ])
+    const dec = await later("2026-12-01")
+    await dec.upkeep()
+    expect(meetingRows(dec)).toEqual([
+      ["M-1", "2026-11-10", "planned"],
+      ["M-2", "2026-11-20", "held"],
+      ["M-3", "2026-11-25", "held"],
+    ])
+  })
+
   test("Review Focus 3: not opened for three weeks, the next write-capable start closes every overdue meeting, keeps unticked items, makes only future occurrences", async () => {
     const k = await boot("2026-11-02") // Mon 2 Nov
     await w(k, "addSeries", { about: "@anna", title: "1:1 Anna", every: "weekly on mon", from: "today" }) // M-1 … M-8: 2 Nov … 21 Dec

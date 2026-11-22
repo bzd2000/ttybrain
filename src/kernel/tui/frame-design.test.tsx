@@ -123,8 +123,9 @@ test("record crumb at 80 columns: the spacer goes first, then the label is cut w
 test("status bar as designed", async () => {
   const t = await open()
   const frame = await t.frame()
-  // The mock's `x done` is FEATURE A14, so it is left out.
-  expect(line(frame, HEIGHT - 1).trim()).toBe("tab panel   enter open   i capture   g or 1-6 screens   ? help   q quit")
+  // The mock's `x done` is FEATURE A14, so it is left out; the 2026-11-20 home design draws no `q quit` (and its
+  // `x done` / `t to talk` show only while the Upcoming meetings panel has rows).
+  expect(line(frame, HEIGHT - 1).trim()).toBe("tab panel   enter open   i capture   g or 1-6 screens   ? help")
   const spans = await t.spans()
   const bar = HEIGHT - 1
   expect(fgAt(spans, "tab ", bar)).toBe(theme.accent)

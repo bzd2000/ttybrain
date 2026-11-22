@@ -113,6 +113,9 @@ export function registerClose(ctx: PluginContext, store: Store, closer: Closer):
   // On every write-capable start (M1): each meeting left open 3 days after its date closes itself, as `closeMeeting`
   // would close it (M6 included), all in this upkeep's one transaction.
   ctx.upkeep("auto-close", async () => {
-    for (const m of await closer.overdue()) await closer.close(m)
+    for (const m of await closer.overdue()) {
+      await closer.close(m)
+      await ctx.data.updateTable("meeting").set({ closed_itself: 1 }).where("id", "=", m.id).execute()
+    }
   })
 }

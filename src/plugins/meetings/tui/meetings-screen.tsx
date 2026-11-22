@@ -1,19 +1,25 @@
-// The Meetings screen (slot 5): one table of meetings in two groups.
-// - `Upcoming · n`: planned meetings by date, then id; one dated before today shows its date in red.
-// - `Past · n`: held and cancelled meetings, newest first; cancelled rows are muted.
-// - Columns: ref, date (`Thu 4 Dec`), title, kind, status, attendee count, project codes of the agenda, then the
-//   columns other plugins registered for the list "meetings".
-// - Keys: Enter opens the meeting, n new, e edit, x close a planned meeting as held, Del cancel a planned meeting
-//   (both after a confirmation). The selection is kept in the route's `selected` param.
+// Screen 5, Meetings (the 2026-11-20 `meetings` design): an overview across people and projects.
+// - "Upcoming" (left, focused first): Date · Meeting · About · Talk · Act. (upcoming.ts), the planned meetings by
+//   week: "This week · 20–22 Nov" (when it has any), "Next week · 23–27 Nov", "Week after · 30 Nov–4 Dec" (its rows'
+//   title and Talk muted). A one-off meeting's title ends with a muted `one-off`. After them, muted: "Held, closes
+//   itself <day> · n" (planned meetings of the last 3 days that close themselves: date amber, Talk `notes` when they
+//   have notes), "Not closed · n" (past planned meetings that never close themselves, date red) and "No subject · n"
+//   (meetings from before subjects, M7; a muted line under the table says how to give one a subject). Groups that
+//   would be empty are left out.
+// - "Series · n" (right): Series · About · Rhythm (short), the series that have not ended: 1:1s, then project, then
+//   board series, each by next date.
+// - Keys: Tab switches panel; Enter opens the meeting (a series: what it is about); n a one-off meeting, N a new
+//   series, s skips the selected meeting's date (after a confirmation), m moves it (a date form). The bar is the
+//   design's: `tab panel   enter open   n one-off   N series   s skip date   m move date   i capture`.
 import { createMemo, createSignal, Show, untrack } from "solid-js"
 import {
   act,
-  joinFit,
-  joinFitWidth,
+  addDays,
+  dayDate,
   KeyHints,
-  longDate,
   Panel,
   printable,
+  shortDate,
   Table,
   useKeys,
   useNav,
@@ -21,87 +27,136 @@ import {
   useQuery,
   useRuntime,
   useScreenKeys,
-  useToday,
-  type Hint,
+  theme,
+  type Cell,
   type TableColumn,
   type TableGroup,
   type TableRow,
-  type Tone,
 } from "@ttybrain/api/tui"
+import { CLOSE_AFTER_DAYS } from "../logic/close"
 import { makeStore } from "../logic/records"
-import { KIND_LABELS, type MeetingRecord } from "../logic/schema"
+import { parseRhythm, rhythmLabel } from "../logic/rhythm"
+import type { SubjectType } from "../logic/schema"
+import { actCell } from "./panels"
+import { dayOnly, makeUpcoming, MUTED_DASH, type Upcoming } from "./upcoming"
 
-export const EMPTY = "No meetings yet. Press n to add one."
+export const EMPTY = "No meetings coming up. Press n or N to add one."
+export const SERIES_EMPTY = "No series yet. Press N to add one."
+export const skipQuestion = (m: { title: string; date: string }) => `Skip ${m.title} on ${dayDate(m.date)}?`
 export const closeQuestion = (ref: string) => `Close ${ref} as held?`
-export const cancelQuestion = (ref: string) => `Cancel ${ref}? It stays in the list as cancelled.`
-const HINTS: Hint[] = [
+// The status line after closing: closeMeeting's message (`1:1 Anna closed · 2 discussed, 3 kept for next time · …`).
+export const closedMessage = (out: unknown) => (out as { message: string }).message
+export const subjectHint = (ref: string) => `give it one: ttybrain meeting subject ${ref} <ref>`
+const HINTS = [
+  { key: "Tab", label: "panel" },
   { key: "Enter", label: "open" },
-  { key: "n", label: "new" },
-  { key: "e", label: "edit" },
-  { key: "x", label: "close" },
-  { key: "Del", label: "cancel" },
+  { key: "n", label: "one-off" },
+  { key: "N", label: "series" },
+  { key: "s", label: "skip date" },
+  { key: "m", label: "move date" },
 ]
-// The Projects column fits each row's first code, plus ` …` when more follow (12 to 18), and a cell keeps whole
-// codes (joinFit): a code is never cut, and more codes than fit always end in `…`.
-const columns = (projectsWidth: number): TableColumn[] => [
-  { id: "ref", title: "Ref", width: 5 },
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const KIND_ORDER = { one_on_one: 0, project: 1, board: 2 } as const
+
+// About fits its codes and names (7 to 16), so they stay whole.
+const upcomingColumns = (aboutWidth: number): TableColumn[] => [
   { id: "date", title: "Date", width: 10 },
-  { id: "title", title: "Title", width: "grow" },
-  { id: "kind", title: "Kind", width: 8 },
-  { id: "status", title: "Status", width: 9 },
-  { id: "att", title: "Att.", width: 4 },
-  { id: "projects", title: "Projects", width: projectsWidth },
+  { id: "meeting", title: "Meeting", width: "grow" },
+  { id: "about", title: "About", width: aboutWidth },
+  { id: "talk", title: "Talk", width: 7, drop: 1 },
+  { id: "act", title: "Act.", width: 6, drop: 1 },
+]
+const seriesColumns = (aboutWidth: number, rhythmWidth: number): TableColumn[] => [
+  { id: "title", title: "Series", width: "grow", minWidth: 10 },
+  { id: "about", title: "About", width: aboutWidth },
+  { id: "rhythm", title: "Rhythm", width: rhythmWidth, drop: 1 },
 ]
 
-// `Thu 4 Dec`: the long date without its year.
-const dayDate = (iso: string) => longDate(iso).replace(/ \d+$/, "")
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`
-// The status line after closing: `closed M-4: 3 actions, 1 decision`.
-export const closedMessage = (ref: string, out: unknown) => {
-  const { actions, decisions } = (out as { logged: { actions: number; decisions: number } }).logged
-  return `closed ${ref}: ${plural(actions, "action")}, ${plural(decisions, "decision")}`
-}
-// The project codes of the agenda, in agenda order, without `#`.
-const codes = (m: MeetingRecord) => [...new Set(m.agenda.flatMap((a) => (a.project === null ? [] : [a.project.slice(1)])))]
-
-function row(m: MeetingRecord, today: string, projectsWidth: number): TableRow {
-  const muted: Tone = m.status === "cancelled" ? "muted" : undefined
-  const cell = (text: string, tone: Tone = muted) => ({ text, tone })
-  return {
-    ref: m.ref,
-    cells: {
-      ref: cell(m.ref, "muted"),
-      date: cell(dayDate(m.date), m.status === "planned" && m.date < today ? "red" : muted),
-      title: cell(m.title),
-      kind: cell(KIND_LABELS[m.kind]),
-      status: cell(m.status),
-      att: cell(String(m.attendees.length)),
-      projects: cell(joinFit(codes(m), projectsWidth), muted ?? "cyan"),
-    },
-  }
+// The Monday of a date's week.
+const mondayOf = (iso: string) => addDays(iso, -((DAYS.indexOf(dayDate(iso).slice(0, 3)) + 6) % 7))
+// `23–27 Nov`, `30 Nov–4 Dec`, `20 Nov`.
+export function rangeLabel(from: string, to: string): string {
+  if (from === to) return shortDate(from)
+  const [a, b] = [shortDate(from), shortDate(to)]
+  return from.slice(0, 7) === to.slice(0, 7) ? `${a.split(" ")[0]}–${b}` : `${a}–${b}`
 }
 
-export function meetingGroups(list: MeetingRecord[]): Array<{ title: string; rows: MeetingRecord[] }> {
-  const upcoming = list.filter((m) => m.status === "planned").sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id)
-  const past = list.filter((m) => m.status !== "planned").sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
-  return [
-    { title: "Upcoming", rows: upcoming },
-    { title: "Past", rows: past },
-  ].filter((g) => g.rows.length > 0)
-}
+type Row = Upcoming & { status?: string }
+type Series = { ref: string; title: string; kind: keyof typeof KIND_ORDER; about: Cell; subject: { type: SubjectType; id: number }; rhythm: string; next: string | null }
+type Loaded = { groups: Array<{ group: TableGroup; meetings: Row[] }>; series: Series[]; noSubject: string | undefined }
 
 export function MeetingsScreen() {
   const rt = useRuntime()
   const store = makeStore(rt)
+  const upcoming = makeUpcoming(rt)
   const nav = useNav()
   const overlay = useOverlay()
   const keys = useKeys()
-  const today = useToday()
 
-  const q = useQuery(async (): Promise<MeetingRecord[]> => {
-    const ids = await rt.data.selectFrom("meeting").select("id").execute()
-    return Promise.all(ids.map((r) => store.meeting(`M-${Number(r.id)}`)))
+  const q = useQuery(async (): Promise<Loaded> => {
+    const day = rt.clock.today()
+    const monday = mondayOf(day)
+    const end = addDays(monday, 20) // the Sunday of the week after next
+    const ahead = await upcoming.between(day, end)
+    const held = (await upcoming.between(addDays(day, -CLOSE_AFTER_DAYS), addDays(day, -1))).filter((m) => m.closes_on !== null)
+    const { notClosed, noSubject } = await upcoming.unclosed(day)
+    const shown = new Set([...ahead, ...held, ...notClosed].map((m) => m.ref))
+    const subjectless = noSubject.filter((m) => !shown.has(m.ref))
+
+    const row = async (m: Row, how: { date?: Cell["tone"]; dim?: boolean; past?: boolean; oneOff?: boolean }): Promise<TableRow> => {
+      const talk = how.past ? null : await upcoming.talk(m)
+      const dim = how.dim ? ("muted" as const) : undefined
+      const title: Cell =
+        how.oneOff && m.series === null ? { text: `${m.title} one-off`, parts: [{ text: `${m.title} ` }, { text: "one-off", tone: "muted" }] } : { text: m.title, tone: dim }
+      const talkCell: Cell = how.past ? (m.notes ? { text: "notes", tone: "muted" } : MUTED_DASH) : talk === null ? MUTED_DASH : { text: String(talk), tone: dim }
+      return {
+        ref: m.ref,
+        cells: {
+          date: { text: dayOnly(m.date), tone: how.date },
+          meeting: title,
+          about: await upcoming.about(m.subject),
+          talk: talkCell,
+          act: how.past && m.status !== "planned" ? MUTED_DASH : actCell(await upcoming.mine(m), day, false),
+        },
+      }
+    }
+    const groups: Loaded["groups"] = []
+    const add = async (title: string, meetings: Row[], tone: "accent" | "muted", how: Parameters<typeof row>[1], count: boolean) => {
+      if (meetings.length === 0) return
+      const space = tone === "muted" && !groups.some((g) => g.group.tone === "muted")
+      groups.push({ group: { title, count, tone, space, rows: await Promise.all(meetings.map((m) => row(m, how))) }, meetings })
+    }
+    const weeks: Array<[string, string, string]> = [
+      ["This week", day, addDays(monday, 6)],
+      ["Next week", addDays(monday, 7), addDays(monday, 13)],
+      ["Week after", addDays(monday, 14), end],
+    ]
+    for (const [name, from, to] of weeks) {
+      const fri = addDays(mondayOf(from), 4)
+      const label = rangeLabel(from, from > fri ? to : fri)
+      await add(`${name} · ${label}`, ahead.filter((m) => m.date >= from && m.date <= to), "accent", { dim: name === "Week after", oneOff: true }, false)
+    }
+    for (const closes of [...new Set(held.map((m) => m.closes_on!))].sort())
+      await add(`Held, closes itself ${DAYS[DAYS.indexOf(dayDate(closes).slice(0, 3))]}`, held.filter((m) => m.closes_on === closes), "muted", { date: "amber", past: true }, true)
+    await add("Not closed", notClosed, "muted", { date: "red", past: true }, true)
+    const statuses = new Map(
+      subjectless.length === 0
+        ? []
+        : (await rt.data.selectFrom("meeting").select(["id", "status"]).where("id", "in", subjectless.map((m) => m.id)).execute()).map((r) => [Number(r.id), String(r.status)]),
+    )
+    await add("No subject", subjectless.map((m) => ({ ...m, status: statuses.get(m.id) })), "muted", { past: true }, true)
+
+    const ids = await rt.data.selectFrom("series").select(["id", "subject_type", "subject_id"]).where((eb) => eb.or([eb("end_date", "is", null), eb("end_date", ">=", day)])).execute()
+    const series: Series[] = []
+    for (const r of ids) {
+      const s = await store.series(`S-${Number(r.id)}`)
+      const subject = { type: r.subject_type as SubjectType, id: Number(r.subject_id) }
+      series.push({ ref: s.ref, title: s.title, kind: s.kind, about: await upcoming.about(subject), subject, rhythm: rhythmLabel(parseRhythm(s.rhythm), "short"), next: s.next })
+    }
+    series.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || (a.next ?? "9999").localeCompare(b.next ?? "9999") || Number(a.ref.slice(2)) - Number(b.ref.slice(2)))
+    return { groups, series, noSubject: subjectless[0]?.ref }
   })
+
   // The selection is kept in the route's params while a record is open (Esc pops to this screen again).
   const params = untrack(() => {
     const r = nav.route()
@@ -111,73 +166,88 @@ export function MeetingsScreen() {
     const here = nav.route()
     if (here.kind === "screen" && here.params?.selected !== ref) nav.replaceParams({ ...here.params, selected: ref })
   }
-  // `current`: the row the table has selected (undefined while it shows none); `want`: a row to select once it is
-  // loaded (a new meeting, or the `selected` param), dropped as soon as the table has selected it.
+  const [focus, setFocus] = createSignal<0 | 1>(0)
   const [current, setCurrent] = createSignal<string | undefined>()
   const [want, setWant] = createSignal<string | undefined>(params.selected)
 
-  const groups = createMemo(() => meetingGroups(q.data() ?? []))
-  const projectsWidth = createMemo(() => joinFitWidth(groups().flatMap((g) => g.rows.map(codes)), 12, 18))
-  const tableGroups = createMemo((): TableGroup[] => groups().map((g) => ({ title: g.title, rows: g.rows.map((m) => row(m, today(), projectsWidth())) })))
-  const shown = () => groups().flatMap((g) => g.rows)
-  // The selected meeting, only while shown.
-  const selected = (): MeetingRecord | undefined => {
-    const ref = current()
-    return ref === undefined ? undefined : shown().find((m) => m.ref === ref)
-  }
-  const loaded = (ref: string | undefined) => ref !== undefined && shown().some((m) => m.ref === ref)
+  const meetings = createMemo(() => (q.data()?.groups ?? []).flatMap((g) => g.meetings))
+  const selected = (): Row | undefined => meetings().find((m) => m.ref === current())
+  const loaded = (ref: string | undefined) => ref !== undefined && meetings().some((m) => m.ref === ref)
   const select = (ref: string | undefined) => {
     setCurrent(ref)
     if (ref !== undefined && ref === want()) setWant(undefined)
     if (ref !== undefined) remember(ref)
   }
+  const seriesRows = createMemo((): TableRow[] =>
+    (q.data()?.series ?? []).map((s) => ({ ref: s.ref, cells: { title: s.title, about: s.about, rhythm: s.rhythm } })),
+  )
+  const fit = (texts: string[], min: number, max: number) => Math.min(max, Math.max(min, ...texts.map((t) => t.length)))
+  const aboutWidth = () => fit((q.data()?.series ?? []).map((s) => s.about.text), 7, 16)
+  const upcomingAbout = () => fit((q.data()?.groups ?? []).flatMap((g) => g.group.rows.map((r) => (r.cells.about as Cell).text)), 7, 16)
+  const rhythmWidth = () => fit((q.data()?.series ?? []).map((s) => s.rhythm), 14, 18)
 
-  const meetingForm = async (recordRef?: string) => {
-    const saved = await overlay.openForm("meeting", "meeting", recordRef === undefined ? {} : { recordRef })
+  const oneOff = async () => {
+    const saved = await overlay.openForm("meeting", "meeting", {})
     if (saved !== undefined) setWant(saved)
   }
-  const close = async (m: MeetingRecord) => {
-    if (!(await overlay.confirm(closeQuestion(m.ref)))) return
-    await act(() => rt.self().write.closeMeeting!({ ref: m.ref }), { ok: (out) => closedMessage(m.ref, out) })
+  const skip = async (m: Row) => {
+    if (!(await overlay.confirm(skipQuestion(m)))) return
+    await act(() => rt.self().write.skipMeeting!({ ref: m.ref }), { ok: () => `skipped ${m.ref}` })
   }
-  const cancel = async (m: MeetingRecord) => {
-    if (!(await overlay.confirm(cancelQuestion(m.ref)))) return
-    await act(() => rt.self().write.cancelMeeting!({ ref: m.ref }), { ok: () => `cancelled ${m.ref}` })
+  const openSeriesSubject = async (ref: string) => {
+    const s = q.data()?.series.find((x) => x.ref === ref)
+    if (!s) return
+    const about = await upcoming.subjectRef(s.subject)
+    if (about !== null) void nav.open(about)
   }
 
   useScreenKeys((key) => {
     if (keys.typing()) return
     const ch = printable(key)
-    const m = selected()
-    const planned = m !== undefined && m.status === "planned"
-    if (key.name === "delete") {
-      if (planned) void cancel(m)
-    } else if (ch === "x") {
-      if (planned) void close(m)
-    } else if (ch === "n") void meetingForm()
-    else if (ch === "e") {
-      if (m !== undefined) void meetingForm(m.ref)
+    const m = focus() === 0 ? selected() : undefined
+    const planned = m !== undefined && (m.status === undefined || m.status === "planned")
+    if (key.name === "tab" && !key.shift) setFocus((f) => (f === 0 ? 1 : 0))
+    else if (ch === "n") void oneOff()
+    else if (ch === "N") void overlay.openForm("series", "series", {})
+    else if (ch === "s") {
+      if (planned) void skip(m)
+    } else if (ch === "m") {
+      if (planned) void overlay.openForm("meeting", "move", { recordRef: m.ref })
     } else return
     key.preventDefault()
   })
-
   return (
-    <box flexDirection="column" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1}>
-      <KeyHints hints={HINTS} />
-      <Panel title="Meetings" count={q.data() === undefined ? undefined : shown().length} focused={keys.active()} grow>
-        <Show when={q.data() !== undefined}>
-          <Table
-            columns={columns(projectsWidth())}
-            groups={tableGroups()}
-            selectedRef={loaded(want()) ? want() : undefined}
-            onSelect={select}
-            onOpen={(ref) => void nav.open(ref)}
-            focused={keys.active()}
-            empty={EMPTY}
-            listId="meetings"
-          />
-        </Show>
-      </Panel>
+    <box flexDirection="row" flexGrow={1} minHeight={0} paddingLeft={1} paddingRight={1} gap={1}>
+      <KeyHints hints={HINTS} exact frame={[]} />
+      <box flexDirection="column" flexGrow={13} flexBasis={0} minHeight={0}>
+        <Panel title="Upcoming" focused={keys.active() && focus() === 0} grow>
+          <Show when={q.data() !== undefined}>
+            <Table
+              columns={upcomingColumns(upcomingAbout())}
+              groups={q.data()!.groups.map((g) => g.group)}
+              selectedRef={loaded(want()) ? want() : undefined}
+              onSelect={select}
+              onOpen={(ref) => void nav.open(ref)}
+              focused={keys.active() && focus() === 0}
+              empty={EMPTY}
+            />
+            <Show when={q.data()!.noSubject}>{(ref: () => string) => <text fg={theme.muted} flexShrink={0} wrapMode="none">{subjectHint(ref())}</text>}</Show>
+          </Show>
+        </Panel>
+      </box>
+      <box flexDirection="column" flexGrow={10} flexBasis={0} minHeight={0}>
+        <Panel title="Series" count={q.data()?.series.length} focused={keys.active() && focus() === 1} grow>
+          <Show when={q.data() !== undefined}>
+            <Table
+              columns={seriesColumns(aboutWidth(), rhythmWidth())}
+              rows={seriesRows()}
+              onOpen={(ref) => void openSeriesSubject(ref)}
+              focused={keys.active() && focus() === 1}
+              empty={SERIES_EMPTY}
+            />
+          </Show>
+        </Panel>
+      </box>
     </box>
   )
 }

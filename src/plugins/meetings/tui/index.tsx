@@ -1,11 +1,14 @@
-// The meetings plugin's tui part: the Meetings screen (slot 5), the meeting record view's Agenda, Prep, Notes and
-// Export tabs, and the meeting, agenda item and attendees forms.
+// The meetings plugin's tui part: the Meetings screen (slot 5), the Attention panel "Upcoming meetings · next 7 days",
+// the meeting record view's Agenda, Prep, Notes and Export tabs, the meeting, agenda item, attendees and move forms,
+// the new recurring meeting form (record type `series`) and the talk-item form (record type `talk_item`).
 import { dayDate, defineTui } from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
 import { AgendaTab } from "./agenda-tab"
 import { ExportTab } from "./export-tab"
-import { AgendaItemForm, AttendeesForm, MeetingForm } from "./forms"
+import { AgendaItemForm, AttendeesForm, MeetingForm, MoveForm, TalkForm } from "./forms"
 import { MeetingsScreen } from "./meetings-screen"
+import { registerPanels } from "./panels"
+import { SERIES_TITLE, SeriesForm } from "./series-form"
 import { NotesTab } from "./notes-tab"
 import { PrepTab } from "./prep-tab"
 
@@ -41,6 +44,10 @@ export const meetingsTui = defineTui({
     ui.recordForm("meeting", { id: "meeting", label: "Meeting", component: MeetingForm })
     ui.recordForm("meeting", { id: "agenda-item", label: "Agenda item", component: AgendaItemForm })
     ui.recordForm("meeting", { id: "attendees", label: "Attendees", component: AttendeesForm })
+    ui.recordForm("meeting", { id: "move", label: "Move date", component: MoveForm })
+    ui.recordForm("series", { id: "series", label: SERIES_TITLE, component: SeriesForm })
+    ui.recordForm("talk_item", { id: "talk", label: "Talk item", component: TalkForm })
+    registerPanels(ui)
   },
 })
 

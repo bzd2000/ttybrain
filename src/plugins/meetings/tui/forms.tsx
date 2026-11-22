@@ -1,17 +1,21 @@
 // The meetings plugin's record forms on the record type `meeting`: `meeting` (an add, or an edit with a
-// recordRef), `agenda-item` (recordRef the meeting; an edit names its position in `prefill.item`) and `attendees`.
+// recordRef; About first, the kind read as `1:1 (project · board)`), `agenda-item` (recordRef the meeting; an edit
+// names its position in `prefill.item`), `attendees` and `move` (a planned meeting's new date); and on `talk_item`
+// the form `talk` (a new item; `prefill.about` fills in its subject, as `t` on an upcoming meeting does).
 // Attendees and projects are typed as tags separated by spaces and/or commas (`@marie, @luc`, `#CRM #ERP`); the
 // `@` and `#` are optional. An unknown person or project shows under its field. An edit sends only the fields that
 // changed, and closes without a write when nothing did.
 import { createEffect, Show, untrack, type JSX } from "solid-js"
-import { act, Form, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "@ttybrain/api/tui"
+import { act, dayDate, Form, useQuery, useRuntime, type FieldSpec, type FormValues, type RecordFormProps, type SubmitResult } from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
-import type { AgendaItem, MeetingRecord } from "../logic/schema"
+import { KIND_LABELS, type AgendaItem, type MeetingRecord } from "../logic/schema"
 
 type Write = (input: Record<string, unknown>) => Promise<unknown>
 
-const KINDS = ["one_on_one", "project", "board"]
-const defined = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))
+export const KINDS = ["one_on_one", "project", "board"]
+// How a kind reads in a form: `1:1`, `project`, `board`.
+export const KIND_FIELD_LABELS: Record<string, string> = { ...KIND_LABELS }
+export const defined = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))
 // A value for an optional field: undefined (left out) when empty.
 const given = (v: string | null | undefined) => (v === null || v === undefined || v.trim() === "" ? undefined : v)
 
@@ -33,7 +37,7 @@ const changedFields = (fields: FieldSpec[], v: FormValues) => fields.filter((f) 
 
 // Loads what `load` returns (null: nothing to load) and renders `children` once it is there. A load that fails
 // closes the form (useQuery has shown the error). Live reloads do not rebuild the form: its fields keep what was typed.
-function With<T>(props: { load: () => Promise<T | null>; close(): void; children: (loaded: T | null) => JSX.Element }) {
+export function With<T>(props: { load: () => Promise<T | null>; close(): void; children: (loaded: T | null) => JSX.Element }) {
   const q = useQuery(props.load)
   createEffect(() => {
     if (q.error() !== undefined && q.data() === undefined) props.close()
@@ -44,7 +48,7 @@ function With<T>(props: { load: () => Promise<T | null>; close(): void; children
 // The field an unknown person or project belongs under (the operations name none for these lookups). A subject
 // that does not resolve is named with its `@` or `#` (`unknown person "@zorro"`), or as `unknown person or project`.
 type Lookups = { person?: string; project?: string; about?: string }
-function fieldOf(error: unknown, lookups: Lookups): string | undefined {
+export function fieldOf(error: unknown, lookups: Lookups): string | undefined {
   const m = error instanceof Error ? /\bunknown (person or project|person|project) "([@#]?)/.exec(error.message) : null
   if (!m) return undefined
   if (lookups.about !== undefined && (m[1] === "person or project" || m[2] !== "")) return lookups.about
@@ -52,7 +56,7 @@ function fieldOf(error: unknown, lookups: Lookups): string | undefined {
 }
 
 // Runs the writes with one act() and turns its result into the form's SubmitResult.
-async function save(run: () => Promise<unknown>, props: RecordFormProps, verb: string, lookups: Lookups = {}): Promise<SubmitResult> {
+export async function save(run: () => Promise<unknown>, props: RecordFormProps, verb: string, lookups: Lookups = {}): Promise<SubmitResult> {
   const r = await act(run, { origin: props.origin, ok: (out) => `${verb} ${(out as { ref: string }).ref}` })
   if (r.ok) return { ok: true, ref: (r.value as { ref: string }).ref }
   const field = fieldOf(r.error, lookups)
@@ -68,15 +72,15 @@ export function MeetingForm(props: RecordFormProps) {
   return (
     <With load={async () => (props.recordRef === undefined ? null : store.meeting(props.recordRef))} close={props.close}>
       {(m: MeetingRecord | null) => {
-        // A new meeting's kind may be left empty: it then follows from what the meeting is about.
+        // What it is about comes first; a new meeting's kind may be left empty: it then follows from that.
         const fields: FieldSpec[] = [
+          { name: "about", label: "About", kind: "refs", required: true, initial: m?.about },
           { name: "title", label: "Title", kind: "text", required: true, initial: m?.title },
+          { name: "kind", label: "Kind", kind: "enum", values: KINDS, labels: KIND_FIELD_LABELS, required: m !== null, initial: m?.kind },
           { name: "date", label: "Date", kind: "date", required: true, initial: m?.date ?? rt.clock.today() },
-          { name: "kind", label: "Kind", kind: "enum", values: KINDS, required: m !== null, initial: m?.kind },
-          { name: "sinceDate", label: "Since", kind: "date", initial: m?.since_date },
           attendeesField(m),
           ...(m === null ? [{ name: "projects", label: "Projects", kind: "text" as const }] : []),
-          { name: "about", label: "About", kind: "refs", required: true, initial: m?.about },
+          { name: "sinceDate", label: "Since", kind: "date", initial: m?.since_date },
         ]
         const add = (v: FormValues) =>
           save(
@@ -201,4 +205,50 @@ export function AttendeesForm(props: RecordFormProps) {
       }}
     </With>
   )
+}
+
+// A planned meeting's new date (`m` on screen 5): moveMeeting, which keeps a series' occurrence its series date.
+export function MoveForm(props: RecordFormProps) {
+  const rt = useRuntime()
+  const store = makeStore(rt)
+  return (
+    <With load={() => store.meeting(props.recordRef ?? "")} close={props.close}>
+      {(m: MeetingRecord | null) => {
+        const meeting = m!
+        const submit = (v: FormValues): Promise<SubmitResult> => {
+          const to = (v.to ?? "").trim()
+          if (to === meeting.date) return Promise.resolve({ ok: true, ref: meeting.ref })
+          return save(() => rt.self().write.moveMeeting!({ ref: meeting.ref, to }), props, "moved")
+        }
+        return (
+          <Form
+            title={`Move ${meeting.title} · ${dayDate(meeting.date)}`}
+            fields={[{ name: "to", label: "New date", kind: "date", required: true, initial: meeting.date }]}
+            submit={submit}
+            close={props.close}
+          />
+        )
+      }}
+    </With>
+  )
+}
+
+// A new talk item: what it is about (a person or a project, `prefill.about`), its text and, for a person's item, the
+// project it is about too (it then also shows at that project's meetings).
+export function TalkForm(props: RecordFormProps) {
+  const rt = useRuntime()
+  const fields: FieldSpec[] = [
+    { name: "about", label: "About", kind: "refs", required: true },
+    { name: "text", label: "Text", kind: "text", required: true },
+    { name: "project", label: "Project", kind: "record", recordType: "project" },
+  ]
+  const submit = (v: FormValues) =>
+    save(
+      () => rt.self().write.addTalk!(defined({ about: (v.about ?? "").trim(), text: v.text ?? "", project: given(v.project) })),
+      props,
+      "added",
+      { project: "project", about: "about" },
+    )
+  const start = props.prefill?.about === undefined ? undefined : "text"
+  return <Form title="New talk item" fields={withPrefill(fields, props.prefill)} {...(start ? { start } : {})} submit={submit} close={props.close} />
 }

@@ -146,6 +146,28 @@ function OwnerErrorForm(props: RecordFormProps) {
   )
 }
 
+// The look options: an enum read through its labels, a note worked out from the values, a placeholder, a footer on
+// the bottom border, and the field focused first (`start`).
+function LooksForm(props: RecordFormProps) {
+  return (
+    <Form
+      title="Looks"
+      footer="ctrl+s save · esc cancel"
+      start="title"
+      fields={[
+        { name: "kind", label: "Kind", kind: "enum", values: ["one_on_one", "project", "board"], labels: { one_on_one: "1:1" }, initial: "one_on_one" },
+        { name: "title", label: "Title", kind: "text", note: (v) => (v.title ? `→ ${v.title.toUpperCase()}` : undefined) },
+        { name: "ends", label: "Ends", kind: "date", placeholder: "never" },
+      ]}
+      submit={async (v) => {
+        submitted.push(v)
+        return { ok: true }
+      }}
+      close={props.close}
+    />
+  )
+}
+
 let overlay: Overlay | undefined
 function Home() {
   overlay = useOverlay()
@@ -161,6 +183,7 @@ const todoPart: TuiDef = defineTui({
     ui.recordForm("thing", { id: "notes", label: "Notes", component: NotesForm })
     ui.recordForm("thing", { id: "owner-error", label: "Owner check", component: OwnerErrorForm })
     ui.recordForm("thing", { id: "links", label: "Links", component: LinksForm })
+    ui.recordForm("thing", { id: "looks", label: "Looks", component: LooksForm })
   },
 })
 
@@ -192,6 +215,28 @@ const lineWith = (frame: string, s: string) => frame.split("\n").find((l) => l.i
 const statusLine = (frame: string) => frame.trimEnd().split("\n").at(-1)!
 
 describe("forms", () => {
+  test("labels, a live note, a placeholder, a footer on the border, and the field focused first", async () => {
+    const t = await open()
+    void overlay!.openForm("thing", "looks")
+    let frame = await t.frame()
+    // The enum reads its value's label, then the others, muted, in brackets.
+    expect(lineWith(frame, "Kind")).toContain("Kind  1:1 (project · board)")
+    expect(lineWith(frame, "Ends")).toContain("never")
+    expect(frame.split("\n").find((l) => l.includes("ctrl+s save · esc cancel"))).toMatch(/─ ctrl\+s save · esc cancel ─┘/)
+    // `start`: typing goes into Title; its note follows the value.
+    await t.input.typeText("abc")
+    frame = await t.frame()
+    expect(lineWith(frame, "› Title")).toContain("abc")
+    const lines = frame.split("\n")
+    expect(lines[lines.findIndex((l) => l.includes("› Title")) + 1]).toContain("→ ABC")
+    t.input.pressTab({ shift: true })
+    t.input.pressArrow("right")
+    expect(lineWith(await t.frame(), "Kind")).toContain("Kind  project (1:1 · board)")
+    t.input.pressKey("s", { ctrl: true })
+    await t.settle()
+    expect(submitted).toEqual([{ kind: "project", title: "abc", ends: null }])
+  })
+
   test("submit creates record and closes", async () => {
     const t = await open()
     overlay!.openForm("thing")

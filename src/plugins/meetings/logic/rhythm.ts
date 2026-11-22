@@ -1,6 +1,6 @@
 // Rhythms (design §5.2): the short phrase a series repeats by, the dates it gives and how it reads back. Pure: dates
 // are ISO calendar dates, compared as strings. Days are 0 = Sunday … 6 = Saturday.
-import { addDays, daysBetween, ValidationError } from "@ttybrain/api"
+import { addDays, dayDate, daysBetween, parseDate, shortDate, ValidationError } from "@ttybrain/api"
 
 export type Rhythm =
   | { every: "weeks"; weeks: number; day: number } // weekly on <day> (weeks 1), every <n> weeks on <day>
@@ -105,4 +105,28 @@ function nthWeekday(y: number, m: number, nth: number, day: number): string {
   if (nth > 0) return iso(y, m, 1 + ((day - weekday(iso(y, m, 1)) + 7) % 7) + 7 * (nth - 1))
   const last = daysIn(y, m)
   return iso(y, m, last - ((weekday(iso(y, m, last)) - day + 7) % 7))
+}
+
+// How the series form reads a rhythm back (the `series` design): the next four dates from `from` (today when empty),
+// `→ Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …`; the phrases it understands when it is not one; nothing while it is empty
+// or the first date does not parse.
+export function rhythmPreview(every: string | null | undefined, from: string | null | undefined, today: string): string | undefined {
+  if (every === null || every === undefined || every.trim() === "") return undefined
+  let first = today
+  if (from !== null && from !== undefined && from.trim() !== "") {
+    try {
+      first = parseDate(from, today)
+    } catch {
+      return undefined
+    }
+  }
+  let r: Rhythm
+  try {
+    r = parseRhythm(every)
+  } catch {
+    return "weekly on mon, every 2 weeks on wed, monthly on the 4th tue, monthly on the last fri, monthly on day 15"
+  }
+  // A year ahead holds four dates of any rhythm.
+  const dates = rhythmDates(r, first, first, addDays(first, 366)).slice(0, 4)
+  return `→ ${dates.map((d, i) => (i === 0 ? dayDate(d) : shortDate(d))).join(", ")} …`
 }

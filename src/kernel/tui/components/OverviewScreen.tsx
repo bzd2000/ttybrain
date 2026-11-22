@@ -5,18 +5,23 @@
 // counted), as many rows as fit (at most MAX_ROWS) plus `+N more`, or its `empty` text, or `⚠ <error>` when its
 // first load failed (spec §9). Rows with a `group` show under a muted sub-heading after a blank line. A panel's
 // `footer` is a muted line after its rows, inside the panel (as the screen designs draw it), not
-// on the border like a Panel footer. A panel's `columns` set its column widths.
-// ↑↓ move within the focused panel and Enter opens the selected row's ref.
+// on the border like a Panel footer (its `note` is that). A panel's `columns` set its column widths, `header` adds
+// a muted row of column titles. ↑↓ move within the focused panel and Enter opens the selected row's ref; a panel's
+// `keys` act on its selected row, and its `detail` shows a block for the selected row under the rows (↓ on the last
+// row moves into it, ↑ on its first row back; its own `keys` and Enter act on its rows). The status bar shows
+// `tab panel`, `enter open`, then the focused panel's detail keys and its own (while it has rows), the global
+// actions' and `g or 1-6 screens`, `? help` (the Attention design draws no `q quit`).
 import { useTerminalDimensions } from "@opentui/solid"
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { useQuery, type Query } from "../data"
-import { useKeys, useScreenKeys } from "../keys"
+import { printable, useKeys, useScreenKeys } from "../keys"
+import { notify } from "../messages"
 import { useNav } from "../nav"
+import { useOverlay } from "../overlay"
 import type { Registered } from "../registry"
 import { PluginScope, useApp } from "../scope"
 import { theme } from "../theme"
-import type { OverviewPanelDef, OverviewRow } from "../types"
-import { KeyHints } from "./KeyHints"
+import type { OverviewColumn, OverviewKeyDef, OverviewPanelDef, OverviewRow } from "../types"
 import { layoutOverview, MAX_ROWS, type PanelPlace } from "./overviewLayout"
 import { Panel } from "./Panel"
 import { fitWidth, Table, type TableColumn, type TableGroup, type TableRow } from "./Table"
@@ -57,7 +62,7 @@ export function OverviewScreen() {
     layoutOverview(
       panels.map((p, i) => {
         const rows = queries[i]!.data()
-        return { rows: rows?.length, empty: p.empty, footer: p.footer, headings: rows === undefined ? 0 : headingLines(rows.slice(0, MAX_ROWS)) }
+        return { rows: rows?.length, empty: p.empty, footer: p.footer, headings: rows === undefined ? 0 : headingLines(rows.slice(0, MAX_ROWS)), extra: extraLines(p) }
       }),
       dims().height - FRAME_LINES,
       dims().width,
@@ -85,15 +90,16 @@ export function OverviewScreen() {
       <For each={props.indexes}>{(i) => <Item i={i} />}</For>
     </box>
   )
+  // The bar: Tab and Enter, then the focused panel's detail keys and its own (while it has rows).
+  createEffect(() => {
+    if (panels.length === 0) return
+    const p = panels[focus()]!
+    const own = (queries[focus()]!.data()?.length ?? 0) > 0 ? [...(p.detail?.keys ?? []), ...(p.keys ?? [])] : []
+    const hints = [{ key: "Tab", label: "panel" }, { key: "Enter", label: "open" }, ...own.map((k) => ({ key: k.key, label: k.label }))]
+    onCleanup(keys.hints(hints, { exact: true, frame: ["g", "?"] }))
+  })
   return (
     <Show when={panels.length > 0} fallback={<text fg={theme.muted}>No panels yet: plugins add them here.</text>}>
-      <KeyHints
-        exact
-        hints={[
-          { key: "Tab", label: "panel" },
-          { key: "Enter", label: "open" },
-        ]}
-      />
       <Show
         when={isGrid()}
         fallback={
@@ -117,49 +123,156 @@ export function OverviewScreen() {
   )
 }
 
+// The lines a panel with rows adds to them: its header row and its detail block (a blank line, its title, its rows).
+const extraLines = (p: OverviewPanelDef) => (p.header ? 1 : 0) + (p.detail ? p.detail.rows + 2 : 0)
+
+const toRow = (r: OverviewRow): TableRow => ({ ref: r.ref, cells: Object.fromEntries(r.cells.map((c, i) => [`c${i}`, c])) })
+
+// Table columns for `rows` from a panel's `columns` (a `{ min, max }` fits the rows shown and its title); without
+// them the column with the widest text (the last of equals) takes the leftover width and the others fit their rows.
+function tableColumns(spec: OverviewColumn[] | undefined, rows: OverviewRow[], shown: TableRow[], titles: string[] = []): TableColumn[] {
+  const title = (i: number) => titles[i] ?? ""
+  if (spec)
+    return spec.map((w, i) =>
+      typeof w === "object"
+        ? { id: `c${i}`, title: title(i), width: Math.max(w.min, fitWidth(shown, `c${i}`, title(i), w.max)), ...(w.drop === undefined ? {} : { drop: w.drop }) }
+        : { id: `c${i}`, title: title(i), width: w },
+    )
+  const n = Math.max(0, ...rows.map((r) => r.cells.length))
+  const natural = Array.from({ length: n }, (_, i) => fitWidth(shown, `c${i}`, title(i), Infinity))
+  const grow = natural.reduce((best, w, i) => (w >= (natural[best] ?? 0) ? i : best), 0)
+  return Array.from({ length: n }, (_, i) =>
+    i === grow ? { id: `c${i}`, title: title(i), width: "grow" as const } : { id: `c${i}`, title: title(i), width: Math.min(natural[i]!, MAX_COLUMN) },
+  )
+}
+
+// Runs a panel key; a failure shows in the status bar.
+function runKey(k: OverviewKeyDef, ref: string, overlay: ReturnType<typeof useOverlay>): void {
+  void Promise.resolve()
+    .then(() => k.run(ref, { overlay }))
+    .catch((e: unknown) => notify(errorText(e), "error"))
+}
+
 function OverviewPanel(props: { def: PanelEntry; query: Query<OverviewRow[]>; place: PanelPlace; focused: boolean }) {
   const nav = useNav()
+  const keys = useKeys()
+  const overlay = useOverlay()
   const all = () => props.query.data() ?? []
-  const toRow = (r: OverviewRow): TableRow => ({ ref: r.ref, cells: Object.fromEntries(r.cells.map((c, i) => [`c${i}`, c])) })
-  const shown = (): TableRow[] => all().slice(0, props.place.rows).map(toRow)
+  const shownRows = () => all().slice(0, props.place.rows)
+  const shown = (): TableRow[] => shownRows().map(toRow)
   // The rows shown, in runs of the same group (the first without a title).
   const groups = (): TableGroup[] => {
     const out: TableGroup[] = []
-    for (const r of all().slice(0, props.place.rows)) {
+    for (const r of shownRows()) {
       const last = out[out.length - 1]
       if (last && last.title === r.group) last.rows.push(toRow(r))
       else out.push({ title: r.group, count: false, space: true, rows: [toRow(r)] })
     }
     return out
   }
-  // Set by the panel's `columns` (a `{ min, max }` fits the rows shown); otherwise the column with the widest text (the last of equals) takes the
-  // leftover width and the others fit their rows.
-  const columns = (): TableColumn[] => {
-    const fixed = props.def.columns
-    if (fixed)
-      return fixed.map((w, i) => ({
-        id: `c${i}`,
-        title: "",
-        width: typeof w === "object" ? Math.max(w.min, fitWidth(shown(), `c${i}`, "", w.max)) : w,
-      }))
-    const n = Math.max(0, ...all().map((r) => r.cells.length))
-    const natural = Array.from({ length: n }, (_, i) => fitWidth(shown(), `c${i}`, "", Infinity))
-    const grow = natural.reduce((best, w, i) => (w >= (natural[best] ?? 0) ? i : best), 0)
-    return Array.from({ length: n }, (_, i) =>
-      i === grow ? { id: `c${i}`, title: "", width: "grow" as const } : { id: `c${i}`, title: "", width: Math.min(natural[i]!, MAX_COLUMN) },
-    )
-  }
+  const columns = (): TableColumn[] => tableColumns(props.def.columns, all(), shown(), props.def.header)
   const more = () => all().length - props.place.rows
+
+  // --- the selected row, and the detail block for it ---
+  const [selected, setSelected] = createSignal<string | undefined>()
+  const [inDetail, setInDetail] = createSignal(false)
+  const [detailSelected, setDetailSelected] = createSignal<string | undefined>()
+  const spec = props.def.detail
+  const detail = useQuery(
+    async () => {
+      const ref = selected()
+      return { ref, detail: ref === undefined || !spec ? null : await spec.load(ref) }
+    },
+    { key: () => selected() },
+  )
+  // The detail of the selected row only (not the last one's, while the new one loads).
+  const current = () => {
+    const d = detail.data()
+    return d && d.ref === selected() ? d.detail : null
+  }
+  const detailAll = () => current()?.rows ?? []
+  const detailCap = () => (spec ? (detailAll().length > spec.rows ? spec.rows - 1 : spec.rows) : 0)
+  const detailShownRows = () => detailAll().slice(0, detailCap())
+  const detailShown = (): TableRow[] => detailShownRows().map(toRow)
+  const detailMore = () => detailAll().length - detailShownRows().length
+  createEffect(() => {
+    if (inDetail() && detailShownRows().length === 0) setInDetail(false)
+  })
+  // With a detail block the rows take their own lines only, so the block follows them.
+  const tableHeight = () => (props.def.header ? 1 : 0) + shownRows().length + headingLines(shownRows())
+
+  useScreenKeys((key) => {
+    if (!props.focused || keys.typing() || key.defaultPrevented) return
+    const ch = printable(key)
+    const down = key.name === "down" || ch === "j"
+    const up = key.name === "up" || ch === "k"
+    const rows = shownRows()
+    if (down && !inDetail() && rows.length > 0 && selected() === rows[rows.length - 1]!.ref && detailShownRows().length > 0) setInDetail(true)
+    else if (up && inDetail() && detailSelected() === detailShownRows()[0]?.ref) setInDetail(false)
+    else {
+      if (ch === undefined) return
+      const own = inDetail() ? spec?.keys?.find((k) => k.key === ch) : undefined
+      const ref = own ? detailSelected() : selected()
+      const k = own ?? props.def.keys?.find((k) => k.key === ch)
+      if (!k || ref === undefined) return
+      runKey(k, ref, overlay)
+    }
+    key.preventDefault()
+  })
+
+  const rowsTable = () => (
+    <Table
+      columns={columns()}
+      groups={groups()}
+      header={props.def.header !== undefined}
+      empty={props.def.empty}
+      focused={props.focused && !inDetail()}
+      onSelect={setSelected}
+      onOpen={(ref) => void nav.open(ref)}
+    />
+  )
   return (
     <box height={props.place.height} flexShrink={0} flexDirection="column" overflow="hidden">
-      <Panel title={props.def.title} count={props.def.count === false ? undefined : props.query.data()?.filter((r) => r.group === undefined).length} focused={props.focused} grow>
+      <Panel
+        title={props.def.title}
+        count={props.def.count === false ? undefined : props.query.data()?.filter((r) => r.group === undefined).length}
+        focused={props.focused}
+        footer={(props.query.data()?.length ?? 0) > 0 ? props.def.note : undefined}
+        grow
+      >
         <Show when={props.query.error() !== undefined && props.query.data() === undefined}>
           <text fg={theme.red} flexShrink={0}>{`⚠ ${errorText(props.query.error())}`}</text>
         </Show>
         <Show when={props.query.data() !== undefined}>
-          <Table columns={columns()} groups={groups()} header={false} empty={props.def.empty} focused={props.focused} onOpen={(ref) => void nav.open(ref)} />
+          <Show when={spec && shownRows().length > 0} fallback={rowsTable()}>
+            <box height={tableHeight()} flexShrink={0} flexDirection="column">
+              {rowsTable()}
+            </box>
+          </Show>
           <Show when={more() > 0}>
             <text fg={theme.muted} flexShrink={0}>{`+${more()} more`}</text>
+          </Show>
+          <Show when={spec ? current() : null}>
+            {(d: () => NonNullable<ReturnType<typeof current>>) => (
+              <box flexDirection="column" flexShrink={0} paddingTop={1}>
+                <text fg={theme.muted} flexShrink={0}>
+                  {d().title}
+                </text>
+                <box height={detailShownRows().length} flexShrink={0} flexDirection="column">
+                  <Table
+                    columns={tableColumns(spec!.columns, detailAll(), detailShown())}
+                    rows={detailShown()}
+                    header={false}
+                    focused={props.focused && inDetail()}
+                    onSelect={setDetailSelected}
+                    onOpen={(ref) => void nav.open(ref)}
+                  />
+                </box>
+                <Show when={detailMore() > 0}>
+                  <text fg={theme.muted} flexShrink={0}>{`+${detailMore()} more`}</text>
+                </Show>
+              </box>
+            )}
           </Show>
         </Show>
         <Show when={props.def.footer}>{(f: () => string) => <text fg={theme.muted} flexShrink={0}>{f()}</text>}</Show>

@@ -13,9 +13,10 @@ import { displayWidth } from "../format"
 
 export const MAX_ROWS = 5
 
-// What a panel needs: its row count (undefined while loading), its empty text and footer, which wrap, and the
-// lines its sub-headings take (`headings`, beside its rows).
-export type PanelNeed = { rows: number | undefined; empty: string; footer?: string; headings?: number }
+// What a panel needs: its row count (undefined while loading), its empty text and footer, which wrap, the lines its
+// sub-headings take (`headings`, beside its rows), and the fixed lines it adds once it has rows (`extra`: a header
+// row, a detail block).
+export type PanelNeed = { rows: number | undefined; empty: string; footer?: string; headings?: number; extra?: number }
 // Where it goes: its column, its grid row (undefined when the columns are balanced instead), its height in lines
 // (borders included) and how many rows it shows.
 export type PanelPlace = { column: 0 | 1; row: number | undefined; height: number; rows: number }
@@ -48,9 +49,10 @@ export function panelTextWidth(screenWidth: number): number {
 type Sized = { chrome: number; min: number; want: number; total: number | undefined }
 
 function size(need: PanelNeed, textWidth: number): Sized {
-  const chrome = 2 + (need.footer ? wrappedLines(need.footer, textWidth) : 0) + (need.headings ?? 0)
+  let chrome = 2 + (need.footer ? wrappedLines(need.footer, textWidth) : 0) + (need.headings ?? 0)
   const n = need.rows
   if (n === undefined) return { chrome, min: 1, want: 1, total: n }
+  if (n > 0) chrome += need.extra ?? 0
   if (n === 0) {
     const lines = wrappedLines(need.empty, textWidth)
     return { chrome, min: 1, want: lines, total: n }
