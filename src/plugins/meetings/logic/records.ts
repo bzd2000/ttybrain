@@ -1,5 +1,5 @@
 // Lookups shared by the operations and the commands (reading the plugin's own tables), and the record types
-// `meeting` (M-) and `series` (S-). People (@handle) and projects (#CODE) are resolved through the kernel's record
+// `meeting` (M-), `series` (S-) and `talk_item` (T-). People (@handle) and projects (#CODE) are resolved through the kernel's record
 // types; a subject (the person or project a meeting or series is about) is a soft reference shown through their views.
 import {
   currentContext,
@@ -205,6 +205,13 @@ export function makeStore(ctx: PluginRuntime) {
     }
   }
 
+  async function talkId(input: string): Promise<number | null> {
+    const id = parseRef(input, "T-")
+    if (id === null) return null
+    const row = await db.selectFrom("talk_item").select("id").where("id", "=", id).executeTakeFirst()
+    return row ? Number(row.id) : null
+  }
+
   // The id the next meeting gets (an integer primary key takes the highest id plus one), for the add line.
   async function nextMeetingId(): Promise<number> {
     const rows = await db.selectFrom("meeting").select("id").orderBy("id", "desc").limit(1).execute()
@@ -243,6 +250,7 @@ export function makeStore(ctx: PluginRuntime) {
     subjectRef,
     seriesId,
     series,
+    talkId,
   }
 }
 
@@ -272,6 +280,17 @@ export function registerRecordTypes(ctx: PluginContext, store: Store): void {
     search: async (text, limit) => {
       const rows = await ctx.data.selectFrom("series").select(["id", "title"]).where("title", "like", `%${text.trim()}%`).orderBy("id").limit(limit).execute()
       return rows.map((r) => ({ ref: formatRef("S-", Number(r.id)), label: String(r.title) }))
+    },
+  })
+  // A talk item (M12): labelled and searched by its text.
+  ctx.recordType({
+    name: "talk_item",
+    prefix: "T-",
+    resolve: (input) => store.talkId(input),
+    label: async (id) => String((await ctx.data.selectFrom("talk_item").select("text").where("id", "=", id).executeTakeFirstOrThrow()).text),
+    search: async (text, limit) => {
+      const rows = await ctx.data.selectFrom("talk_item").select(["id", "text"]).where("text", "like", `%${text.trim()}%`).orderBy("id").limit(limit).execute()
+      return rows.map((r) => ({ ref: formatRef("T-", Number(r.id)), label: String(r.text) }))
     },
   })
 }

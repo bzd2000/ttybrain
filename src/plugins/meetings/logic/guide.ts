@@ -1,4 +1,4 @@
-// The agent guide's section on meetings: preparing one, and turning its notes into actions and decisions.
+// The agent guide's section on meetings: preparing one, turning its notes into actions and decisions, and talk-lists.
 import type { PluginContext } from "@ttybrain/api"
 
 const MARKDOWN = `
@@ -16,6 +16,12 @@ Meetings are referenced as \`M-<n>\`. \`ttybrain meeting list\` shows the planne
 - Put the minutes in the notes: \`ttybrain meeting notes M-4 --file minutes.md\`, or \`-\` to read stdin.
 - Turn each commitment into an action and each decision into a decision record, tied to the meeting: \`ttybrain action add "Send the roadmap" --owner marie --due fri --meeting M-4\` and \`ttybrain decision add "Select vendor B" --project CRM --meeting M-4\`.
 - Then \`ttybrain meeting close M-4\`. It marks the meeting held and prints how many actions and decisions were logged from it; a meeting with none logged is worth a second look.
+
+**Talk-lists**
+
+- Every person and project has a talk-list: things the user wants to raise at the next meeting with them, referenced as \`T-<n>\`. Add one with \`ttybrain talk add @anna "AWS training budget"\` (or \`#CRM\` for a project). \`--project ERP\` tags a person's item with a project, so it also shows at ERP's meetings until it is discussed in either place.
+- \`ttybrain talk list @anna\` shows the open items in order, with those added before the last held meeting under "carried over"; a project's list includes people's items tagged with it. \`ttybrain talk list\` shows every list.
+- When an item has been discussed: \`ttybrain talk done T-3 --meeting M-4\` (the meeting must be about the item's person or project, or a project meeting for a tagged item); without \`--meeting\` when it came up elsewhere. \`ttybrain talk drop T-3\` takes it off the list without discussing it; \`ttybrain talk move T-3 --to 1\` reorders.
 `
 
 export function registerGuide(ctx: PluginContext): void {

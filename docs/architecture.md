@@ -31,7 +31,7 @@ src/kernel/                 knows nothing about projects or people
 src/bin/pm.ts               the `ttybrain` entry point: boots the kernel with discovered plugins (`discover: true`) and runs the CLI
 src/plugins/<id>/package.json  the plugin manifest (`main`, `ttybrain.id`, `ttybrain.tui`); the build copies it to dist-node with .js entries
 src/plugins/<id>/logic/     index.ts (definePlugin), schema.ts, views.ts, ops*.ts, commands*.ts, records.ts, report.ts, guide.ts: NO UI imports
-                            (meetings: ops.ts, records.ts, series.ts, rhythm.ts, since.ts, reports.ts, commands.ts, views.ts, guide.ts, schema.ts)
+                            (meetings: ops.ts, records.ts, series.ts, rhythm.ts, talk.ts, since.ts, reports.ts, commands.ts, views.ts, guide.ts, schema.ts)
 src/kernel/tui/             the TUI kernel: frame, router, keys, overlays, data hooks, building blocks (see "The TUI")
 src/plugins/<id>/tui/       screens, record tabs, panels, forms, badges: each plugin's TUI part (`defineTui`)
 tests/helpers.ts            makeTestKernel; tests/builtins.ts the built-ins as static lists (tests only); tests/fixtures/ fixture plugins
@@ -156,7 +156,7 @@ Rules:
 | `people` | — | projects, actions | person, note, goal | `@handle`, `N-`, `G-` |
 | `projects` | people | people, meetings, actions | project, health_update, milestone, deliverable, risk, decision, involvement | `#CODE`, `MS-`, `D-`, `R-`, `DE-` |
 | `actions` | — | people, projects, meetings | action, link | `A-` |
-| `meetings` | projects, people, actions | people, projects, actions | meeting, attendee, agenda_item, series, series_attendee | `M-`, `S-` |
+| `meetings` | projects, people, actions | people, projects, actions | meeting, attendee, agenda_item, series, series_attendee, talk_item | `M-`, `S-`, `T-` |
 | `inbox` | — | — | item, link | `I-` |
 | `assistant` (phase 7) | — | all (as tools) | — | — |
 

@@ -149,10 +149,12 @@ export function makeOccurrences(ctx: PluginContext, store: Store) {
     }
   }
 
-  // A meeting that carries nothing: no notes, no agenda, nothing linked to it or made from it, no origin of its own.
+  // A meeting that carries nothing: no notes, no agenda, no talk item discussed in it, nothing linked to it or made
+  // from it, no origin of its own.
   async function empty(meetingId: number, notes: string): Promise<boolean> {
     if (notes.trim() !== "") return false
     if (await db.selectFrom("agenda_item").select("id").where("meeting_id", "=", meetingId).executeTakeFirst()) return false
+    if (await db.selectFrom("talk_item").select("id").where("meeting_id", "=", meetingId).executeTakeFirst()) return false
     if (await anyIn(() => db.selectFrom("actions.link").select("action_id").where("record_type", "=", "meeting").where("record_id", "=", meetingId).executeTakeFirst())) return false
     if (await anyIn(() => db.selectFrom("projects.decision").select("id").where("meeting_id", "=", meetingId).executeTakeFirst())) return false
     if ((await ctx.provenance.createdFrom("meeting", formatRef("M-", meetingId))).length > 0) return false

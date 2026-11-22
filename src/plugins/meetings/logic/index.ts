@@ -1,6 +1,7 @@
 // The meetings plugin: every meeting is about a person (1:1) or a project (project, board), one-off or an occurrence
-// of a recurring series, with agenda and asks (plugin reference §3, meetings design §5). Tables, the M- and S-
-// record types, views, the operations, the series and their `occurrences` upkeep, the `ttybrain meeting` commands, the
+// of a recurring series, with agenda and asks, and the talk-lists of people and projects (plugin reference §3,
+// meetings design §5). Tables, the M-, S- and T- record types, views, the operations, the series and their
+// `occurrences` upkeep, the talk-lists, the `ttybrain meeting` and `ttybrain talk` commands, the
 // board and minutes reports (with the prep and report reads) and the guide section.
 import { definePlugin } from "@ttybrain/api"
 import { registerCommands } from "./commands"
@@ -10,6 +11,7 @@ import { makeStore, registerRecordTypes } from "./records"
 import { registerReports } from "./reports"
 import { registerSchema } from "./schema"
 import { makeOccurrences, registerSeries } from "./series"
+import { makeTalks, registerTalk } from "./talk"
 import { registerViews } from "./views"
 
 export const meetings = definePlugin({
@@ -28,7 +30,9 @@ export const meetings = definePlugin({
     registerRecordTypes(ctx, store)
     registerOps(ctx, store)
     registerSeries(ctx, store, makeOccurrences(ctx, store))
-    registerCommands(ctx, store)
+    const talks = makeTalks(ctx, store)
+    registerTalk(ctx, store, talks)
+    registerCommands(ctx, store, talks)
     registerReports(ctx, store)
     registerGuide(ctx)
   },

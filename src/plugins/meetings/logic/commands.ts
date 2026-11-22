@@ -5,7 +5,8 @@
 import { readFile } from "node:fs/promises"
 import { addDays, currentContext, formatRef, formatTable, ValidationError, type FlagDef, type PluginContext } from "@ttybrain/api"
 import type { Store } from "./records"
-import { KIND_INPUTS, type MeetingRecord, type SeriesRecord } from "./schema"
+import { KIND_INPUTS, type MeetingRecord, type SeriesRecord, type SubjectType, type TalkRecord } from "./schema"
+import type { TalkList, Talks } from "./talk"
 
 const text = (description: string, placeholder?: string): FlagDef => ({ type: "string", description, ...(placeholder ? { placeholder } : {}) })
 const bool = (description: string): FlagDef => ({ type: "boolean", description })
@@ -47,12 +48,108 @@ function meetingText(m: MeetingRecord): string {
   return blocks.join("\n\n")
 }
 
+// One subject's talk-list as text: a heading, then one line per item (its place on the list, ref, text, project tag
+// or `—`, date added); the carried group under its own line. On a project's list, a person's item tagged with the
+// project has no number (its place is on that person's list) and shows whose it is instead of the tag.
+function talkBlock(about: string, list: TalkList): string {
+  const row = (t: TalkRecord) => {
+    const own = t.about === about
+    return [own && t.position !== null ? `${t.position}.` : "", t.ref, t.text, own ? (t.project ?? "—") : t.about, t.added_date]
+  }
+  const open = list.open.map(row)
+  const carried = list.carried.map(row)
+  const widths = [0, 1, 2, 3].map((i) => Math.max(...[...open, ...carried].map((r) => r[i]!.length)))
+  const format = (r: string[]) => `${r[0]!.padEnd(widths[0]!)} ${r[1]!.padEnd(widths[1]!)}  ${r[2]!.padEnd(widths[2]!)}  ${r[3]!.padEnd(widths[3]!)}  ${r[4]}`
+  const head = `${about} · ${list.open.length} open${list.carried.length ? `, ${list.carried.length} carried` : ""}`
+  const lines = [head, ...open.map(format)]
+  if (carried.length) lines.push(`carried over from ${list.carriedFrom}`, ...carried.map(format))
+  return lines.join("\n")
+}
+
 const line = (m: MeetingRecord) => `${m.ref} ${m.title} on ${m.date}`
 const seriesLine = (s: SeriesRecord) => `${s.ref} ${s.title}: ${s.rhythm}${s.next ? `, next ${s.next}` : ""}${s.end_date ? `, until ${s.end_date}` : ""}`
 const SUBJECT_USAGE = "usage: ttybrain meeting subject <M-n> <about>, or ttybrain meeting subject --all-without <about>"
 
-export function registerCommands(ctx: PluginContext, store: Store): void {
+export function registerCommands(ctx: PluginContext, store: Store, talks: Talks): void {
   const write = () => ctx.self().write
+
+  ctx.command({
+    thing: "talk",
+    verb: "add",
+    summary: "add an item to a person's or project's talk-list; --project also puts a person's item on that project's meetings",
+    args: [
+      { name: "about", required: true },
+      { name: "text", required: true },
+    ],
+    flags: { project: text("tag it with a project", "code") },
+    run: async ({ args, flags }) => {
+      const t: TalkRecord = await write().addTalk!({ about: args.about, text: args.text, ...(flags.project !== undefined ? { project: flags.project } : {}) })
+      return { json: t, text: `${t.ref} added to ${t.about}'s talk-list at ${t.position}` }
+    },
+  })
+
+  ctx.command({
+    thing: "talk",
+    verb: "list",
+    summary: "show the open talk items: of one person or project (a project's include people's items tagged with it), or of everyone",
+    args: [{ name: "about" }],
+    run: async ({ args }) => {
+      if (args.about !== undefined) {
+        const subject = await store.subject(String(args.about))
+        const list = await talks.list(subject)
+        const items = [...list.open, ...list.carried]
+        return { json: items, text: items.length ? talkBlock(subject.ref, list) : `no open talk items for ${subject.ref}` }
+      }
+      const subjects = await ctx.data.selectFrom("talk_item").select(["subject_type", "subject_id"]).distinct().where("status", "=", "open").execute()
+      const blocks: Array<{ about: string; type: SubjectType; list: TalkList }> = []
+      for (const s of subjects) {
+        const list = await talks.list({ type: s.subject_type as SubjectType, id: Number(s.subject_id) }, { own: true })
+        blocks.push({ about: [...list.open, ...list.carried][0]!.about, type: s.subject_type as SubjectType, list })
+      }
+      // People, then projects, each by ref; those that no longer resolve last.
+      const key = (b: (typeof blocks)[number]) => `${b.about === "—" ? 1 : 0}${b.type === "person" ? 0 : 1}${b.about}`
+      blocks.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0))
+      return {
+        json: blocks.flatMap((b) => [...b.list.open, ...b.list.carried]),
+        text: blocks.length ? blocks.map((b) => talkBlock(b.about, b.list)).join("\n\n") : "no open talk items",
+      }
+    },
+  })
+
+  ctx.command({
+    thing: "talk",
+    verb: "done",
+    summary: "mark a talk item discussed, in a meeting it is on (--meeting) or elsewhere",
+    args: [{ name: "item", required: true }],
+    flags: { meeting: text("the meeting it was discussed in", "M-n") },
+    run: async ({ args, flags }) => {
+      const t: TalkRecord = await write().discussTalk!({ ref: args.item, ...(flags.meeting !== undefined ? { meeting: flags.meeting } : {}) })
+      return { json: t, text: `${t.ref} discussed${t.meeting ? ` in ${t.meeting}` : ""}` }
+    },
+  })
+
+  ctx.command({
+    thing: "talk",
+    verb: "drop",
+    summary: "take a talk item off its list without discussing it",
+    args: [{ name: "item", required: true }],
+    run: async ({ args }) => {
+      const t: TalkRecord = await write().dropTalk!({ ref: args.item })
+      return { json: t, text: `${t.ref} dropped` }
+    },
+  })
+
+  ctx.command({
+    thing: "talk",
+    verb: "move",
+    summary: "move a talk item to another place on its list",
+    args: [{ name: "item", required: true }],
+    flags: { to: { type: "number", description: "the new place (1 is first)", required: true } },
+    run: async ({ args, flags }) => {
+      const t: TalkRecord = await write().moveTalk!({ ref: args.item, to: flags.to })
+      return { json: t, text: `${t.ref} moved to ${t.position}` }
+    },
+  })
 
   ctx.command({
     thing: "meeting",

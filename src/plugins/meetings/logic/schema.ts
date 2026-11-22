@@ -1,12 +1,14 @@
 // The meetings plugin's tables (plugin reference §3) and the TypeBox shapes of its records.
 // 001: meeting, attendee, agenda_item. 002 (the meetings rework, design §5.1–5.2): every meeting may have a subject
 // (a person or a project) and belong to a recurring `series`; kinds become one_on_one, project and board; the
-// children no longer cascade (rule 6), so the meetings plugin deletes them itself.
+// children no longer cascade (rule 6), so the meetings plugin deletes them itself. 003 (design §5.3): talk items, the
+// things to raise with a person or about a project.
 import { sql, Type, type Kysely, type PluginContext, type Static } from "@ttybrain/api"
 
 export const MEETING_KINDS = ["one_on_one", "project", "board"] as const
 export const MEETING_STATUSES = ["planned", "held", "cancelled"] as const
 export const SUBJECT_TYPES = ["person", "project"] as const
+export const TALK_STATUSES = ["open", "discussed", "dropped"] as const
 // Kinds as given (CLI, operations): `steering` and `other`, the kinds before 002, are aliases of `project`.
 export const KIND_INPUTS = [...MEETING_KINDS, "steering", "other"] as const
 // How a kind reads on screen.
@@ -59,7 +61,21 @@ export const SeriesRecord = Type.Object({
 })
 export type SeriesRecord = Static<typeof SeriesRecord>
 
-const inList = (col: string, xs: readonly string[]) => sql.raw(`${col} in (${xs.map((x) => `'${x}'`).join(", ")})`)
+export const TalkStatus = Type.Union([Type.Literal("open"), Type.Literal("discussed"), Type.Literal("dropped")])
+export const TalkRecord = Type.Object({
+  ref: Text,
+  id: Type.Integer(),
+  about: Text, // the subject: @handle or #CODE; `person:<id>` while its plugin is not loaded, `—` once it is gone
+  text: Text,
+  project: Opt, // the project tag: #CODE (`—` once it is gone), null for none
+  added_date: Text,
+  position: Type.Union([Type.Integer(), Type.Null()]), // 1..n on the subject's list while open, null otherwise
+  status: TalkStatus,
+  meeting: Opt, // M-n it was discussed in
+})
+export type TalkRecord = Static<typeof TalkRecord>
+
+const inList =(col: string, xs: readonly string[]) => sql.raw(`${col} in (${xs.map((x) => `'${x}'`).join(", ")})`)
 
 // 001 as meetings 1.0.0 shipped it (kept as is: applied databases have it; the upgrade test builds one with it).
 export async function migration001(db: Kysely<any>): Promise<void> {
@@ -191,7 +207,32 @@ async function migration002(db: Kysely<any>): Promise<void> {
   await db.schema.dropTable("agenda_item_copy").execute()
 }
 
+// Talk items. `id` is AUTOINCREMENT, like `meeting`'s: an id is never given again. `position` is the item's place on
+// its subject's list while it is open (1..n, unique per subject), null once discussed or dropped. `meeting_id` is the
+// meeting it was discussed in (no ON DELETE action, rule 6; meetings deletes only occurrences that hold nothing).
+async function migration003(db: Kysely<any>): Promise<void> {
+  await db.schema
+    .createTable("talk_item")
+    .addColumn("id", "integer", (c) => c.primaryKey().autoIncrement())
+    .addColumn("subject_type", "text", (c) => c.notNull().check(inList("subject_type", SUBJECT_TYPES)))
+    .addColumn("subject_id", "integer", (c) => c.notNull()) // soft reference to a people person or a projects project
+    .addColumn("text", "text", (c) => c.notNull())
+    .addColumn("project_id", "integer") // soft reference to a projects project: the tag
+    .addColumn("added_date", "text", (c) => c.notNull())
+    .addColumn("position", "integer")
+    .addColumn("status", "text", (c) => c.notNull().defaultTo("open").check(inList("status", TALK_STATUSES)))
+    .addColumn("meeting_id", "integer", (c) => c.references("meeting.id"))
+    .addColumn("status_date", "text") // the day it was discussed or dropped
+    .addColumn("created_at", "text", (c) => c.notNull())
+    .addColumn("updated_at", "text", (c) => c.notNull())
+    .addUniqueConstraint("talk_item_position", ["subject_type", "subject_id", "position"])
+    .execute()
+  await db.schema.createIndex("talk_item_project").on("talk_item").columns(["project_id", "status"]).execute()
+  await db.schema.createIndex("talk_item_meeting").on("talk_item").column("meeting_id").execute()
+}
+
 export function registerSchema(ctx: PluginContext): void {
   ctx.migration("001", migration001)
   ctx.migration("002", migration002)
+  ctx.migration("003", migration003)
 }

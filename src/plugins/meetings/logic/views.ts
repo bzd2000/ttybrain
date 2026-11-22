@@ -1,4 +1,4 @@
-// The published views: meetings.meeting, meetings.agenda_item, meetings.attendee and meetings.series.
+// The published views: meetings.meeting, meetings.agenda_item, meetings.attendee, meetings.series and meetings.talk_item.
 // They are a versioned contract; other plugins join them, never the tables.
 import type { PluginContext } from "@ttybrain/api"
 
@@ -26,5 +26,23 @@ export function registerViews(ctx: PluginContext): void {
     version: 1,
     columns: { id: "integer", subject_type: "text", subject_id: "integer", title: "text", kind: "text", rhythm: "text", first_date: "date", end_date: "date" },
     query: (db) => db.selectFrom("series").select(["id", "subject_type", "subject_id", "title", "kind", "rhythm", "first_date", "end_date"]),
+  })
+
+  ctx.publish("talk_item", {
+    version: 1,
+    columns: {
+      id: "integer",
+      subject_type: "text",
+      subject_id: "integer",
+      text: "text",
+      project_id: "integer",
+      added_date: "date",
+      position: "integer",
+      status: "text",
+      meeting_id: "integer",
+      status_date: "date",
+    },
+    query: (db) =>
+      db.selectFrom("talk_item").select(["id", "subject_type", "subject_id", "text", "project_id", "added_date", "position", "status", "meeting_id", "status_date"]),
   })
 }
