@@ -6,7 +6,7 @@ import type { Clock } from "./clock"
 import type { Origin } from "./context"
 import type { Config } from "./config"
 import type { FieldDef } from "./fields"
-import type { PluginApi, PluginReadApi, ReadOp, WriteOp } from "./operations"
+import type { PluginApi, ReadOp, WriteOp } from "./operations"
 import type { RecordTypeDef } from "./records"
 import type { ReportDef, ReportResult, ReportSectionDef } from "./reports"
 import type { TagRegistry, TagTypeDef } from "./tags"
@@ -39,9 +39,11 @@ export interface PluginContext {
   upgrade(id: string, run: () => Promise<"done" | "later">): void
   publish(name: string, def: ViewDef): void
   expose(ops: { read?: Record<string, ReadOp>; write?: Record<string, WriteOp> }): void
-  // Another plugin's exposed operations: read and write for a plugin in `requires`; only `read` (`write` is
-  // undefined) for one only in `reads`, while it is loaded at a version in that range; undefined otherwise.
-  use(pluginId: string): PluginApi | PluginReadApi | undefined
+  // Another plugin's exposed operations; undefined unless it is in `requires`.
+  use(pluginId: string): PluginApi | undefined
+  // Another plugin's read operations, for a plugin in `reads` or `requires`; undefined while it is not loaded, or is
+  // loaded at a version outside the `reads` range (as for its views).
+  read(pluginId: string): PluginApi["read"] | undefined
   self(): PluginApi
   recordType(def: Omit<RecordTypeDef, "plugin">): void
   readonly records: {
@@ -87,4 +89,4 @@ export interface PluginContext {
 }
 
 // The read/write side of a context, without registrations: what a plugin's TUI part gets (`kernel.runtime(id)`).
-export type PluginRuntime = Pick<PluginContext, "id" | "data" | "config" | "clock" | "use" | "self" | "records" | "tags" | "reports" | "provenance">
+export type PluginRuntime = Pick<PluginContext, "id" | "data" | "config" | "clock" | "use" | "read" | "self" | "records" | "tags" | "reports" | "provenance">

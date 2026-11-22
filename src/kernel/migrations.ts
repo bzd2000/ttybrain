@@ -191,6 +191,19 @@ export class MigrationRunner {
     this.backedUp = true
   }
 
+  // Before the first data step a boot attempts: the same backup as for migrations (`bak-v<N>`), unless this boot
+  // already made one or that file exists (a step that keeps saying "later" does not rewrite it on every boot).
+  // A database new at this boot has nothing to back up. Outside any transaction (VACUUM INTO needs that).
+  backupBeforeSteps(): void {
+    if (this.backedUp || this.bootCount() === 0 || !existsSync(this.paths.db)) return
+    if (this.kdb.raw.inTransaction()) throw new Error("the backup before data steps cannot run inside a transaction")
+    if (existsSync(`${this.paths.db}.bak-v${this.appliedCount()}`)) {
+      this.backedUp = true
+      return
+    }
+    this.backupIfNeeded()
+  }
+
   async run(pluginId: string, migrations: Migration[], external: boolean): Promise<void> {
     assertPluginId(pluginId)
     const ids = new Set<string>()
@@ -224,6 +237,7 @@ export class MigrationRunner {
   // "later" rolls back whatever the step did. A throw rolls back and is rethrown. "busy": another connection holds
   // the write lock, so nothing ran (the boot does not wait for it). The caller provides the operation context.
   async runStep(pluginId: string, step: DataStep): Promise<StepOutcome> {
+    this.backupBeforeSteps()
     const later = Symbol("later")
     let started = false
     try {

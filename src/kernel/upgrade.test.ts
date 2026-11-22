@@ -1,11 +1,15 @@
 // One-time data steps (`ctx.upgrade`) and read access through `ctx.use` for plugins in `reads`.
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, spyOn, test } from "bun:test"
+import { readdirSync, statSync } from "node:fs"
+import { join } from "node:path"
 import { makeTestKernel, type TestKernel } from "../../tests/helpers"
 import { definePlugin, sql, Type, type PluginContext, type PluginDef } from "./api"
 import { runCli } from "./cli/dispatch"
 import { fixedClock } from "./clock"
 import { runWithContext } from "./context"
+import { openRaw } from "./db/sqlite"
 import { bootKernel, type Kernel } from "./host"
+import { MigrationRunner } from "./migrations"
 
 let cleanups: Array<() => Promise<void>> = []
 afterEach(async () => {
@@ -128,9 +132,9 @@ describe("data steps", () => {
     const giver = plugin(
       "giver",
       async (ctx) => {
-        const taker = ctx.use("taker")
+        const taker = ctx.read("taker")
         if (!taker) return "later"
-        const { n } = await taker.read.count!({})
+        const { n } = await taker.count!({})
         log.push(`giver sees ${n}`)
         if (n === 0) return "later"
         await ctx.data.deleteFrom("row").execute()
@@ -141,9 +145,9 @@ describe("data steps", () => {
     const taker = plugin(
       "taker",
       async (ctx) => {
-        const giver = ctx.use("giver")
+        const giver = ctx.read("giver")
         if (!giver) return "later"
-        const { n } = await giver.read.count!({})
+        const { n } = await giver.count!({})
         log.push(`taker sees ${n}`)
         if (n === 0) return "later"
         for (let i = 0; i < n; i++) await ctx.self().write.add!({ note: `copied ${i + 1}` })
@@ -312,14 +316,68 @@ describe("data steps", () => {
   })
 })
 
-describe("use() and reads", () => {
-  test("use() of a reads-only plugin gives read ops, not write", async () => {
+describe("data step backups", () => {
+  const backups = (k: Kernel) => readdirSync(k.paths.home).filter((f) => f.includes(".bak-")).sort()
+
+  test("a step-only boot backs the database up once; later boots of a pending step add none", async () => {
+    let ready = false
+    const step: Step = async (ctx) => {
+      if (!ready) return "later"
+      await ctx.self().write.add!({ note: "after" })
+      return "done"
+    }
+    const a = await first([plugin("alpha")]) // a new database: nothing to back up
+    await runWithContext(a.context(), () => a.ops.api("alpha")!.write.add!({ note: "before" }))
+    expect(backups(a)).toEqual([])
+
+    await again(a.home, [plugin("alpha", step)]) // no migration pending, a step is
+    expect(backups(a)).toEqual(["ttybrain.db.bak-v1"])
+    const file = join(a.home, "ttybrain.db.bak-v1")
+    const stamp = statSync(file).mtimeMs
+    await again(a.home, [plugin("alpha", step)])
+    ready = true
+    const c = await again(a.home, [plugin("alpha", step)])
+    expect(backups(c)).toEqual(["ttybrain.db.bak-v1"])
+    expect(statSync(file).mtimeMs).toBe(stamp) // kept, not rewritten
+    expect(notes(c, "alpha")).toEqual(["before", "after"])
+    // The backup is the database as it was before any step ran.
+    const copy = openRaw(file)
+    try {
+      expect(copy.prepare("SELECT note FROM alpha_row").all([])).toEqual([{ note: "before" }])
+      expect(copy.prepare("SELECT id FROM kernel_plugin_migration ORDER BY id").all([])).toEqual([{ id: "001" }])
+    } finally {
+      copy.close()
+    }
+  })
+
+  test("with nothing pending no step is attempted, even while another connection holds the write lock", async () => {
+    const a = await first([plugin("alpha", async () => "done")])
+    expect(recorded(a, "alpha")).toEqual(["001", "upgrade:s1"])
+    const runStep = spyOn(MigrationRunner.prototype, "runStep")
+    a.db.raw.exec("BEGIN IMMEDIATE")
+    try {
+      const started = performance.now()
+      const b = await again(a.home, [plugin("alpha", async () => "done")])
+      expect(performance.now() - started).toBeLessThan(1000)
+      expect(runStep).not.toHaveBeenCalled()
+      expect(b.plugins[0]).toEqual({ id: "alpha", version: "1.0.0", source: "built-in", status: "ok" })
+    } finally {
+      a.db.raw.exec("ROLLBACK")
+      runStep.mockRestore()
+    }
+    expect(backups(a)).toEqual([])
+  })
+})
+
+describe("read() and use()", () => {
+  test("read() gives the read operations of a plugin in reads or requires; use() stays requires-only", async () => {
     let seen: Record<string, unknown> = {}
     const reader = definePlugin({
       id: "reader",
       name: "r",
       version: "1.0.0",
       apiVersion: 1,
+      requires: { beta: "^1.0.0" },
       reads: { alpha: "^1.0.0", ghost: "^1.0.0", old: "^2.0.0" },
       activate(ctx) {
         ctx.expose({
@@ -328,15 +386,16 @@ describe("use() and reads", () => {
               input: Type.Object({}),
               output: Type.Object({}),
               run: async () => {
-                const alpha = ctx.use("alpha")
+                const alpha = ctx.read("alpha")
                 seen = {
-                  keys: alpha && Object.keys(alpha),
-                  read: alpha && Object.keys(alpha.read),
-                  write: alpha?.write,
-                  count: await alpha?.read.count!({}),
-                  ghost: ctx.use("ghost"), // not loaded
-                  old: ctx.use("old"), // loaded, outside the range
-                  beta: ctx.use("beta"), // neither required nor read
+                  alpha: alpha && Object.keys(alpha),
+                  count: await alpha?.count!({}),
+                  useAlpha: ctx.use("alpha"), // only read: no use()
+                  beta: Object.keys(ctx.read("beta") ?? {}), // required: read() works too
+                  useBeta: Object.keys(ctx.use("beta")?.write ?? {}),
+                  ghost: ctx.read("ghost"), // not loaded
+                  old: ctx.read("old"), // loaded, outside the range
+                  other: ctx.read("other"), // neither required nor read
                 }
                 return {}
               },
@@ -345,24 +404,21 @@ describe("use() and reads", () => {
         })
       },
     })
-    const k = await first([plugin("alpha"), plugin("old"), plugin("beta"), reader])
+    const k = await first([plugin("alpha"), plugin("old"), plugin("beta"), plugin("other"), reader])
     await runWithContext(k.context(), () => k.ops.api("reader")!.read.probe!({}))
-    expect(seen).toEqual({ keys: ["read"], read: ["count"], write: undefined, count: { n: 0 }, ghost: undefined, old: undefined, beta: undefined })
-  })
-
-  test("use() of a required plugin still gives read and write", async () => {
-    let api: unknown
-    const user = definePlugin({
-      id: "user",
-      name: "u",
-      version: "1.0.0",
-      apiVersion: 1,
-      requires: { alpha: "^1.0.0" },
-      reads: { alpha: "^1.0.0" },
-      activate: (ctx) => void (api = ctx.use("alpha")),
+    expect(seen).toEqual({
+      alpha: ["count"],
+      count: { n: 0 },
+      useAlpha: undefined,
+      beta: ["count"],
+      useBeta: ["add"],
+      ghost: undefined,
+      old: undefined,
+      other: undefined,
     })
-    await first([plugin("alpha"), user])
-    const a = api as { read: object; write: object }
-    expect([Object.keys(a.read), Object.keys(a.write)]).toEqual([["count"], ["add"]])
+    // The TUI runtime carries it too.
+    const rt = k.runtime("reader")!
+    expect(Object.keys(rt.read("alpha") ?? {})).toEqual(["count"])
+    expect(rt.read("other")).toBeUndefined()
   })
 })

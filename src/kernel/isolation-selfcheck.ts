@@ -204,7 +204,7 @@ export async function runIsolationSelfCheck(): Promise<{ ok: boolean; results: S
 }
 
 // Data steps (ctx.upgrade) on this runtime: a boot that finds the write lock taken leaves a pending step for later
-// without waiting; the next boot runs it once, with own DML and a read of a `reads`-only plugin through ctx.use.
+// without waiting; the next boot runs it once, with own DML and a read of a `reads`-only plugin through ctx.read.
 async function checkDataSteps(check: (name: string, fn: () => Promise<void>) => Promise<void>, assert: (cond: boolean, msg: string) => void) {
   const dir = mkdtempSync(join(tmpdir(), "pm-steps-"))
   let runs = 0
@@ -231,8 +231,8 @@ async function checkDataSteps(check: (name: string, fn: () => Promise<void>) => 
         if (!withStep) return
         ctx.upgrade("s1", async () => {
           runs++
-          const g = ctx.use("giver")
-          if (!g || g.write !== undefined || !(await g.read.ready!({}))) return "later"
+          const g = ctx.read("giver")
+          if (!g || ctx.use("giver") !== undefined || !(await g.ready!({}))) return "later"
           await ctx.data.insertInto("row").values({ note: "moved" }).execute()
           return "done"
         })

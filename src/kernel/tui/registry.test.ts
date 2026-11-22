@@ -35,7 +35,7 @@ describe("plugin runtime", () => {
 
   test("runtime is undefined for a plugin that is not loaded", () => {
     expect(k.runtime("assistant")).toBeUndefined()
-    expect(Object.keys(k.runtime("projects")!).sort()).toEqual(["clock", "config", "data", "id", "provenance", "records", "reports", "self", "tags", "use"])
+    expect(Object.keys(k.runtime("projects")!).sort()).toEqual(["clock", "config", "data", "id", "provenance", "read", "records", "reports", "self", "tags", "use"])
   })
 
   test('tags.suggest("#cr", 5) finds the project; an unknown prefix gives []', async () => {

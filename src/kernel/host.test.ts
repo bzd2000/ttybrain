@@ -9,7 +9,7 @@ import { fixedClock } from "./clock"
 import { runWithContext } from "./context"
 import { bootKernel } from "./host"
 import { IsolationError, NotFoundError, ViewUnavailableError } from "./errors"
-import type { PluginApi, PluginReadApi } from "./operations"
+import type { PluginApi } from "./operations"
 import { runCli } from "./cli/dispatch"
 
 let kernels: TestKernel[] = []
@@ -120,7 +120,7 @@ describe("a working kernel", () => {
   })
 
   test('use("x") for a plugin not in requires → undefined; self() is the own API', async () => {
-    let seen: { other?: PluginApi | PluginReadApi; own?: PluginApi } = {}
+    let seen: { other?: PluginApi; own?: PluginApi } = {}
     const probe = definePlugin({
       id: "probe",
       name: "Probe",
