@@ -5,8 +5,8 @@
 // links, next week's due dates as weekdays, the `status:open` footer and the status bar with `l links`. Seeded with
 // the 2026-11-13 designs' example data (the 2026-11-20 mock's data is the meetings rework's), today Thu 12 Nov 2026,
 // 118×36. Ids follow the seed (R5: A-1, not A-27); a meeting title gives way to the 30-wide column with its date
-// kept; `Later · 34` / `No date · 3` stay scrolling groups (R1), not the mock's collapsed line. The frame's
-// `i capture`, `? help` and the kept `enter open` follow the mock's hints, as on every screen.
+// kept; `Later · 34` / `No date · 3` stay scrolling groups (R1), not the mock's collapsed line. The status bar is
+// exactly the mock's: no global (`i capture`) or frame hints.
 import { afterEach, expect, test } from "bun:test"
 import { builtinPlugins } from "../builtins"
 import { fgAt, isSelected, line, seedDesign } from "../design"
@@ -66,7 +66,7 @@ test("Actions as designed", async () => {
     "Later · 34",
   ])
   expect(line(frame, 34)).toMatch(/^ ╰─+ status:open ─╯$/)
-  expect(line(frame, 35)).toBe(" ↑↓ select   x done   d due   l links   e edit   / filter   n new   i capture   ? help   enter open")
+  expect(line(frame, 35)).toBe(" ↑↓ select   x done   d due   l links   e edit   / filter   n new")
 
   const spans = await tui.spans()
   expect(isSelected(spans, "Send revised budget to Peter")).toBe(true)
@@ -116,6 +116,6 @@ test("Actions at 80x24 drops Owner, keeps Linked to whole", async () => {
   // The 80-column status bar shows whole hints only.
   const bar = line(frame, 23)
   expect(bar).toMatch(/^ ↑↓ select {3}x done {3}d due {3}l links {3}e edit {3}\/ filter {3}n new/)
-  const known = ["↑↓ select", "x done", "d due", "l links", "e edit", "/ filter", "n new", "i capture", "? help", "enter open"]
+  const known = ["↑↓ select", "x done", "d due", "l links", "e edit", "/ filter", "n new"]
   for (const part of bar.trim().split("   ")) expect(known).toContain(part)
 })

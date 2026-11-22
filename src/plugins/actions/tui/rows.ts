@@ -89,13 +89,15 @@ export function linkedCell(rec: ActionRecord, meetings: Map<number, Meeting>, ex
 }
 
 // The design's columns: the ids and owners fit the longest shown (so `A-1000001` and names stay whole); narrow
-// terminals drop Owner first, then Linked to.
-export function actionColumns(rows: Row[]): TableColumn[] {
+// terminals drop Owner first, then Linked to (`keepOwner`: Linked to first, as on a person's tab, where owning an
+// action or being linked to it is the difference that must stay visible).
+export function actionColumns(rows: Row[], opts: { keepOwner?: boolean } = {}): TableColumn[] {
+  const [owner, linked] = opts.keepOwner ? [1, 2] : [2, 1]
   return [
     { id: "id", title: "ID", width: fitWidth(rows.map((r) => r.rec.ref), ID.min, ID.max) },
     { id: "title", title: "Action", width: "grow", minWidth: TITLE_MIN },
-    { id: "owner", title: "Owner", width: fitWidth(rows.map((r) => r.ownerName ?? ""), OWNER.min, OWNER.max), drop: 2 },
-    { id: "linked", title: "Linked to", width: LINKED_WIDTH, drop: 1 },
+    { id: "owner", title: "Owner", width: fitWidth(rows.map((r) => r.ownerName ?? ""), OWNER.min, OWNER.max), drop: owner },
+    { id: "linked", title: "Linked to", width: LINKED_WIDTH, drop: linked },
     { id: "due", title: "Due", width: 7 },
   ]
 }

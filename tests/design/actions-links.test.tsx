@@ -78,7 +78,7 @@ test("a project's Actions tab: the screen's columns, the project left out of Lin
     cols(["A-8", "Invite Marie to design walkthrough", "me", "@marie", "17 Nov"], WIDE),
     cols(["A-10", "Draft cutover plan", "me", "—", "23 Nov"], WIDE),
   ])
-  expect(line(frame, 35)).toBe(" ←→ tabs   esc back   n add   e edit   x done   d due   l links   del delete   ↑↓ select   ? help   q quit")
+  expect(line(frame, 35)).toBe(" ←→ tabs   esc back   n add   e edit   x done   d due   l links   del delete   enter open   ? help   q quit")
   const spans = await tui.spans()
   expect(isSelected(spans, "Send revised budget to Peter")).toBe(true)
   expect(fgAt(spans, "A-4", 6)).toBe(theme.muted)
@@ -100,14 +100,15 @@ test("a person's and a meeting's Actions tabs list the actions linked to them; n
   tui.input.pressEscape()
   await until(tui, (f) => !f.includes("› @peter"))
 
-  // The meeting's tab comes after its Export tab; its new action is linked to it.
+  // The meeting's tab comes after its Export tab; its new action is linked to it, opened as the meetings plugin's
+  // "log action" opens it.
   frame = await actionsTab(tui, "M-2", 4, "Prepare SteerCo deck input")
   expect(line(frame, 2)).toBe("  Agenda   Prep   Notes   Export   Actions 1")
   expect(line(frame, 3)).toMatch(/^ ╭─ Actions · 1 open ─+╮$/)
   expect(inside(frame, 5)).toBe(cols(["A-4", "Prepare SteerCo deck input", "me", "CRM", "Fri"], WIDE))
   tui.input.pressKey("n")
-  frame = await until(tui, (f) => f.includes("New action"))
-  expect(lineWith(frame, "Links")).toContain("M-2")
+  frame = await until(tui, (f) => f.includes("New action · M-2"))
+  expect(lineWith(frame, "  Links")).toContain("M-2")
   await tui.input.typeText("Circulate the minutes")
   tui.input.pressKey("s", { ctrl: true })
   frame = await until(tui, (f) => f.includes("Circulate the minutes"))
@@ -173,6 +174,24 @@ test("an archived project cannot be linked (the error shows, nothing is written)
   tui.input.pressEscape()
   await until(tui, (f) => !f.includes("Links of A-1"))
 
+  // In the full form too: a refused link in a save that also changes the title shows under Links; nothing is written.
+  tui.input.pressKey("e")
+  await until(tui, (f) => f.includes("Edit A-1"))
+  await tui.input.typeText(" now")
+  tui.input.pressTab()
+  tui.input.pressTab()
+  tui.input.pressTab()
+  await tui.input.typeText(" #OLD")
+  tui.input.pressKey("s", { ctrl: true })
+  frame = await until(tui, (f) => f.includes("✗"))
+  const rows = frame.split("\n")
+  const at = rows.findIndex((l) => l.includes("✗ #OLD is archived"))
+  expect(rows[at - 1]).toContain("Links")
+  expect(await linksOf(1)).toEqual(["project:1"])
+  tui.input.pressEscape()
+  await until(tui, (f) => !f.includes("Edit A-1"))
+  expect(lineWith(await tui.frame(), "Reply to vendor")).not.toContain("now")
+
   // A-2's only project is archived (the action is frozen), but its link can go.
   tui.input.pressArrow("down")
   for (let i = 0; i < 100 && !isSelected(await tui.spans(), "Wrap up"); i++) await new Promise((r) => setTimeout(r, 10))
@@ -219,9 +238,13 @@ test("80x24: long link lists are cut whole; codes, handles and 9-character ids s
   expect(inside(frame, lineIndex(frame, "A-1000001"))).toBe(cols(["A-1000001", "Agree the ingest cut-ove…", "DATAPLATFORM2027 @alexandra …", "17 Nov"], narrow))
   tui.input.pressEscape()
   await until(tui, (f) => !f.includes("› CRM"))
-  // The person's tab: both codes, then no room for the meeting (not even its date and a cut title).
-  frame = await actionsTab(tui, "@alexandra", 3, "cut-ove…")
-  expect(inside(frame, lineIndex(frame, "A-1000001"))).toBe(cols(["A-1000001", "Agree the ingest cut-ove…", "DATAPLATFORM2027 CRM …", "17 Nov"], narrow))
+  // The person's tab keeps Owner (owned or linked must stay visible) and lets Linked to go first: ID 9, Action
+  // 74 − 9 − 8 − 7 − 3 = 47, Owner 8, Due 7.
+  frame = await actionsTab(tui, "@alexandra", 3, "with the vendor")
+  const person = [9, 47, 8, 7]
+  expect(frame).not.toContain("Linked to")
+  expect(inside(frame, lineIndex(frame, "ID "))).toBe(cols(["ID", "Action", "Owner", "Due"], person))
+  expect(inside(frame, lineIndex(frame, "A-1000001"))).toBe(cols(["A-1000001", "Agree the ingest cut-over plan with the vendor", "me", "17 Nov"], person))
   for (const word of ["DATAPLATFORM2027", "A-1000001", "@alexandra"]) for (let k = 2; k < word.length; k++) expect(frame).not.toContain(word.slice(0, k) + "…")
 })
 

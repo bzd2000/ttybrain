@@ -61,15 +61,23 @@ export function ActionForm(props: RecordFormProps) {
           const changes = linkChanges(before, words(v.links))
           const relinked = changes.removed.length > 0 || changes.added.length > 0
           if (changed.length === 0 && !relinked) return { ok: true, ref: rec.ref }
+          // Whether the last attempt failed in its links (act may retry the whole callback when busy).
+          let linkFailed = false
           return save(async () => {
             const write = rt.self().write
+            linkFailed = false
             // Unlinking first lets an action leave an archived project in the same save.
-            await writeLinks(write, rec.ref, changes)
+            try {
+              await writeLinks(write, rec.ref, changes)
+            } catch (e) {
+              linkFailed = true
+              throw e
+            }
             if (changed.length === 0) return { ref: rec.ref }
             const input: Record<string, unknown> = { ref: rec.ref }
             for (const name of changed) input[name] = v[name] ?? (name === "title" ? "" : null)
             return write.editAction!(input)
-          }, "saved").then((res) => (res.ok || !relinked || changed.length > 0 ? res : { ...res, field: "links" }))
+          }, "saved").then((res) => (res.ok || !linkFailed ? res : { ...res, field: "links" }))
         }
         return (
           <Form

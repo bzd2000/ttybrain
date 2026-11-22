@@ -33,8 +33,8 @@ import { actionCells, actionColumns, loadRows, type Row } from "./rows"
 
 export const EMPTY = "No open actions. Press n to add one."
 export const NO_MATCH = "No actions match the filter."
-// The design's bar (`↑↓ select  x done  d due  l links  e edit  / filter  n new`); the global `i capture` and the
-// frame's `? help` come from the frame, and the kept `enter open` follows them.
+// The design's bar, exactly: `↑↓ select  x done  d due  l links  e edit  / filter  n new` (no global or frame hints;
+// their keys, and Enter, still work).
 const HINTS: Hint[] = [
   { key: "↑↓", label: "select" },
   { key: "x", label: "done" },
@@ -44,7 +44,6 @@ const HINTS: Hint[] = [
   { key: "/", label: "filter" },
   { key: "n", label: "new" },
 ]
-const KEPT_HINTS: Hint[] = [{ key: "Enter", label: "open" }]
 const FILTER_HINTS: Hint[] = [
   { key: "Enter", label: "apply" },
   { key: "Esc", label: "clear" },
@@ -150,7 +149,7 @@ export function ActionsScreen() {
   createEffect(() => {
     const on = editing() && keys.active()
     keys.textFocus(on)
-    onCleanup(keys.hints(on ? FILTER_HINTS : HINTS, on ? undefined : { exact: true, frame: ["?"], after: KEPT_HINTS }))
+    onCleanup(keys.hints(on ? FILTER_HINTS : HINTS, on ? undefined : { exact: true, frame: [], globals: false }))
   })
   const startFilter = () => {
     setDraft(filter())

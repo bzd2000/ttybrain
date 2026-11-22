@@ -155,8 +155,9 @@ describe("projects' person tabs", () => {
     expect(lineWith(frame, "Data platform")).toMatch(/DATAPLATFORM2027 Data platform\s+sponsor\s+active/)
     tui.input.pressArrow("right")
     frame = await until(tui, (f) => f.includes("Review contract"))
-    // At 80 columns the Owner column gives way; the project code in Linked to stays whole.
-    expect(lineWith(frame, "Review contract")).toMatch(/A-1\s+Review contract\s+DATAPLATFORM2027\s+—/)
+    // At 80 columns a person's tab lets Linked to go and keeps Owner (owned or linked must stay visible).
+    expect(lineWith(frame, "Review contract")).toMatch(/A-1\s+Review contract\s+Marie\s+—/)
+    expect(frame).not.toContain("Linked to")
     for (const l of lines(frame)) expect(l.length).toBeLessThanOrEqual(80)
   })
 

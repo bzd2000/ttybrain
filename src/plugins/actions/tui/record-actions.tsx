@@ -1,8 +1,9 @@
 // The Actions tab of every record actions link to (project, person, meeting): one component. It lists the actions
 // linked to the record (a person's also the ones they own), open ones first by due date (none last), then the done
 // and dropped ones, newest done date first. Columns as on the Actions screen (rows.ts), the record itself left out
-// of Linked to; the panel title is `Actions · n open`. Keys: n add (linked to the record; a person who is not a
-// stakeholder owns it instead), e edit, x done, d due, l links, Del delete (after a confirm), Enter opens the action.
+// of Linked to (on a person's tab, Linked to gives way before Owner); the panel title is `Actions · n open`. Keys: n
+// add (linked to the record, a meeting's as `New action · M-n`; a person who is not a stakeholder owns it instead),
+// e edit, x done, d due, l links, Del delete (after a confirm), Enter opens the action.
 import { createMemo, createSignal, Show } from "solid-js"
 import {
   act,
@@ -31,6 +32,7 @@ const HINTS: Hint[] = [
   { key: "d", label: "due" },
   { key: "l", label: "links" },
   { key: "Del", label: "delete" },
+  { key: "Enter", label: "open" },
 ]
 
 type Runtime = Pick<TuiContext, "data" | "records">
@@ -113,7 +115,13 @@ export function RecordActions(props: { recordRef: string }) {
   const add = async () => {
     const found = q.data()?.found
     if (found === undefined || found === null) return
-    const prefill: Record<string, string> = found.person !== undefined && !found.person.stakeholder ? { owner: props.recordRef } : { links: props.recordRef }
+    // A meeting's action is opened as the meetings plugin's "log action" opens it: `New action · M-n`.
+    const prefill: Record<string, string> =
+      found.person !== undefined && !found.person.stakeholder
+        ? { owner: props.recordRef }
+        : found.target.type === "meeting"
+          ? { meeting: props.recordRef }
+          : { links: props.recordRef }
     const saved = await overlay.openForm("action", "action", { prefill })
     if (saved !== undefined) setWant(saved)
   }
@@ -142,7 +150,7 @@ export function RecordActions(props: { recordRef: string }) {
       <Panel title={`Actions · ${list().filter((r) => r.rec.status === "open").length} open`} focused={keys.active()} grow>
         <Show when={q.data() !== undefined}>
           <Table
-            columns={actionColumns(list())}
+            columns={actionColumns(list(), { keepOwner: q.data()?.found?.target.type === "person" })}
             rows={rows()}
             selectedRef={rows().some((r) => r.ref === want()) ? want() : undefined}
             onSelect={select}
