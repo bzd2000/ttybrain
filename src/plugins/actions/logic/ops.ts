@@ -115,12 +115,17 @@ export function registerOps(ctx: PluginContext, store: Store): void {
   }
 
   const imported = async () => (await db.selectFrom("handover").select("source").where("source", "=", "projects").executeTakeFirst()) !== undefined
-  // Until the projects plugin's actions are imported, a new action's id is above RESERVED, so it cannot take an id
-  // a moved one keeps (projects off at the upgrade); after that, ids go on from the highest.
+  // Until the projects plugin's actions are imported, a new action's id goes on from the higher of our own maximum and
+  // the highest id still waiting in projects (no collision, no jump). Only when projects cannot be read (off, out of
+  // range) is it above RESERVED, so it cannot take an id a moved action keeps; after the import, ids go on from the
+  // highest.
   const newId = async (): Promise<number | undefined> => {
     if (await imported()) return undefined
     const row = await db.selectFrom("action").select((eb) => eb.fn.max("id").as("m")).executeTakeFirst()
-    return Math.max(Number(row?.m ?? 0), RESERVED) + 1
+    const own = Number(row?.m ?? 0)
+    const legacyMax = ctx.read("projects")?.legacyMaxId
+    if (legacyMax === undefined) return Math.max(own, RESERVED) + 1
+    return Math.max(own, Number(((await legacyMax({})) as { max: number }).max)) + 1
   }
 
   async function setStatus(ref: string, status: "done" | "cancelled", doneDate: string | null): Promise<ActionRecord> {

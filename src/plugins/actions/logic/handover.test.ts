@@ -321,6 +321,41 @@ describe("actions: the handover from projects", () => {
     expect((await ok(k, "action", "add", "After the move", "--json")).json.ref).toBe("A-1000003")
   })
 
+  test("projects loaded but the import skipped (write lock held at boot): new ids go on from the legacy maximum, then the import keeps every id", async () => {
+    // As after the upgrade's migrations with the steps still pending: the rows wait in projects_action.
+    const setup = await boot(ALL)
+    const insert = setup.db.raw.prepare(
+      `INSERT INTO projects_action (id, title, status, created_at, updated_at) VALUES (?, ?, 'open', '2026-10-01T08:00:00', '2026-10-02T08:00:00')`,
+    )
+    for (const id of [1, 4, 9]) insert.run([id, `Legacy ${id}`])
+    setup.db.raw.exec(`DELETE FROM actions_handover; DELETE FROM actions_handover_row; DELETE FROM kernel_plugin_migration WHERE id LIKE 'upgrade:%'`)
+    await close(setup)
+    // Another process holds the write lock while this one boots: the steps are skipped.
+    const other = openRaw(join(home, "ttybrain.db"))
+    other.exec("BEGIN IMMEDIATE")
+    let busy: Kernel
+    try {
+      busy = await boot(ALL)
+    } finally {
+      other.exec("ROLLBACK")
+      other.close()
+    }
+    expect(all(busy, `SELECT count(*) AS n FROM actions_handover`)).toEqual([{ n: 0 }])
+    expect((await ok(busy, "action", "add", "Added on a busy boot", "--json")).json.ref).toBe("A-10")
+    await close(busy)
+
+    const k = await boot(ALL)
+    expect(steps(k)).toEqual(DONE)
+    expect(all(k, `SELECT id, title FROM actions_action ORDER BY id`)).toEqual([
+      { id: 1, title: "Legacy 1" },
+      { id: 4, title: "Legacy 4" },
+      { id: 9, title: "Legacy 9" },
+      { id: 10, title: "Added on a busy boot" },
+    ])
+    expect(all(k, `SELECT count(*) AS n FROM projects_action`)).toEqual([{ n: 0 }])
+    expect((await ok(k, "action", "add", "After", "--json")).json.ref).toBe("A-11")
+  })
+
   test("a normal upgrade never uses the high range", async () => {
     const rows = legacyRows(3)
     await legacyDatabase(rows)

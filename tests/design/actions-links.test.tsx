@@ -205,6 +205,34 @@ test("an archived project cannot be linked (the error shows, nothing is written)
   expect(await linksOf(2)).toEqual([])
 })
 
+// The links write and editAction share one act: a refused owner rolls the changed links back with it.
+test("the full form: new Links and an unknown owner fail together; the links stay as they were", async () => {
+  kernel = await makeTestKernel({ plugins: builtinPlugins })
+  await inCtx(async () => {
+    await write("projects").addProject!({ code: "CRM", name: "CRM replatforming" })
+    await write("projects").addProject!({ code: "ERP", name: "ERP upgrade" })
+    await write("actions").addAction!({ title: "Reply to vendor", due: "2026-11-16", project: "CRM" }) // A-1
+  })
+  tui = await renderTui(kernel, { width: 118, height: 36 })
+  tui.input.pressKey("4")
+  await until(tui, (f) => f.includes("Reply to vendor"))
+  tui.input.pressKey("e")
+  await until(tui, (f) => f.includes("Edit A-1"))
+  tui.input.pressTab()
+  tui.input.pressTab()
+  await tui.input.typeText("@nobody")
+  tui.input.pressTab()
+  await tui.input.typeText(" #ERP")
+  tui.input.pressKey("s", { ctrl: true })
+  const frame = await until(tui, (f) => f.includes("✗"))
+  expect(frame).toContain("Edit A-1")
+  expect(frame.toLowerCase()).toContain("nobody")
+  expect(await linksOf(1)).toEqual(["project:1"])
+  tui.input.pressEscape()
+  await until(tui, (f) => !f.includes("Edit A-1"))
+  expect(await linksOf(1)).toEqual(["project:1"])
+})
+
 // Review Focus 5 and the 9-character ids of the handover's high range.
 test("80x24: long link lists are cut whole; codes, handles and 9-character ids stay whole", async () => {
   kernel = await makeTestKernel({ plugins: builtinPlugins })

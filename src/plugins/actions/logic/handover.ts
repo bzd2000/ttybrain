@@ -14,7 +14,7 @@ const LINKS = [
 ] as const
 type LegacyAction = Record<(typeof COLUMNS)[number] | (typeof LINKS)[number][1], unknown>
 
-// Actions added before the import (projects off at the upgrade) get ids above RESERVED (ops.ts), so the moved ids
+// Actions added before the import with projects unreadable (off at the upgrade) get ids above RESERVED (ops.ts), so the moved ids
 // cannot be taken. Should one be taken anyway, nothing moves and nothing is changed: deleting an action would also
 // erase the origins the moved one with that id carries, so the hint says not to.
 export const RESERVED = 1_000_000

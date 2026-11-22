@@ -26,6 +26,15 @@ const LegacyAction = Type.Object({
 export function registerHandover(ctx: PluginContext): void {
   ctx.expose({
     read: {
+      // The highest id still in this plugin's action table (0 when empty); the actions plugin allocates above it.
+      legacyMaxId: {
+        input: Type.Object({}),
+        output: Type.Object({ max: Type.Integer() }),
+        run: async () => {
+          const row = await ctx.data.selectFrom("action").select((eb) => eb.fn.max("id").as("m")).executeTakeFirst()
+          return { max: Number(row?.m ?? 0) }
+        },
+      },
       // Every action row still in this plugin's table, every column, by id.
       legacyActions: {
         input: Type.Object({}),

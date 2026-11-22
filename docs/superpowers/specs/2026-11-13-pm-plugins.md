@@ -235,7 +235,7 @@ Readers: `meetings` (minutes and notes), `people` (follow-ups) and `projects` (o
 | `completeAction` / `cancelAction` | `ref`, `date?` | `~ A-41 done`, `~ A-41 cancelled` |
 | `deleteAction` | `ref` | `- action A-41 "Send the roadmap"` |
 
-An action counts as archived (writes refused, hidden from Attention and the overview) only when it has project links and every one of them is archived; linking to an archived project is refused. Until the legacy import is done, new actions get ids above 1,000,000 so they cannot collide with the ids still to be moved.
+An action counts as archived (writes refused, hidden from Attention and the overview) only when it has project links and every one of them is archived; linking to an archived project is refused. Until the legacy import is done, new actions get ids after the highest id still waiting in projects (`legacyMaxId`), or above 1,000,000 when projects cannot be read, so they cannot collide with the ids still to be moved.
 
 ### CLI
 
