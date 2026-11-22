@@ -29,7 +29,7 @@ import {
   type Tone,
 } from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
-import type { MeetingRecord } from "../logic/schema"
+import { KIND_LABELS, type MeetingRecord } from "../logic/schema"
 
 export const EMPTY = "No meetings yet. Press n to add one."
 export const closeQuestion = (ref: string) => `Close ${ref} as held?`
@@ -73,7 +73,7 @@ function row(m: MeetingRecord, today: string, projectsWidth: number): TableRow {
       ref: cell(m.ref, "muted"),
       date: cell(dayDate(m.date), m.status === "planned" && m.date < today ? "red" : muted),
       title: cell(m.title),
-      kind: cell(m.kind),
+      kind: cell(KIND_LABELS[m.kind]),
       status: cell(m.status),
       att: cell(String(m.attendees.length)),
       projects: cell(joinFit(codes(m), projectsWidth), muted ?? "cyan"),

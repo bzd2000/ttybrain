@@ -1,6 +1,7 @@
-// The exposed operations: the read `sinceDate` (design §8) and every write. Writes return the meeting with its
-// `ref`; `describe` gives the change-set line (plugin reference §3). Agenda items are addressed by their meeting
-// and their 1-based position, which stays dense (1..n) through add, move and remove.
+// The exposed operations: the reads `sinceDate` (design §8) and `upcoming`, and every meeting write (the series ones
+// are in series.ts). Writes return the meeting with its `ref`; `describe` gives the change-set line (plugin
+// reference §3). Agenda items are addressed by their meeting and their 1-based position, which stays dense (1..n)
+// through add, move and remove. Every new meeting has a subject (`about`), which gives its kind unless one is given.
 import {
   currentContext,
   formatRef,
@@ -8,7 +9,6 @@ import {
   normalizeCode,
   normalizeHandle,
   NotFoundError,
-  parseDate,
   parseRef,
   Type,
   ValidationError,
@@ -16,7 +16,8 @@ import {
   type Static,
 } from "@ttybrain/api"
 import type { Store } from "./records"
-import { MeetingKind, MeetingRecord, type MeetingRecord as Meeting } from "./schema"
+import { KindInput, MeetingKind, MeetingRecord, MeetingStatus, type MeetingRecord as Meeting, type SubjectType } from "./schema"
+import { dateField as date, kindFor, normalizeKind, shownDate } from "./series"
 import { sinceFor, type SinceResult } from "./since"
 
 const Ref = NonBlank()
@@ -25,15 +26,30 @@ const Clearable = Type.Optional(Type.Union([Type.String(), Type.Null()]))
 const Position = Type.Integer({ minimum: 1 })
 
 const AddMeeting = Type.Object({
+  about: NonBlank(),
   title: NonBlank(),
   date: NonBlank(),
-  kind: Type.Optional(MeetingKind),
+  kind: Type.Optional(KindInput),
   attendees: Type.Optional(Type.Array(NonBlank())),
   projects: Type.Optional(Type.Array(NonBlank())),
   sinceDate: OptStr,
 })
-const EditMeeting = Type.Object({ ref: Ref, title: Type.Optional(NonBlank()), date: Type.Optional(NonBlank()), kind: Type.Optional(MeetingKind), sinceDate: Clearable })
+const EditMeeting = Type.Object({ ref: Ref, title: Type.Optional(NonBlank()), date: Type.Optional(NonBlank()), kind: Type.Optional(KindInput), sinceDate: Clearable })
 const MeetingRef = Type.Object({ ref: Ref })
+const MoveMeeting = Type.Object({ ref: Ref, to: NonBlank() })
+const SetSubject = Type.Object({ meeting: Ref, about: NonBlank() })
+const UpcomingInput = Type.Object({ from: NonBlank(), to: NonBlank() })
+const UpcomingRow = Type.Object({
+  ref: Type.String(),
+  id: Type.Integer(),
+  title: Type.String(),
+  date: Type.String(),
+  kind: MeetingKind,
+  status: MeetingStatus,
+  about: Type.Union([Type.String(), Type.Null()]),
+  series: Type.Union([Type.String(), Type.Null()]),
+})
+const UpcomingOutput = Type.Object({ meetings: Type.Array(UpcomingRow) })
 const SetAttendees = Type.Object({ meeting: Ref, people: Type.Array(NonBlank()) })
 const AddAgendaItem = Type.Object({ meeting: Ref, text: NonBlank(), project: OptStr, ask: OptStr, position: Type.Optional(Position) })
 const EditAgendaItem = Type.Object({ meeting: Ref, item: Position, text: Type.Optional(NonBlank()), project: Clearable, ask: Clearable })
@@ -59,28 +75,14 @@ type EditItemInput = Static<typeof EditAgendaItem>
 type MoveInput = Static<typeof MoveAgendaItem>
 type RemoveInput = Static<typeof RemoveAgendaItem>
 type NotesInput = Static<typeof SetNotes>
+type MoveMeetingInput = Static<typeof MoveMeeting>
+type SubjectInput = Static<typeof SetSubject>
 
 const now = () => currentContext().now
 const today = () => currentContext().today
 const blank = (v: string | null | undefined) => v === null || v === undefined || v.trim() === ""
 // Free text: trimmed, and empty means none.
 const clean = (v: string | null | undefined) => (blank(v) ? null : v!.trim())
-const date = (input: string, field: string) => {
-  try {
-    return parseDate(input, today())
-  } catch (e) {
-    if (e instanceof ValidationError) throw new ValidationError(e.message, { field, hint: e.hint })
-    throw e
-  }
-}
-// A date for a describe line: normalised when valid, as typed otherwise (describe never throws).
-const shownDate = (input: string) => {
-  try {
-    return parseDate(input, today())
-  } catch {
-    return input.trim()
-  }
-}
 const items = (n: number) => (n === 0 ? "no items" : `only ${n} ${n === 1 ? "item" : "items"}`)
 const uniq = <T>(xs: T[]) => [...new Set(xs)]
 
@@ -123,6 +125,12 @@ export function registerOps(ctx: PluginContext, store: Store): void {
     return store.meeting(m.ref)
   }
 
+  // A meeting's subject type, or null for one that has none yet (from before subjects existed).
+  async function subjectTypeOf(m: Meeting): Promise<SubjectType | null> {
+    const row = await db.selectFrom("meeting").select("subject_type").where("id", "=", m.id).executeTakeFirstOrThrow()
+    return (row.subject_type as SubjectType | null) ?? null
+  }
+
   ctx.expose({
     read: {
       sinceDate: {
@@ -131,6 +139,23 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         toolDescription: "The date a meeting's prep for a project counts from: the meeting's own since date, else the last held meeting covering the project, else 30 days before.",
         run: async (i: Static<typeof SinceInput>): Promise<SinceResult> => sinceFor(store, await store.meeting(i.meeting), await store.projectId(i.project)),
       },
+      // The planned meetings dated from `from` to `to` (both included), by date.
+      upcoming: {
+        input: UpcomingInput,
+        output: UpcomingOutput,
+        toolDescription: "The planned meetings between two dates, with what each is about and its series.",
+        run: async (i: Static<typeof UpcomingInput>) => {
+          const from = date(i.from, "from")
+          const to = date(i.to, "to")
+          const ids = await db.selectFrom("meeting").select("id").where("status", "=", "planned").where("date", ">=", from).where("date", "<=", to).orderBy("date").orderBy("id").execute()
+          const meetings = []
+          for (const r of ids) {
+            const m = await store.meeting(formatRef("M-", Number(r.id)))
+            meetings.push({ ref: m.ref, id: m.id, title: m.title, date: m.date, kind: m.kind, status: m.status, about: m.about, series: m.series })
+          }
+          return { meetings }
+        },
+      },
     },
     write: {
       addMeeting: {
@@ -138,16 +163,31 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         output: MeetingRecord,
         describe: async (i: AddInput) => `+ meeting ${formatRef("M-", await store.nextMeetingId())} "${i.title.trim()}" ${shownDate(i.date)}`,
         run: async (i: AddInput) => {
+          const subject = await store.subject(i.about)
+          const kind = kindFor(subject, i.kind)
           const day = date(i.date, "date")
           const since = blank(i.sinceDate) ? null : date(i.sinceDate!, "sinceDate")
-          const people: number[] = []
+          // Without attendees, a meeting about a person has that person.
+          const people: number[] = i.attendees === undefined && subject.type === "person" ? [subject.id] : []
           for (const h of i.attendees ?? []) people.push(await store.personId(h))
           const projects: number[] = []
           for (const c of i.projects ?? []) projects.push(await store.projectId(c))
           const t = now()
           const res = await db
             .insertInto("meeting")
-            .values({ title: i.title.trim(), date: day, kind: i.kind ?? "other", status: "planned", since_date: since, notes: "", created_at: t, updated_at: t })
+            .values({
+              title: i.title.trim(),
+              date: day,
+              kind,
+              status: "planned",
+              since_date: since,
+              notes: "",
+              subject_type: subject.type,
+              subject_id: subject.id,
+              auto_close: 1,
+              created_at: t,
+              updated_at: t,
+            })
             .executeTakeFirstOrThrow()
           const id = Number(res.insertId)
           for (const person_id of uniq(people)) await db.insertInto("attendee").values({ meeting_id: id, person_id }).execute()
@@ -171,7 +211,7 @@ export function registerOps(ctx: PluginContext, store: Store): void {
           const after = {
             title: i.title === undefined ? undefined : `"${i.title.trim()}"`,
             date: i.date === undefined ? undefined : shownDate(i.date),
-            kind: i.kind,
+            kind: i.kind === undefined ? undefined : normalizeKind(i.kind),
             since: i.sinceDate === undefined ? undefined : blank(i.sinceDate) ? "none" : shownDate(i.sinceDate!),
           }
           const was = m && { title: `"${m.title}"`, date: m.date, kind: m.kind, since: m.since_date ?? "none" }
@@ -185,8 +225,48 @@ export function registerOps(ctx: PluginContext, store: Store): void {
           const set: Record<string, unknown> = { updated_at: now() }
           if (i.title !== undefined) set.title = i.title.trim()
           if (i.date !== undefined) set.date = date(i.date, "date")
-          if (i.kind !== undefined) set.kind = i.kind
+          if (i.kind !== undefined) {
+            const type = await subjectTypeOf(m)
+            set.kind = type === null ? normalizeKind(i.kind) : kindFor({ type, ref: m.about! }, i.kind)
+          }
           if (i.sinceDate !== undefined) set.since_date = blank(i.sinceDate) ? null : date(i.sinceDate!, "sinceDate")
+          await db.updateTable("meeting").set(set).where("id", "=", m.id).execute()
+          return store.meeting(m.ref)
+        },
+      },
+      // Skip one date of a series (M3): the occurrence is cancelled and keeps its place, so it is not made again.
+      skipMeeting: {
+        input: MeetingRef,
+        output: MeetingRecord,
+        describe: async (i: { ref: string }) => `~ ${refOf(i.ref, await before(i.ref))} skipped`,
+        run: async (i: { ref: string }) => setStatus(await store.openMeeting(i.ref), "cancelled"),
+      },
+      // Move a planned meeting to another date (M3): an occurrence keeps the series date it was made for.
+      moveMeeting: {
+        input: MoveMeeting,
+        output: MeetingRecord,
+        describe: async (i: MoveMeetingInput) => {
+          const m = await before(i.ref)
+          return `~ ${refOf(i.ref, m)} date ${m ? `${m.date} → ` : ""}${shownDate(i.to)}`
+        },
+        run: async (i: MoveMeetingInput) => {
+          const m = await store.openMeeting(i.ref)
+          await db.updateTable("meeting").set({ date: date(i.to, "to"), updated_at: now() }).where("id", "=", m.id).execute()
+          return store.meeting(m.ref)
+        },
+      },
+      // Give a meeting its subject (design §5.5): a person makes it a 1:1, a project keeps board and makes anything
+      // else a project meeting. It closes itself from then on only when dated today or later (M4).
+      setSubject: {
+        input: SetSubject,
+        output: MeetingRecord,
+        describe: async (i: SubjectInput) => `~ ${refOf(i.meeting, await before(i.meeting))} about ${i.about.trim()}`,
+        run: async (i: SubjectInput) => {
+          const m = await store.meeting(i.meeting)
+          const subject = await store.subject(i.about)
+          const kind = subject.type === "person" ? "one_on_one" : m.kind === "board" ? "board" : "project"
+          const set: Record<string, unknown> = { subject_type: subject.type, subject_id: subject.id, kind, updated_at: now() }
+          if (m.date >= today()) set.auto_close = 1
           await db.updateTable("meeting").set(set).where("id", "=", m.id).execute()
           return store.meeting(m.ref)
         },

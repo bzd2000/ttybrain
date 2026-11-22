@@ -43,7 +43,7 @@ describe("projects", () => {
   })
 
   test("declares the views it reads: people's, meetings' and actions'", () => {
-    expect(projects.reads).toEqual({ people: "^1", meetings: "^1", actions: "^2" })
+    expect(projects.reads).toEqual({ people: "^1", meetings: "^2", actions: "^2" })
     expect(projects.requires).toEqual({ people: "^1" })
   })
 

@@ -1,4 +1,4 @@
-// The meeting record view's Agenda tab: `Thu 4 Dec 2026 · steering · planned · 8 attendees`, the agenda as a
+// The meeting record view's Agenda tab: `Thu 4 Dec 2026 · project · planned · 8 attendees`, the agenda as a
 // table (#, item, project, the ask's first line) and the attendees. Keys: n add an item, e edit it, J/K move it
 // down/up (the selection follows it), Del remove it (after a confirmation), p attendees, x close the meeting.
 // A cancelled meeting is read-only: its write keys say so and open nothing.
@@ -22,7 +22,7 @@ import {
   type TableRow,
 } from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
-import type { AgendaItem, MeetingRecord } from "../logic/schema"
+import { KIND_LABELS, type AgendaItem, type MeetingRecord } from "../logic/schema"
 import { attendeeNames } from "./agenda-list"
 import { closedMessage, closeQuestion } from "./meetings-screen"
 
@@ -45,8 +45,8 @@ const columns = (codes: string[]): TableColumn[] => [
 
 const firstLine = (s: string | null) => (s ?? "").split("\n")[0] ?? ""
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`
-// `Thu 4 Dec 2026 · steering · planned · 8 attendees`.
-const meetingHeader = (m: MeetingRecord) => [longDate(m.date), m.kind, m.status, plural(m.attendees.length, "attendee")].join(" · ")
+// `Thu 4 Dec 2026 · project · planned · 8 attendees`.
+const meetingHeader = (m: MeetingRecord) => [longDate(m.date), KIND_LABELS[m.kind], m.status, plural(m.attendees.length, "attendee")].join(" · ")
 
 // The writes the meeting tabs share: a guard for a cancelled meeting, closing, and logging an action or decision
 // against the meeting (and the item's project, when it has one).

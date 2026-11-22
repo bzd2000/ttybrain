@@ -59,7 +59,7 @@ async function open(): Promise<RenderedTui> {
     await write("people").addPerson!({ name: "Luc Peeters", handle: "luc", is_stakeholder: true })
     await write("projects").addProject!({ code: "CRM", name: "CRM replatforming" })
     await write("projects").addProject!({ code: "ERP", name: "ERP upgrade" })
-    await write().addMeeting!({ title: "SteerCo Q4", date: "2026-11-20", kind: "steering", attendees: ["marie"], projects: ["CRM"] })
+    await write().addMeeting!({ about: "#CRM", title: "SteerCo Q4", date: "2026-11-20", kind: "steering", attendees: ["marie"], projects: ["CRM"] })
   })
   tui = await renderTui(kernel, { parts: [part], width: 100, height: 34 })
   tui.input.pressKey("2")
@@ -86,6 +86,9 @@ describe("meeting form", () => {
     await t.input.typeText("Board")
     for (let i = 0; i < 4; i++) t.input.pressTab() // title → attendees
     await t.input.typeText("@marie @zorro")
+    t.input.pressTab() // projects
+    t.input.pressTab() // about
+    await t.input.typeText("#CRM")
     t.input.pressKey("s", { ctrl: true })
     const frame = await until(t, (f) => f.includes('unknown person "zorro"'))
     const lines = frame.split("\n")
@@ -124,6 +127,33 @@ describe("meeting form", () => {
     const frame = await until(t, (f) => !f.includes("Edit M-1"))
     expect(statusLine(frame)).not.toContain("saved")
     expect(calls).toEqual([])
+  })
+
+  test("About: an unknown subject shows under it; an edit of it gives the meeting its new subject", async () => {
+    const t = await open()
+    void overlay!.openForm("meeting", "meeting", {})
+    await until(t, (f) => f.includes("New meeting"))
+    await t.input.typeText("1:1")
+    for (let i = 0; i < 6; i++) t.input.pressTab() // title → about
+    await t.input.typeText("@zorro")
+    t.input.pressKey("s", { ctrl: true })
+    let frame = await until(t, (f) => f.includes('unknown person "@zorro"'))
+    const lines = frame.split("\n")
+    expect(lines[lines.findIndex((l) => l.includes("About")) + 1]).toContain('✗ unknown person "@zorro"')
+    t.input.pressEscape()
+    await until(t, (f) => !f.includes("New meeting"))
+
+    const calls = spy()
+    void overlay!.openForm("meeting", "meeting", { recordRef: "M-1" })
+    frame = await until(t, (f) => f.includes("Edit M-1"))
+    expect(lineWith(frame, "About")).toContain("#CRM")
+    for (let i = 0; i < 5; i++) t.input.pressTab() // title → about
+    for (let i = 0; i < 4; i++) t.input.pressBackspace()
+    await t.input.typeText("@marie")
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, (f) => statusLine(f).includes("saved M-1"))
+    expect(calls).toEqual([{ name: "setSubject", input: { meeting: "M-1", about: "@marie" } }])
+    expect(await record("M-1")).toMatchObject({ about: "@marie", kind: "one_on_one" })
   })
 })
 

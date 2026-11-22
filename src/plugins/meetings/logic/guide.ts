@@ -6,7 +6,7 @@ Meetings are referenced as \`M-<n>\`. \`ttybrain meeting list\` shows the planne
 
 **Preparing a meeting**
 
-- Add it with the projects to discuss: \`ttybrain meeting add "Steering committee Q4" --date 2026-12-04 --kind steering --attendees peter,marie --projects CRM,ERP\`. Each project gets a status item on the agenda.
+- Add it with who or what it is about and the projects to discuss: \`ttybrain meeting add "Steering committee Q4" --about CRM --date 2026-12-04 --attendees peter,marie --projects CRM,ERP\`. Each project gets a status item on the agenda. A recurring one is a series: \`ttybrain meeting series add @karim "1:1 Karim" --every "2 weeks on wed" --from wed\`.
 - Add other items with \`ttybrain meeting agenda M-4 add "Budget" --project CRM --ask "Release contingency"\`. The \`--ask\` is what the user wants from the room; set one wherever there is a decision to get. Change items with \`agenda … edit|move|remove\`.
 - Run \`ttybrain report board M-4\` for the preparation: what changed on each project since it was last covered. \`ttybrain meeting edit M-4 --since <date>\` changes where that starts; \`--no-since\` goes back to the default.
 - A cancelled meeting cannot be changed. Cancel with \`ttybrain meeting cancel M-<n>\`.

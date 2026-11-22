@@ -31,7 +31,7 @@ src/kernel/                 knows nothing about projects or people
 src/bin/pm.ts               the `ttybrain` entry point: boots the kernel with discovered plugins (`discover: true`) and runs the CLI
 src/plugins/<id>/package.json  the plugin manifest (`main`, `ttybrain.id`, `ttybrain.tui`); the build copies it to dist-node with .js entries
 src/plugins/<id>/logic/     index.ts (definePlugin), schema.ts, views.ts, ops*.ts, commands*.ts, records.ts, report.ts, guide.ts: NO UI imports
-                            (meetings: ops.ts, records.ts, since.ts, reports.ts, commands.ts, views.ts, guide.ts, schema.ts)
+                            (meetings: ops.ts, records.ts, series.ts, rhythm.ts, since.ts, reports.ts, commands.ts, views.ts, guide.ts, schema.ts)
 src/kernel/tui/             the TUI kernel: frame, router, keys, overlays, data hooks, building blocks (see "The TUI")
 src/plugins/<id>/tui/       screens, record tabs, panels, forms, badges: each plugin's TUI part (`defineTui`)
 tests/helpers.ts            makeTestKernel; tests/builtins.ts the built-ins as static lists (tests only); tests/fixtures/ fixture plugins
@@ -63,7 +63,7 @@ Every feature is a plugin, built-ins included: `people`, `projects`, `actions`, 
 6. **Schema changes only in `ctx.migration(id, up)`.** The kernel runs each migration in its own transaction and checks the result: prefixes, no foreign objects, no triggers for external plugins. Foreign keys are deferred to the migration's commit, so an own table that other own tables reference can be rebuilt (copy, drop, create, copy back); don't rename it out of the way, since a rename rewrites the references to it. Copy back with named columns, as actions `002` does (`insertInto(t).columns([...]).expression(selectFrom(copy).select([...]))`): that is the pattern to follow. A `selectAll()` copy back between tables defined alike is copied wholesale by SQLite (its transfer optimisation), without the foreign-key bookkeeping that clears the drop's deferred violations, so the commit fails with `FOREIGN KEY constraint failed`. projects `002` uses `selectAll()` and escapes this only because its copy differs from the new table (a different CHECK); don't rely on that. Deferring does not stop `ON DELETE CASCADE` / `SET NULL` / `SET DEFAULT`: the drop's implicit DELETE would fire them, so the kernel refuses a migration that drops a table while an own table that references it with such an action still exists (`it drops "<table>", which "<child>" references with ON DELETE <action>; …`). Keep such a child in a copy and drop it first, rebuild the parent, then recreate the child (meetings' `meeting` has cascading children).
 7. **Transactions belong to the kernel.** Every write operation runs in a kernel transaction, and nested calls use savepoints. Never start one in a plugin. **A nested write (`ctx.use(x).write.y(...)`) must be awaited** before the parent issues more statements; a statement guard fails a statement issued while a nested write is still pending, and an un-awaited nested write is drained into its parent (commits or rolls back with it). After-commit hooks (events such as `record.changed`) run after the outermost commit and **without an origin**. Reads share one connection, so a read can see another concurrent chain's uncommitted writes; this is accepted for a single-user tool.
 8. **Soft references.** A plugin may store another plugin's record id as a plain column, e.g. `owner_id`. It displays it by joining that plugin's published view, never its tables.
-9. **Registrations only during `activate`.** `migration`, `upgrade`, `publish`, `expose`, `recordType`, `tagType`, `command`, `report`, `reportSection`, `guideSection` and `field` throw once boot is done (the host seals the contexts).
+9. **Registrations only during `activate`.** `migration`, `upgrade`, `upkeep`, `publish`, `expose`, `recordType`, `tagType`, `command`, `report`, `reportSection`, `guideSection` and `field` throw once boot is done (the host seals the contexts).
 
 ## Data steps
 
@@ -73,6 +73,14 @@ Every feature is a plugin, built-ins included: `people`, `projects`, `actions`, 
 - **Backup.** Before the first step a boot attempts, the kernel takes the same backup as before migrations (`ttybrain.db.bak-v<N>`, N = migrations applied), unless this boot already made one or that file exists, so a step that keeps saying `"later"` does not rewrite it on every boot. A database new at this boot is not backed up.
 - **Outcome.** `"done"` commits and records the step in `kernel_plugin_migration` as `upgrade:<id>` (migration ids may not start with `upgrade:`; these rows do not count as migrations for the backup's `bak-v<N>`), so it never runs again. `"later"` rolls back whatever it did and leaves it pending for the next boot. A throw rolls it back and leaves it pending; the plugin stays `ok` and `ttybrain plugin list` and Help's plugin problems show `data step "<id>" failed: <message>` as its error; a thrown `PmError`'s hint is kept as the plugin's `hint` (a `hint` field in `plugin list --json`, a `hint (<id>): …` line under the table, and a `hint:` line under the problem in Help). A duplicated or empty step id fails the plugin.
 - **Read-only boots.** With nothing pending, no step is attempted and no write lock is taken. A pending step takes the write lock briefly on every boot that can get it, whatever the command (a `"later"` step does so on each boot until it is done; it commits nothing). When another process holds the write lock, the boot does not wait: the steps stay pending and run on the next boot that gets the lock (so a read-only command is never held up; until then, data the step would move is still where it was). A data step, like a migration's `up`, has no timeout and holds the write lock while it runs.
+
+## Upkeep
+
+`ctx.upkeep(id, run: () => Promise<void>)`, registered in `activate`, is recurring data work that keeps a plugin's data current with the date (meetings makes the occurrences of its series ahead). It is a data step that runs on every write-capable boot instead of once.
+- **When.** Never during boot itself, so a read-only command never takes the write lock for it: before the first write of a boot (the kernel's before-write hook on any outermost write: a CLI write command's operation, the TUI's `act`, a change set), and when the TUI starts and when the day changes while it is open (`kernel.upkeep()`, called by live refresh). At most once a day per kernel: the loaded plugins' upkeeps in load order, after the data steps; concurrent callers share one run.
+- **How.** Each upkeep runs in its own kernel write transaction, in an operation context without an origin, with the plugin's normal context, like a data step (data changes on its own tables allowed, schema changes not). Nothing is recorded: it must be safe to run again (make only what is missing). It has no timeout.
+- **Busy.** When another process holds the write lock, it does not wait: the upkeeps are skipped for that boot (that day, for a TUI left open), and the write that triggered them goes on and waits as usual. Read-only commands may show yesterday's state until the next write-capable start (accepted).
+- **Outcome.** A throw rolls that upkeep back; the plugin stays `ok`, the next upkeep still runs, and `ttybrain plugin list` and Help's plugin problems show `upkeep "<id>" failed: <message>` (with a `PmError`'s hint kept, as for a data step) for the rest of that process. `kernel.upkeep()` resolves to whether any upkeep changed rows; the TUI reloads its screens only then. A duplicated or empty upkeep id fails the plugin.
 
 ## Operations
 
@@ -148,7 +156,7 @@ Rules:
 | `people` | — | projects, actions | person, note, goal | `@handle`, `N-`, `G-` |
 | `projects` | people | people, meetings, actions | project, health_update, milestone, deliverable, risk, decision, involvement | `#CODE`, `MS-`, `D-`, `R-`, `DE-` |
 | `actions` | — | people, projects, meetings | action, link | `A-` |
-| `meetings` | projects, people, actions | people, projects, actions | meeting, attendee, agenda_item | `M-` |
+| `meetings` | projects, people, actions | people, projects, actions | meeting, attendee, agenda_item, series, series_attendee | `M-`, `S-` |
 | `inbox` | — | — | item, link | `I-` |
 | `assistant` (phase 7) | — | all (as tools) | — | — |
 

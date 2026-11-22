@@ -240,7 +240,7 @@ test("80x24: long link lists are cut whole; codes, handles and 9-character ids s
     await write("people").addPerson!({ name: "Alexandra Vandenberghe", handle: "alexandra", is_stakeholder: true })
     await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
     await write("projects").addProject!({ code: "CRM", name: "CRM replatforming" })
-    await write("meetings").addMeeting!({ title: "Steering committee Q4", date: "2026-12-04" })
+    await write("meetings").addMeeting!({ about: "#CRM", title: "Steering committee Q4", date: "2026-12-04" })
     await write("actions").addAction!({ title: "Short one", due: "2026-11-16", project: "CRM" }) // A-1
     const long = await write("actions").addAction!({ title: "Agree the ingest cut-over plan with the vendor", due: "2026-11-17" })
     // Moved before it is linked (a link references the action's id).

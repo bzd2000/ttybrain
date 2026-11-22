@@ -16,6 +16,8 @@ export type Migration = { id: string; up: (db: Kysely<any>) => Promise<void> }
 // A one-time data step (`ctx.upgrade`). Applied ones are kept in kernel_plugin_migration as `upgrade:<id>`.
 export type DataStep = { id: string; run: () => Promise<"done" | "later"> }
 export type StepOutcome = "done" | "later" | "busy"
+// Recurring upkeep (`ctx.upkeep`): run on every write-capable boot; nothing is recorded.
+export type Upkeep = { id: string; run: () => Promise<void> }
 
 export const STEP_PREFIX = "upgrade:"
 const isStepRow = (id: string) => id.startsWith(STEP_PREFIX)
@@ -261,6 +263,34 @@ export class MigrationRunner {
       if (!started && e instanceof BusyError) return "busy"
       throw e
     }
+  }
+
+  // Runs one upkeep in its own kernel write transaction, with plugin data changes allowed (as runStep). A throw
+  // rolls back and is rethrown. "busy": another connection holds the write lock, so nothing ran; "changed": it
+  // committed row changes; "done": it committed none. The caller provides the operation context.
+  async runUpkeep(upkeep: Upkeep): Promise<"done" | "changed" | "busy"> {
+    let started = false
+    let changed = false
+    try {
+      await this.kdb.write(
+        async () => {
+          started = true
+          this.kdb.invalidateSchema()
+          const before = this.totalChanges()
+          await upkeep.run()
+          changed = this.totalChanges() !== before
+        },
+        { op: true, noWait: true, upkeep: true },
+      )
+      return changed ? "changed" : "done"
+    } catch (e) {
+      if (!started && e instanceof BusyError) return "busy"
+      throw e
+    }
+  }
+
+  private totalChanges(): number {
+    return Number(Object.values(this.kdb.raw.prepare("SELECT total_changes()").all([])[0] ?? {})[0])
   }
 
   private bootCount(): number {

@@ -17,7 +17,7 @@ import { discoverPlugins, type PluginCandidate, type PluginSource } from "./load
 import { EventBus } from "./events"
 import { FieldRegistry } from "./fields"
 import { GuideRegistry } from "./guide"
-import { MigrationRunner, ownerOf, ownTablesOf, type DataStep, type Migration } from "./migrations"
+import { MigrationRunner, ownerOf, ownTablesOf, type DataStep, type Migration, type Upkeep } from "./migrations"
 import { OperationRegistry } from "./operations"
 import { resolvePaths, type Paths } from "./paths"
 import { assertPluginId } from "./plugin-id"
@@ -65,6 +65,12 @@ export type Kernel = {
   // Refuses an origin that cannot be recorded: no plugin owns its ref's record type (ValidationError, exit 1),
   // or the type is registered but the record does not exist (NotFoundError, exit 2).
   checkOrigin(origin: Origin): Promise<void>
+  // Runs the loaded plugins' upkeeps (ctx.upkeep) when they have not run yet today on this kernel: in load order,
+  // each in its own write transaction, none at all while another process holds the write lock (skipped for the
+  // day). Concurrent callers share one run. The kernel also calls it before the first write of a day; the TUI at its
+  // start and when the day changes. Resolves to whether an upkeep changed any rows (a caller sharing a run, or one
+  // made when nothing was due, gets false).
+  upkeep(): Promise<boolean>
   shutdown(): Promise<void>
 }
 
@@ -91,6 +97,7 @@ type Slot = {
   hint?: string
   migrations: Migration[]
   steps: DataStep[] // ctx.upgrade, in registration order
+  upkeeps: Upkeep[] // ctx.upkeep, in registration order
   off: Array<() => void> // event subscriptions
   ctx?: PluginContext
   runtime?: PluginRuntime
@@ -178,7 +185,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const all = discover ? [...given, ...(await discoverPlugins(paths, config, discover))] : given
   const activateTimeoutMs = discover?.timeoutMs ?? DEFAULT_ACTIVATE_TIMEOUT_MS
   const slots: Slot[] = all.map((p): Slot => {
-    const base = { status: "pending" as Slot["status"], migrations: [], steps: [], off: [] }
+    const base = { status: "pending" as Slot["status"], migrations: [], steps: [], upkeeps: [], off: [] }
     if (isDef(p)) return { ...base, id: p.id, version: p.version, source: "built-in", def: p }
     const slot: Slot = { ...base, id: p.def?.id ?? p.id, version: p.def?.version ?? p.version ?? "", source: p.source, dir: p.dir }
     if (p.tui !== undefined) slot.tui = p.tui
@@ -317,6 +324,11 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         if (!sid || s.steps.some((t) => t.id === sid)) throw new ValidationError(`data step id "${sid}" is empty or duplicated`)
         s.steps.push({ id: sid, run })
       },
+      upkeep: (uid, run) => {
+        live()
+        if (!uid || s.upkeeps.some((u) => u.id === uid)) throw new ValidationError(`upkeep id "${uid}" is empty or duplicated`)
+        s.upkeeps.push({ id: uid, run })
+      },
       use: (other) => (required.has(other) ? ops.api(other) : undefined),
       read: readOps,
       self: () => ops.api(id) ?? { read: {}, write: {} },
@@ -449,7 +461,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const pendingSteps = order.flatMap((s) => (s.status === "ok" ? runner.pendingSteps(s.id, s.steps).map((step) => ({ s, step })) : []))
   if (pendingSteps.length > 0) await runSteps(await runSteps(pendingSteps))
 
-  const plugins: PluginStatus[] = order.map((s) => ({
+  const plugins: PluginStatus[] = order.map((s): PluginStatus => ({
     id: s.id,
     version: s.version,
     source: s.source,
@@ -459,6 +471,48 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     ...(s.tui !== undefined ? { tui: s.tui } : {}),
     ...(s.dir !== undefined ? { dir: s.dir } : {}),
   }))
+
+  // 7. Upkeep (ctx.upkeep): not at boot, so a read-only command never takes the write lock for it. It runs before
+  // the first write (any outermost kernel write but its own) and when the TUI asks, at most once a day per kernel.
+  // Its errors are added to the plugin's listed error, like a data step's.
+  const statusOf = new Map(plugins.map((p) => [p.id, p]))
+  const noteError = (id: string, text: string, hint?: string) => {
+    const p = statusOf.get(id)
+    if (!p) return
+    if (p.error === undefined) p.error = text
+    else if (!p.error.split("; ").includes(text)) p.error = `${p.error}; ${text}`
+    if (hint && !(p.hint ?? "").split("; ").includes(hint)) p.hint = p.hint === undefined ? hint : `${p.hint}; ${hint}`
+  }
+  let upkeptOn: string | undefined
+  let upkeeping: Promise<boolean> | undefined
+  const runUpkeeps = async (): Promise<boolean> => {
+    let changed = false
+    for (const s of order) {
+      if (s.status !== "ok") continue
+      for (const u of s.upkeeps) {
+        try {
+          const outcome = await runWithContext(context(), () => runner.runUpkeep(u))
+          if (outcome === "busy") return changed // skipped for the day
+          if (outcome === "changed") changed = true
+        } catch (e) {
+          noteError(s.id, `upkeep "${u.id}" failed: ${message(e)}`, e instanceof PmError ? e.hint : undefined)
+        }
+      }
+    }
+    return changed
+  }
+  const upkeep = (): Promise<boolean> => {
+    if (upkeeping) return upkeeping
+    const day = clock.today()
+    if (upkeptOn === day) return Promise.resolve(false)
+    upkeptOn = day
+    upkeeping = runUpkeeps().finally(() => {
+      upkeeping = undefined
+    })
+    return upkeeping
+  }
+  // The write goes on whatever the upkeep did (its errors are kept with the plugins).
+  if (order.some((s) => s.status === "ok" && s.upkeeps.length > 0)) db.setBeforeWrite(() => upkeep().catch(() => false))
 
   return {
     paths,
@@ -487,6 +541,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     },
     requiresOf: (pluginId) => Object.keys(byId.get(pluginId)?.def?.requires ?? {}),
     checkOrigin: originCheck,
+    upkeep,
     shutdown: () => db.close(),
   }
 }

@@ -10,7 +10,7 @@ import type { AgendaItem, MeetingRecord } from "../logic/schema"
 
 type Write = (input: Record<string, unknown>) => Promise<unknown>
 
-const KINDS = ["steering", "board", "other"]
+const KINDS = ["one_on_one", "project", "board"]
 const defined = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))
 // A value for an optional field: undefined (left out) when empty.
 const given = (v: string | null | undefined) => (v === null || v === undefined || v.trim() === "" ? undefined : v)
@@ -41,11 +41,14 @@ function With<T>(props: { load: () => Promise<T | null>; close(): void; children
   return <Show when={q.data() !== undefined}>{untrack(() => props.children(q.data()!))}</Show>
 }
 
-// The field an unknown person or project belongs under (the operations name none for these lookups).
-type Lookups = { person?: string; project?: string }
+// The field an unknown person or project belongs under (the operations name none for these lookups). A subject
+// that does not resolve is named with its `@` or `#` (`unknown person "@zorro"`), or as `unknown person or project`.
+type Lookups = { person?: string; project?: string; about?: string }
 function fieldOf(error: unknown, lookups: Lookups): string | undefined {
-  const m = error instanceof Error ? /\bunknown (person|project)\b/.exec(error.message) : null
-  return m ? lookups[m[1] as keyof Lookups] : undefined
+  const m = error instanceof Error ? /\bunknown (person or project|person|project) "([@#]?)/.exec(error.message) : null
+  if (!m) return undefined
+  if (lookups.about !== undefined && (m[1] === "person or project" || m[2] !== "")) return lookups.about
+  return lookups[m[1] as "person" | "project"]
 }
 
 // Runs the writes with one act() and turns its result into the form's SubmitResult.
@@ -65,48 +68,54 @@ export function MeetingForm(props: RecordFormProps) {
   return (
     <With load={async () => (props.recordRef === undefined ? null : store.meeting(props.recordRef))} close={props.close}>
       {(m: MeetingRecord | null) => {
+        // A new meeting's kind may be left empty: it then follows from what the meeting is about.
         const fields: FieldSpec[] = [
           { name: "title", label: "Title", kind: "text", required: true, initial: m?.title },
           { name: "date", label: "Date", kind: "date", required: true, initial: m?.date ?? rt.clock.today() },
-          { name: "kind", label: "Kind", kind: "enum", values: KINDS, required: true, initial: m?.kind ?? "steering" },
+          { name: "kind", label: "Kind", kind: "enum", values: KINDS, required: m !== null, initial: m?.kind },
           { name: "sinceDate", label: "Since", kind: "date", initial: m?.since_date },
           attendeesField(m),
           ...(m === null ? [{ name: "projects", label: "Projects", kind: "text" as const }] : []),
+          { name: "about", label: "About", kind: "refs", required: true, initial: m?.about },
         ]
         const add = (v: FormValues) =>
           save(
             () =>
               write("addMeeting")(
                 defined({
+                  about: v.about?.trim() ?? "",
                   title: v.title ?? "",
                   date: v.date ?? "",
-                  kind: v.kind ?? "steering",
+                  kind: given(v.kind),
                   sinceDate: given(v.sinceDate),
-                  attendees: tags(v.attendees),
+                  attendees: given(v.attendees) === undefined ? undefined : tags(v.attendees),
                   projects: tags(v.projects),
                 }),
               ),
             props,
             "added",
-            { person: "attendees", project: "projects" },
+            { person: "attendees", project: "projects", about: "about" },
           )
         const edit = (meeting: MeetingRecord, v: FormValues): Promise<SubmitResult> => {
-          const changed = changedFields(fields, v).filter((n) => n !== "attendees")
+          const changed = changedFields(fields, v).filter((n) => n !== "attendees" && n !== "about")
+          const about = (v.about ?? "").trim()
+          const subject = about !== (meeting.about ?? "")
           const people = tags(v.attendees)
           const attendees = !sameTags(people, tags(attendeesField(meeting).initial))
-          if (changed.length === 0 && !attendees) return Promise.resolve({ ok: true, ref: meeting.ref })
+          if (changed.length === 0 && !attendees && !subject) return Promise.resolve({ ok: true, ref: meeting.ref })
           const input: Record<string, unknown> = { ref: meeting.ref }
           for (const name of changed) input[name] = name === "sinceDate" ? (given(v.sinceDate) ?? null) : (v[name] ?? "")
           return save(
             async () => {
               let out: unknown
+              if (subject) out = await write("setSubject")({ meeting: meeting.ref, about })
               if (changed.length > 0) out = await write("editMeeting")(input)
               if (attendees) out = await write("setAttendees")({ meeting: meeting.ref, people })
               return out
             },
             props,
             "saved",
-            { person: "attendees" },
+            { person: "attendees", about: "about" },
           )
         }
         return (

@@ -207,11 +207,11 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
     ]
     for (const [title, date] of decisions) await projects.addDecision!({ project: "CRM", title, date })
 
-    // M-1, the SteerCo of 28 Oct (held); M-2, the coming steering committee.
-    const m1 = await meetings.addMeeting!({ title: "SteerCo", date: "2026-10-28", kind: "steering", projects: ["CRM"], attendees: ["peter", "marie", "tom"] })
+    // M-1, the SteerCo of 28 Oct (held); M-2, the coming steering committee: both project meetings about CRM.
+    const m1 = await meetings.addMeeting!({ about: "#CRM", title: "SteerCo", date: "2026-10-28", projects: ["CRM"], attendees: ["peter", "marie", "tom"] })
     await meetings.closeMeeting!({ ref: m1.ref })
     const attendees = ["peter", "marie", "luc", "tom", "anna", "bob", "karim", "sofie"]
-    const m2 = await meetings.addMeeting!({ title: "Steering committee Q4", date: "2026-12-04", kind: "steering", attendees })
+    const m2 = await meetings.addMeeting!({ about: "#CRM", title: "Steering committee Q4", date: "2026-12-04", attendees })
     const ask = "Approve 2-week shift of design milestone and release of contingency budget."
     await meetings.addAgendaItem!({ meeting: m2.ref, text: "Minutes & open actions" })
     await meetings.addAgendaItem!({ meeting: m2.ref, text: "CRM status", project: "CRM", ask })

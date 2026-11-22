@@ -55,12 +55,12 @@ async function seed() {
     await write("projects").addProject!({ code: "CRM", name: "CRM replatforming" })
     await write("projects").addProject!({ code: "ERP", name: "ERP upgrade" })
     const w = write()
-    await w.addMeeting!({ title: "SteerCo Q4", date: "2026-11-20", kind: "steering", attendees: ["marie", "luc"], projects: ["CRM"] })
-    await w.addMeeting!({ title: "Board December", date: "2026-12-04", kind: "board" })
-    await w.addMeeting!({ title: "Ops sync", date: "2026-11-10", kind: "other" })
-    await w.addMeeting!({ title: "SteerCo Q3", date: "2026-09-15", kind: "steering", projects: ["CRM", "ERP"] })
-    await w.addMeeting!({ title: "Vendor review", date: "2026-10-01", kind: "other" })
-    await w.addMeeting!({ title: "Board October", date: "2026-10-20", kind: "board" })
+    await w.addMeeting!({ about: "#CRM", title: "SteerCo Q4", date: "2026-11-20", kind: "steering", attendees: ["marie", "luc"], projects: ["CRM"] })
+    await w.addMeeting!({ about: "#CRM", title: "Board December", date: "2026-12-04", kind: "board" })
+    await w.addMeeting!({ about: "#CRM", title: "Ops sync", date: "2026-11-10", kind: "other" })
+    await w.addMeeting!({ about: "#CRM", title: "SteerCo Q3", date: "2026-09-15", kind: "steering", projects: ["CRM", "ERP"] })
+    await w.addMeeting!({ about: "#CRM", title: "Vendor review", date: "2026-10-01", kind: "other" })
+    await w.addMeeting!({ about: "#CRM", title: "Board October", date: "2026-10-20", kind: "board" })
     await w.closeMeeting!({ ref: "M-4" })
     await w.cancelMeeting!({ ref: "M-5" })
     await w.closeMeeting!({ ref: "M-6" })
@@ -106,9 +106,9 @@ describe("Meetings screen", () => {
     expect(at).toEqual([...at].sort((a, b) => a - b))
     expect(at[2]!).toBeLessThan(past)
     expect(at[3]!).toBeGreaterThan(past)
-    expect(lineWith(frame, "SteerCo Q4")).toMatch(/M-1\s+Fri 20 Nov\s+SteerCo Q4\s+steering\s+planned\s+2\s+CRM/)
-    expect(lineWith(frame, "SteerCo Q3")).toMatch(/M-4\s+Tue 15 Sep\s+SteerCo Q3\s+steering\s+held\s+0\s+CRM ERP/)
-    expect(lineWith(frame, "Vendor review")).toMatch(/M-5\s+Thu 1 Oct\s+Vendor review\s+other\s+cancelled/)
+    expect(lineWith(frame, "SteerCo Q4")).toMatch(/M-1\s+Fri 20 Nov\s+SteerCo Q4\s+project\s+planned\s+2\s+CRM/)
+    expect(lineWith(frame, "SteerCo Q3")).toMatch(/M-4\s+Tue 15 Sep\s+SteerCo Q3\s+project\s+held\s+0\s+CRM ERP/)
+    expect(lineWith(frame, "Vendor review")).toMatch(/M-5\s+Thu 1 Oct\s+Vendor review\s+project\s+cancelled/)
     const cancelled = (await spansOf(t, "Vendor review")).filter((s) => ["M-5", "Thu 1 Oct", "Vendor review", "cancelled"].some((x) => s.text.includes(x)))
     expect(cancelled.length).toBeGreaterThan(0)
     for (const s of cancelled) expect(rgbToHex(s.fg).toLowerCase()).toBe(theme.muted)
@@ -130,18 +130,21 @@ describe("Meetings screen", () => {
     t.input.pressKey("n")
     let frame = await until(t, (f) => f.includes("New meeting"))
     expect(lineWith(frame, "Date*")).toContain("2026-11-13")
-    expect(lineWith(frame, "Kind*")).toContain("steering")
+    expect(lineWith(frame, "Kind ")).not.toContain("project") // empty: it follows from About
+    expect(lineWith(frame, "About*")).toBeTruthy()
     await t.input.typeText("SteerCo Q1")
     t.input.pressTab() // date: today
-    t.input.pressTab() // kind: steering
+    t.input.pressTab() // kind: from About
     t.input.pressTab() // since
     t.input.pressTab() // attendees
     await t.input.typeText("@marie, luc")
     t.input.pressTab() // projects
     await t.input.typeText("#CRM,ERP")
+    t.input.pressTab() // about
+    await t.input.typeText("#CRM")
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, (f, s) => !f.includes("New meeting") && isSelected(s, "SteerCo Q1"))
-    expect(lineWith(frame, "SteerCo Q1")).toMatch(/M-7\s+Fri 13 Nov\s+SteerCo Q1\s+steering\s+planned\s+2\s+CRM ERP/)
+    expect(lineWith(frame, "SteerCo Q1")).toMatch(/M-7\s+Fri 13 Nov\s+SteerCo Q1\s+project\s+planned\s+2\s+CRM ERP/)
     expect(frame).toContain("Upcoming · 4")
     expect(statusLine(frame)).toContain("added M-7")
     const m = await inCtx(async () => {
@@ -154,7 +157,7 @@ describe("Meetings screen", () => {
       { position: 2, text: "ERP upgrade status" },
     ])
     expect(m.attendees).toEqual([1, 2]) // marie, luc
-    expect((await meetingRows()).at(-1)).toEqual({ id: 7, title: "SteerCo Q1", date: "2026-11-13", kind: "steering", status: "planned" })
+    expect((await meetingRows()).at(-1)).toEqual({ id: 7, title: "SteerCo Q1", date: "2026-11-13", kind: "project", status: "planned" })
   })
 
   test("edit changes attendees through setAttendees", async () => {
@@ -226,7 +229,7 @@ describe("Meetings screen", () => {
     expect(frame).toContain("› M-2 Board December")
     expect(frame).toContain("No agenda yet. Press n to add an item.")
     // A meeting sorting above it: it would move the selection if it had been reset.
-    await inCtx(() => write().addMeeting!({ title: "Kick-off", date: "2026-11-11" }))
+    await inCtx(() => write().addMeeting!({ about: "#CRM", title: "Kick-off", date: "2026-11-11" }))
     t.input.pressEscape()
     frame = await until(t, (f, s) => !f.includes("› M-2 Board December") && f.includes("Kick-off") && isSelected(s, "Board December"))
     expect(frame).not.toContain("› M-2 Board December")
@@ -238,8 +241,8 @@ describe("Meetings screen", () => {
     await inCtx(async () => {
       await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
       await write("projects").addProject!({ code: "CRM", name: "CRM" })
-      await write().addMeeting!({ title: "Data sync", date: "2026-11-20", kind: "steering", projects: ["DATAPLATFORM2027"] })
-      await write().addMeeting!({ title: "CRM sync", date: "2026-11-21", kind: "steering", projects: ["CRM"] })
+      await write().addMeeting!({ about: "#CRM", title: "Data sync", date: "2026-11-20", kind: "steering", projects: ["DATAPLATFORM2027"] })
+      await write().addMeeting!({ about: "#CRM", title: "CRM sync", date: "2026-11-21", kind: "steering", projects: ["CRM"] })
     })
     tui = await renderTui(kernel, { width: 80, height: 24 })
     tui.input.pressKey("5")
@@ -247,7 +250,7 @@ describe("Meetings screen", () => {
     expect(lineWith(frame, "Data sync")).toContain(" DATAPLATFORM2027 ")
     expect(lineWith(frame, "CRM sync").lastIndexOf(" CRM ")).toBe(lineWith(frame, "Data sync").indexOf(" DATAPLATFORM2027 "))
     // The columns before it are still whole: kind, status and the attendee count.
-    expect(lineWith(frame, "Data sync")).toMatch(/steering planned\s+0\s+DATAPLATFORM2027 │/)
+    expect(lineWith(frame, "Data sync")).toMatch(/project  planned\s+0\s+DATAPLATFORM2027 │/)
   })
 
   test("a row with two codes keeps whole codes and ends with … at 80x24", async () => {
@@ -255,15 +258,15 @@ describe("Meetings screen", () => {
     await inCtx(async () => {
       await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
       await write("projects").addProject!({ code: "CRM", name: "CRM" })
-      await write().addMeeting!({ title: "Data sync", date: "2026-11-20", kind: "steering", projects: ["DATAPLATFORM2027", "CRM"] })
-      await write().addMeeting!({ title: "CRM sync", date: "2026-11-21", kind: "steering", projects: ["CRM", "DATAPLATFORM2027"] })
+      await write().addMeeting!({ about: "#CRM", title: "Data sync", date: "2026-11-20", kind: "steering", projects: ["DATAPLATFORM2027", "CRM"] })
+      await write().addMeeting!({ about: "#CRM", title: "CRM sync", date: "2026-11-21", kind: "steering", projects: ["CRM", "DATAPLATFORM2027"] })
     })
     tui = await renderTui(kernel, { width: 80, height: 24 })
     tui.input.pressKey("5")
     const frame = await until(tui, (f) => f.includes("Data sync"))
     // In agenda order, in an 18-wide column: the long code first, then ` …`; after CRM it gives way.
-    expect(lineWith(frame, "Data sync")).toMatch(/steering planned\s+0\s+DATAPLATFORM2027 … │/)
-    expect(lineWith(frame, "CRM sync")).toMatch(/steering planned\s+0\s+CRM …\s+│/)
+    expect(lineWith(frame, "Data sync")).toMatch(/project  planned\s+0\s+DATAPLATFORM2027 … │/)
+    expect(lineWith(frame, "CRM sync")).toMatch(/project  planned\s+0\s+CRM …\s+│/)
     expect(lineWith(frame, "CRM sync").lastIndexOf(" CRM …")).toBe(lineWith(frame, "Data sync").indexOf(" DATAPLATFORM2027 …"))
     expect(frame).not.toMatch(/DATAPLAT\w*…|CRM \w+…/)
   })

@@ -135,6 +135,7 @@ describe("TUI data", () => {
     "busy then success",
     async () => {
       tui = await renderTui(kernel, { parts: [screenPart(ActionsList)] })
+      await tui.settle() // the start's upkeep has written and let go of the write lock
       const b = await second()
       b.db.raw.exec("BEGIN IMMEDIATE")
       setTimeout(() => b.db.raw.exec("ROLLBACK"), 1500)

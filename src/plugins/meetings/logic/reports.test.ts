@@ -43,14 +43,14 @@ async function seed() {
   await w("people", "addPerson", { name: "Peter Janssens", handle: "peter" })
   await w("people", "addPerson", { name: "Marie Dubois", handle: "marie" })
   await w("projects", "addProject", { code: "CRM", name: "CRM replatforming" })
-  await w("meetings", "addMeeting", { title: "SteerCo Q3", date: "2026-10-28", kind: "steering", projects: ["CRM"] }) // M-1
+  await w("meetings", "addMeeting", { about: "#CRM", title: "SteerCo Q3", date: "2026-10-28", kind: "steering", projects: ["CRM"] }) // M-1
   await w("projects", "setHealth", { project: "CRM", health: "amber", comment: "Design slipping 2 weeks", date: "2026-11-02" })
   await w("projects", "addMilestone", { project: "CRM", title: "Design approved", due: "2026-12-10" }) // MS-1
   await w("projects", "addRisk", { project: "CRM", title: "Budget overrun ~12%", type: "issue", severity: "high" }) // R-1
   await w("actions", "addAction", { title: "Send revised budget to Peter", project: "CRM", due: "2026-11-10" }) // A-1, overdue
   await w("actions", "addAction", { title: "Share integration specs", project: "CRM", meeting: "M-1" }) // A-2, from M-1
   await w("meetings", "closeMeeting", { ref: "M-1" })
-  await w("meetings", "addMeeting", { title: "Steering committee Q4", date: "2026-12-04", kind: "steering", attendees: ["peter", "marie"] }) // M-2
+  await w("meetings", "addMeeting", { about: "#CRM", title: "Steering committee Q4", date: "2026-12-04", kind: "steering", attendees: ["peter", "marie"] }) // M-2
   await w("meetings", "addAgendaItem", { meeting: "M-2", text: "Minutes & open actions" })
   await w("meetings", "addAgendaItem", { meeting: "M-2", text: "CRM status", project: "CRM", ask: ASK })
   await w("meetings", "addAgendaItem", { meeting: "M-2", text: "AOB" })
@@ -130,7 +130,7 @@ describe("meetings reports", () => {
 
   test("board pack of a meeting without projects", async () => {
     await seed()
-    await w("meetings", "addMeeting", { title: "Team sync", date: "2026-11-20", attendees: ["peter"] }) // M-3
+    await w("meetings", "addMeeting", { about: "@peter", title: "Team sync", date: "2026-11-20", attendees: ["peter"] }) // M-3
     await w("meetings", "addAgendaItem", { meeting: "M-3", text: "AOB", ask: "Anything else?" })
     expect((await ok("report", "board", "M-3")).out).toBe(
       [
@@ -150,7 +150,7 @@ describe("meetings reports", () => {
         "",
       ].join("\n"),
     )
-    await w("meetings", "addMeeting", { title: "Empty", date: "2026-11-21" }) // M-4
+    await w("meetings", "addMeeting", { about: "#CRM", title: "Empty", date: "2026-11-21" }) // M-4
     expect((await ok("report", "board", "M-4")).out).toBe(
       ["# Empty · 2026-11-21", "", "## Attendees", "", "_No attendees._", "", "## Agenda", "", "_No agenda yet._", ""].join("\n"),
     )

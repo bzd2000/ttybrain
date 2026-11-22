@@ -37,6 +37,11 @@ export interface PluginContext {
   // "done" records it so it never runs again; "later" commits nothing and leaves it pending; a throw rolls it back,
   // keeps it pending and shows the error with the plugin, which stays loaded.
   upgrade(id: string, run: () => Promise<"done" | "later">): void
+  // Recurring upkeep (docs/architecture.md, "Upkeep"): like a data step, but run on every write-capable boot (before
+  // the first write of a boot, at TUI start, and when the day changes while the TUI is open), once a day, after the
+  // data steps, in its own write transaction with this context. Skipped for that boot when another process holds the
+  // write lock; a throw rolls it back and shows the error with the plugin, which stays loaded.
+  upkeep(id: string, run: () => Promise<void>): void
   publish(name: string, def: ViewDef): void
   expose(ops: { read?: Record<string, ReadOp>; write?: Record<string, WriteOp> }): void
   // Another plugin's exposed operations; undefined unless it is in `requires`.
