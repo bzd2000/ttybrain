@@ -155,7 +155,8 @@ describe("projects' person tabs", () => {
     expect(lineWith(frame, "Data platform")).toMatch(/DATAPLATFORM2027 Data platform\s+sponsor\s+active/)
     tui.input.pressArrow("right")
     frame = await until(tui, (f) => f.includes("Review contract"))
-    expect(lineWith(frame, "Review contract")).toMatch(/A-1\s+Review contract\s+DATAPLATFORM2027 owner/)
+    // At 80 columns the Owner column gives way; the project code in Linked to stays whole.
+    expect(lineWith(frame, "Review contract")).toMatch(/A-1\s+Review contract\s+DATAPLATFORM2027\s+—/)
     for (const l of lines(frame)) expect(l.length).toBeLessThanOrEqual(80)
   })
 
@@ -165,23 +166,24 @@ describe("projects' person tabs", () => {
     expect(frame).toContain("No projects yet. Press n to add one.")
   })
 
-  test("Actions lists owned and for, open first; x completes; n prefills for", async () => {
+  test("Actions lists owned and linked, open first; x completes; n links a stakeholder", async () => {
     const t = await open("@marie", 3)
-    let frame = await until(t, (f) => f.includes("Send revised budget"))
+    let frame = await until(t, (f) => f.includes("Send revised budget") && f.includes("Linked to"))
     expect(tabLine(frame)).toContain("Actions 3")
-    expect(lineWith(frame, "Ref")).toMatch(/Ref\s+Action\s+Proj\.\s+As\s+Due/)
+    expect(lineWith(frame, "Linked to")).toMatch(/ID\s+Action\s+Owner\s+Linked to\s+Due/)
     expect(frame).not.toContain("Bob's own")
     const order = ["A-1", "A-2", "A-3", "A-5", "A-4"].map((r) => indexOf(frame, `${r} `))
     expect(order).toEqual([...order].sort((a, b) => a - b))
-    expect(lineWith(frame, "A-1 ")).toMatch(/A-1\s+Send revised budget\s+for\s+-3d/)
-    expect(lineWith(frame, "A-2 ")).toMatch(/A-2\s+Review contract\s+CRM\s+owner\s+20 Nov/)
-    expect(lineWith(frame, "A-3 ")).toMatch(/A-3\s+Collect quotes\s+owner\s+—/)
-    expect(lineWith(frame, "A-5 ")).toMatch(/A-5\s+Book workshop\s+owner/) // owner and for: owner
-    expect(lineWith(frame, "A-4 ")).toMatch(/A-4\s+Sign off scope\s+for/)
+    // Marie herself is left out of Linked to; closed actions say what became of them.
+    expect(lineWith(frame, "A-1 ")).toMatch(/A-1\s+Send revised budget\s+me\s+—\s+10 Nov/)
+    expect(lineWith(frame, "A-2 ")).toMatch(/A-2\s+Review contract\s+Marie\s+CRM\s+20 Nov/)
+    expect(lineWith(frame, "A-3 ")).toMatch(/A-3\s+Collect quotes\s+Marie\s+—\s+—/)
+    expect(lineWith(frame, "A-5 ")).toMatch(/A-5\s+Book workshop\s+Marie\s+—\s+done/)
+    expect(lineWith(frame, "A-4 ")).toMatch(/A-4\s+Sign off scope\s+me\s+—\s+done/)
     const spans = await t.spans()
     const a1 = spans.lines.find((l) => l.spans.map((s) => s.text).join("").includes("Send revised budget"))!
-    expect(rgbToHex(a1.spans.find((s) => s.text.includes("-3d"))!.fg).toLowerCase()).toBe(theme.red)
-    expect(lines(frame.trimEnd()).at(-1)).toContain("n add   e edit   x done")
+    expect(rgbToHex(a1.spans.find((s) => s.text.includes("10 Nov"))!.fg).toLowerCase()).toBe(theme.red)
+    expect(lines(frame.trimEnd()).at(-1)).toContain("n add   e edit   x done   d due   l links   del delete")
 
     // x on A-1: done today, so it moves first among the closed ones.
     expect(isSelected(await t.spans(), "A-1 ")).toBe(true)
@@ -191,18 +193,16 @@ describe("projects' person tabs", () => {
     const after = ["A-2", "A-3", "A-1", "A-5", "A-4"].map((r) => indexOf(frame, `${r} `))
     expect(after).toEqual([...after].sort((a, b) => a - b))
 
-    // Enter opens the action's project (A-2 is on CRM); an action without one stays.
+    // Enter opens the selected action (its form), as on the Actions screen.
     t.input.pressKey("k") // A-1 → A-3
     t.input.pressKey("k") // → A-2
     for (let i = 0; i < 80 && !isSelected(await t.spans(), "A-2 "); i++) await sleep(25)
     expect(isSelected(await t.spans(), "A-2 ")).toBe(true)
     t.input.pressEnter()
-    await until(t, () => t.nav.route().kind === "record" && (t.nav.route() as { ref: string }).ref === "#CRM")
-    expect(t.nav.route()).toMatchObject({ kind: "record", ref: "#CRM" })
+    frame = await until(t, (f) => f.includes("Edit A-2"))
+    expect(lineWith(frame, "Links")).toContain("#CRM")
     t.input.pressEscape()
-    await until(t, () => (t.nav.route() as { ref?: string }).ref === "@marie")
-    for (let i = 0; i < 3; i++) t.input.pressArrow("right") // the record view opens on Summary again
-    frame = await until(t, (f) => f.includes("Review contract") && f.includes("Actions ·"))
+    await until(t, (f) => !f.includes("Edit A-2"))
 
     // e edits the selected action.
     t.input.pressKey("e")
@@ -210,11 +210,11 @@ describe("projects' person tabs", () => {
     t.input.pressEscape()
     await until(t, (f) => !f.includes("Edit A-2"))
 
-    // n: a stakeholder's new action is for them.
+    // n: a stakeholder's new action is linked to them.
     t.input.pressKey("n")
     frame = await until(t, (f) => f.includes("New action"))
-    expect(lineWith(frame, "For")).toContain("@marie")
-    expect(lineWith(frame, "Owner")).not.toContain("@marie")
+    expect(lineWith(frame, "Links")).toContain("@marie")
+    expect(lineWith(frame, "Owner (empty")).not.toContain("@marie")
   })
 
   test("Actions: n prefills the owner for a team member; empty text", async () => {
@@ -222,8 +222,8 @@ describe("projects' person tabs", () => {
     let frame = await until(t, (f) => f.includes("Bob's own"))
     t.input.pressKey("n")
     frame = await until(t, (f) => f.includes("New action"))
-    expect(lineWith(frame, "Owner")).toContain("@bob")
-    expect(lineWith(frame, "For")).not.toContain("@bob")
+    expect(lineWith(frame, "Owner (empty")).toContain("@bob")
+    expect(lineWith(frame, "Links")).not.toContain("@bob")
     t.input.pressEscape()
     await until(t, (f) => !f.includes("New action"))
 

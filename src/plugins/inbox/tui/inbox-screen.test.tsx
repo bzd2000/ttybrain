@@ -111,6 +111,7 @@ describe("inbox screen", () => {
     t.input.pressKey("a")
     frame = await until(t, (f) => f.includes("New action"))
     expect(frame).toContain("call about")
+    expect(lineWith(frame, "Links")).toContain("#CRM") // the item's project, prefilled in the links field
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, (f) => f.includes("→ Action A-1") && !f.includes("New action"))
     const action = kernel!.db.raw.prepare("SELECT title, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'project') AS project_id FROM actions_action a").all([])[0] as any

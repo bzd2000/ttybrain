@@ -79,7 +79,7 @@ describe("actions screen", () => {
     expect(frame).toContain("Actions · 6 open")
     const overdue = lineWith(frame, "Reply to vendor")
     expect(overdue).toContain("me")
-    expect(overdue).toContain("Peter")
+    expect(overdue).toContain("CRM @peter")
     expect(overdue).toContain("CRM")
     expect(overdue).toContain("9 Nov")
     expect(lineWith(frame, "Prepare budget")).toContain("Anna")
@@ -218,7 +218,8 @@ describe("actions screen", () => {
     expect(isSelected(await t.spans(), "Draft scope")).toBe(true) // the row now at that index
   })
 
-  test("for/from shows inbox origin", async () => {
+  // Linked to replaces the 2026-11-13 For / from column: an inbox origin is no link, so the action shows `—`.
+  test("an action from the inbox without links shows —", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await seed()
     await inCtx(async () => void (await write("inbox").capture!({ text: "call the vendor" })))
@@ -230,8 +231,31 @@ describe("actions screen", () => {
     tui = await renderTui(kernel, { width: 120, height: 32 })
     tui.input.pressKey("4")
     const frame = await untilThat(tui, (f) => f.includes("From the inbox"))
-    expect(lineWith(frame, "From the inbox")).toContain("inbox I-1")
-    expect(lineWith(frame, "Prepare budget")).toContain("—")
+    expect(lineWith(frame, "From the inbox")).toMatch(/me\s+—\s+—/)
+  })
+
+  // The design's `@anna #CRM mine`: links by ref (a @handle also matches the owner), mine = owner:me.
+  test("filter by links and mine", async () => {
+    const t = await open()
+    const filtered = async (text: string, footer = `status:open ${text}`) => {
+      t.input.pressKey("/")
+      await type(t, text)
+      t.input.pressEnter()
+      return untilThat(t, (f) => f.includes(footer))
+    }
+    let frame = await filtered("#CRM @peter")
+    expect(frame).toContain("Reply to vendor")
+    expect(frame).not.toContain("Prepare budget")
+    t.input.pressEscape()
+    await untilThat(t, (f) => f.includes(" status:open ─"))
+    frame = await filtered("@anna") // Anna owns A-2
+    expect(frame).toContain("Prepare budget")
+    expect(frame).not.toContain("Reply to vendor")
+    t.input.pressEscape()
+    await untilThat(t, (f) => f.includes(" status:open ─"))
+    frame = await filtered("mine", "status:open owner:me")
+    expect(frame).toContain("Reply to vendor")
+    expect(frame).not.toContain("Prepare budget")
   })
 
   test("an action from a meeting shows the meeting title", async () => {

@@ -4,7 +4,8 @@
 //   (also Alt+S, which is how a fast Esc s arrives), submits from anywhere. Esc not followed by `s` within
 //   ESC_WINDOW_MS cancels.
 // - enum fields cycle with ←→; record fields autocomplete from the kernel's record type search (↑↓ pick, Tab
-//   accepts); date fields preview the parsed ISO date (`→ 2026-11-15`) or `invalid date`, with the CLI's parsing.
+//   accepts); a refs field (several refs, space-separated) autocompletes its last word from the record type whose
+//   prefix starts it (`#cr`, `@an`, `M-`), Tab replacing that word with the ref and a space; date fields preview the parsed ISO date (`→ 2026-11-15`) or `invalid date`, with the CLI's parsing.
 // - While the form is open it holds text focus, so single-letter global keys type into the field.
 // - A failed submit keeps the form open with its values: a ValidationError naming a field (or a failed
 //   SubmitResult's `field`) shows under that field as `✗ <message>`, any other error at the bottom. While a submit is in flight (`saving…`, busy retries
@@ -51,6 +52,9 @@ const OP_PREFIX = /^[\w-]+\.[\w-]+: /
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 type Extra = { key: string; plugin: string; def: FieldDef }
+
+// The word a refs field is typing: after its last space (empty right after one).
+const lastWord = (value: string) => /\S*$/.exec(value)![0]
 
 // An extra field's value as the form edits it, and back as its `set` operation takes it.
 const asText = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
@@ -162,10 +166,16 @@ export function Form(props: {
   // --- record autocomplete: open after typing in a record field, closed once a suggestion is accepted ---
   const [suggesting, setSuggesting] = createSignal(false)
   const [picked, setPicked] = createSignal(0)
+  // A refs field searches the record type whose prefix starts its last word (`@an` people, `M-` meetings).
   const searchKey = () => {
     const f = current()
-    const text = f ? (valueOf(f.name) ?? "").trim() : ""
-    return f?.kind === "record" && f.recordType && suggesting() && text !== "" ? { type: f.recordType, text } : null
+    if (!f || !suggesting()) return null
+    const value = valueOf(f.name) ?? ""
+    if (f.kind === "record") return f.recordType && value.trim() !== "" ? { type: f.recordType, text: value.trim() } : null
+    if (f.kind !== "refs") return null
+    const word = lastWord(value)
+    const def = word === "" ? undefined : kernel.records.typeOfRef(word)
+    return def ? { type: def.name, text: word.slice(def.prefix.length) } : null
   }
   const search = useQuery(
     async (): Promise<Suggestion[]> => {
@@ -180,7 +190,9 @@ export function Form(props: {
     const f = current()
     const s = suggestions()[picked()]
     if (!f || !s) return false
-    setValue(f.name, s.ref)
+    // A refs field: the last word becomes the ref, and a space follows for the next one.
+    const value = valueOf(f.name) ?? ""
+    setValue(f.name, f.kind === "refs" ? `${value.slice(0, value.length - lastWord(value).length)}${s.ref} ` : s.ref)
     setSuggesting(false)
     return true
   }
@@ -404,7 +416,7 @@ export function Form(props: {
               onInput={(v) => {
                 if (v === (valueOf(f.name) ?? "")) return // the echo of a value set here (an accepted suggestion)
                 setValue(f.name, v)
-                if (f.kind === "record") {
+                if (f.kind === "record" || f.kind === "refs") {
                   setSuggesting(true)
                   setPicked(0)
                 }

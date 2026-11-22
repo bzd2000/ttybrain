@@ -9,7 +9,7 @@ const dash: Cell = { text: "—", tone: "muted" }
 const project = (ref: string | null): Cell => (ref === null ? dash : { text: ref.slice(1), tone: "cyan" })
 // Ids and codes start at the designs' widths and grow to their longest text (codes up to 16), so they stay whole.
 // id, title, project, due.
-const COLUMNS = [{ min: 5, max: 8 }, "grow", { min: 7, max: 16 }, 7] as const
+const COLUMNS = [{ min: 5, max: 10 }, "grow", { min: 7, max: 16 }, 7] as const
 
 export function registerPanels(ui: TuiContext): void {
   const overview = makeOverview(ui, makeStore(ui))

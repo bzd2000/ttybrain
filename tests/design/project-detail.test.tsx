@@ -161,15 +161,17 @@ test("Milestones and Deliverables tabs: totals, muted refs, green ✓, done date
   spans = await t.spans()
   expect(fgAt(spans, "@anna", "Solution design")).toBe(theme.magenta)
   expect(fgAt(spans, "D-", "Solution design")).toBe(theme.muted)
-  // Actions: a named owner or for-person magenta; `me` and `—` muted (as the Actions mock draws them).
+  // Actions: the Actions screen's columns (2026-11-20 mock): owners by first name, plain, `me` muted; linked people magenta,
+  // `—` muted; CRM itself is left out of Linked to.
   for (let i = 0; i < 3; i++) t.input.pressArrow("right")
   frame = await until(t, (f) => f.includes("Send revised budget to Peter") && f.includes("Prepare SteerCo deck input"))
   spans = await t.spans()
   expect(line(frame, frame.split("\n").findIndex((l) => l.includes("Send revised budget")))).toMatch(/Send revised budget to Peter +me +@peter /)
   expect(fgAt(spans, "me    ", "Send revised budget")).toBe(theme.muted)
   expect(fgAt(spans, "@peter", "Send revised budget")).toBe(theme.magenta)
-  expect(fgAt(spans, "—", "Prepare SteerCo deck input")).toBe(theme.muted)
-  expect(fgAt(spans, "@bob", "Align migration scope")).toBe(theme.magenta)
+  expect(fgAt(spans, "Steering committee Q4 4 Dec", "Prepare SteerCo deck input")).toBe(theme.muted)
+  expect(fgAt(spans, "—", "Align migration scope")).toBe(theme.muted)
+  expect(fgAt(spans, "Bob", "Align migration scope")).toBe(theme.text)
 })
 
 // At 80×24 nothing is wider than the terminal; the facts and the short lists' titles stay whole (the

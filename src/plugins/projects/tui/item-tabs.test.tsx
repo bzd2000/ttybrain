@@ -283,17 +283,18 @@ describe("actions tab", () => {
     expect(kernel!.db.raw.prepare("SELECT title, owner_id, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'project') AS project_id FROM actions_action a ORDER BY id").all([])).toEqual([{ title: "Call vendor", owner_id: null, project_id: 1 }])
   })
 
-  test("x on an action sets it to done; the tab counts all actions, so it stays", async () => {
+  test("x on an action sets it to done; it stays listed, the tab counts the open ones", async () => {
     const t = await open(5, async () => {
       await write("actions").addAction!({ title: "One", project: "CRM" })
       await write("actions").addAction!({ title: "Two", project: "CRM", owner: "@peter" })
     })
     let frame = await until(t, "Actions 2")
-    expect(lineWith(frame, "Two")).toContain("@peter")
+    expect(lineWith(frame, "Two")).toContain("Peter")
     t.input.pressKey("x")
     frame = await until(t, "done ")
     expect(lineWith(frame, "One")).toContain("done")
-    expect(frame).toContain("Actions 2")
+    frame = await until(t, "Actions 1")
+    expect(frame).toContain("Actions · 1 open")
     expect((await rows<any>("action", ["status"]))[0].status).toBe("done")
   })
 })
