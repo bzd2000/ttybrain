@@ -15,7 +15,8 @@ Meetings are referenced as \`M-<n>\`. \`ttybrain meeting list\` shows the planne
 
 - Put the minutes in the notes: \`ttybrain meeting notes M-4 --file minutes.md\`, or \`-\` to read stdin.
 - Turn each commitment into an action and each decision into a decision record, tied to the meeting: \`ttybrain action add "Send the roadmap" --owner marie --due fri --meeting M-4\` and \`ttybrain decision add "Select vendor B" --project CRM --meeting M-4\`.
-- Then \`ttybrain meeting close M-4\`. It marks the meeting held and prints how many actions and decisions were logged from it; a meeting with none logged is worth a second look.
+- Then \`ttybrain meeting close M-4\`. It marks the meeting held, keeps its unticked talk items open for next time, stores a 1:1's notes on the person as a 1:1 note, and prints one line: \`1:1 Anna closed · 2 discussed, 3 kept for next time · 2 actions created · notes saved\` (\`--json\` also counts the decisions logged). A meeting with no actions created is worth a second look. A meeting not closed 3 days after its date closes itself the same way.
+- An action agreed in a meeting links to the meeting and to what it is about: \`ttybrain action add "Approve AWS training" --due fri --link M-4 --link @anna\`.
 
 **Talk-lists**
 

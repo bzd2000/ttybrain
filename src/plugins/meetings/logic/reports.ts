@@ -1,11 +1,13 @@
 // The meetings reports (spec §8): `board` (`ttybrain report board <M-n>`: attendees, agenda, then one block per covered
 // project, made of projects' `project-status` sections run through ctx.reports, plus the asks) and `minutes`
-// (`ttybrain report minutes <M-n>`: attendees, notes, and the decisions and actions linked to the meeting). The reads
-// `prep` (per agenda item: its project's status sections and the since) and `report` (a rendered report) serve the TUI.
+// (`ttybrain report minutes <M-n>`: attendees, notes, the talk items discussed, and the decisions and actions linked to
+// the meeting). The reads `prep` (per agenda item: its project's status sections and the since) and `report` (a
+// rendered report) serve the TUI.
 import { NonBlank, ReportCompactSchema, Type, type Cell, type PluginContext, type ReportSectionResult, type Static } from "@ttybrain/api"
 import type { Store } from "./records"
 import type { MeetingRecord as Meeting } from "./schema"
 import { sinceFor, type SinceResult } from "./since"
+import type { Talks } from "./talk"
 
 type Row = Record<string, Cell>
 type Block = { code: string; name: string; since: SinceResult; sections: ReportSectionResult[] }
@@ -52,7 +54,7 @@ type ReportInput = Static<typeof ReportInput>
 
 const bare = (code: string | null) => (code === null ? null : code.replace(/^#/, ""))
 
-export function registerReports(ctx: PluginContext, store: Store): void {
+export function registerReports(ctx: PluginContext, store: Store, talks: Talks): void {
   const db = ctx.data
 
   // The meeting's attendees with their names, in the meeting's (handle) order.
@@ -148,6 +150,17 @@ export function registerReports(ctx: PluginContext, store: Store): void {
     run: async (m: Meeting) => {
       const has = m.notes.trim() !== ""
       return { title: "Notes", columns: [], rows: [], empty: has ? "" : "No notes.", ...(has ? { text: m.notes } : {}) }
+    },
+  })
+  // The talk items discussed in the meeting, in the order they were ticked; left out when there are none (meetings
+  // from before talk-lists keep their minutes as they were).
+  ctx.reportSection("minutes", {
+    id: "discussed",
+    order: 25,
+    run: async (m: Meeting) => {
+      const items = await talks.records(await talks.discussedIn(m.id))
+      if (items.length === 0) return []
+      return { title: "Discussed", columns: ["ID", "Item", "Project"], rows: items.map((t) => ({ ID: t.ref, Item: t.text, Project: bare(t.project) })), empty: "" }
     },
   })
   ctx.reportSection("minutes", {

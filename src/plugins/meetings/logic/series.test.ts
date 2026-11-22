@@ -255,8 +255,8 @@ describe("series", () => {
     await w(k, "skipMeeting", { ref: "M-2" })
     expect(await r(k, "upcoming", { from: "today", to: "+3w" })).toEqual({
       meetings: [
-        { ref: "M-1", id: 1, title: "1:1 Karim", date: "2026-11-25", kind: "one_on_one", status: "planned", about: "@karim", series: "S-1" },
-        { ref: "M-5", id: 5, title: "Vendor call", date: "2026-11-26", kind: "project", status: "planned", about: "#CRM", series: null },
+        { ref: "M-1", id: 1, title: "1:1 Karim", date: "2026-11-25", kind: "one_on_one", status: "planned", about: "@karim", series: "S-1", closes_on: "2026-11-28" },
+        { ref: "M-5", id: 5, title: "Vendor call", date: "2026-11-26", kind: "project", status: "planned", about: "#CRM", series: null, closes_on: "2026-11-29" },
       ],
     })
     expect(k.db.raw.prepare(`SELECT * FROM "meetings__pub_series"`).all([])).toEqual([

@@ -99,20 +99,26 @@ describe("ttybrain meeting", () => {
     expect((await cli(["meeting", "agenda", "M-1", "shuffle"])).code).toBe(1)
   })
 
-  test("close prints what was logged", async () => {
+  test("close prints the close line; --json keeps what was logged", async () => {
     await boot()
     await ok("meeting", "add", "Board", "--about", "ERP", "--date", "2026-11-10")
-    expect((await ok("meeting", "close", "M-1")).out).toBe("M-1 held\nlogged: 0 actions, 0 decisions\n")
+    expect((await ok("meeting", "close", "M-1")).out).toBe("Board closed\n")
     await ok("meeting", "add", "Board 2", "--about", "ERP", "--date", "2026-11-11")
     await ok("action", "add", "One", "--meeting", "M-2")
     await ok("action", "add", "Two", "--meeting", "M-2")
     await ok("action", "add", "Three", "--meeting", "M-2")
     await ok("decision", "add", "Go", "--meeting", "M-2")
-    expect((await ok("meeting", "close", "M-2")).out).toBe("M-2 held\nlogged: 3 actions, 1 decision\n")
+    const closed = await ok("meeting", "close", "M-2", "--json")
+    expect([closed.json.ref, closed.json.status, closed.json.logged, closed.json.message]).toEqual([
+      "M-2",
+      "held",
+      { actions: 3, decisions: 1 },
+      "Board 2 closed · 3 actions created",
+    ])
     expect((await cli(["meeting", "close", "M-2"])).code).toBe(1)
     await ok("meeting", "add", "Board 3", "--about", "ERP", "--date", "2026-11-12")
     await ok("action", "add", "Solo", "--meeting", "M-3")
-    expect((await ok("meeting", "close", "M-3")).out).toBe("M-3 held\nlogged: 1 action, 0 decisions\n")
+    expect((await ok("meeting", "close", "M-3")).out).toBe("Board 3 closed · 1 action created\n")
   })
 
   test("cancelled meeting: writes exit 1 with the message", async () => {

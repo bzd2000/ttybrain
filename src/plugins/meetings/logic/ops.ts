@@ -3,6 +3,7 @@
 // reference §3). Agenda items are addressed by their meeting and their 1-based position, which stays dense (1..n)
 // through add, move and remove. Every new meeting has a subject (`about`), which gives its kind unless one is given.
 import {
+  addDays,
   currentContext,
   formatRef,
   NonBlank,
@@ -15,6 +16,7 @@ import {
   type PluginContext,
   type Static,
 } from "@ttybrain/api"
+import { CLOSE_AFTER_DAYS, Closed, type Closer } from "./close"
 import type { Store } from "./records"
 import type { Talks } from "./talk"
 import { KindInput, MeetingKind, MeetingRecord, MeetingStatus, type MeetingRecord as Meeting, type SubjectType } from "./schema"
@@ -50,6 +52,7 @@ const UpcomingRow = Type.Object({
   status: MeetingStatus,
   about: Type.Union([Type.String(), Type.Null()]),
   series: Type.Union([Type.String(), Type.Null()]),
+  closes_on: Type.Union([Type.String(), Type.Null()]), // the day it closes itself if not closed by then (date + 3); null: it never does
 })
 const UpcomingOutput = Type.Object({ meetings: Type.Array(UpcomingRow) })
 const SetAttendees = Type.Object({ meeting: Ref, people: Type.Array(NonBlank()) })
@@ -63,10 +66,6 @@ const SinceOutput = Type.Object({
   since: Type.String(),
   source: Type.Union([Type.Literal("meeting"), Type.Literal("previous"), Type.Literal("default")]),
   previous: Type.Union([Type.Object({ ref: Type.String(), title: Type.String(), date: Type.String() }), Type.Null()]),
-})
-const Closed = Type.Object({
-  ...MeetingRecord.properties,
-  logged: Type.Object({ actions: Type.Integer(), decisions: Type.Integer() }),
 })
 
 type AddInput = Static<typeof AddMeeting>
@@ -88,7 +87,7 @@ const clean = (v: string | null | undefined) => (blank(v) ? null : v!.trim())
 const items = (n: number) => (n === 0 ? "no items" : `only ${n} ${n === 1 ? "item" : "items"}`)
 const uniq = <T>(xs: T[]) => [...new Set(xs)]
 
-export function registerOps(ctx: PluginContext, store: Store, talks: Talks): void {
+export function registerOps(ctx: PluginContext, store: Store, talks: Talks, closer: Closer): void {
   const db = ctx.data
 
   // The meeting as it is now, for a describe line; undefined when the ref does not resolve.
@@ -155,11 +154,20 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks): voi
         run: async (i: Static<typeof UpcomingInput>) => {
           const from = date(i.from, "from")
           const to = date(i.to, "to")
-          const ids = await db.selectFrom("meeting").select("id").where("status", "=", "planned").where("date", ">=", from).where("date", "<=", to).orderBy("date").orderBy("id").execute()
+          const ids = await db
+            .selectFrom("meeting")
+            .select(["id", "auto_close"])
+            .where("status", "=", "planned")
+            .where("date", ">=", from)
+            .where("date", "<=", to)
+            .orderBy("date")
+            .orderBy("id")
+            .execute()
           const meetings = []
           for (const r of ids) {
             const m = await store.meeting(formatRef("M-", Number(r.id)))
-            meetings.push({ ref: m.ref, id: m.id, title: m.title, date: m.date, kind: m.kind, status: m.status, about: m.about, series: m.series })
+            const closes_on = Number(r.auto_close) === 1 ? addDays(m.date, CLOSE_AFTER_DAYS) : null
+            meetings.push({ ref: m.ref, id: m.id, title: m.title, date: m.date, kind: m.kind, status: m.status, about: m.about, series: m.series, closes_on })
           }
           return { meetings }
         },
@@ -296,6 +304,7 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks): voi
         describe: async (i: { ref: string }) => `~ ${refOf(i.ref, await before(i.ref))} cancelled`,
         run: async (i: { ref: string }) => dropMeeting(await store.openMeeting(i.ref)),
       },
+      // Held: unticked talk items kept for next time, a 1:1's notes on its person (close.ts).
       closeMeeting: {
         input: MeetingRef,
         output: Closed,
@@ -304,10 +313,7 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks): voi
           const m = await store.meeting(i.ref)
           if (m.status === "held") throw new ValidationError(`${m.ref} is already held`)
           await store.openMeeting(m.ref) // a cancelled meeting cannot be held
-          const held = await setStatus(m, "held")
-          const actions = await db.selectFrom("actions.link").select("action_id").where("record_type", "=", "meeting").where("record_id", "=", m.id).execute()
-          const decisions = await db.selectFrom("projects.decision").select("id").where("meeting_id", "=", m.id).execute()
-          return { ...held, logged: { actions: actions.length, decisions: decisions.length } }
+          return closer.close(m)
         },
       },
       setAttendees: {

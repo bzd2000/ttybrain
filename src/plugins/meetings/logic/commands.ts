@@ -4,6 +4,7 @@
 // first positionals name the meeting and the verb.
 import { readFile } from "node:fs/promises"
 import { addDays, currentContext, formatRef, formatTable, ValidationError, type FlagDef, type PluginContext } from "@ttybrain/api"
+import type { Closed } from "./close"
 import type { Store } from "./records"
 import { KIND_INPUTS, type MeetingRecord, type SeriesRecord, type SubjectType, type TalkRecord } from "./schema"
 import type { TalkList, Talks } from "./talk"
@@ -395,11 +396,11 @@ export function registerCommands(ctx: PluginContext, store: Store, talks: Talks)
   ctx.command({
     thing: "meeting",
     verb: "close",
-    summary: "mark a meeting held and say how many actions and decisions came from it",
+    summary: "mark a meeting held: unticked talk items stay for next time, a 1:1's notes go on the person",
     args: [{ name: "meeting", required: true }],
     run: async ({ args }) => {
-      const m: MeetingRecord & { logged: { actions: number; decisions: number } } = await write().closeMeeting!({ ref: args.meeting })
-      return { json: m, text: `${m.ref} held\nlogged: ${plural(m.logged.actions, "action")}, ${plural(m.logged.decisions, "decision")}` }
+      const m: Closed = await write().closeMeeting!({ ref: args.meeting })
+      return { json: m, text: m.message }
     },
   })
 

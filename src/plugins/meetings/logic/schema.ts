@@ -2,7 +2,8 @@
 // 001: meeting, attendee, agenda_item. 002 (the meetings rework, design §5.1–5.2): every meeting may have a subject
 // (a person or a project) and belong to a recurring `series`; kinds become one_on_one, project and board; the
 // children no longer cascade (rule 6), so the meetings plugin deletes them itself. 003 (design §5.3): talk items, the
-// things to raise with a person or about a project.
+// things to raise with a person or about a project. 004 (design §5.3): the talk items a meeting kept open for next time
+// when it was closed, so a held meeting still shows what it covered.
 import { sql, Type, type Kysely, type PluginContext, type Static } from "@ttybrain/api"
 
 export const MEETING_KINDS = ["one_on_one", "project", "board"] as const
@@ -235,8 +236,22 @@ async function migration003(db: Kysely<any>): Promise<void> {
   await db.schema.createIndex("talk_item_meeting").on("talk_item").column("meeting_id").execute()
 }
 
+// The talk items that were on a meeting's agenda and still open when it was closed (kept for next time), in agenda
+// order. What was discussed in it is on the item itself (`talk_item.meeting_id`). No ON DELETE actions (rule 6); only
+// held meetings have rows, and held meetings are never deleted.
+async function migration004(db: Kysely<any>): Promise<void> {
+  await db.schema
+    .createTable("talk_kept")
+    .addColumn("meeting_id", "integer", (c) => c.notNull().references("meeting.id"))
+    .addColumn("talk_id", "integer", (c) => c.notNull().references("talk_item.id"))
+    .addColumn("position", "integer", (c) => c.notNull()) // its place on the agenda at close
+    .addPrimaryKeyConstraint("talk_kept_pk", ["meeting_id", "talk_id"])
+    .execute()
+}
+
 export function registerSchema(ctx: PluginContext): void {
   ctx.migration("001", migration001)
   ctx.migration("002", migration002)
   ctx.migration("003", migration003)
+  ctx.migration("004", migration004)
 }

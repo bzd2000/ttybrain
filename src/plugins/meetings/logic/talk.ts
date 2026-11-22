@@ -151,6 +151,8 @@ export function makeTalks(ctx: PluginContext, store: Store) {
   // A meeting's talk items (M5). A 1:1 or project meeting: the subject's open items (for a project, then people's
   // items tagged with it), each group led by the items already discussed in this meeting (ticked, in the order they
   // were). A board meeting: the board project's talk-list; what it took onto its agenda (M8) is discussed and gone.
+  // A held meeting shows what it covered: the items discussed in it, then those it kept open at its close (whatever
+  // became of them since), not the subject's list of today.
   async function agenda(meeting: string): Promise<{ meeting: string; items: Talk[] }> {
     const m = await store.meeting(meeting)
     const subject = await db.selectFrom("meeting").select(["subject_type", "subject_id"]).where("id", "=", m.id).executeTakeFirstOrThrow()
@@ -159,12 +161,24 @@ export function makeTalks(ctx: PluginContext, store: Store) {
     const id = Number(subject.subject_id)
     const here = m.kind === "board" ? [] : await discussedIn(m.id)
     const own = (r: Row) => r.subject_type === type && r.subject_id === id
-    const tagged = type === "project" ? await taggedOpen(id) : []
-    const rows = [...here.filter(own), ...(await ownOpen(type, id)), ...here.filter((r) => !own(r)), ...tagged]
+    const ticked = new Set(here.map((r) => r.id))
+    const rest = m.status === "held" ? (await keptIn(m.id)).filter((r) => !ticked.has(r.id)) : [...(await ownOpen(type, id)), ...(type === "project" ? await taggedOpen(id) : [])]
+    const rows = [...here.filter(own), ...rest.filter(own), ...here.filter((r) => !own(r)), ...rest.filter((r) => !own(r))]
     return { meeting: m.ref, items: await records(rows) }
   }
   const discussedIn = async (meetingId: number) =>
     (await select().where("meeting_id", "=", meetingId).where("status", "=", "discussed").orderBy("updated_at").orderBy("id").execute()).map(toRow)
+  // The items a held meeting kept open at its close, in the order they were on its agenda.
+  async function keptIn(meetingId: number): Promise<Row[]> {
+    const kept = await db.selectFrom("talk_kept").select(["talk_id", "position"]).where("meeting_id", "=", meetingId).orderBy("position").execute()
+    if (kept.length === 0) return []
+    const byId = new Map((await select().where("id", "in", kept.map((k) => Number(k.talk_id))).execute()).map((r) => [Number(r.id), toRow(r)]))
+    return kept.map((k) => byId.get(Number(k.talk_id))!).filter((r) => r !== undefined)
+  }
+  // Remembers the items a meeting keeps open as it closes (its agenda's open items, in agenda order).
+  async function keep(meetingId: number, items: Array<{ id: number }>): Promise<void> {
+    for (const [n, t] of items.entries()) await db.insertInto("talk_kept").values({ meeting_id: meetingId, talk_id: t.id, position: n + 1 }).execute()
+  }
 
   // Gives a subject's open items positions 1..n in the given order. Two passes, so the unique position never clashes.
   async function reorder(ids: number[]): Promise<void> {
@@ -186,7 +200,7 @@ export function makeTalks(ctx: PluginContext, store: Store) {
     for (const r of await discussedIn(meetingId)) await reopen(r)
   }
 
-  return { row, item, list, agenda, records, groups, reorder, openIds, reopen, reopenDiscussedIn }
+  return { row, item, list, agenda, records, groups, reorder, openIds, reopen, reopenDiscussedIn, discussedIn, keep }
 }
 
 export function registerTalk(ctx: PluginContext, store: Store, talks: Talks): void {
