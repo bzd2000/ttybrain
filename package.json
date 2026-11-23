@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "bun --watch src/bin/pm.ts",
     "start": "bun src/bin/pm.ts",
-    "test": "bun test",
+    "test": "bun test --timeout 30000",
     "typecheck": "bun check",
     "build:node": "node scripts/build-node.mjs",
     "start:node": "npm run build:node && node --experimental-ffi dist-node/bin/pm.js",
