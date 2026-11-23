@@ -80,6 +80,8 @@ npm run run:node              # run the existing dist-node/ build without rebuil
 
 Arguments go after `--`, e.g. `npm run run:node -- project list`.
 
+To compare the TUI with the screen designs (Linux or Windows PowerShell): `bun run seed:dev` fills `.ttybrain-dev/` with the designs' example data (`--set 11-13` for the first designs, `--fresh` to replace an existing dev database), then `bun run start:dev` opens the TUI on it (`bun run pm:dev project list` for the CLI).
+
 The Node FFI warning on `start:node` is expected. The CLI itself needs no flag.
 
 ## License

@@ -35,3 +35,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # node build output
 dist-node
+
+# local dev database (bun run seed:dev)
+.ttybrain-dev/
