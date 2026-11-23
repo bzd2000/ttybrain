@@ -42,8 +42,7 @@ const cols = (texts: string[], widths = COLS) =>
 const inside = (frame: string, i: number) => (line(frame, i).split("│")[1] ?? "").slice(1).trimEnd()
 
 test("Actions as designed", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   tui.input.pressKey("4")
   const frame = await until(tui, (f) => f.includes("Invite Marie to design walkthrough") && f.includes("Later · 34"))
@@ -96,8 +95,7 @@ test("Actions as designed", async () => {
 
 // At 80×24 Owner goes first, so Linked to stays with whole codes and names; the due column stays too.
 test("Actions at 80x24 drops Owner, keeps Linked to whole", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width: 80, height: 24 })
   tui.input.pressKey("4")
   const frame = await until(tui, (f) => f.includes("Book vendor demo slot") && f.includes("Pilot user list"))

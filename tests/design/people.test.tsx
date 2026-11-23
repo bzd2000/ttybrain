@@ -61,8 +61,7 @@ const TEAM = [
 ]
 
 async function people(width: number, height: number): Promise<RenderedTui> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width, height })
   tui.input.pressKey("3")
   await until(tui, (f) => f.includes("Sofie Lambert") && (width < 110 || f.includes("Interactions")))

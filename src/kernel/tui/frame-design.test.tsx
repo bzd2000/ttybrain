@@ -22,8 +22,7 @@ afterEach(async () => {
 })
 
 async function open(): Promise<RenderedTui> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width: WIDTH, height: HEIGHT })
   await tui.frame()
   return tui
@@ -101,8 +100,7 @@ test("record breadcrumbs: screen chip, code cyan, label; no extra line", async (
 // At 80 columns the space between the crumb and the badge gives way first, then the crumb's detail; only then is the
 // label cut, with `…`, never the `› ` or the code.
 test("record crumb at 80 columns: the spacer goes first, then the label is cut with …", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   const t = (tui = await renderTui(kernel, { width: 80, height: 24 }))
   await t.nav.open("@anna")
   // The spacer is gone and the detail gives way (a person's crumb has no ref); the name stays whole.

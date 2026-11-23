@@ -125,7 +125,8 @@ const SCREENS: Screen[] = [
       t.input.pressArrow("right")
       await until(t, (f) => f.includes("Ask for this meeting"))
       t.input.pressArrow("down")
-      return until(t, (f) => f.includes("Prep · CRM replatforming") && f.includes("Overdue actions"))
+      // The ask is the prep's last section; at 80×24 Overdue actions is below the panel's fold.
+      return until(t, (f) => f.includes("Prep · CRM replatforming") && f.includes("contingency budget") && (f.split("\n").length < 40 || f.includes("Overdue actions")))
     },
   },
   {
@@ -279,8 +280,7 @@ const hints = (frame: string) =>
     .filter(Boolean)
 
 async function render(s: Screen, width: number, height: number): Promise<string> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: s.meetings ? "2026-11-20" : "2026-11-12" })
-  await (s.meetings ? seedMeetings(kernel) : seedDesign(kernel))
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: s.meetings ? "2026-11-20" : "2026-11-12", seed: s.meetings ? seedMeetings : seedDesign })
   tui = await renderTui(kernel, { width, height })
   const frame = await s.open(tui)
   tui.destroy()

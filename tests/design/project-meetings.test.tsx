@@ -53,11 +53,11 @@ const TALK = [3]
 const PAST = [9, 25, 13]
 
 async function crm(tab: "meetings" | "talk", width = 118, height = 36): Promise<{ t: RenderedTui; frame: string }> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
-  await seedMeetings(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width, height })
   await tui.nav.open("#CRM", tab)
-  const ready = (f: string) => (tab === "meetings" ? f.includes("Past meetings") && f.includes("Prep · since 27 Oct") && f.includes("A-1 Send revised budget to Peter") : f.includes("To talk about · 3 open"))
+  // The action's title is cut at 80 columns.
+  const ready = (f: string) => (tab === "meetings" ? f.includes("Past meetings") && f.includes("Prep · since 27 Oct") && f.includes("A-1 Send revised b") : f.includes("To talk about · 3 open"))
   await until(tui, ready)
   await tui.settle()
   return { t: tui, frame: await until(tui, ready) }

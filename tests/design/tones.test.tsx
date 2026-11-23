@@ -40,8 +40,7 @@ async function tab(t: RenderedTui, ref: string, name: string, text: string): Pro
 }
 
 async function start(): Promise<RenderedTui> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   const people = kernel.runtime("people")!.self().write as Record<string, (i: any) => Promise<any>>
   await runWithContext(kernel.context(), () => people.addNote!({ person: "marie", kind: "interaction", project: "CRM", text: "Walkthrough agreed", date: "2026-11-10" }))
   tui = await renderTui(kernel, { width: 118, height: 36 })
@@ -96,7 +95,7 @@ test("a person's Projects & roles tab: codes cyan", async () => {
 
 test("a person's Actions tab: refs muted, codes cyan", async () => {
   const t = await start()
-  await tab(t, "@peter", "Actions", "Proj.")
+  await tab(t, "@peter", "Actions", "Linked to")
   const spans = await t.spans()
   expect(fgAt(spans, "A-1", "Send revised budget to Peter")).toBe(theme.muted)
   expect(fgAt(spans, "CRM", "Send revised budget to Peter")).toBe(theme.cyan)

@@ -40,8 +40,7 @@ const inside = (frame: string, i: number, side: 0 | 1) => (line(frame, i).split(
 const AGENDA = [3, 24, 7]
 
 async function board(width = 118, height = 36): Promise<{ t: RenderedTui; frame: string }> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
-  await seedMeetings(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width, height })
   await tui.nav.open("#BOARD", "meetings")
   await until(tui, (f) => f.includes("Past meetings"))
@@ -118,8 +117,7 @@ test("Board meeting at 80×24: codes whole, panels keep their borders, whole hin
 })
 
 test("a 1:1 has no tab row and no Actions tab (M11)", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
-  await seedMeetings(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   await tui.nav.open("M-7")
   const frame = await until(tui, (f) => f.includes("Talk · 0 of 5 discussed"))

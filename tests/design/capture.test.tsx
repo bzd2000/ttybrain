@@ -41,8 +41,7 @@ async function until(t: RenderedTui, check: (frame: string) => boolean): Promise
 const box = (frame: string, left: number) => frame.split("\n").map((l) => l.slice(left, left + 76))
 
 test("Quick capture as designed", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width: WIDTH, height: HEIGHT })
   tui.input.pressKey("2")
   await until(tui, (f) => f.includes("CRM replatforming"))
@@ -134,8 +133,7 @@ const talkItems = (about: string) =>
 const inboxItems = () => kernel!.db.raw.prepare("SELECT text FROM inbox_item ORDER BY id").all([]) as Array<{ text: string }>
 
 async function captureOnActions(): Promise<RenderedTui> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
-  await seedMeetings(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width: WIDTH, height: HEIGHT })
   tui.input.pressKey("4")
   await until(tui, (f) => f.includes("Actions · 7 open"))

@@ -52,10 +52,9 @@ const STAKEHOLDERS = [17, 24, 10]
 // The 2026-11-20 designs put "Upcoming meetings · next 7 days" first: the 2026-11-13 design's panels follow it,
 // paired in the same order (one place later each), and its bar has no `q quit`.
 test("Attention as designed", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width: 118, height: 36 })
-  const frame = await until(tui, (f) => f.includes("Marie Dubois") && f.includes("Send revised budget to Peter") && f.includes("I-5"))
+  const frame = await until(tui, (f) => f.includes("Marie Dubois") && f.includes("Send revised budget to…") && f.includes("I-5"))
 
   // The lead block: Upcoming meetings (none in the next 7 days: no header, no note) and Overdue actions beside it.
   expect(line(frame, 1)).toMatch(/^ ╭─ Upcoming meetings · next 7 days ─+╮ ╭─ Overdue actions · 3 ─+╮$/)
@@ -184,8 +183,7 @@ const rightInside = (frame: string, i: number) => {
 }
 
 test("Attention: Upcoming meetings as designed (2026-11-20 home)", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
-  await seedMeetings(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   const frame = await until(tui, (f) => f.includes("Before 1:1 Anna") && f.includes("Ask HR about the AWS training budget") && f.includes("5 items") && f.includes("Marie Dubois"))
 
@@ -264,8 +262,7 @@ test("Attention: Upcoming meetings as designed (2026-11-20 home)", async () => {
 })
 
 test("Attention's Upcoming meetings: Enter opens the meeting, t adds to its talk-list, x in the action block marks it done", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
-  await seedMeetings(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   await until(tui, (f) => f.includes("Before 1:1 Anna"))
   const talks = async (about: string) =>
@@ -279,7 +276,8 @@ test("Attention's Upcoming meetings: Enter opens the meeting, t adds to its talk
   tui.input.pressKey("s", { ctrl: true })
   await until(tui, (f) => !f.includes("New talk item") && f.includes("1:1 Anna r"))
   expect((await talks("@anna")).at(-1)).toBe("Conference budget")
-  frame = await until(tui, (f) => inside(f, 3, 0).includes(cols([10, 16, 7, 7], ["Mon 23", "1:1 Anna r", "Anna", "5"])))
+  frame = await until(tui, (f) => inside(f, 3, 0).startsWith(cols(MEETINGS, ["Mon 23", "1:1 Anna r", "Anna", "5"])))
+  expect(inside(frame, 3, 0)).toBe(cols(MEETINGS, ["Mon 23", "1:1 Anna r", "Anna", "5", "2 · 1 late"]))
 
   // Down to the Board, then into its block: x marks the Board's action done.
   for (let i = 0; i < 4; i++) tui.input.pressArrow("down")

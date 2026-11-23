@@ -40,8 +40,7 @@ const inside = (frame: string, i: number, side: 0 | 1) => (line(frame, i).split(
 const lines = (frame: string) => frame.split("\n")
 
 async function openPrep(width: number, height: number): Promise<{ t: RenderedTui; frame: string }> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width, height })
   await tui.settle()
   await tui.nav.open("M-2")
@@ -49,7 +48,8 @@ async function openPrep(width: number, height: number): Promise<{ t: RenderedTui
   tui.input.pressArrow("right")
   await until(tui, (f) => f.includes("Ask for this meeting"))
   tui.input.pressArrow("down")
-  const frame = await until(tui, (f) => f.includes("Prep · CRM replatforming") && f.includes("Overdue actions") && f.includes("Design slipping") && f.includes("Approve 2-week"))
+  // At 80×24 Overdue actions is below the panel's fold.
+  const frame = await until(tui, (f) => f.includes("Prep · CRM replatforming") && (height < 36 || f.includes("Overdue actions")) && f.includes("Design slipping") && f.includes("Approve 2-week"))
   return { t: tui, frame }
 }
 
