@@ -3,6 +3,7 @@
   "module": "src/bin/pm.ts",
   "type": "module",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "scripts": {
     "dev": "bun --watch src/bin/pm.ts",
     "start": "bun src/bin/pm.ts",
