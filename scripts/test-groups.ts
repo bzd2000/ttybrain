@@ -54,6 +54,11 @@ if (what === "check") {
   const total = Object.values(groups).reduce((n, files) => n + files.length, 0)
   console.log(`test-groups ok: ${Object.entries(groups).map(([g, files]) => `${g} ${files.length}`).join(", ")} (${total} files)`)
 } else if (what !== undefined && what in groups) {
+  // An empty group would make `bun test` run the whole suite: refuse it instead.
+  if (groups[what]!.length === 0) {
+    console.error(`test-groups: group "${what}" has no test files`)
+    process.exit(1)
+  }
   // `./` makes each one a path to bun test, not a name filter.
   const proc = Bun.spawn([process.execPath, "test", ...args, ...groups[what]!.map((f) => `./${f}`)], { cwd: root, stdio: ["inherit", "inherit", "inherit"] })
   process.exit(await proc.exited)

@@ -80,7 +80,12 @@ async function snapshot(opts: Opts, from: Uint8Array | undefined, fn: (k: Kernel
 
 function template(key: string, make: () => Promise<Uint8Array | undefined>): Promise<Uint8Array | undefined> {
   let file = templates.files.get(key)
-  if (!file) templates.files.set(key, (file = make()))
+  if (!file) {
+    file = make()
+    templates.files.set(key, file)
+    // A failed build isn't kept: the next test with this key tries again and reports its own error.
+    file.catch(() => templates.files.delete(key))
+  }
   return file
 }
 
