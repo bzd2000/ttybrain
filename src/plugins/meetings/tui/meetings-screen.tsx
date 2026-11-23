@@ -8,8 +8,11 @@
 //   (meetings from before subjects, M7; a muted line under the table says how to give one a subject). Groups that
 //   would be empty are left out.
 // - "Series · n" (right): Series · About · Rhythm (short), the series that have not ended: 1:1s, then project, then
-//   board series, each by next date.
-// - Keys: Tab switches panel; Enter opens the meeting (a series: what it is about); n a one-off meeting, N a new
+//   board series, each by next date; as tall as its rows (at most half the column).
+// - "Boards · n" (right, under Series; design §5.7): the boards that are not archived, by code: the code (cyan, its
+//   column as wide as the longest code, so codes stay whole) and the name.
+// - Keys: Tab cycles Upcoming → Series → Boards; Enter opens the meeting (a series: what it is about; a board: its
+//   view); n a one-off meeting, N a new
 //   series, s skips the selected meeting's date (after a confirmation), m moves it (a date form). The bar is the
 //   design's: `tab panel   enter open   n one-off   N series   s skip date   m move date   i capture`.
 import { createMemo, createSignal, Show, untrack } from "solid-js"
@@ -43,6 +46,7 @@ import { dayOnly, makeUpcoming, MUTED_DASH, type Upcoming } from "./upcoming"
 
 export const EMPTY = "No meetings coming up. Press n or N to add one."
 export const SERIES_EMPTY = "No series yet. Press N to add one."
+export const BOARDS_EMPTY = "No boards yet."
 export const skipQuestion = (m: { title: string; date: string }) => `Skip ${m.title} on ${dayDate(m.date)}?`
 export const closeQuestion = (ref: string) => `Close ${ref} as held?`
 // The status line after closing: closeMeeting's message (`1:1 Anna closed · 2 discussed, 3 kept for next time · …`).
@@ -84,7 +88,12 @@ export function rangeLabel(from: string, to: string): string {
 
 type Row = Upcoming & { status?: string }
 type Series = { ref: string; title: string; kind: keyof typeof KIND_ORDER; about: Cell; subject: { type: SubjectType; id: number }; rhythm: string; next: string | null }
-type Loaded = { groups: Array<{ group: TableGroup; meetings: Row[] }>; series: Series[]; noSubject: string | undefined }
+type Board = { ref: string; code: string; name: string }
+type Loaded = { groups: Array<{ group: TableGroup; meetings: Row[] }>; series: Series[]; boards: Board[]; noSubject: string | undefined }
+const boardColumns = (codeWidth: number): TableColumn[] => [
+  { id: "code", title: "", width: codeWidth },
+  { id: "name", title: "", width: "grow", minWidth: 10 },
+]
 
 export function MeetingsScreen() {
   const rt = useRuntime()
@@ -156,7 +165,12 @@ export function MeetingsScreen() {
       series.push({ ref: s.ref, title: s.title, kind: s.kind, about: await upcoming.about(subject), subject, rhythm: rhythmLabel(parseRhythm(s.rhythm), "short"), next: s.next })
     }
     series.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || (a.next ?? "9999").localeCompare(b.next ?? "9999") || Number(a.ref.slice(2)) - Number(b.ref.slice(2)))
-    return { groups, series, noSubject: subjectless[0]?.ref }
+    const boards = (await rt.data.selectFrom("board").select(["code", "name"]).where("archived_at", "is", null).orderBy("code").execute()).map((r) => ({
+      ref: `#${String(r.code)}`,
+      code: String(r.code),
+      name: String(r.name),
+    }))
+    return { groups, series, boards, noSubject: subjectless[0]?.ref }
   })
 
   // The selection is kept in the route's params while a record is open (Esc pops to this screen again).
@@ -168,7 +182,7 @@ export function MeetingsScreen() {
     const here = nav.route()
     if (here.kind === "screen" && here.params?.selected !== ref) nav.replaceParams({ ...here.params, selected: ref })
   }
-  const [focus, setFocus] = createSignal<0 | 1>(0)
+  const [focus, setFocus] = createSignal<0 | 1 | 2>(0)
   const [current, setCurrent] = createSignal<string | undefined>()
   const [want, setWant] = createSignal<string | undefined>(params.selected)
 
@@ -186,6 +200,8 @@ export function MeetingsScreen() {
   const fit = (texts: string[], min: number, max: number) => Math.min(max, Math.max(min, ...texts.map((t) => t.length)))
   const aboutWidth = () => fit((q.data()?.series ?? []).map((s) => s.about.text), 7, 16)
   const upcomingAbout = () => fit((q.data()?.groups ?? []).flatMap((g) => g.group.rows.map((r) => (r.cells.about as Cell).text)), 7, 16)
+  const boardRows = createMemo((): TableRow[] => (q.data()?.boards ?? []).map((b) => ({ ref: b.ref, cells: { code: { text: b.code, tone: "cyan" }, name: b.name } })))
+  const codeWidth = () => fit((q.data()?.boards ?? []).map((b) => b.code), 2, 16)
   const rhythmWidth = () => fit((q.data()?.series ?? []).map((s) => s.rhythm), 14, 18)
 
   const oneOff = async () => {
@@ -208,7 +224,8 @@ export function MeetingsScreen() {
     const ch = printable(key)
     const m = focus() === 0 ? selected() : undefined
     const planned = m !== undefined && (m.status === undefined || m.status === "planned")
-    if (key.name === "tab" && !key.shift) setFocus((f) => (f === 0 ? 1 : 0))
+    if (key.name === "tab" && !key.shift) setFocus((f) => ((f + 1) % 3) as 0 | 1 | 2)
+    else if (key.name === "tab" && key.shift) setFocus((f) => ((f + 2) % 3) as 0 | 1 | 2)
     else if (ch === "n") void oneOff()
     else if (ch === "N") void overlay.openForm("series", "series", {})
     else if (ch === "s") {
@@ -239,7 +256,7 @@ export function MeetingsScreen() {
         </Panel>
       </box>
       <box flexDirection="column" flexGrow={10} flexBasis={0} minHeight={0}>
-        <Panel title="Series" count={q.data()?.series.length} focused={keys.active() && focus() === 1} grow>
+        <Panel title="Series" count={q.data()?.series.length} focused={keys.active() && focus() === 1} shrink>
           <Show when={q.data() !== undefined}>
             <Table
               columns={seriesColumns(aboutWidth(), rhythmWidth())}
@@ -247,6 +264,18 @@ export function MeetingsScreen() {
               onOpen={(ref) => void openSeriesSubject(ref)}
               focused={keys.active() && focus() === 1}
               empty={SERIES_EMPTY}
+            />
+          </Show>
+        </Panel>
+        <Panel title="Boards" count={q.data()?.boards.length} focused={keys.active() && focus() === 2} grow>
+          <Show when={q.data() !== undefined}>
+            <Table
+              columns={boardColumns(codeWidth())}
+              rows={boardRows()}
+              header={false}
+              onOpen={(ref) => void nav.open(ref)}
+              focused={keys.active() && focus() === 2}
+              empty={BOARDS_EMPTY}
             />
           </Show>
         </Panel>

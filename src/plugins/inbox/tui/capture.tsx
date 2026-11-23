@@ -5,8 +5,8 @@
 // `s` (a fast Esc s arrives as Alt+S, which saves too), saves through `capture` and closes with `captured I-n`;
 // Esc not followed by `s` within ESC_WINDOW_MS cancels. While saving, further saves and Esc are ignored.
 // While the word at the cursor is a tag being typed (`#cr`, `@ma`), up to 5 `tags.suggest` results show: ↑↓ pick,
-// Tab replaces the word with the ref and a space. On a project's or a person's record view, the text starts with
-// its tag and a line says why.
+// Tab replaces the word with the ref and a space. On a project's, a board's or a person's record view, the text
+// starts with its tag and a line says why.
 // The text is kept as a draft (`inbox:capture`): a cancel keeps it (`draft kept`), a save deletes it, and the next
 // capture first offers it (r restore · x discard · Esc close); a restored draft takes the place of the prefill.
 // Capture routes (TuiContext.captureRoute, the meetings plugin's `talk @anna …`): the first route whose preview of the
@@ -112,9 +112,9 @@ export function CaptureOverlay(props: { close(): void }) {
   const context = useQuery(async (): Promise<Prefill | null> => {
     if (route.kind !== "record") return null
     const found = await rt.records.resolve(route.ref)
-    if (!found || (found.type !== "project" && found.type !== "person")) return null
+    if (!found || (found.type !== "project" && found.type !== "person" && found.type !== "board")) return null
     const tag = await rt.records.refOf(found.type, found.id)
-    const why = found.type === "project" ? `the ${tag.replace(/^#/, "")} project` : await rt.records.label(tag)
+    const why = found.type === "project" ? `the ${tag.replace(/^#/, "")} project` : found.type === "board" ? `the ${await rt.records.label(tag)}` : await rt.records.label(tag)
     return { tag, why }
   })
   const [prefill, setPrefill] = createSignal<Prefill | undefined>(undefined)

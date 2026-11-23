@@ -266,6 +266,14 @@ describe("upgrading meetings 2.0.0 data: boards", () => {
       'board #CRMB "CRM replatforming" now holds the board meetings of project #CRM; open talk items stay on #CRM; rename it: ttybrain board edit #CRMB --code <CODE>',
       'board #OPSB "Operations board" now holds the board meetings of project #OPS; rename it: ttybrain board edit #OPSB --code <CODE>',
     ])
+    // What the notice says about the talk items was decided when the step ran: a later item on OPS, or CRM's item
+    // dropped, changes nothing in it.
+    const before = k.plugins.find((p) => p.id === "meetings")!.notices
+    expect((await cli(k, "talk", "add", "#OPS", "New item")).code).toBe(0)
+    expect((await cli(k, "talk", "drop", "T-1")).code).toBe(0)
+    await close(k)
+    const again = await boot(old.home)
+    expect(again.plugins.find((p) => p.id === "meetings")!.notices).toEqual(before)
   })
 
   test("running the step again changes nothing", async () => {

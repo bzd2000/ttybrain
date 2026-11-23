@@ -179,13 +179,27 @@ describe("boards as subjects", () => {
     const one = await failure(w("addMeeting", { about: "#MB", title: "x", date: "today", kind: "one_on_one" }))
     expect([one.message, one.field]).toEqual(["a 1:1 needs a person; #MB is a board", "kind"])
     const person = await failure(w("addMeeting", { about: "@anna", title: "x", date: "today", kind: "board" }))
-    expect([person.message, person.field, person.hint]).toEqual(["a board meeting needs a board; @anna is a person", "kind", "add one: ttybrain board add <CODE> <name>"])
+    const HINT = "make it about a board (#MB); add one: ttybrain board add <CODE> <name>"
+    expect([person.message, person.field, person.hint]).toEqual(["a board meeting needs a board; @anna is a person", "kind", HINT])
+    // Kind board needs a board: on a project it is refused too (meeting, series, an edit of the kind, a new subject).
+    const onProject = await failure(w("addMeeting", { about: "#CRM", title: "x", date: "today", kind: "board" }))
+    expect([onProject.name, onProject.message, onProject.field, onProject.hint]).toEqual(["ValidationError", "a board meeting needs a board; #CRM is a project", "kind", HINT])
+    const series = await failure(w("addSeries", { about: "#CRM", title: "x", kind: "board", every: "weekly on fri", from: "today" }))
+    expect([series.message, series.hint]).toEqual(["a board meeting needs a board; #CRM is a project", HINT])
+    const moved = await failure(w("setSubject", { meeting: "M-1", about: "#CRM" }))
+    expect([moved.message, moved.hint]).toEqual(["a board meeting needs a board; #CRM is a project", HINT])
+    expect(sql("SELECT kind, subject_type FROM meetings_meeting WHERE id = 1")).toEqual([{ kind: "board", subject_type: "board" }])
     const edit = await failure(w("editMeeting", { ref: "M-1", kind: "project" }))
     expect(edit.message).toBe("a project meeting needs a project; #MB is a board")
     // `meeting subject` to a board makes it a board meeting.
     await ok("meeting", "add", "Steering", "--about", "#CRM", "--date", "2026-12-04")
     expect((await ok("meeting", "subject", "M-3", "#MB")).out).toBe("M-3 about #MB (board)\n")
     expect((await ok("meeting", "subject", "M-3", "@anna")).out).toBe("M-3 about @anna (one_on_one)\n")
+    await ok("meeting", "add", "Steering 2", "--about", "#CRM", "--date", "2026-12-11")
+    const kind = await failure(w("editMeeting", { ref: "M-4", kind: "board" }))
+    expect(kind.message).toBe("a board meeting needs a board; #CRM is a project")
+    const cmd = await cli("meeting", "add", "x", "--about", "#CRM", "--kind", "board", "--date", "today")
+    expect([cmd.code, cmd.err]).toEqual([1, `error: a board meeting needs a board; #CRM is a project\nhint: ${HINT}\n`])
   })
 
   test("a board series makes its occurrences; upcoming and meeting list show the board", async () => {

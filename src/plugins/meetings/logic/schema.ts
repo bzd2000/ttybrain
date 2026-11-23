@@ -436,6 +436,14 @@ async function migration006(db: Kysely<any>): Promise<void> {
   )
 }
 
+// Whether the `boards-from-projects` step left the project's open talk items on it (it moved board meetings off a
+// project that still had other meetings or series, and open items of its own): decided when the step ran, so the
+// notice that names the board says so as long as it is shown, and only then (an item added to the project later
+// does not change it). 0 for a board made any other way.
+async function migration007(db: Kysely<any>): Promise<void> {
+  await db.schema.alterTable("board").addColumn("talk_stayed", "integer", (c) => c.notNull().defaultTo(0)).execute()
+}
+
 // In order. Exported so that upgrade tests can build a database as an earlier version left it.
 export const MIGRATIONS: ReadonlyArray<readonly [string, (db: Kysely<any>) => Promise<void>]> = [
   ["001", migration001],
@@ -444,6 +452,7 @@ export const MIGRATIONS: ReadonlyArray<readonly [string, (db: Kysely<any>) => Pr
   ["004", migration004],
   ["005", migration005],
   ["006", migration006],
+  ["007", migration007],
 ]
 
 export function registerSchema(ctx: PluginContext): void {

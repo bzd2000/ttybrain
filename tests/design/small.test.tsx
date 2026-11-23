@@ -140,14 +140,15 @@ const SCREENS: Screen[] = [
   {
     name: "Meetings",
     meetings: true,
-    must: MEETING_WORDS,
+    must: [...MEETING_WORDS, "BOARD Management board"], // the Boards panel's code and name
     chip: "5 Meetings",
     panels: true,
     open: async (t) => {
       t.input.pressKey("5")
-      await until(t, (f) => f.includes("Held, closes itself") && f.split("BOARD").length > 2)
+      const ready = (f: string) => f.includes("Held, closes itself") && f.split("BOARD").length > 3
+      await until(t, ready)
       await t.settle()
-      return until(t, (f) => f.includes("Held, closes itself") && f.split("BOARD").length > 2)
+      return until(t, ready)
     },
   },
   {
@@ -212,10 +213,32 @@ const SCREENS: Screen[] = [
     },
   },
   {
+    name: "Board · Meetings",
+    meetings: true,
+    must: ["BOARD", "Board · monthly, last Fri", "Your actions for BOARD", "Marie D., Peter J.", "30 Oct    Board"],
+    chip: "5 Meetings",
+    panels: true,
+    open: async (t) => {
+      await t.nav.open("#BOARD", "meetings")
+      return settled(t, (f) => f.includes("Past meetings") && f.includes("A-5"))
+    },
+  },
+  {
+    name: "Board · Talk",
+    meetings: true,
+    must: ["BOARD", "Your actions for BOARD"],
+    chip: "5 Meetings",
+    panels: true,
+    open: async (t) => {
+      await t.nav.open("#BOARD", "talk")
+      return settled(t, (f) => f.includes("To talk about · 2 open") && f.includes("Hiring freeze") && f.includes("A-5"))
+    },
+  },
+  {
     name: "Board meeting",
     meetings: true,
     must: ["BOARD", "CRM", "ERP", "HRP"],
-    chip: "2 Projects",
+    chip: "5 Meetings",
     panels: true,
     open: async (t) => {
       await t.nav.open("#BOARD", "meetings")
@@ -237,6 +260,21 @@ const SCREENS: Screen[] = [
       t.input.pressKey("i")
       await until(t, (f) => f.includes("Capture to inbox"))
       await t.input.typeText("talk @anna holiday planning #CRM ")
+      return settled(t, (f) => f.includes("talk-list"))
+    },
+  },
+  {
+    name: "Capture to a board's talk-list",
+    meetings: true,
+    must: ["Management board's talk-list"],
+    chip: "4 Actions",
+    panels: true,
+    open: async (t) => {
+      t.input.pressKey("4")
+      await until(t, (f) => f.includes("Actions · 7 open"))
+      t.input.pressKey("i")
+      await until(t, (f) => f.includes("Capture to inbox"))
+      await t.input.typeText("talk #BOARD office move ")
       return settled(t, (f) => f.includes("talk-list"))
     },
   },

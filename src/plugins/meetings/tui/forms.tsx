@@ -46,12 +46,13 @@ export function With<T>(props: { load: () => Promise<T | null>; close(): void; c
 }
 
 // The field an unknown person or project belongs under (the operations name none for these lookups). A subject
-// that does not resolve is named with its `@` or `#` (`unknown person "@zorro"`), or as `unknown person or project`.
+// that does not resolve is named with its `@` or `#` (`unknown person "@zorro"`, `unknown project or board "#X"`),
+// or as `unknown person, project or board`.
 type Lookups = { person?: string; project?: string; about?: string }
 export function fieldOf(error: unknown, lookups: Lookups): string | undefined {
-  const m = error instanceof Error ? /\bunknown (person or project|person|project) "([@#]?)/.exec(error.message) : null
+  const m = error instanceof Error ? /\bunknown (person, project or board|project or board|person|project) "([@#]?)/.exec(error.message) : null
   if (!m) return undefined
-  if (lookups.about !== undefined && (m[1] === "person or project" || m[2] !== "")) return lookups.about
+  if (lookups.about !== undefined && (m[1]!.includes(" or ") || m[2] !== "")) return lookups.about
   return lookups[m[1] as "person" | "project"]
 }
 

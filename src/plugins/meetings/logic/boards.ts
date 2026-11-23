@@ -322,6 +322,10 @@ export async function boardsFromProjects(ctx: PluginContext): Promise<Array<{ bo
       (await db.selectFrom(table).select("id").where("subject_type", "=", "project").where("subject_id", "=", pid).executeTakeFirst()) !== undefined
     const talk = !(await left("meeting")) && !(await left("series"))
     if (talk) await db.updateTable("talk_item").set(onBoard).where("subject_type", "=", "project").where("subject_id", "=", pid).where("status", "=", "open").execute()
+    else {
+      const open = await db.selectFrom("talk_item").select("id").where("subject_type", "=", "project").where("subject_id", "=", pid).where("status", "=", "open").executeTakeFirst()
+      if (open) await db.updateTable("board").set({ talk_stayed: 1 }).where("id", "=", bid).execute()
+    }
     made.push({ board: `#${c}`, project: `#${project}`, talk })
   }
   return made
@@ -332,27 +336,19 @@ function registerBoardsFromProjects(ctx: PluginContext, store: Store): void {
     await boardsFromProjects(ctx)
     return "done"
   })
-  // Until such a board is first edited (or archived): named, so the user can give it a better code; and, while the
-  // project still has open talk items of its own, that they stayed there.
+  // Until such a board is first edited (or archived): named, so the user can give it a better code; and, when the
+  // step left the project's open talk items on it (decided then: `talk_stayed`), that they stayed there.
   ctx.notices(async () => {
-    const rows = await ctx.data.selectFrom("board").select(["id", "from_project_id"]).where("from_project_id", "is not", null).orderBy("code").execute()
+    const rows = await ctx.data.selectFrom("board").select(["id", "from_project_id", "talk_stayed"]).where("from_project_id", "is not", null).orderBy("code").execute()
     const lines: string[] = []
     for (const r of rows) {
       const b = await store.boardById(Number(r.id))
       const pid = Number(r.from_project_id)
       const project = await store.subjectRef("project", pid)
       const known = project.startsWith("#")
-      const open = await ctx.data
-        .selectFrom("talk_item")
-        .select("id")
-        .where("subject_type", "=", "project")
-        .where("subject_id", "=", pid)
-        .where("status", "=", "open")
-        .executeTakeFirst()
-      const stay = known && open ? `; open talk items stay on ${project}` : ""
+      const stay = known && Number(r.talk_stayed) === 1 ? `; open talk items stay on ${project}` : ""
       lines.push(`board ${b.ref} "${b.name}" now holds the board meetings of ${known ? `project ${project}` : "a project"}${stay}; rename it: ttybrain board edit ${b.ref} --code <CODE>`)
     }
     return lines
   })
 }
-

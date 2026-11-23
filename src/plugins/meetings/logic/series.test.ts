@@ -93,7 +93,7 @@ describe("series", () => {
     expect(m1).toMatchObject({ ref: "M-1", kind: "one_on_one", about: "@karim", series: "S-1" })
   })
 
-  test("a project series: kind from the subject, explicit attendees; board kind is allowed on a project", async () => {
+  test("a project series: kind from the subject, explicit attendees; board kind needs a board", async () => {
     const k = await boot()
     const s = await w(k, "addSeries", { about: "#CRM", title: "CRM steering", every: "monthly on the 4th tue", from: "today", attendees: ["anna", "@karim"] })
     expect(s).toMatchObject({ ref: "S-1", kind: "project", about: "#CRM", rhythm: "monthly on the 4th tue", first_date: "2026-11-20", attendees: ["@anna", "@karim"], next: "2026-11-24" })
@@ -102,8 +102,11 @@ describe("series", () => {
       ["M-2", "2026-12-22", "2026-12-22", "planned"],
     ])
     expect(attendees(k, 2)).toEqual(["anna", "karim"])
-    const board = await w(k, "addSeries", { about: "CRM", title: "Board", kind: "board", every: "monthly on the last fri", from: "today" })
-    expect(board).toMatchObject({ ref: "S-2", kind: "board", attendees: [], next: "2026-11-27" })
+    const onProject = await failure(w(k, "addSeries", { about: "CRM", title: "Board", kind: "board", every: "monthly on the last fri", from: "today" }))
+    expect([onProject.name, onProject.message, onProject.field]).toEqual(["ValidationError", "a board meeting needs a board; #CRM is a project", "kind"])
+    await w(k, "addBoard", { code: "MB", name: "Management board" })
+    const board = await w(k, "addSeries", { about: "MB", title: "Board", kind: "board", every: "monthly on the last fri", from: "today" })
+    expect(board).toMatchObject({ ref: "S-2", kind: "board", about: "#MB", attendees: [], next: "2026-11-27" })
   })
 
   test("validation: rhythm, kind against the subject, unknown subject, until before from", async () => {

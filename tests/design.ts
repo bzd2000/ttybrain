@@ -91,7 +91,7 @@ type Level = "high" | "low" | null
 
 // The 2026-11-13 designs' data, as of Thu 12 Nov 2026: 12 people (7 stakeholders, 5 team), 8 projects (BI2 on
 // hold) with health, milestones, deliverables, risks and decisions, 46 open actions (3 overdue, 3 this week, 3 next
-// week, 34 later, 3 undated), M-1 "SteerCo" (28 Oct, held) and M-2 "Steering committee Q4" (4 Dec, 8 attendees,
+// week, 34 later, 3 undated), M-1 "SteerCo" (28 Oct, held) and M-2 "Steering committee Q4" (board SC, 4 Dec, 8 attendees,
 // 5 agenda items), the CRM context, and the inbox: 4 handled items (I-1 dismissed, I-2 … I-4 processed, with what
 // was made from them; captured Mon 9 Nov and yesterday, as the Inbox design) and 3 new ones (I-5 … I-7, today at
 // 09:42, 10:15 and 11:03). Only through the plugins' write operations; a failing write throws.
@@ -213,13 +213,14 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
     ]
     for (const [title, date] of decisions) await projects.addDecision!({ project: "CRM", title, date })
 
-    // M-1, the SteerCo of 28 Oct (held), a project meeting about CRM; M-2, the coming steering committee, about CRM
-    // and with an agenda naming other projects: a board meeting, so it keeps the Agenda · Prep · Notes · Export tabs
-    // the 2026-11-13 meeting prep design draws (ruling M11).
+    // M-1, the SteerCo of 28 Oct (held), a project meeting about CRM; M-2, the coming steering committee, about the
+    // board SC "Steering committee" and with an agenda naming other projects: a board meeting, so it keeps the
+    // Agenda · Prep · Notes · Export tabs the 2026-11-13 meeting prep design draws (ruling M11).
     const m1 = await meetings.addMeeting!({ about: "#CRM", title: "SteerCo", date: "2026-10-28", projects: ["CRM"], attendees: ["peter", "marie", "tom"] })
     await meetings.closeMeeting!({ ref: m1.ref })
     const attendees = ["peter", "marie", "luc", "tom", "anna", "bob", "karim", "sofie"]
-    const m2 = await meetings.addMeeting!({ about: "#CRM", title: "Steering committee Q4", date: "2026-12-04", kind: "board", attendees })
+    await meetings.addBoard!({ code: "SC", name: "Steering committee" })
+    const m2 = await meetings.addMeeting!({ about: "#SC", title: "Steering committee Q4", date: "2026-12-04", attendees })
     const ask = "Approve 2-week shift of design milestone and release of contingency budget."
     await meetings.addAgendaItem!({ meeting: m2.ref, text: "Minutes & open actions" })
     await meetings.addAgendaItem!({ meeting: m2.ref, text: "CRM status", project: "CRM", ask })
@@ -347,10 +348,11 @@ export async function seedLongRefs(kernel: Kernel): Promise<void> {
 // The 2026-11-20 meeting designs' data (docs/superpowers/specs/2026-11-20-ttybrain-meeting-screens.html), as of
 // Fri 20 Nov 2026: use with `makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })`.
 // - People: Anna Peeters, Bob Willems, Sofie Lambert, Karim Haddad, Mathias Wouters (team); Marie Dubois, Peter
-//   Janssens (stakeholders; Marie last seen 2 Oct, 49 days ago). Projects CRM (amber), ERP (red), HRP, BOARD.
+//   Janssens (stakeholders; Marie last seen 2 Oct, 49 days ago). Projects CRM (amber), ERP (red), HRP; the
+//   board BOARD "Management board" (plan ruling B5: a board, not a project).
 // - Series S-1 … S-7 in the `meetings` mock's order: 1:1 Anna (every 2 weeks on Mon from 9 Nov), 1:1 Bob (Wed, from
 //   11 Nov), 1:1 Sofie (Mon, from 16 Nov), 1:1 Karim (Wed, from 4 Nov), CRM steering (monthly, 4th Tue, from 22 Sep),
-//   ERP steering (monthly, 1st Thu; its 3 Dec skipped), Board (BOARD, board, monthly, last Fri). Their past dates
+//   ERP steering (monthly, 1st Thu; its 3 Dec skipped), Board (the board BOARD, monthly, last Fri). Their past dates
 //   are held (Karim's Wed 18 Nov is not: it has notes and closes itself on Sat 21); the CRM kick-off (14 Sep) and the
 //   ERP vendor call (Thu 26 Nov) are one-off meetings. The Board of Fri 27 Nov has the `board` mock's five agenda items.
 // - Talk-lists: Anna 4 open (Tue … today, two tagged ERP and CRM) and 1 carried over from her 1:1 of 9 Nov (where 3
@@ -397,9 +399,9 @@ export async function seedMeetings(kernel: Kernel): Promise<void> {
       ["CRM", "CRM replatforming"],
       ["ERP", "ERP vendor selection"],
       ["HRP", "HR self-service portal"],
-      ["BOARD", "Management board"],
     ])
       await projects.addProject!({ code, name })
+    await meetings.addBoard!({ code: "BOARD", name: "Management board" })
     for (const [project, person, role] of [
       ["CRM", "peter", "sponsor"],
       ["CRM", "marie", "business owner"],
@@ -421,7 +423,7 @@ export async function seedMeetings(kernel: Kernel): Promise<void> {
   await on("2026-10-02", () => people.addNote!({ person: "marie", kind: "interaction", text: "Kick-off of the CRM key user group", date: "2026-10-02" }))
 
   // The board: monthly, its October meeting held.
-  await on("2026-10-26", () => meetings.addSeries!({ about: "#BOARD", title: "Board", kind: "board", every: "monthly on the last fri", from: "2026-10-30", attendees: ["peter", "marie"] }))
+  await on("2026-10-26", () => meetings.addSeries!({ about: "#BOARD", title: "Board", every: "monthly on the last fri", from: "2026-10-30", attendees: ["peter", "marie"] }))
   await close("Board", "2026-10-30")
 
   // Anna: an item from before her 1:1 of 9 Nov stays (carried), three were discussed in it.
@@ -460,7 +462,6 @@ export async function seedMeetings(kernel: Kernel): Promise<void> {
   // Health and the talk items of the week.
   await on("2026-11-16", async () => {
     await projects.setHealth!({ project: "HRP", health: "green", comment: "On track", date: "2026-11-16" })
-    await projects.setHealth!({ project: "BOARD", health: "green", comment: "On track", date: "2026-11-16" })
     await people.addNote!({ person: "peter", kind: "interaction", text: "Worried about CRM budget", date: "2026-11-16" })
   })
   await on("2026-11-17", () => meetings.addTalk!({ about: "@anna", text: "AWS training budget for next year" }))

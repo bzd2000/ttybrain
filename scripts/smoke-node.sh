@@ -120,7 +120,10 @@ out="$(TTYBRAIN_HOME="$meetings_home" ttybrain meeting add "Next board" --about 
 expect_in "meetings 002: next id" "M-4 Next board" "$out"
 # Boards on Node (meetings 006 and the boards-from-projects step): a board meeting on a project, as before boards
 # existed, moves to a new board #BOARDB when the step runs (made to run again here), and plugin list names the board.
-TTYBRAIN_HOME="$meetings_home" ttybrain meeting add "Board" --about BOARD --kind board --date +2w >/dev/null
+# The meeting is written as before boards (kind board now needs a board subject, so the CLI refuses it).
+meetings_eval 'db.prepare("INSERT INTO meetings_meeting (id, title, date, kind, status, notes, subject_type, subject_id, auto_close, created_at, updated_at) VALUES (5, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)").run("Board", "2027-12-31", "board", "planned", "", "project", 1, "2026-01-01T00:00:00", "2026-01-01T00:00:00")' >/dev/null
+out="$(TTYBRAIN_HOME="$meetings_home" ttybrain meeting add "Board" --about BOARD --kind board --date +2w 2>&1 || true)"; echo "$out"
+expect_in "board kind needs a board" "error: a board meeting needs a board; #BOARD is a project" "$out"
 meetings_eval 'db.prepare("DELETE FROM kernel_plugin_migration WHERE plugin = ? AND id = ?").run("meetings", "upgrade:boards-from-projects")' >/dev/null
 out="$(TTYBRAIN_HOME="$meetings_home" ttybrain meeting show M-5)"; echo "$out"
 expect_in "boards step: moved" "  kind: board" "$out"

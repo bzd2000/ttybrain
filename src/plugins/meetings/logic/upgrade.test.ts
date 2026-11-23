@@ -143,10 +143,11 @@ describe("upgrading meetings 1.0.0 data", () => {
   test("meeting subject --all-without #BOARD assigns them; only those dated today or later will close themselves", async () => {
     old = await makeTestKernel({ plugins: [meetingsV1, projects, people, actions], today: "2026-11-20" })
     for (const [name, handle] of [["Peter Janssens", "peter"], ["Marie Dubois", "marie"], ["Tom Peeters", "tom"]]) await w(old, "people", "addPerson", { name, handle })
-    for (const [code, name] of [["CRM", "CRM replatforming"], ["ERP", "ERP upgrade"], ["BOARD", "Management board"]]) await w(old, "projects", "addProject", { code, name })
+    for (const [code, name] of [["CRM", "CRM replatforming"], ["ERP", "ERP upgrade"]]) await w(old, "projects", "addProject", { code, name })
     seedV1(old)
     await old.shutdown()
     upgraded = await bootKernel({ env: { TTYBRAIN_HOME: old.home, TTYBRAIN_TEST: "1" }, plugins: builtinPlugins, clock: fixedClock("2026-11-20") })
+    await cli(upgraded, "board", "add", "BOARD", "Management board")
 
     const one = await cli(upgraded, "meeting", "subject", "M-5", "@tom")
     expect([one.code, one.out]).toEqual([0, "M-5 about @tom (one_on_one)\n"])
@@ -154,14 +155,18 @@ describe("upgrading meetings 1.0.0 data", () => {
     expect(await runWithContext(upgraded.context(), () => upgraded!.ops.describe("meetings", "setSubject", { allWithout: true, about: "#BOARD" }))).toBe(
       "~ meetings without a subject about #BOARD",
     )
+    // Onto a project, the board meeting among them is refused: as one write, nothing changes.
+    const project = await cli(upgraded, "meeting", "subject", "--all-without", "#CRM")
+    expect([project.code, project.err.split("\n")[0]]).toEqual([1, "error: a board meeting needs a board; #CRM is a project"])
+    // Onto a board, they all become its board meetings.
     const all = await cli(upgraded, "meeting", "subject", "--all-without", "#BOARD")
-    expect([all.code, all.out, all.err]).toEqual([0, ["M-1 about #BOARD (project)", "M-4 about #BOARD (project)", "M-3 about #BOARD (board)", "M-2 about #BOARD (project)", ""].join("\n"), ""])
+    expect([all.code, all.out, all.err]).toEqual([0, ["M-1 about #BOARD (board)", "M-4 about #BOARD (board)", "M-3 about #BOARD (board)", "M-2 about #BOARD (board)", ""].join("\n"), ""])
     expect((await cli(upgraded, "meeting", "subject", "--all-without", "#BOARD")).out).toBe("no meetings without a subject\n")
     expect(upgraded.db.raw.prepare("SELECT id, kind, subject_type, subject_id, auto_close FROM meetings_meeting ORDER BY id").all([])).toEqual([
-      { id: 1, kind: "project", subject_type: "project", subject_id: 3, auto_close: 0 }, // 28 Oct: past
-      { id: 2, kind: "project", subject_type: "project", subject_id: 3, auto_close: 1 },
-      { id: 3, kind: "board", subject_type: "project", subject_id: 3, auto_close: 1 },
-      { id: 4, kind: "project", subject_type: "project", subject_id: 3, auto_close: 0 },
+      { id: 1, kind: "board", subject_type: "board", subject_id: 1, auto_close: 0 }, // 28 Oct: past
+      { id: 2, kind: "board", subject_type: "board", subject_id: 1, auto_close: 1 },
+      { id: 3, kind: "board", subject_type: "board", subject_id: 1, auto_close: 1 },
+      { id: 4, kind: "board", subject_type: "board", subject_id: 1, auto_close: 0 },
       { id: 5, kind: "one_on_one", subject_type: "person", subject_id: 3, auto_close: 0 }, // 18 Nov: past
     ])
     const usage = await cli(upgraded, "meeting", "subject", "M-1")

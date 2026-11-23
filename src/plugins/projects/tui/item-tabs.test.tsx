@@ -332,7 +332,8 @@ describe("meeting-linked forms", () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await seed(async () => {
       await write("meetings").addMeeting!({ about: "#CRM", title: "SteerCo Q4", date: "2026-12-04", projects: ["CRM"] })
-      await write("meetings").addMeeting!({ about: "#ERP", title: "Board", date: "2026-12-10", kind: "board" })
+      await write("meetings").addBoard!({ code: "MB", name: "Management board" })
+      await write("meetings").addMeeting!({ about: "#MB", title: "Board", date: "2026-12-10" })
     })
     tui = await renderTui(kernel, { parts: [part, actionsTui], width: 120, height: 32 })
     tui.input.pressKey("3")

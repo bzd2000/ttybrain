@@ -1,5 +1,5 @@
 // What the Attention panel and screen 5 show about a planned meeting (the `home` and `meetings` designs): what it is
-// about (a person's first name, a project's code), what waits on its talk-list ("To talk": the open items of its
+// about (a person's first name, a project's or a board's code), what waits on its talk-list ("To talk": the open items of its
 // subject's list; a board meeting: its agenda length) and your open actions for it ("Your act.": owner me, linked to
 // its subject, to it, or to an earlier meeting of its series). Read through the plugin's own reads and tables and the
 // people, projects and actions views; a plugin that is not loaded shows nothing for its part.
@@ -97,7 +97,7 @@ export function makeUpcoming(rt: Runtime) {
   }
 
   // What a meeting or series is about, as the About column shows it: a person's first name (magenta for a
-  // stakeholder, as names elsewhere; a team member's in plain text, as the designs draw them), a project's code (cyan),
+  // stakeholder, as names elsewhere; a team member's in plain text, as the designs draw them), a project's or a board's code (cyan),
   // `—` (muted) for none or a record that is gone.
   async function about(subject: { type: SubjectType; id: number } | null): Promise<Cell> {
     if (subject === null) return MUTED_DASH
@@ -108,6 +108,10 @@ export function makeUpcoming(rt: Runtime) {
       if (!p) return MUTED_DASH
       const tone: Tone = Number(p.is_stakeholder) === 1 && Number(p.is_team) !== 1 ? "magenta" : undefined
       return { text: String(p.name).split(/\s+/)[0]!, tone }
+    }
+    if (subject.type === "board") {
+      const b = await db.selectFrom("board").select("code").where("id", "=", subject.id).executeTakeFirst()
+      return b ? { text: String(b.code), tone: "cyan" } : MUTED_DASH
     }
     const p = await orNothing(undefined as Record<string, unknown> | undefined, () => db.selectFrom("projects.project").select("code").where("id", "=", subject.id).executeTakeFirst())
     return p ? { text: String(p.code), tone: "cyan" } : MUTED_DASH

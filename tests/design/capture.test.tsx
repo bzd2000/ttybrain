@@ -181,6 +181,57 @@ test("Quick capture to a talk-list as designed", async () => {
   expect(inboxItems()).toHaveLength(2)
 })
 
+// Boards (design §5.7, Review Focus 4 of the boards plan): `talk #BOARD …` goes onto the board's talk-list, and the
+// line under the input names the board and its next board meeting; a board's item takes no project tag, so there
+// is no "linked to" line. A board as a person's item's project tag, or a code that is neither a project nor a board,
+// goes to the inbox as before, and the line says why.
+test("Quick capture to a board's talk-list", async () => {
+  const t = await captureOnActions()
+  await t.input.typeText("talk #BOARD office move in January ")
+  const frame = await until(t, (f) => f.includes('without "talk"'))
+  const rows = frame.split("\n")
+  const top = rows.findIndex((l) => l.includes("╭─ Capture"))
+  const lines = box(frame, rows[top]!.indexOf("╭")).slice(top, top + 8)
+  expect(lines[0]).toMatch(/^╭─ Capture ─+╮$/)
+  expect(lines[2]).toBe(`│ │ ${"talk #BOARD office move in January".padEnd(68)} │ │`)
+  expect(lines[5]).toBe(`│ ${"→ Management board's talk-list · next board Fri 27 Nov".padEnd(72)} │`)
+  expect(lines[6]).toBe(`│ ${'  without "talk" it goes to the inbox as before'.padEnd(72)} │`)
+  expect(lines[7]).toMatch(/^╰─+ ctrl\+s save · esc cancel ─╯$/)
+  const spans = await t.spans()
+  expect(fgAt(spans, "#BOARD", top + 2)).toBe(theme.cyan)
+  expect(fgAt(spans, "→", top + 5)).toBe(theme.green)
+  expect(fgAt(spans, "Management board's talk-list", top + 5)).toBe(theme.text)
+  expect(fgAt(spans, " · next board Fri 27 Nov", top + 5)).toBe(theme.muted)
+
+  t.input.pressKey("s", { ctrl: true })
+  const after = await until(t, (f) => line(f, HEIGHT - 1).includes("Management board's talk-list"))
+  expect(line(after, HEIGHT - 1)).toMatch(/^ added T-\d+ to Management board's talk-list/)
+  expect((await talkItems("#BOARD")).at(-1)).toEqual(expect.objectContaining({ text: "Office move in January", project: null }))
+  expect(inboxItems()).toHaveLength(2)
+
+  const cases: Array<[text: string, why: string]> = [
+    ["talk @anna sponsor question #BOARD", "→ goes to the inbox · #BOARD is a board, not a project"],
+    ["talk #NOPE sponsor question", "→ goes to the inbox · #NOPE is not a project or board"],
+  ]
+  for (const [n, [text, why]] of cases.entries()) {
+    t.input.pressKey("i")
+    await until(t, (f) => f.includes("Capture to inbox"))
+    await t.input.typeText(text)
+    await until(t, (f) => f.includes(why))
+    t.input.pressKey("s", { ctrl: true })
+    await until(t, (f) => line(f, HEIGHT - 1).includes(`captured I-${3 + n}`))
+    expect(inboxItems().at(-1)!.text).toBe(text)
+  }
+  expect((await talkItems("#BOARD")).length).toBe(3)
+
+  // A code both a project and a board has (a data error the shared namespace prevents) is not swallowed: it is why.
+  kernel!.db.raw.prepare("INSERT INTO meetings_board (code, name, created_at, updated_at) VALUES ('CRM', 'Clash', '2026-11-20', '2026-11-20')").run([])
+  t.input.pressKey("i")
+  await until(t, (f) => f.includes("Capture to inbox"))
+  await t.input.typeText("talk #CRM budget")
+  expect(await until(t, (f) => f.includes('"#CRM" is both'))).toContain('→ goes to the inbox · "#CRM" is both a project and a board')
+})
+
 // Review Focus 5: almost a talk item (no tag, two people, a tag that does not resolve) goes to the inbox, and the line
 // under the input says so before saving; text without `talk` shows no line, as before.
 test("Quick capture that is almost a talk item goes to the inbox, and says so first", async () => {

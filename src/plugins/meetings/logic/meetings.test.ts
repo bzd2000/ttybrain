@@ -99,10 +99,13 @@ describe("meetings operations", () => {
     expect([none.name, none.message]).toEqual(["ValidationError", "meetings.addMeeting: about is required"])
   })
 
-  test("the subject gives the kind; a 1:1 needs a person, project and board a project; steering and other mean project", async () => {
+  test("the subject gives the kind; a 1:1 needs a person, a project meeting a project, a board meeting a board; steering and other mean project", async () => {
     await boot()
+    await w("addBoard", { code: "MB", name: "Management board" })
     expect((await w("addMeeting", { about: "#CRM", title: "a", date: "today" })).kind).toBe("project")
-    expect((await w("addMeeting", { about: "CRM", title: "b", date: "today", kind: "board" })).kind).toBe("board")
+    const onProject = await failure(w("addMeeting", { about: "CRM", title: "b", date: "today", kind: "board" }))
+    expect([onProject.name, onProject.message, onProject.field]).toEqual(["ValidationError", "a board meeting needs a board; #CRM is a project", "kind"])
+    expect((await w("addMeeting", { about: "MB", title: "b", date: "today", kind: "board" })).kind).toBe("board")
     expect((await w("addMeeting", { about: "#CRM", title: "c", date: "today", kind: "other" })).kind).toBe("project")
     expect((await w("addMeeting", { about: "@peter", title: "d", date: "today" })).kind).toBe("one_on_one")
     const wrong = await failure(w("addMeeting", { about: "@peter", title: "e", date: "today", kind: "board" }))
@@ -115,7 +118,7 @@ describe("meetings operations", () => {
     const bare = await failure(w("editMeeting", { ref: "M-2", kind: "one_on_one" }))
     expect([bare.name, bare.message, bare.field, bare.hint]).toEqual(["ValidationError", "a 1:1 needs a person; this meeting has no subject", "kind", "run ttybrain meeting subject M-2 @handle first"])
     expect((await w("editMeeting", { ref: "M-2", kind: "board" })).kind).toBe("board")
-    await w("setSubject", { meeting: "M-2", about: "#CRM" }) // restores the subject for the checks below
+    await w("setSubject", { meeting: "M-2", about: "#MB" }) // restores the subject for the checks below
     const unknown = await failure(w("addMeeting", { about: "nobody", title: "f", date: "today" }))
     expect([unknown.name, unknown.message]).toEqual(["NotFoundError", 'unknown person, project or board "nobody"'])
     const near = await failure(w("addMeeting", { about: "#CRN", title: "f", date: "today" }))
@@ -208,7 +211,8 @@ describe("meetings operations", () => {
   test("close and cancel rules", async () => {
     await boot()
     await w("addMeeting", steerco)
-    await w("addMeeting", { about: "#ERP", title: "Board", date: "2026-12-10", kind: "board" })
+    await w("addBoard", { code: "MB", name: "Management board" })
+    await w("addMeeting", { about: "#MB", title: "Board", date: "2026-12-10", kind: "board" })
     await w("addAction", { title: "Send the minutes", meeting: "M-1" }, "actions")
     await w("addDecision", { title: "Go with B", meeting: "M-2" }, "projects")
     const closed = await w("closeMeeting", { ref: "M-1" })

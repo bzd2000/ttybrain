@@ -46,20 +46,19 @@ export function shownDate(input: string): string {
 }
 
 const DEFAULT_KIND: Record<SubjectType, MeetingKind> = { person: "one_on_one", project: "project", board: "board" }
+export const BOARD_HINT = "make it about a board (#MB); add one: ttybrain board add <CODE> <name>"
 const A_SUBJECT: Record<SubjectType, string> = { person: "a person", project: "a project", board: "a board" }
 
 // The kind a meeting or series gets: as given (`steering` and `other` mean project), else from its subject (a person:
-// one_on_one, a project: project, a board: board). A 1:1 needs a person, a project meeting a project, and a board is
-// only ever the subject of board meetings (design §5.7). A board meeting on a project, as before boards existed, is
-// still taken (the design seeds have them) until the TUI part of boards moves them; the `boards-from-projects` step
-// moves those of existing databases.
+// one_on_one, a project: project, a board: board). A 1:1 needs a person, a project meeting a project, a board meeting
+// a board, and a board is only ever the subject of board meetings (design §5.7). The `boards-from-projects` step
+// moved the board meetings that existing databases had on a project.
 export function kindFor(subject: Pick<Subject, "type" | "ref">, given?: string): MeetingKind {
   const kind = given === undefined ? DEFAULT_KIND[subject.type] : normalizeKind(given)
   const is = `${subject.ref} is ${A_SUBJECT[subject.type]}`
   if (kind === "one_on_one" && subject.type !== "person") throw new ValidationError(`a 1:1 needs a person; ${is}`, { field: "kind" })
   if (kind === "project" && subject.type !== "project") throw new ValidationError(`a project meeting needs a project; ${is}`, { field: "kind" })
-  if (kind === "board" && subject.type === "person")
-    throw new ValidationError(`a board meeting needs a board; ${is}`, { field: "kind", hint: "add one: ttybrain board add <CODE> <name>" })
+  if (kind === "board" && subject.type !== "board") throw new ValidationError(`a board meeting needs a board; ${is}`, { field: "kind", hint: BOARD_HINT })
   return kind
 }
 export const normalizeKind = (k: string): MeetingKind => (k === "steering" || k === "other" ? "project" : (k as MeetingKind))

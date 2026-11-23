@@ -56,14 +56,14 @@ const stored = (k: Kernel) =>
   ])
 const refs = (items: Array<{ ref: string }>) => items.map((t) => t.ref)
 
-// Today Fri 20 Nov 2026 (the mock's); Anna (person 1), Bob (person 2), CRM (project 1), ERP (2), BOARD (3).
+// Today Fri 20 Nov 2026 (the mock's); Anna (person 1), Bob (person 2), CRM (project 1), ERP (2); the board BOARD.
 async function boot(today = "2026-11-20"): Promise<TestKernel> {
   home = await makeTestKernel({ plugins: builtinPlugins, today })
   await w(home, "addPerson", { name: "Anna Peeters", handle: "anna" }, "people")
   await w(home, "addPerson", { name: "Bob Willems", handle: "bob" }, "people")
   await w(home, "addProject", { code: "CRM", name: "CRM replatforming" }, "projects")
   await w(home, "addProject", { code: "ERP", name: "ERP upgrade" }, "projects")
-  await w(home, "addProject", { code: "BOARD", name: "Management board" }, "projects")
+  await w(home, "addBoard", { code: "BOARD", name: "Management board" })
   return home
 }
 async function later(today: string): Promise<Kernel> {
@@ -234,7 +234,7 @@ describe("talk-lists", () => {
     expect(await w(k, "discussTalk", { ref: "T-1" })).toMatchObject({ ref: "T-1", status: "discussed", meeting: null })
   })
 
-  test("a board meeting's agenda read is the board project's talk-list, not its agenda items", async () => {
+  test("a board meeting's agenda read is the board's talk-list, not its agenda items", async () => {
     const k = await boot()
     const board = await w(k, "addMeeting", { about: "#BOARD", title: "Board", date: "2026-12-04", kind: "board", projects: ["CRM"] })
     await w(k, "addTalk", { about: "#BOARD", text: "Budget round 2027" }) // T-1
