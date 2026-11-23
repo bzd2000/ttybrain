@@ -193,14 +193,15 @@ function LookForm(props: RecordFormProps) {
   )
 }
 
-// A derived field that follows from the start: `copy` follows `title` (filled in) until edited.
+// A derived field that follows from the start: `copy` follows `title` (filled in) until edited; with
+// `prefill.copy` it starts with a value of its own and keeps it.
 function DeriveForm(props: RecordFormProps) {
   return (
     <Form
       title="Derive"
       fields={[
         { name: "title", label: "Title", kind: "text", initial: "Plan" },
-        { name: "copy", label: "Copy", kind: "text", derive: (v) => (v.title ? `${v.title}!` : null) },
+        { name: "copy", label: "Copy", kind: "text", initial: props.prefill?.copy, derive: (v) => (v.title ? `${v.title}!` : null) },
       ]}
       submit={async (v) => {
         submitted.push(v)
@@ -296,6 +297,26 @@ describe("forms", () => {
     expect(lineWith(frame, "Copy")).toContain("Plan B!")
     await t.input.typeText("C")
     expect(lineWith(await t.frame(), "Copy")).toContain("Plan BC!")
+  })
+
+  test("a derived field given a value to start with keeps it, and the untouched form keeps no draft", async () => {
+    const t = await open()
+    void overlay!.openForm("thing", "derive", { prefill: { copy: "Saved" } })
+    await t.settle()
+    let frame = await t.frame()
+    expect(lineWith(frame, "Copy")).toContain("Saved")
+    t.input.pressEscape()
+    for (let i = 0; i < 100 && frame.includes("Derive"); i++) {
+      await sleep(25)
+      frame = await t.frame()
+    }
+    expect(frame).not.toContain("Derive")
+    expect(statusLine(frame)).not.toContain("draft kept")
+    void overlay!.openForm("thing", "derive", { prefill: { copy: "Saved" } })
+    await t.settle()
+    frame = await t.frame()
+    expect(frame).not.toContain("restore")
+    expect(lineWith(frame, "Copy")).toContain("Saved")
   })
 
   test("look: a panel with a plain label column; only the focused field is an input, the others as read", async () => {

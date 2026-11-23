@@ -137,7 +137,8 @@ export function Form(props: {
   const extraOf = (name: string) => extras.find((x) => x.key === name)
 
   // The derived fields that were edited (or given a value to start with): they no longer follow the others.
-  const [touched, setTouched] = createSignal(new Set<string>(props.fields.filter((f) => f.derive && f.initial !== undefined && f.initial !== null).map((f) => f.name)))
+  const initiallyTouched = new Set<string>(props.fields.filter((f) => f.derive && f.initial !== undefined && f.initial !== null).map((f) => f.name))
+  const [touched, setTouched] = createSignal(new Set<string>(initiallyTouched))
   const touch = (name: string) => setTouched((t) => (t.has(name) ? t : new Set([...t, name])))
   // Applies the derives that follow (untouched) to `v`, a few passes so one may follow another.
   const derived = (v: FormValues, only: (name: string) => boolean = (n) => !touched().has(n)): FormValues => {
@@ -155,7 +156,8 @@ export function Form(props: {
   // which count as where it started); a derived field that still follows the others is not part of a draft ---
   const ownInitial = Object.fromEntries(props.fields.map((f) => [f.name, initial(f)]))
   const ready = () => extraInitial() !== undefined
-  const baseline = (): FormValues => derived({ ...ownInitial, ...(extraInitial() ?? {}) }, () => true)
+  // Only the fields that follow from the start are derived: one given a value keeps it.
+  const baseline = (): FormValues => derived({ ...ownInitial, ...(extraInitial() ?? {}) }, (n) => !initiallyTouched.has(n))
   const following = (name: string) => props.fields.some((f) => f.name === name && f.derive !== undefined) && !touched().has(name)
   const draftOf = (v: FormValues): FormValues => Object.fromEntries(Object.entries(v).filter(([n]) => !following(n)))
   const initialValues = (): FormValues => draftOf(baseline())

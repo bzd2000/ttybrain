@@ -190,6 +190,25 @@ describe("talk item form", () => {
 })
 
 describe("series form", () => {
+  test("prefilled with a kind and attendees of its own: they are kept, and Esc on the untouched form keeps no draft", async () => {
+    const t = await open()
+    const from = { prefill: { about: "@marie", kind: "project", attendees: "@luc" }, draftFor: "@marie:prefilled" }
+    void overlay!.openForm("series", "series", from)
+    let frame = await until(t, (f) => f.includes("Marie Dubois · person") && f.includes("Luc Peeters"))
+    expect(lineWith(frame, "Kind")).toMatch(/Kind +project \(1:1 · board\)/)
+    expect(lineWith(frame, "Attendees")).toContain("Luc Peeters")
+    t.input.pressEscape()
+    await sleep(30)
+    frame = await until(t, (f) => !f.includes("New recurring meeting"))
+    expect(statusLine(frame)).not.toContain("draft kept")
+    void overlay!.openForm("series", "series", from)
+    frame = await until(t, (f) => f.includes("Luc Peeters"))
+    await t.settle()
+    frame = await t.frame()
+    expect(frame).not.toContain("restore")
+    expect(lineWith(frame, "Kind")).toMatch(/Kind +project/)
+  })
+
   test("opened from a subject and left untouched, Esc keeps no draft; a restored draft keeps its derived fields following", async () => {
     const t = await open()
     const from = { prefill: { about: "@marie" }, draftFor: "@marie" }
