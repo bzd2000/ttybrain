@@ -147,6 +147,24 @@ describe("TUI shell", () => {
     }
   })
 
+  test("? lists a loaded plugin's notices, above the plugin problems", async () => {
+    const noticer = definePlugin({ id: "noticer", name: "Noticer", version: "1.0.0", apiVersion: 1, activate: (ctx) => ctx.notices(async () => ["board #CRMB wants a better code"]) })
+    const k = await makeTestKernel({ plugins: [...builtinPlugins, noticer] })
+    try {
+      tui = await renderTui(k, { parts: builtinTuiParts })
+      tui.input.pressKey("?")
+      const lines = (await tui.frame()).split("\n")
+      const at = lines.findIndex((l) => l.includes("Notices"))
+      expect(at).toBeGreaterThan(0)
+      expect(lines[at + 1]).toContain("noticer: board #CRMB wants a better code")
+      expect(lines.findIndex((l) => l.includes("Plugin problems"))).toBeGreaterThan(at + 1)
+    } finally {
+      tui?.destroy()
+      tui = undefined
+      await k.cleanup()
+    }
+  })
+
   test("text field disables single-letter keys", async () => {
     tui = await renderTui(kernel, { parts: [testPart(InputScreen)] })
     tui.input.pressKey("2")

@@ -1,5 +1,5 @@
-// Help (`?`): the global keys (the kernel's, then one per registered global action), the keys of what has focus now, and the plugin problems (tui parts that failed
-// or were skipped, and logic plugins that failed to load). Esc or `?` closes it; it claims every key while open.
+// Help (`?`): the global keys (the kernel's, then one per registered global action), the keys of what has focus now, the plugins' notices (only when there are
+// any), and the plugin problems (tui parts that failed or were skipped, and logic plugins that failed to load). Esc or `?` closes it; it claims every key while open.
 import { For, onMount, Show } from "solid-js"
 import { GLOBAL_KEYS, printable, useKeys, useScreenKeys, type Hint } from "../keys"
 import { theme } from "../theme"
@@ -23,7 +23,7 @@ function KeyRows(props: { rows: Hint[] }) {
   )
 }
 
-export function Help(props: { hints: Hint[]; actions: Hint[]; problems: string[]; close(): void }) {
+export function Help(props: { hints: Hint[]; actions: Hint[]; problems: string[]; notices?: string[]; close(): void }) {
   const keys = useKeys()
   const all = [...GLOBAL_KEYS, ...props.actions]
   const half = Math.ceil(all.length / 2)
@@ -44,6 +44,11 @@ export function Help(props: { hints: Hint[]; actions: Hint[]; problems: string[]
         <text> </text>
         <text fg={theme.muted}>Here</text>
         <text fg={theme.text}>{props.hints.map((h) => `${h.key}${h.alt === undefined ? "" : ` or ${h.alt}`} ${h.label}`).join("   ")}</text>
+      </Show>
+      <Show when={(props.notices ?? []).length > 0}>
+        <text> </text>
+        <text fg={theme.muted}>Notices</text>
+        <For each={props.notices}>{(n) => <text fg={theme.text}>{n}</text>}</For>
       </Show>
       <text> </text>
       <text fg={theme.muted}>Plugin problems</text>

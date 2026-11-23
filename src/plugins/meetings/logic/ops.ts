@@ -179,7 +179,7 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks, clos
         output: MeetingRecord,
         describe: async (i: AddInput) => `+ meeting "${i.title.trim()}" ${shownDate(i.date)}`,
         run: async (i: AddInput) => {
-          const subject = await store.subject(i.about)
+          const subject = await store.activeSubject(i.about)
           const kind = kindFor(subject, i.kind)
           const day = date(i.date, "date")
           const since = blank(i.sinceDate) ? null : date(i.sinceDate!, "sinceDate")
@@ -281,8 +281,8 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks, clos
           return store.meeting(m.ref)
         },
       },
-      // Give a meeting its subject (design §5.5): a person makes it a 1:1, a project keeps board and makes anything
-      // else a project meeting. It closes itself from then on only when dated today or later (M4). With `allWithout`
+      // Give a meeting its subject (design §5.5, §5.7): a person makes it a 1:1, a board a board meeting, a project
+      // keeps board (as before boards existed) and makes anything else a project meeting. It closes itself from then on only when dated today or later (M4). With `allWithout`
       // instead of `meeting`, every meeting that has no subject yet gets it, in date order, all in this one write;
       // the output's `ref` is then the first meeting changed (the subject's ref when there was none).
       setSubject: {
@@ -293,9 +293,9 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks, clos
         run: async (i: SubjectInput) => {
           if ((i.meeting === undefined) === (i.allWithout !== true))
             throw new ValidationError("give either meeting or allWithout", { field: "meeting" })
-          const subject = await store.subject(i.about)
+          const subject = await store.activeSubject(i.about)
           const assign = async (m: Meeting) => {
-            const kind = subject.type === "person" ? "one_on_one" : m.kind === "board" ? "board" : "project"
+            const kind = subject.type === "person" ? "one_on_one" : subject.type === "board" || m.kind === "board" ? "board" : "project"
             const set: Record<string, unknown> = { subject_type: subject.type, subject_id: subject.id, kind, updated_at: now() }
             if (m.date >= today()) set.auto_close = 1
             await db.updateTable("meeting").set(set).where("id", "=", m.id).execute()

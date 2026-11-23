@@ -46,10 +46,20 @@ export function kernelCommands(kernel: Kernel, help: HelpFn): CommandDef[] {
       verb: "list",
       summary: "list the plugins with their version, source, status and error",
       run: async () => {
-        // A hint (what to do about a failed data step) is a JSON field when there is one, and a line under the table.
-        const rows = kernel.plugins.map((p) => ({ id: p.id, version: p.version, source: p.source, status: p.status, error: p.error ?? null, ...(p.hint !== undefined && { hint: p.hint }) }))
+        // A hint (what to do about a failed data step) and a plugin's notices are JSON fields when there are any, and
+        // lines under the table.
+        const rows = kernel.plugins.map((p) => ({
+          id: p.id,
+          version: p.version,
+          source: p.source,
+          status: p.status,
+          error: p.error ?? null,
+          ...(p.hint !== undefined && { hint: p.hint }),
+          ...(p.notices !== undefined && { notices: p.notices }),
+        }))
         const hints = kernel.plugins.filter((p) => p.hint !== undefined).map((p) => `hint (${p.id}): ${p.hint}`)
-        return { json: rows, text: [formatTable(["id", "version", "source", "status", "error"], rows), ...hints].join("\n") }
+        const notices = kernel.plugins.flatMap((p) => (p.notices ?? []).map((n) => `notice (${p.id}): ${n}`))
+        return { json: rows, text: [formatTable(["id", "version", "source", "status", "error"], rows), ...hints, ...notices].join("\n") }
       },
     },
     {

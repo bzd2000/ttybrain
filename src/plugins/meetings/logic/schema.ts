@@ -4,12 +4,15 @@
 // children no longer cascade (rule 6), so the meetings plugin deletes them itself. 003 (design §5.3): talk items, the
 // things to raise with a person or about a project. 004 (design §5.3): the talk items a meeting kept open for next time
 // when it was closed, so a held meeting still shows what it covered. 005: whether a held meeting closed itself (the
-// `auto-close` upkeep), so closing it again can say so.
+// `auto-close` upkeep), so closing it again can say so. 006 (design §5.7): boards, and `board` as a subject type of
+// meetings, series and talk items.
 import { sql, Type, type Kysely, type PluginContext, type Static } from "@ttybrain/api"
 
 export const MEETING_KINDS = ["one_on_one", "project", "board"] as const
 export const MEETING_STATUSES = ["planned", "held", "cancelled"] as const
-export const SUBJECT_TYPES = ["person", "project"] as const
+export const SUBJECT_TYPES = ["person", "project", "board"] as const
+// The subject types before 006 (the CHECKs of 002 and 003).
+const SUBJECT_TYPES_002 = ["person", "project"] as const
 export const TALK_STATUSES = ["open", "discussed", "dropped"] as const
 // Kinds as given (CLI, operations): `steering` and `other`, the kinds before 002, are aliases of `project`.
 export const KIND_INPUTS = [...MEETING_KINDS, "steering", "other"] as const
@@ -79,7 +82,19 @@ export const TalkRecord = Type.Object({
 })
 export type TalkRecord = Static<typeof TalkRecord>
 
-const inList = (col: string, xs: readonly string[]) => sql.raw(`${col} in (${xs.map((x) => `'${x}'`).join(", ")})`)
+// A board (design §5.7): its code (`#MB`), name and optional note. An archived one takes no new meetings, series or
+// talk items until it is restored.
+export const BoardRecord = Type.Object({
+  ref: Text, // #CODE
+  id: Type.Integer(),
+  code: Text,
+  name: Text,
+  note: Opt,
+  archived: Type.Boolean(),
+})
+export type BoardRecord = Static<typeof BoardRecord>
+
+const inList =(col: string, xs: readonly string[]) => sql.raw(`${col} in (${xs.map((x) => `'${x}'`).join(", ")})`)
 
 // 001 as meetings 1.0.0 shipped it (kept as is: applied databases have it; the upgrade test builds one with it).
 export async function migration001(db: Kysely<any>): Promise<void> {
@@ -128,7 +143,7 @@ async function migration002(db: Kysely<any>): Promise<void> {
   await db.schema
     .createTable("series")
     .addColumn("id", "integer", (c) => c.primaryKey())
-    .addColumn("subject_type", "text", (c) => c.notNull().check(inList("subject_type", SUBJECT_TYPES)))
+    .addColumn("subject_type", "text", (c) => c.notNull().check(inList("subject_type", SUBJECT_TYPES_002)))
     .addColumn("subject_id", "integer", (c) => c.notNull()) // soft reference to a people person or a projects project
     .addColumn("title", "text", (c) => c.notNull())
     .addColumn("kind", "text", (c) => c.notNull().check(inList("kind", MEETING_KINDS)))
@@ -175,7 +190,7 @@ async function migration002(db: Kysely<any>): Promise<void> {
     .addColumn("status", "text", (c) => c.notNull().defaultTo("planned").check(inList("status", MEETING_STATUSES)))
     .addColumn("since_date", "text")
     .addColumn("notes", "text", (c) => c.notNull().defaultTo(""))
-    .addColumn("subject_type", "text", (c) => c.check(inList("subject_type", SUBJECT_TYPES))) // null: no subject yet
+    .addColumn("subject_type", "text", (c) => c.check(inList("subject_type", SUBJECT_TYPES_002))) // null: no subject yet
     .addColumn("subject_id", "integer") // soft reference to a people person or a projects project
     .addColumn("series_id", "integer", (c) => c.references("series.id")) // null: a one-off meeting
     .addColumn("series_date", "text") // the series date it was made for; kept when the meeting is moved
@@ -219,7 +234,7 @@ async function migration003(db: Kysely<any>): Promise<void> {
   await db.schema
     .createTable("talk_item")
     .addColumn("id", "integer", (c) => c.primaryKey().autoIncrement())
-    .addColumn("subject_type", "text", (c) => c.notNull().check(inList("subject_type", SUBJECT_TYPES)))
+    .addColumn("subject_type", "text", (c) => c.notNull().check(inList("subject_type", SUBJECT_TYPES_002)))
     .addColumn("subject_id", "integer", (c) => c.notNull()) // soft reference to a people person or a projects project
     .addColumn("text", "text", (c) => c.notNull())
     .addColumn("project_id", "integer") // soft reference to a projects project: the tag
@@ -256,10 +271,181 @@ async function migration005(db: Kysely<any>): Promise<void> {
   await db.schema.alterTable("meeting").addColumn("closed_itself", "integer", (c) => c.notNull().defaultTo(0)).execute()
 }
 
+const SERIES_COLUMNS = ["id", "subject_type", "subject_id", "title", "kind", "rhythm", "first_date", "end_date", "created_at", "updated_at"] as const
+const MEETING_COLUMNS_005 = [
+  "id",
+  "title",
+  "date",
+  "kind",
+  "status",
+  "since_date",
+  "notes",
+  "subject_type",
+  "subject_id",
+  "series_id",
+  "series_date",
+  "auto_close",
+  "created_at",
+  "updated_at",
+  "closed_itself",
+] as const
+const TALK_COLUMNS = [
+  "id",
+  "subject_type",
+  "subject_id",
+  "text",
+  "project_id",
+  "added_date",
+  "position",
+  "last_position",
+  "status",
+  "meeting_id",
+  "status_date",
+  "created_at",
+  "updated_at",
+] as const
+
+// A rule-6 rebuild of an own table (copy, drop, create, copy back with named columns). For an AUTOINCREMENT table the
+// drop would reset its counter to the largest id left (rule 2), so the ids of deleted rows above it could come back.
+// The counter cannot be read (plugins may not name sqlite_sequence), so it is measured: a probe row inserted before
+// the drop gets the counter + 1, and is deleted again. After the copy back, a row with the old counter as its id is
+// inserted and deleted (when that is above the largest id left), which sets the new counter to it: the next id is the
+// one the table would have given before the rebuild.
+async function rebuild(
+  db: Kysely<any>,
+  table: string,
+  columns: readonly string[],
+  create: () => Promise<void>,
+  autoincrement?: { probe: Record<string, unknown> },
+): Promise<void> {
+  let high = 0
+  if (autoincrement) {
+    const res = await db.insertInto(table).values(autoincrement.probe).executeTakeFirstOrThrow()
+    high = Number(res.insertId) - 1
+    await db.deleteFrom(table).where("id", "=", Number(res.insertId)).execute()
+  }
+  let copy = db.schema.createTable(`${table}_copy`)
+  for (const c of columns) copy = copy.addColumn(c, "blob") // no type affinity: values are copied back as they are
+  await copy.execute()
+  await db.insertInto(`${table}_copy`).columns([...columns]).expression(db.selectFrom(table).select([...columns])).execute()
+  await db.schema.dropTable(table).execute()
+  await create()
+  await db.insertInto(table).columns([...columns]).expression(db.selectFrom(`${table}_copy`).select([...columns])).execute()
+  await db.schema.dropTable(`${table}_copy`).execute()
+  if (autoincrement) {
+    const max = await db.selectFrom(table).select((eb) => eb.fn.max("id").as("m")).executeTakeFirst()
+    if (high > Number(max?.m ?? 0)) {
+      await db.insertInto(table).values({ ...autoincrement.probe, id: high }).execute()
+      await db.deleteFrom(table).where("id", "=", high).execute()
+    }
+  }
+}
+
+// Boards (design §5.7), and `board` as a subject of meetings, series and talk items. The subject_type CHECKs of series,
+// meeting and talk_item change, so the three are rebuilt (rule 6: series, then meeting, then talk_item, each with its
+// indexes; their children reference them without an ON DELETE action, and foreign keys are checked at the
+// migration's commit), keeping the meeting and talk_item counters (rebuild). `board.id` is AUTOINCREMENT too: a board
+// is a subject by id. Codes are stored upper-case, one per board. `from_project_id` is the project whose board
+// meetings the `boards-from-projects` step moved onto the board, until the board is first edited (the step's notice
+// names it until then); null otherwise.
+async function migration006(db: Kysely<any>): Promise<void> {
+  await db.schema
+    .createTable("board")
+    .addColumn("id", "integer", (c) => c.primaryKey().autoIncrement())
+    .addColumn("code", "text", (c) => c.notNull())
+    .addColumn("name", "text", (c) => c.notNull())
+    .addColumn("note", "text")
+    .addColumn("archived_at", "text")
+    .addColumn("from_project_id", "integer") // soft reference to a projects project
+    .addColumn("created_at", "text", (c) => c.notNull())
+    .addColumn("updated_at", "text", (c) => c.notNull())
+    .execute()
+  await db.schema.createIndex("board_code").on("board").column("code").unique().execute()
+
+  const T = "1970-01-01T00:00:00"
+  await rebuild(db, "series", SERIES_COLUMNS, () =>
+    db.schema
+      .createTable("series")
+      .addColumn("id", "integer", (c) => c.primaryKey())
+      .addColumn("subject_type", "text", (c) => c.notNull().check(inList("subject_type", SUBJECT_TYPES)))
+      .addColumn("subject_id", "integer", (c) => c.notNull()) // soft reference to a person, a project or a board
+      .addColumn("title", "text", (c) => c.notNull())
+      .addColumn("kind", "text", (c) => c.notNull().check(inList("kind", MEETING_KINDS)))
+      .addColumn("rhythm", "text", (c) => c.notNull()) // the canonical phrase (rhythm.ts)
+      .addColumn("first_date", "text", (c) => c.notNull())
+      .addColumn("end_date", "text")
+      .addColumn("created_at", "text", (c) => c.notNull())
+      .addColumn("updated_at", "text", (c) => c.notNull())
+      .execute(),
+  )
+  await rebuild(
+    db,
+    "meeting",
+    MEETING_COLUMNS_005,
+    async () => {
+      await db.schema
+        .createTable("meeting")
+        .addColumn("id", "integer", (c) => c.primaryKey().autoIncrement())
+        .addColumn("title", "text", (c) => c.notNull())
+        .addColumn("date", "text", (c) => c.notNull())
+        .addColumn("kind", "text", (c) => c.notNull().check(inList("kind", MEETING_KINDS)))
+        .addColumn("status", "text", (c) => c.notNull().defaultTo("planned").check(inList("status", MEETING_STATUSES)))
+        .addColumn("since_date", "text")
+        .addColumn("notes", "text", (c) => c.notNull().defaultTo(""))
+        .addColumn("subject_type", "text", (c) => c.check(inList("subject_type", SUBJECT_TYPES))) // null: no subject yet
+        .addColumn("subject_id", "integer") // soft reference to a person, a project or a board
+        .addColumn("series_id", "integer", (c) => c.references("series.id")) // null: a one-off meeting
+        .addColumn("series_date", "text") // the series date it was made for; kept when the meeting is moved
+        .addColumn("auto_close", "integer", (c) => c.notNull().defaultTo(0)) // 1: closes itself 3 days after its date
+        .addColumn("created_at", "text", (c) => c.notNull())
+        .addColumn("updated_at", "text", (c) => c.notNull())
+        .addColumn("closed_itself", "integer", (c) => c.notNull().defaultTo(0))
+        .addUniqueConstraint("meeting_series_date", ["series_id", "series_date"])
+        .execute()
+      await db.schema.createIndex("meeting_date").on("meeting").column("date").execute()
+      await db.schema.createIndex("meeting_subject").on("meeting").columns(["subject_type", "subject_id"]).execute()
+    },
+    { probe: { title: "probe", date: "1970-01-01", kind: "project", status: "cancelled", created_at: T, updated_at: T } },
+  )
+  await rebuild(
+    db,
+    "talk_item",
+    TALK_COLUMNS,
+    async () => {
+      await db.schema
+        .createTable("talk_item")
+        .addColumn("id", "integer", (c) => c.primaryKey().autoIncrement())
+        .addColumn("subject_type", "text", (c) => c.notNull().check(inList("subject_type", SUBJECT_TYPES)))
+        .addColumn("subject_id", "integer", (c) => c.notNull()) // soft reference to a person, a project or a board
+        .addColumn("text", "text", (c) => c.notNull())
+        .addColumn("project_id", "integer") // soft reference to a projects project: the tag
+        .addColumn("added_date", "text", (c) => c.notNull())
+        .addColumn("position", "integer")
+        .addColumn("last_position", "integer")
+        .addColumn("status", "text", (c) => c.notNull().defaultTo("open").check(inList("status", TALK_STATUSES)))
+        .addColumn("meeting_id", "integer", (c) => c.references("meeting.id"))
+        .addColumn("status_date", "text")
+        .addColumn("created_at", "text", (c) => c.notNull())
+        .addColumn("updated_at", "text", (c) => c.notNull())
+        .addUniqueConstraint("talk_item_position", ["subject_type", "subject_id", "position"])
+        .execute()
+      await db.schema.createIndex("talk_item_project").on("talk_item").columns(["project_id", "status"]).execute()
+      await db.schema.createIndex("talk_item_meeting").on("talk_item").column("meeting_id").execute()
+    },
+    { probe: { subject_type: "person", subject_id: 0, text: "probe", added_date: "1970-01-01", status: "dropped", created_at: T, updated_at: T } },
+  )
+}
+
+// In order. Exported so that upgrade tests can build a database as an earlier version left it.
+export const MIGRATIONS: ReadonlyArray<readonly [string, (db: Kysely<any>) => Promise<void>]> = [
+  ["001", migration001],
+  ["002", migration002],
+  ["003", migration003],
+  ["004", migration004],
+  ["005", migration005],
+  ["006", migration006],
+]
+
 export function registerSchema(ctx: PluginContext): void {
-  ctx.migration("001", migration001)
-  ctx.migration("002", migration002)
-  ctx.migration("003", migration003)
-  ctx.migration("004", migration004)
-  ctx.migration("005", migration005)
+  for (const [id, up] of MIGRATIONS) ctx.migration(id, up)
 }

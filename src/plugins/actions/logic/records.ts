@@ -236,11 +236,15 @@ export function makeStore(rt: PluginRuntime) {
     const row = (await q().where("code", "=", code).executeTakeFirst()) ?? (/^\d+$/.test(code) ? await q().where("id", "=", Number(code)).executeTakeFirst() : undefined)
     return row ? { id: Number(row.id), ref: `#${row.code}`, code: String(row.code), archived: Number(row.archived) === 1 } : null
   }
+  // A project by code or id. A code another record type has (a board: `#` is shared) is refused as that type.
   async function project(input: string): Promise<ProjectRef> {
     const p = await projectRow(input)
     const code = normalizeCode(input)
-    if (p === null) throw new NotFoundError(`unknown project "${code}"`, { suggestions: suggest(code, await codes()) })
-    return p
+    if (p !== null) return p
+    const other = await rt.records.resolve(`#${code}`)
+    if (other && other.type !== "project")
+      throw new ValidationError(`#${code} is a ${other.type}, not a project`, { hint: `link the action to it instead: --link #${code}` })
+    throw new NotFoundError(`unknown project "${code}"`, { suggestions: suggest(code, await codes()) })
   }
   const archivedProject = (p: ProjectRef) => new ValidationError(`${p.ref} is archived`, { hint: `restore it first: ttybrain project restore ${p.code}` })
   // A project that may have actions written on it: not archived.
@@ -310,17 +314,18 @@ export function makeStore(rt: PluginRuntime) {
   // ---- links: any record the kernel's record types resolve (`#CRM`, `@anna`, `M-4`; a bare `CRM` is a project code).
   async function lookup(input: string): Promise<Target | null> {
     const ref = input.trim()
+    // A code two record types both know (a data error: `"#MB" is both a project and a board`) is not swallowed.
     const tryRef = async (r: string) => {
       try {
         return await rt.records.resolve(r)
       } catch (e) {
-        if (!(e instanceof NotFoundError || e instanceof ValidationError)) throw e
+        if (!(e instanceof NotFoundError)) throw e
         return null
       }
     }
     return (await tryRef(ref)) ?? (/^[#@]/.test(ref) ? null : await tryRef(`#${ref}`))
   }
-  // A record a new link may point at: it resolves, and a project or person is not archived.
+  // A record a new link may point at: it resolves, and a project, person or board (meetings.board) is not archived.
   async function target(input: string): Promise<Target> {
     const t = input.trim() === "" ? null : await lookup(input)
     if (t === null) throw new ValidationError(`unknown record "${input.trim()}"`, { field: "links", hint: LINK_HINT })
@@ -330,6 +335,11 @@ export function makeStore(rt: PluginRuntime) {
     } else if (t.type === "person") {
       const p = await personById(t.id)
       if (p?.archived) throw archivedPerson(p)
+    } else if (t.type === "board") {
+      const b = await unlessUnavailable(undefined as { code: unknown; archived_at: unknown } | undefined, () =>
+        db.selectFrom("meetings.board").select(["code", "archived_at"]).where("id", "=", t.id).executeTakeFirst(),
+      )
+      if (b && b.archived_at !== null) throw new ValidationError(`#${b.code} is archived`, { hint: `restore it first: ttybrain board restore #${b.code}` })
     }
     return t
   }

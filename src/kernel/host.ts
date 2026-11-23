@@ -38,6 +38,7 @@ export type PluginStatus = {
   status: "ok" | "failed" | "disabled"
   error?: string
   hint?: string // what to do about `error`, when a failed data step's error carried one (a PmError's hint)
+  notices?: string[] // what the plugin's ctx.notices said at boot (left out when nothing)
   tui?: string // file URL of the plugin's tui entry (ttybrain.tui)
   dir?: string // the plugin's directory, for discovered plugins
 }
@@ -103,6 +104,8 @@ type Slot = {
   migrations: Migration[]
   steps: DataStep[] // ctx.upgrade, in registration order
   upkeeps: Upkeep[] // ctx.upkeep, in registration order
+  notices?: () => Promise<string[]> // ctx.notices
+  said?: string[] // what it said at boot
   off: Array<() => void> // event subscriptions
   ctx?: PluginContext
   runtime?: PluginRuntime
@@ -338,6 +341,11 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         if (!uid || s.upkeeps.some((u) => u.id === uid)) throw new ValidationError(`upkeep id "${uid}" is empty or duplicated`)
         s.upkeeps.push({ id: uid, run })
       },
+      notices: (run) => {
+        live()
+        if (s.notices) throw new ValidationError("notices may be registered once")
+        s.notices = run
+      },
       use: (other) => (required.has(other) ? ops.api(other) : undefined),
       read: readOps,
       self: () => ops.api(id) ?? { read: {}, write: {} },
@@ -476,6 +484,21 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const pendingSteps = order.flatMap((s) => (s.status === "ok" ? runner.pendingSteps(s.id, s.steps).map((step) => ({ s, step })) : []))
   if (pendingSteps.length > 0) await runSteps(await runSteps(pendingSteps))
 
+  // 6b. Notices (ctx.notices), after the data steps (what a step made can be named): read only, an external plugin's
+  // raced against the activate timeout; a throw is listed as the plugin's error.
+  for (const s of order) {
+    if (s.status !== "ok" || !s.notices) continue
+    try {
+      const saying = runWithContext(context(), () => s.notices!())
+      const said = await (s.source !== "built-in" ? withTimeout(saying, activateTimeoutMs, `timed out after ${activateTimeoutMs} ms`) : saying)
+      const lines = Array.isArray(said) ? said.filter((n): n is string => typeof n === "string" && n.trim() !== "") : []
+      if (lines.length > 0) s.said = lines
+    } catch (e) {
+      const text = `notices failed: ${message(e)}`
+      s.error = s.error === undefined ? text : `${s.error}; ${text}`
+    }
+  }
+
   const plugins: PluginStatus[] = order.map((s): PluginStatus => ({
     id: s.id,
     version: s.version,
@@ -483,6 +506,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     status: s.status === "pending" ? "failed" : s.status,
     ...(s.error !== undefined ? { error: s.error } : {}),
     ...(s.hint !== undefined ? { hint: s.hint } : {}),
+    ...(s.said !== undefined ? { notices: s.said } : {}),
     ...(s.tui !== undefined ? { tui: s.tui } : {}),
     ...(s.dir !== undefined ? { dir: s.dir } : {}),
   }))

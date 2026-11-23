@@ -46,6 +46,7 @@ describe("plugin runtime", () => {
     expect(k.tags.types()).toEqual([
       { prefix: "@", recordType: "person" },
       { prefix: "#", recordType: "project" },
+      { prefix: "#", recordType: "board" },
     ])
   })
 
@@ -60,6 +61,7 @@ describe("plugin runtime", () => {
     expect(rt.tags.types()).toEqual([
       { prefix: "@", recordType: "person" },
       { prefix: "#", recordType: "project" },
+      { prefix: "#", recordType: "board" },
     ])
     // People: a team member's detail is `team`, anyone else's their job title (none without one).
     expect(await rt.tags.suggest("@ma", 5)).toEqual([

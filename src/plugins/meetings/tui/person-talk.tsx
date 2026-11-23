@@ -87,7 +87,7 @@ export const lastParts = (m: Last | null): CellPart[] =>
 export const actionRow = (a: MyAction, today: string): TableRow => ({ ref: a.ref, cells: { ref: { text: a.ref, tone: "muted" }, title: a.title, due: dueCell(a.due, today) } })
 
 type Loaded = {
-  subject: { ref: string; type: "person" | "project"; id: number; label: string; first: string }
+  subject: { ref: string; type: "person" | "project" | "board"; id: number; label: string; first: string }
   open: TalkRecord[]
   carried: TalkRecord[]
   carriedFrom: string | undefined

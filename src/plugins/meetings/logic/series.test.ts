@@ -111,7 +111,7 @@ describe("series", () => {
     const bad = await failure(w(k, "addSeries", { about: "@karim", title: "x", every: "daily", from: "today" }))
     expect([bad.name, bad.message, bad.field]).toEqual(["ValidationError", 'invalid rhythm "daily"', "every"])
     const kind = await failure(w(k, "addSeries", { about: "@karim", title: "x", kind: "board", every: "weekly on mon", from: "today" }))
-    expect([kind.name, kind.message, kind.field]).toEqual(["ValidationError", "a board meeting needs a project; @karim is a person", "kind"])
+    expect([kind.name, kind.message, kind.field]).toEqual(["ValidationError", "a board meeting needs a board; @karim is a person", "kind"])
     const oneOnOne = await failure(w(k, "addSeries", { about: "#CRM", title: "x", kind: "one_on_one", every: "weekly on mon", from: "today" }))
     expect(oneOnOne.message).toBe("a 1:1 needs a person; #CRM is a project")
     const unknown = await failure(w(k, "addSeries", { about: "@nobody", title: "x", every: "weekly on mon", from: "today" }))

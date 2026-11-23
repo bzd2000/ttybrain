@@ -45,12 +45,21 @@ export function shownDate(input: string): string {
   }
 }
 
+const DEFAULT_KIND: Record<SubjectType, MeetingKind> = { person: "one_on_one", project: "project", board: "board" }
+const A_SUBJECT: Record<SubjectType, string> = { person: "a person", project: "a project", board: "a board" }
+
 // The kind a meeting or series gets: as given (`steering` and `other` mean project), else from its subject (a person:
-// one_on_one, a project: project). A 1:1 needs a person; project and board need a project.
+// one_on_one, a project: project, a board: board). A 1:1 needs a person, a project meeting a project, and a board is
+// only ever the subject of board meetings (design §5.7). A board meeting on a project, as before boards existed, is
+// still taken (the design seeds have them) until the TUI part of boards moves them; the `boards-from-projects` step
+// moves those of existing databases.
 export function kindFor(subject: Pick<Subject, "type" | "ref">, given?: string): MeetingKind {
-  const kind = given === undefined ? (subject.type === "person" ? "one_on_one" : "project") : normalizeKind(given)
-  if (kind === "one_on_one" && subject.type !== "person") throw new ValidationError(`a 1:1 needs a person; ${subject.ref} is a project`, { field: "kind" })
-  if (kind !== "one_on_one" && subject.type !== "project") throw new ValidationError(`a ${kind} meeting needs a project; ${subject.ref} is a person`, { field: "kind" })
+  const kind = given === undefined ? DEFAULT_KIND[subject.type] : normalizeKind(given)
+  const is = `${subject.ref} is ${A_SUBJECT[subject.type]}`
+  if (kind === "one_on_one" && subject.type !== "person") throw new ValidationError(`a 1:1 needs a person; ${is}`, { field: "kind" })
+  if (kind === "project" && subject.type !== "project") throw new ValidationError(`a project meeting needs a project; ${is}`, { field: "kind" })
+  if (kind === "board" && subject.type === "person")
+    throw new ValidationError(`a board meeting needs a board; ${is}`, { field: "kind", hint: "add one: ttybrain board add <CODE> <name>" })
   return kind
 }
 export const normalizeKind = (k: string): MeetingKind => (k === "steering" || k === "other" ? "project" : (k as MeetingKind))
@@ -222,7 +231,7 @@ export function registerSeries(ctx: PluginContext, store: Store, occurrences: Oc
         output: SeriesRecord,
         describe: async (i: AddInput) => `+ series ${formatRef("S-", await store.nextSeriesId())} "${i.title.trim()}" ${shownRhythm(i.every)} from ${shownDate(i.from)}`,
         run: async (i: AddInput) => {
-          const subject = await store.subject(i.about)
+          const subject = await store.activeSubject(i.about)
           const kind = kindFor(subject, i.kind)
           const rhythm = rhythmOf(i.every)
           const first = dateField(i.from, "from")

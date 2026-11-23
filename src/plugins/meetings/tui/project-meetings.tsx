@@ -172,7 +172,7 @@ function WithFact(props: { names: CellPart[] }) {
 // A meeting panel: a series (its title and rhythm, its next occurrence) or a one-off meeting.
 type Block = { title: string; next: MeetingRow | null; with: CellPart[] }
 type Loaded = {
-  subject: { ref: string; type: "person" | "project"; first: string }
+  subject: { ref: string; type: "person" | "project" | "board"; first: string }
   blocks: Block[]
   talk: TalkRecord[]
   past: Past[]

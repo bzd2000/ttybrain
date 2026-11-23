@@ -42,6 +42,11 @@ export interface PluginContext {
   // data steps, in its own write transaction with this context. Skipped for that boot when another process holds the
   // write lock; a throw rolls it back and shows the error with the plugin, which stays loaded.
   upkeep(id: string, run: () => Promise<void>): void
+  // Notices (docs/architecture.md, "Notices"): what the user should know about the plugin's data that is not a
+  // problem, such as a record a data step made that wants a better name. Run at each boot after the data steps, with
+  // this context (reading only); each line is shown with the plugin in `ttybrain plugin list` and Help. [] says
+  // nothing. A throw is shown as the plugin's error. Once per plugin.
+  notices(run: () => Promise<string[]>): void
   publish(name: string, def: ViewDef): void
   expose(ops: { read?: Record<string, ReadOp>; write?: Record<string, WriteOp> }): void
   // Another plugin's exposed operations; undefined unless it is in `requires`.

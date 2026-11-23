@@ -174,6 +174,6 @@ describe("upgrading meetings 1.0.0 data", () => {
     const none = await cli(upgraded, "meeting", "subject", "--all-without", "#NOPE")
     expect(none.code).toBe(2)
     const unknown = await cli(upgraded, "meeting", "subject", "M-1", "#NOPE")
-    expect([unknown.code, unknown.err.split("\n")[0]]).toEqual([2, 'error: unknown project "#NOPE"'])
+    expect([unknown.code, unknown.err.split("\n")[0]]).toEqual([2, 'error: unknown project or board "#NOPE"'])
   })
 })
