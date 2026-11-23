@@ -174,7 +174,7 @@ describe("Projects screen", () => {
     await t.input.typeText("Bad code")
     t.input.pressKey("s", { ctrl: true })
     const frame = await t.frame()
-    expect(lines(frame)[indexOf(frame, "Code") + 1]).toContain('✗ invalid project code "x"')
+    expect(lines(frame)[indexOf(frame, "Code") + 1]).toContain('✗ invalid project code "X"')
   })
 
   test("a number field takes decimals only: 0x10 is an error, not effort 16", async () => {
