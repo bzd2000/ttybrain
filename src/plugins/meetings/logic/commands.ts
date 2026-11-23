@@ -298,18 +298,26 @@ export function registerCommands(ctx: PluginContext, store: Store, talks: Talks)
     summary: "say who or what a meeting is about: ttybrain meeting subject <M-n> <about>, or --all-without <about> for every meeting without one",
     // Both positionals are optional to the dispatcher: with --all-without the only one is <about>.
     args: [{ name: "meeting" }, { name: "about" }],
-    flags: { "all-without": bool("every meeting that has no subject yet (then give only <about>)") },
+    flags: {
+      "all-without": bool("every meeting that has no subject yet whose kind fits it (then give only <about>): board meetings take a board, the others a person or project"),
+      kind: { ...kindFlag, description: "change the meeting's kind together with its subject (needed when the subject is of another kind than the meeting)" },
+    },
     run: async ({ args, flags }) => {
       if (flags["all-without"]) {
         if (args.about !== undefined) throw new ValidationError(`unexpected argument "${args.about}"`, { hint: SUBJECT_USAGE })
         if (args.meeting === undefined) throw new ValidationError("missing argument <about>", { field: "about", hint: SUBJECT_USAGE })
-        const out: { meetings: MeetingRecord[] } = await write().setSubject!({ allWithout: true, about: args.meeting })
-        const changed = out.meetings
-        return { json: changed, text: changed.length ? changed.map((m) => `${m.ref} about ${m.about} (${m.kind})`).join("\n") : "no meetings without a subject" }
+        const out: { meetings: MeetingRecord[]; skipped: number; reason?: string } = await write().setSubject!({
+          allWithout: true,
+          about: args.meeting,
+          ...(flags.kind !== undefined ? { kind: flags.kind } : {}),
+        })
+        const lines = out.meetings.map((m) => `${m.ref} about ${m.about} (${m.kind})`)
+        if (out.reason !== undefined) lines.push(`skipped ${out.reason}`)
+        return { json: { meetings: out.meetings, skipped: out.skipped, ...(out.reason === undefined ? {} : { reason: out.reason }) }, text: lines.length ? lines.join("\n") : "no meetings without a subject" }
       }
       if (args.meeting === undefined) throw new ValidationError("missing argument <meeting>", { field: "meeting", hint: SUBJECT_USAGE })
       if (args.about === undefined) throw new ValidationError("missing argument <about>", { field: "about", hint: SUBJECT_USAGE })
-      const m: MeetingRecord = await write().setSubject!({ meeting: args.meeting, about: args.about })
+      const m: MeetingRecord = await write().setSubject!({ meeting: args.meeting, about: args.about, ...(flags.kind !== undefined ? { kind: flags.kind } : {}) })
       return { json: m, text: `${m.ref} about ${m.about} (${m.kind})` }
     },
   })

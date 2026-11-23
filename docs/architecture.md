@@ -32,7 +32,7 @@ src/bin/pm.ts               the `ttybrain` entry point: boots the kernel with di
 src/plugins/<id>/package.json  the plugin manifest (`main`, `ttybrain.id`, `ttybrain.tui`); the build copies it to dist-node with .js entries
 src/plugins/<id>/logic/     index.ts (definePlugin), schema.ts, views.ts, ops*.ts, commands*.ts, records.ts, report.ts, guide.ts: NO UI imports
                             (meetings: ops.ts, records.ts, boards.ts, series.ts, rhythm.ts, talk.ts, close.ts, since.ts, reports.ts, commands.ts, views.ts, guide.ts, schema.ts)
-                            (meetings tui/: the in-progress view meeting-view.tsx, person-talk / project-talk, person-meetings / project-meetings,
+                            (meetings tui/: the in-progress view meeting-view.tsx, the board's own view board-view.tsx, person-talk / project-talk, person-meetings / project-meetings,
                             subject.ts, talk-form.tsx, talk-capture.ts (the capture route), agenda-tab.tsx (a board's Agenda with its talk-list))
 src/kernel/tui/             the TUI kernel: frame, router, keys, overlays, data hooks, building blocks (see "The TUI")
 src/plugins/<id>/tui/       screens, record tabs, panels, forms, badges: each plugin's TUI part (`defineTui`)

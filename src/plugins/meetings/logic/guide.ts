@@ -23,7 +23,7 @@ Meetings are referenced as \`M-<n>\`. \`ttybrain meeting list\` shows the planne
 
 - A recurring meeting is a series (\`S-<n>\`): \`ttybrain meeting series add @karim "1:1 Karim" --every "2 weeks on wed" --from wed\`. The rhythm is \`weekly on <day>\`, \`every <n> weeks on <day>\`, \`monthly on the <1st|2nd|3rd|4th|last> <day>\` or \`monthly on day <n>\` (dates only, no times). Its meetings are created for the next 8 weeks and again as time passes; they are ordinary meetings (\`M-<n>\`).
 - \`ttybrain meeting series list\` shows them; \`series edit S-2 --every … --attendees … --until …\` changes what is still ahead (a changed \`--every\` still counts from the first date), and \`series end S-2 --on <date>\` stops it. Skip one date with \`ttybrain meeting skip M-9\` or change it with \`meeting move M-9 --to <date>\`; neither comes back.
-- A meeting always has a subject (a person, a project or a board). Meetings from before this existed have none: \`ttybrain meeting subject M-4 #CRM\`, or \`--all-without #CRM\` for all.
+- A meeting always has a subject (a person, a project or a board). Meetings from before this existed have none: \`ttybrain meeting subject M-4 #CRM\`, or \`--all-without #CRM\` for all that fit (board meetings take a board, the others a project or person). A meeting with a subject keeps its kind: \`--kind\` changes both.
 
 **Boards**
 

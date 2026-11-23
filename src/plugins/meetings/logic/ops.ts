@@ -19,7 +19,7 @@ import {
 import { CLOSE_AFTER_DAYS, Closed, type Closer } from "./close"
 import type { Store } from "./records"
 import type { Talks } from "./talk"
-import { KindInput, MeetingKind, MeetingRecord, MeetingStatus, type MeetingRecord as Meeting, type SubjectType } from "./schema"
+import { KIND_LABELS, KindInput, MeetingKind, MeetingRecord, MeetingStatus, type MeetingRecord as Meeting, type SubjectType } from "./schema"
 import { dateField as date, kindFor, normalizeKind, shownDate } from "./series"
 import { sinceFor, type SinceResult } from "./since"
 
@@ -40,8 +40,14 @@ const AddMeeting = Type.Object({
 const EditMeeting = Type.Object({ ref: Ref, title: Type.Optional(NonBlank()), date: Type.Optional(NonBlank()), kind: Type.Optional(KindInput), sinceDate: Clearable })
 const MeetingRef = Type.Object({ ref: Ref })
 const MoveMeeting = Type.Object({ ref: Ref, to: NonBlank() })
-const SetSubject = Type.Object({ meeting: Type.Optional(Ref), allWithout: Type.Optional(Type.Boolean()), about: NonBlank() })
-const SubjectAll = Type.Object({ ref: Type.String(), about: Type.String(), meetings: Type.Array(MeetingRecord) })
+const SetSubject = Type.Object({ meeting: Type.Optional(Ref), allWithout: Type.Optional(Type.Boolean()), about: NonBlank(), kind: Type.Optional(KindInput) })
+const SubjectAll = Type.Object({
+  ref: Type.String(),
+  about: Type.String(),
+  meetings: Type.Array(MeetingRecord),
+  skipped: Type.Number(), // the meetings without a subject whose kind does not fit it
+  reason: Type.Optional(Type.String()),
+})
 const UpcomingInput = Type.Object({ from: NonBlank(), to: NonBlank() })
 const UpcomingRow = Type.Object({
   ref: Type.String(),
@@ -281,10 +287,13 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks, clos
           return store.meeting(m.ref)
         },
       },
-      // Give a meeting its subject (design §5.5, §5.7): a person makes it a 1:1, a board a board meeting, a project
-      // keeps board (as before boards existed) and makes anything else a project meeting. It closes itself from then on only when dated today or later (M4). With `allWithout`
-      // instead of `meeting`, every meeting that has no subject yet gets it, in date order, all in this one write;
-      // the output's `ref` is then the first meeting changed (the subject's ref when there was none).
+      // Give a meeting its subject (design §5.5, §5.7): a person makes a subject-less meeting a 1:1, a board a board
+      // meeting, a project a project meeting. A meeting that has a subject keeps its kind: a subject of another kind is
+      // refused unless `kind` is given, which changes the kind together with the subject (also the way back from a
+      // mistake). It closes itself from then on only when dated today or later (M4). With `allWithout` instead of
+      // `meeting`, the meetings that have no subject yet and whose kind fits it (board meetings a board, the others a
+      // person or project) get it, in date order, all in this one write; the others are counted as skipped. The
+      // output's `ref` is the first meeting changed (the subject's ref when there was none).
       setSubject: {
         input: SetSubject,
         output: Type.Union([MeetingRecord, SubjectAll]),
@@ -293,21 +302,42 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks, clos
         run: async (i: SubjectInput) => {
           if ((i.meeting === undefined) === (i.allWithout !== true))
             throw new ValidationError("give either meeting or allWithout", { field: "meeting" })
+          if (i.allWithout === true && i.kind !== undefined) throw new ValidationError("kind goes with one meeting, not --all-without", { field: "kind" })
           const subject = await store.activeSubject(i.about)
           const assign = async (m: Meeting) => {
-            // A board meeting stays one, so it needs a board (kindFor; design §5.1, §5.7); the others follow the
-            // subject (a person: 1:1, a project: project).
-            const kind = kindFor(subject, m.kind === "board" ? "board" : undefined)
+            let kind: MeetingKind
+            if (m.about === null) kind = kindFor(subject, i.kind ?? (m.kind === "board" ? "board" : undefined)) // no subject yet: a board meeting stays one
+            else if (i.kind !== undefined) kind = kindFor(subject, i.kind)
+            else {
+              kind = kindFor(subject)
+              if (kind !== m.kind)
+                throw new ValidationError(`${m.ref} is a ${KIND_LABELS[m.kind]} meeting; ${subject.ref} would make it a ${KIND_LABELS[kind]} meeting`, {
+                  field: "kind",
+                  hint: `to change its kind too: ttybrain meeting subject ${m.ref} ${i.about.trim()} --kind ${kind}`,
+                })
+            }
             const set: Record<string, unknown> = { subject_type: subject.type, subject_id: subject.id, kind, updated_at: now() }
             if (m.date >= today()) set.auto_close = 1
             await db.updateTable("meeting").set(set).where("id", "=", m.id).execute()
             return store.meeting(m.ref)
           }
           if (i.meeting !== undefined) return assign(await store.meeting(i.meeting))
-          const ids = await db.selectFrom("meeting").select("id").where("subject_type", "is", null).orderBy("date").orderBy("id").execute()
+          const rows = await db.selectFrom("meeting").select(["id", "kind"]).where("subject_type", "is", null).orderBy("date").orderBy("id").execute()
+          const toBoard = subject.type === "board"
+          const fits = rows.filter((r) => (r.kind === "board") === toBoard)
+          const skipped = rows.length - fits.length
+          const reason = !skipped
+            ? undefined
+            : toBoard
+              ? `${skipped === 1 ? "1 meeting that is not a board meeting" : `${skipped} meetings that are not board meetings`} (a board is only the subject of board meetings)`
+              : `${skipped} board meeting${skipped === 1 ? "" : "s"} (they need a board; ${subject.ref} is ${subject.type === "person" ? "a person" : "a project"})`
+          if (fits.length === 0 && skipped > 0)
+            throw new ValidationError(`no meeting without a subject fits ${subject.ref}: ${reason}`, {
+              hint: toBoard ? "give the others a person or project" : "give the board meetings a board: ttybrain meeting subject --all-without #CODE",
+            })
           const meetings: Meeting[] = []
-          for (const r of ids) meetings.push(await assign(await store.meeting(formatRef("M-", Number(r.id)))))
-          return { ref: meetings[0]?.ref ?? subject.ref, about: subject.ref, meetings }
+          for (const r of fits) meetings.push(await assign(await store.meeting(formatRef("M-", Number(r.id)))))
+          return { ref: meetings[0]?.ref ?? subject.ref, about: subject.ref, meetings, skipped, ...(reason === undefined ? {} : { reason }) }
         },
       },
       cancelMeeting: {

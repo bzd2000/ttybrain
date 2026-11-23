@@ -186,27 +186,43 @@ describe("boards as subjects", () => {
     expect([onProject.name, onProject.message, onProject.field, onProject.hint]).toEqual(["ValidationError", "a board meeting needs a board; #CRM is a project", "kind", HINT])
     const series = await failure(w("addSeries", { about: "#CRM", title: "x", kind: "board", every: "weekly on fri", from: "today" }))
     expect([series.message, series.hint]).toEqual(["a board meeting needs a board; #CRM is a project", HINT])
-    const moved = await failure(w("setSubject", { meeting: "M-1", about: "#CRM" }))
+    const moved = await failure(w("setSubject", { meeting: "M-1", about: "#CRM", kind: "board" }))
     expect([moved.message, moved.hint]).toEqual(["a board meeting needs a board; #CRM is a project", HINT])
     expect(sql("SELECT kind, subject_type FROM meetings_meeting WHERE id = 1")).toEqual([{ kind: "board", subject_type: "board" }])
     const edit = await failure(w("editMeeting", { ref: "M-1", kind: "project" }))
     expect(edit.message).toBe("a project meeting needs a project; #MB is a board")
-    // `meeting subject` to a board makes it a board meeting.
     await ok("meeting", "add", "Steering", "--about", "#CRM", "--date", "2026-12-04")
-    expect((await ok("meeting", "subject", "M-3", "#MB")).out).toBe("M-3 about #MB (board)\n")
-    // A board meeting stays one: a person is refused as a project is, nothing changes.
+    // `meeting subject` on a meeting that has a subject keeps its kind: a board needs --kind board, nothing silently re-kinds.
+    const toBoard = await cli("meeting", "subject", "M-3", "#MB")
+    expect([toBoard.code, toBoard.err]).toEqual([1, "error: M-3 is a project meeting; #MB would make it a board meeting\nhint: to change its kind too: ttybrain meeting subject M-3 #MB --kind board\n"])
+    expect((await ok("meeting", "subject", "M-3", "#MB", "--kind", "board")).out).toBe("M-3 about #MB (board)\n")
+    // And back: a mistake is undone with --kind; without it a board meeting refuses a person or project.
     const toPerson = await cli("meeting", "subject", "M-3", "@anna")
-    expect([toPerson.code, toPerson.err]).toEqual([1, `error: a board meeting needs a board; @anna is a person\nhint: ${HINT}\n`])
+    expect([toPerson.code, toPerson.err]).toEqual([1, "error: M-3 is a board meeting; @anna would make it a 1:1 meeting\nhint: to change its kind too: ttybrain meeting subject M-3 @anna --kind one_on_one\n"])
     expect(sql("SELECT kind, subject_type FROM meetings_meeting WHERE id = 3")).toEqual([{ kind: "board", subject_type: "board" }])
-    // In bulk too: a board meeting among the meetings without a subject refuses the whole write.
+    const wrong = await cli("meeting", "subject", "M-3", "@anna", "--kind", "project")
+    expect([wrong.code, wrong.err.split("\n")[0]]).toEqual([1, "error: a project meeting needs a project; @anna is a person"])
+    expect((await ok("meeting", "subject", "M-3", "#CRM", "--kind", "project")).out).toBe("M-3 about #CRM (project)\n")
+    expect((await ok("meeting", "subject", "M-3", "#MB", "--kind", "board")).out).toBe("M-3 about #MB (board)\n")
+    // In bulk: a project meeting and board meetings without a subject; each ref takes only those that fit.
     k!.db.raw.prepare("UPDATE meetings_meeting SET subject_type = NULL, subject_id = NULL WHERE id IN (2, 3)").run([])
-    const bulk = await cli("meeting", "subject", "--all-without", "@anna")
-    expect([bulk.code, bulk.err.split("\n")[0]]).toEqual([1, "error: a board meeting needs a board; @anna is a person"])
-    expect(sql("SELECT id, kind, subject_type FROM meetings_meeting WHERE id IN (2, 3) ORDER BY id")).toEqual([
-      { id: 2, kind: "board", subject_type: null },
-      { id: 3, kind: "board", subject_type: null },
-    ])
-    expect((await ok("meeting", "subject", "--all-without", "#MB")).out).toBe("M-3 about #MB (board)\nM-2 about #MB (board)\n")
+    k!.db.raw.prepare("UPDATE meetings_meeting SET kind = 'project' WHERE id = 2").run([])
+    const bulk = await cli("meeting", "subject", "--all-without", "#CRM", "--json")
+    expect([bulk.code, bulk.json.meetings.map((m: any) => m.ref), bulk.json.skipped]).toEqual([0, ["M-2"], 1])
+    expect(bulk.json.reason).toBe("1 board meeting (they need a board; #CRM is a project)")
+    k!.db.raw.prepare("UPDATE meetings_meeting SET subject_type = NULL, subject_id = NULL, kind = 'project' WHERE id = 2").run([])
+    expect((await ok("meeting", "subject", "--all-without", "#MB")).out).toBe(
+      "M-3 about #MB (board)\nskipped 1 meeting that is not a board meeting (a board is only the subject of board meetings)\n",
+    )
+    const noBoard = await cli("meeting", "subject", "--all-without", "#MB") // M-2 (a project meeting) is the only one left
+    expect([noBoard.code, noBoard.err.split("\n")[0]]).toEqual([1, "error: no meeting without a subject fits #MB: 1 meeting that is not a board meeting (a board is only the subject of board meetings)"])
+    expect((await ok("meeting", "subject", "--all-without", "#CRM")).out).toBe("M-2 about #CRM (project)\n")
+    k!.db.raw.prepare("UPDATE meetings_meeting SET subject_type = NULL, subject_id = NULL WHERE id = 3").run([])
+    const nofit = await cli("meeting", "subject", "--all-without", "#CRM")
+    expect([nofit.code, nofit.err.split("\n")[0]]).toEqual([1, "error: no meeting without a subject fits #CRM: 1 board meeting (they need a board; #CRM is a project)"])
+    const withKind = await cli("meeting", "subject", "--all-without", "#MB", "--kind", "board")
+    expect(withKind.code).toBe(1)
+    expect((await ok("meeting", "subject", "--all-without", "#MB")).out).toBe("M-3 about #MB (board)\n")
     await ok("meeting", "add", "Steering 2", "--about", "#CRM", "--date", "2026-12-11")
     const kind = await failure(w("editMeeting", { ref: "M-4", kind: "board" }))
     expect(kind.message).toBe("a board meeting needs a board; #CRM is a project")

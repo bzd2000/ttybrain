@@ -70,14 +70,29 @@ export function MeetingForm(props: RecordFormProps) {
   const rt = useRuntime()
   const store = makeStore(rt)
   const write = (op: string): Write => rt.self().write[op]! as Write
+  // The meeting being edited and the board codes (what a `#CODE` is: a board or a project).
+  const load = async () => ({
+    meeting: props.recordRef === undefined ? null : await store.meeting(props.recordRef),
+    boards: new Set((await rt.data.selectFrom("board").select("code").execute()).map((r) => String(r.code))),
+  })
   return (
-    <With load={async () => (props.recordRef === undefined ? null : store.meeting(props.recordRef))} close={props.close}>
-      {(m: MeetingRecord | null) => {
+    <With load={load} close={props.close}>
+      {(loaded: { meeting: MeetingRecord | null; boards: Set<string> } | null) => {
+        const m = loaded?.meeting ?? null
+        const boards = loaded?.boards ?? new Set<string>()
+        // An edit that gives the meeting a subject of another kind changes its Kind with it, so the change shows
+        // before saving: until Kind is edited by hand it follows About (so it has no `initial`: a field with one never follows).
+        const kindOf = (about: string | null | undefined): string | null | undefined => {
+          const ref = (about ?? "").trim().split(/[\s,]+/)[0] ?? ""
+          if (m === null) return undefined
+          if (ref === (m.about ?? "")) return m.kind
+          return ref.startsWith("@") ? "one_on_one" : ref.startsWith("#") ? (boards.has(ref.slice(1).toUpperCase()) ? "board" : "project") : undefined
+        }
         // What it is about comes first; a new meeting's kind may be left empty: it then follows from that.
         const fields: FieldSpec[] = [
           { name: "about", label: "About", kind: "refs", required: true, initial: m?.about },
           { name: "title", label: "Title", kind: "text", required: true, initial: m?.title },
-          { name: "kind", label: "Kind", kind: "enum", values: KINDS, labels: KIND_FIELD_LABELS, required: m !== null, initial: m?.kind },
+          { name: "kind", label: "Kind", kind: "enum", values: KINDS, labels: KIND_FIELD_LABELS, required: m !== null, derive: (v) => kindOf(v.about) },
           { name: "date", label: "Date", kind: "date", required: true, initial: m?.date ?? rt.clock.today() },
           attendeesField(m),
           ...(m === null ? [{ name: "projects", label: "Projects", kind: "text" as const }] : []),
@@ -102,9 +117,10 @@ export function MeetingForm(props: RecordFormProps) {
             { person: "attendees", project: "projects", about: "about" },
           )
         const edit = (meeting: MeetingRecord, v: FormValues): Promise<SubmitResult> => {
-          const changed = changedFields(fields, v).filter((n) => n !== "attendees" && n !== "about")
+          const changed = changedFields(fields.map((f) => (f.name === "kind" ? { ...f, initial: meeting.kind } : f)), v).filter((n) => n !== "attendees" && n !== "about")
           const about = (v.about ?? "").trim()
           const subject = about !== (meeting.about ?? "")
+          if (subject) changed.splice(0, changed.length, ...changed.filter((n) => n !== "kind")) // setSubject carries the kind
           const people = tags(v.attendees)
           const attendees = !sameTags(people, tags(attendeesField(meeting).initial))
           if (changed.length === 0 && !attendees && !subject) return Promise.resolve({ ok: true, ref: meeting.ref })
@@ -113,7 +129,7 @@ export function MeetingForm(props: RecordFormProps) {
           return save(
             async () => {
               let out: unknown
-              if (subject) out = await write("setSubject")({ meeting: meeting.ref, about })
+              if (subject) out = await write("setSubject")({ meeting: meeting.ref, about, ...(given(v.kind) === undefined ? {} : { kind: v.kind }) })
               if (changed.length > 0) out = await write("editMeeting")(input)
               if (attendees) out = await write("setAttendees")({ meeting: meeting.ref, people })
               return out
@@ -169,7 +185,7 @@ export function AgendaItemForm(props: RecordFormProps) {
             { project: "project" },
           )
         const edit = (it: AgendaItem, v: FormValues): Promise<SubmitResult> => {
-          const changed = changedFields(fields, v)
+          const changed = changedFields(fields.map((f) => (f.name === "kind" ? { ...f, initial: meeting.kind } : f)), v)
           if (changed.length === 0) return Promise.resolve({ ok: true, ref: meeting.ref })
           const input: Record<string, unknown> = { meeting: meeting.ref, item: it.position }
           for (const name of changed) input[name] = name === "text" ? (v.text ?? "") : (given(v[name]) ?? null)

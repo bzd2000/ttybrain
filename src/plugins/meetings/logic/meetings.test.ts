@@ -126,12 +126,14 @@ describe("meetings operations", () => {
     await w("addPerson", { name: "Crm Bot", handle: "crm" }, "people")
     const both = await failure(w("addMeeting", { about: "crm", title: "g", date: "today" }))
     expect([both.name, both.message, both.hint]).toEqual(["ValidationError", '"crm" is both a person and a project', "use @crm or #CRM"])
-    // setSubject: a person makes a 1:1, a project a project meeting; a board meeting stays one, so it needs a board.
+    // setSubject: a person makes a 1:1, a project a project meeting; once it has a subject the kind stays unless given.
     expect(await d("setSubject", { meeting: "M-3", about: "@tom" })).toBe("~ M-3 about @tom")
-    expect(await w("setSubject", { meeting: "M-3", about: "@tom" })).toMatchObject({ ref: "M-3", kind: "one_on_one", about: "@tom" })
-    expect(await w("setSubject", { meeting: "M-3", about: "#ERP" })).toMatchObject({ kind: "project", about: "#ERP" })
-    const board = await failure(w("setSubject", { meeting: "M-2", about: "@tom" }))
-    expect([board.name, board.message]).toEqual(["ValidationError", "a board meeting needs a board; @tom is a person"])
+    const first = await failure(w("setSubject", { meeting: "M-3", about: "@tom" })) // M-3 is a project meeting about #CRM
+    expect(first.message).toBe("M-3 is a project meeting; @tom would make it a 1:1 meeting")
+    expect(await w("setSubject", { meeting: "M-3", about: "@tom", kind: "one_on_one" })).toMatchObject({ ref: "M-3", kind: "one_on_one", about: "@tom" })
+    const rekind = await failure(w("setSubject", { meeting: "M-3", about: "#ERP" }))
+    expect([rekind.name, rekind.message, rekind.hint]).toEqual(["ValidationError", "M-3 is a 1:1 meeting; #ERP would make it a project meeting", "to change its kind too: ttybrain meeting subject M-3 #ERP --kind project"])
+    expect(await w("setSubject", { meeting: "M-3", about: "#ERP", kind: "project" })).toMatchObject({ kind: "project", about: "#ERP" })
   })
 
   test("edit, attendees and agenda change lines", async () => {

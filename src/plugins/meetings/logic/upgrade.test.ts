@@ -155,18 +155,22 @@ describe("upgrading meetings 1.0.0 data", () => {
     expect(await runWithContext(upgraded.context(), () => upgraded!.ops.describe("meetings", "setSubject", { allWithout: true, about: "#BOARD" }))).toBe(
       "~ meetings without a subject about #BOARD",
     )
-    // Onto a project, the board meeting among them is refused: as one write, nothing changes.
+    // Onto a project, the project meetings among them are assigned and the board meeting is skipped (and counted).
     const project = await cli(upgraded, "meeting", "subject", "--all-without", "#CRM")
-    expect([project.code, project.err.split("\n")[0]]).toEqual([1, "error: a board meeting needs a board; #CRM is a project"])
-    // Onto a board, they all become its board meetings.
+    expect([project.code, project.out, project.err]).toEqual([
+      0,
+      ["M-1 about #CRM (project)", "M-4 about #CRM (project)", "M-2 about #CRM (project)", "skipped 1 board meeting (they need a board; #CRM is a project)", ""].join("\n"),
+      "",
+    ])
+    // Onto a board, the board meeting becomes its board meeting.
     const all = await cli(upgraded, "meeting", "subject", "--all-without", "#BOARD")
-    expect([all.code, all.out, all.err]).toEqual([0, ["M-1 about #BOARD (board)", "M-4 about #BOARD (board)", "M-3 about #BOARD (board)", "M-2 about #BOARD (board)", ""].join("\n"), ""])
+    expect([all.code, all.out, all.err]).toEqual([0, "M-3 about #BOARD (board)\n", ""])
     expect((await cli(upgraded, "meeting", "subject", "--all-without", "#BOARD")).out).toBe("no meetings without a subject\n")
     expect(upgraded.db.raw.prepare("SELECT id, kind, subject_type, subject_id, auto_close FROM meetings_meeting ORDER BY id").all([])).toEqual([
-      { id: 1, kind: "board", subject_type: "board", subject_id: 1, auto_close: 0 }, // 28 Oct: past
-      { id: 2, kind: "board", subject_type: "board", subject_id: 1, auto_close: 1 },
+      { id: 1, kind: "project", subject_type: "project", subject_id: 1, auto_close: 0 }, // 28 Oct: past
+      { id: 2, kind: "project", subject_type: "project", subject_id: 1, auto_close: 1 },
       { id: 3, kind: "board", subject_type: "board", subject_id: 1, auto_close: 1 },
-      { id: 4, kind: "board", subject_type: "board", subject_id: 1, auto_close: 0 },
+      { id: 4, kind: "project", subject_type: "project", subject_id: 1, auto_close: 0 },
       { id: 5, kind: "one_on_one", subject_type: "person", subject_id: 3, auto_close: 0 }, // 18 Nov: past
     ])
     const usage = await cli(upgraded, "meeting", "subject", "M-1")

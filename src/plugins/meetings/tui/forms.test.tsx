@@ -151,8 +151,22 @@ describe("meeting form", () => {
     await t.input.typeText("@marie")
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, (f) => statusLine(f).includes("saved M-1"))
-    expect(calls).toEqual([{ name: "setSubject", input: { meeting: "M-1", about: "@marie" } }])
+    expect(calls).toEqual([{ name: "setSubject", input: { meeting: "M-1", about: "@marie", kind: "one_on_one" } }])
     expect(await record("M-1")).toMatchObject({ about: "@marie", kind: "one_on_one" })
+  })
+
+  test("About: a subject of another kind changes Kind with it, visibly, and the write carries it", async () => {
+    const t = await open()
+    const calls = spy()
+    void overlay!.openForm("meeting", "meeting", { recordRef: "M-1" })
+    let frame = await until(t, (f) => f.includes("Edit M-1"))
+    expect(lineWith(frame, "Kind")).toContain("project")
+    for (let i = 0; i < 4; i++) t.input.pressBackspace()
+    await t.input.typeText("@marie")
+    frame = await until(t, (f) => lineWith(f, "Kind").includes("1:1"))
+    t.input.pressKey("s", { ctrl: true })
+    await until(t, (f) => statusLine(f).includes("saved M-1"))
+    expect(calls[0]).toEqual({ name: "setSubject", input: { meeting: "M-1", about: "@marie", kind: "one_on_one" } })
   })
 })
 
