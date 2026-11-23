@@ -189,6 +189,43 @@ describe("talk item form", () => {
   })
 })
 
+describe("series form", () => {
+  test("opened from a subject and left untouched, Esc keeps no draft; a restored draft keeps its derived fields following", async () => {
+    const t = await open()
+    const from = { prefill: { about: "@marie" }, draftFor: "@marie" }
+    void overlay!.openForm("series", "series", from)
+    let frame = await until(t, (f) => f.includes("Marie Dubois · person"))
+    expect(lineWith(frame, "Attendees")).toContain("Marie Dubois")
+    t.input.pressEscape()
+    await sleep(30)
+    frame = await until(t, (f) => !f.includes("New recurring meeting"))
+    expect(statusLine(frame)).not.toContain("draft kept")
+    void overlay!.openForm("series", "series", from)
+    frame = await until(t, (f) => f.includes("Marie Dubois · person"))
+    await t.settle()
+    expect(await t.frame()).not.toContain("restore")
+
+    // The rhythm typed: Esc keeps it; restored, First date and Attendees still follow.
+    await until(t, (f) => statusLine(f).includes("tab field"))
+    await t.input.typeText("weekly on mon")
+    frame = await until(t, (f) => lineWith(f, "First date").includes("Mon 16 Nov"))
+    t.input.pressEscape()
+    await sleep(30)
+    frame = await until(t, (f) => !f.includes("New recurring meeting"))
+    expect(statusLine(frame)).toContain("draft kept")
+    void overlay!.openForm("series", "series", from)
+    await until(t, (f) => f.includes("restore"))
+    t.input.pressKey("r")
+    frame = await until(t, (f) => !f.includes("restore") && lineWith(f, "First date").includes("Mon 16 Nov"))
+    expect(lineWith(frame, "Rhythm")).toContain("weekly on mon")
+    for (let i = 0; i < 3; i++) t.input.pressBackspace()
+    await t.input.typeText("wed")
+    frame = await until(t, (f) => lineWith(f, "First date").includes("Wed 18 Nov"))
+    expect(lineWith(frame, "First date")).toContain("Wed 18 Nov")
+    expect(lineWith(frame, "Attendees")).toContain("Marie Dubois")
+  })
+})
+
 describe("agenda item form", () => {
   test("adds an item to the meeting", async () => {
     const t = await open()

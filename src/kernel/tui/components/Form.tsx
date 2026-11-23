@@ -136,10 +136,29 @@ export function Form(props: {
   const fields = createMemo((): FieldSpec[] => (extraInitial() === undefined ? props.fields : [...props.fields, ...extraSpecs]))
   const extraOf = (name: string) => extras.find((x) => x.key === name)
 
-  // --- the draft: the values of every field shown, against the values the form opened with ---
+  // The derived fields that were edited (or given a value to start with): they no longer follow the others.
+  const [touched, setTouched] = createSignal(new Set<string>(props.fields.filter((f) => f.derive && f.initial !== undefined && f.initial !== null).map((f) => f.name)))
+  const touch = (name: string) => setTouched((t) => (t.has(name) ? t : new Set([...t, name])))
+  // Applies the derives that follow (untouched) to `v`, a few passes so one may follow another.
+  const derived = (v: FormValues, only: (name: string) => boolean = (n) => !touched().has(n)): FormValues => {
+    const out = { ...v }
+    for (let pass = 0; pass < 3; pass++)
+      for (const f of props.fields) {
+        if (!f.derive || !only(f.name)) continue
+        const d = f.derive(out)
+        if (d !== undefined) out[f.name] = d
+      }
+    return out
+  }
+
+  // --- the draft: the values of every field shown, against the values the form opened with (after its derives,
+  // which count as where it started); a derived field that still follows the others is not part of a draft ---
   const ownInitial = Object.fromEntries(props.fields.map((f) => [f.name, initial(f)]))
   const ready = () => extraInitial() !== undefined
-  const initialValues = (): FormValues => ({ ...ownInitial, ...(extraInitial() ?? {}) })
+  const baseline = (): FormValues => derived({ ...ownInitial, ...(extraInitial() ?? {}) }, () => true)
+  const following = (name: string) => props.fields.some((f) => f.name === name && f.derive !== undefined) && !touched().has(name)
+  const draftOf = (v: FormValues): FormValues => Object.fromEntries(Object.entries(v).filter(([n]) => !following(n)))
+  const initialValues = (): FormValues => draftOf(baseline())
   const draft = useDraftKey<FormValues>(useContext(FormDraftKey), initialValues)
   const pick = (v: FormValues, names: string[]) => Object.fromEntries(names.filter((n) => n in v).map((n) => [n, v[n] ?? null]))
   // The draft offered: set while the form waits for r / x / Esc (it takes no keys meanwhile).
@@ -152,21 +171,24 @@ export function Form(props: {
     if (!d || !ready()) return
     const names = fields().map((f) => f.name)
     const shown = pick(d.values, names)
-    if (sameValues({ ...pick(initialValues(), names), ...shown }, pick(initialValues(), names))) {
+    if (sameValues({ ...pick(baseline(), names), ...shown }, pick(baseline(), names))) {
       draft.discard()
       setOffer(undefined)
     }
   })
   createEffect(() => {
     const v = values()
-    if (ready() && !offer()) draft.schedule(v)
+    if (ready() && !offer()) draft.schedule(draftOf(v))
   })
   const restore = () => {
     const d = offer()
     if (!d) return
     setOffer(undefined)
-    for (const name of Object.keys(d.values)) touch(name)
-    setValues((all) => ({ ...all, ...pick(d.values, Object.keys(all)) }))
+    const merged = { ...values(), ...pick(d.values, Object.keys(values())) }
+    // A derived field is edited only when the draft's value is not what it would follow to.
+    const follow = derived(merged, () => true)
+    for (const name of Object.keys(d.values)) if ((d.values[name] ?? null) !== (follow[name] ?? null)) touch(name)
+    setValues(merged)
   }
   const discardDraft = () => {
     draft.discard()
@@ -178,8 +200,6 @@ export function Form(props: {
   const setValue = (name: string, v: string | null) => setValues((all) => ({ ...all, [name]: v }))
 
   // --- derived values: a field with `derive` follows the others until it is edited (or restored from a draft) ---
-  const [touched, setTouched] = createSignal(new Set<string>())
-  const touch = (name: string) => setTouched((t) => (t.has(name) ? t : new Set([...t, name])))
   createEffect(() => {
     const v = values()
     for (const f of props.fields) {

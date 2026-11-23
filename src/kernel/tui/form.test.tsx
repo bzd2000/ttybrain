@@ -193,6 +193,24 @@ function LookForm(props: RecordFormProps) {
   )
 }
 
+// A derived field that follows from the start: `copy` follows `title` (filled in) until edited.
+function DeriveForm(props: RecordFormProps) {
+  return (
+    <Form
+      title="Derive"
+      fields={[
+        { name: "title", label: "Title", kind: "text", initial: "Plan" },
+        { name: "copy", label: "Copy", kind: "text", derive: (v) => (v.title ? `${v.title}!` : null) },
+      ]}
+      submit={async (v) => {
+        submitted.push(v)
+        return { ok: true }
+      }}
+      close={props.close}
+    />
+  )
+}
+
 let overlay: Overlay | undefined
 function Home() {
   overlay = useOverlay()
@@ -210,6 +228,7 @@ const todoPart: TuiDef = defineTui({
     ui.recordForm("thing", { id: "links", label: "Links", component: LinksForm })
     ui.recordForm("thing", { id: "looks", label: "Looks", component: LooksForm })
     ui.recordForm("thing", { id: "look", label: "Look", component: LookForm })
+    ui.recordForm("thing", { id: "derive", label: "Derive", component: DeriveForm })
   },
 })
 
@@ -241,6 +260,44 @@ const lineWith = (frame: string, s: string) => frame.split("\n").find((l) => l.i
 const statusLine = (frame: string) => frame.trimEnd().split("\n").at(-1)!
 
 describe("forms", () => {
+  test("derived values count as where the form starts: no draft for an untouched form; a restore keeps them following", async () => {
+    const t = await open()
+    void overlay!.openForm("thing", "derive")
+    let frame = await t.frame()
+    expect(lineWith(frame, "Copy")).toContain("Plan!")
+    // Esc, then (no `s`) the cancel, once the Esc chord's window has passed.
+    const closed = async () => {
+      t.input.pressEscape()
+      let f = await t.frame()
+      for (let i = 0; i < 100 && f.includes("Derive"); i++) {
+        await sleep(25)
+        f = await t.frame()
+      }
+      return f
+    }
+    frame = await closed()
+    expect(frame).not.toContain("Derive")
+    expect(statusLine(frame)).not.toContain("draft kept")
+    void overlay!.openForm("thing", "derive")
+    await t.settle()
+    frame = await t.frame()
+    expect(frame).not.toContain("restore")
+
+    // Changed: Esc keeps a draft of the title only; restored, Copy still follows Title.
+    await t.input.typeText(" B")
+    expect(lineWith(await t.frame(), "Copy")).toContain("Plan B!")
+    expect(statusLine(await closed())).toContain("draft kept")
+    void overlay!.openForm("thing", "derive")
+    frame = await t.frame()
+    expect(frame).toContain("restore")
+    t.input.pressKey("r")
+    frame = await t.frame()
+    expect(lineWith(frame, "Title")).toContain("Plan B")
+    expect(lineWith(frame, "Copy")).toContain("Plan B!")
+    await t.input.typeText("C")
+    expect(lineWith(await t.frame(), "Copy")).toContain("Plan BC!")
+  })
+
   test("look: a panel with a plain label column; only the focused field is an input, the others as read", async () => {
     const t = await open()
     await runWithContext(kernel.context(), () => kernel.runtime("todo")!.self().write.addThing!({ title: "Write spec" }))
