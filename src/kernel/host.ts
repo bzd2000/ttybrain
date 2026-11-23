@@ -73,7 +73,7 @@ export type Kernel = {
   // start and when the day changes. Resolves to whether an upkeep changed any rows (a caller sharing a run, or one
   // made when nothing was due, gets false).
   upkeep(): Promise<boolean>
-  // The upkeep failures of this process so far, oldest first (`text`: `upkeep "<id>" failed: <message>`). The CLI
+  // The upkeep failures of this process so far, oldest first (`text`: `upkeep "<plugin>/<id>" failed: <message>`). The CLI
   // prints those a command raised as warnings; they also stay on the plugin's status.
   upkeepFailures(): readonly UpkeepFailure[]
   shutdown(): Promise<void>
@@ -504,7 +504,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
           const text = `upkeep "${u.id}" failed: ${message(e)}`
           const hint = e instanceof PmError ? e.hint : undefined
           noteError(s.id, text, hint)
-          upkeepFailures.push({ plugin: s.id, text, ...(hint ? { hint } : {}) })
+          upkeepFailures.push({ plugin: s.id, text: `upkeep "${s.id}/${u.id}" failed: ${message(e)}`, ...(hint ? { hint } : {}) })
         }
       }
     }

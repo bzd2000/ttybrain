@@ -214,12 +214,6 @@ export function makeStore(ctx: PluginRuntime) {
     return row ? Number(row.id) : null
   }
 
-  // The id the next meeting gets (an integer primary key takes the highest id plus one), for the add line.
-  async function nextMeetingId(): Promise<number> {
-    const rows = await db.selectFrom("meeting").select("id").orderBy("id", "desc").limit(1).execute()
-    return rows.length ? Number(rows[0]!.id) + 1 : 1
-  }
-
   async function nextSeriesId(): Promise<number> {
     const rows = await db.selectFrom("series").select("id").orderBy("id", "desc").limit(1).execute()
     return rows.length ? Number(rows[0]!.id) + 1 : 1
@@ -244,7 +238,6 @@ export function makeStore(ctx: PluginRuntime) {
     openMeeting,
     personId,
     projectId,
-    nextMeetingId,
     nextSeriesId,
     heldMeetingsWith,
     unlessUnavailable,

@@ -71,7 +71,7 @@ const steerco = { about: "#CRM", title: "Steering committee Q4", date: "2026-12-
 describe("meetings operations", () => {
   test("addMeeting with attendees and projects creates agenda items", async () => {
     await boot()
-    expect(await d("addMeeting", steerco)).toBe('+ meeting M-1 "Steering committee Q4" 2026-12-04')
+    expect(await d("addMeeting", steerco)).toBe('+ meeting "Steering committee Q4" 2026-12-04')
     const m: MeetingRecord = await w("addMeeting", steerco)
     expect(m).toEqual({
       ref: "M-1",
@@ -92,7 +92,7 @@ describe("meetings operations", () => {
     })
     const plain = await w("addMeeting", { about: "tom", title: "1:1", date: "tomorrow" })
     expect([plain.ref, plain.date, plain.kind, plain.attendees, plain.agenda, plain.about]).toEqual(["M-2", "2026-11-14", "one_on_one", ["@tom"], [], "@tom"])
-    expect(await d("addMeeting", { about: "#ERP", title: "Next", date: "2026-12-01" })).toBe('+ meeting M-3 "Next" 2026-12-01')
+    expect(await d("addMeeting", { about: "#ERP", title: "Next", date: "2026-12-01" })).toBe('+ meeting "Next" 2026-12-01')
     const bad = await failure(w("addMeeting", { about: "#ERP", title: "Next", date: "someday" }))
     expect([bad.name, bad.field]).toEqual(["ValidationError", "date"])
     const none = await failure(w("addMeeting", { title: "Next", date: "2026-12-01" }))
@@ -110,6 +110,12 @@ describe("meetings operations", () => {
     const edit = await failure(w("editMeeting", { ref: "M-1", kind: "one_on_one" }))
     expect([edit.message, edit.field]).toEqual(["a 1:1 needs a person; #CRM is a project", "kind"])
     expect(await d("editMeeting", { ref: "M-1", kind: "steering" })).toBe("~ M-1 (no change)")
+    // A meeting without a subject cannot become a 1:1 (it has no person).
+    k!.db.raw.prepare("UPDATE meetings_meeting SET subject_type = NULL, subject_id = NULL WHERE id = 2").run([])
+    const bare = await failure(w("editMeeting", { ref: "M-2", kind: "one_on_one" }))
+    expect([bare.name, bare.message, bare.field, bare.hint]).toEqual(["ValidationError", "a 1:1 needs a person; this meeting has no subject", "kind", "run ttybrain meeting subject M-2 @handle first"])
+    expect((await w("editMeeting", { ref: "M-2", kind: "board" })).kind).toBe("board")
+    await w("setSubject", { meeting: "M-2", about: "#CRM" }) // restores the subject for the checks below
     const unknown = await failure(w("addMeeting", { about: "nobody", title: "f", date: "today" }))
     expect([unknown.name, unknown.message]).toEqual(["NotFoundError", 'unknown person or project "nobody"'])
     const near = await failure(w("addMeeting", { about: "#CRN", title: "f", date: "today" }))

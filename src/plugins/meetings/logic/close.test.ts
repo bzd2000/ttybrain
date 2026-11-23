@@ -267,6 +267,29 @@ describe("auto-close", () => {
     ])
   })
 
+  test("changing a meeting's date re-applies M4: edit to the past stops auto-close, move to the future starts it", async () => {
+    const k = await boot("2026-11-20")
+    await w(k, "addMeeting", { about: "@karim", title: "Future", date: "2026-11-27" }) // M-1, auto_close 1
+    await w(k, "addMeeting", { about: "@anna", title: "Past", date: "2026-11-10" }) // M-2, auto_close 0
+    await w(k, "addMeeting", { about: "@bob", title: "No subject", date: "2026-11-27" }) // M-3
+    k.db.raw.prepare("UPDATE meetings_meeting SET subject_type = NULL, subject_id = NULL, auto_close = 0 WHERE id = 3").run([])
+    await w(k, "editMeeting", { ref: "M-1", date: "2026-11-02" })
+    await w(k, "moveMeeting", { ref: "M-2", to: "2026-12-01" })
+    await w(k, "editMeeting", { ref: "M-3", date: "2026-12-05" })
+    expect(sql(k, "SELECT id, auto_close FROM meetings_meeting ORDER BY id")).toEqual([
+      { id: 1, auto_close: 0 },
+      { id: 2, auto_close: 1 },
+      { id: 3, auto_close: 0 }, // no subject: never
+    ])
+    const dec = await later("2026-12-05")
+    await dec.upkeep()
+    expect(meetingRows(dec)).toEqual([
+      ["M-1", "2026-11-02", "planned"], // moved into the past: it does not close itself on the next write
+      ["M-2", "2026-12-01", "held"], // moved to the future: closes itself 3 days after the new date
+      ["M-3", "2026-12-05", "planned"],
+    ])
+  })
+
   test("Review Focus 3: not opened for three weeks, the next write-capable start closes every overdue meeting, keeps unticked items, makes only future occurrences", async () => {
     const k = await boot("2026-11-02") // Mon 2 Nov
     await w(k, "addSeries", { about: "@anna", title: "1:1 Anna", every: "weekly on mon", from: "today" }) // M-1 … M-8: 2 Nov … 21 Dec

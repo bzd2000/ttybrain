@@ -216,10 +216,17 @@ export function SubjectMeetings(props: { recordRef: string }) {
         const { sections } = await rt.reports.run("project-status", params)
         const fact = sections.find((x) => x.compact?.fact === true)
         // The status rows without their headings; the actions section is replaced by "Your actions for <code>".
+        // A section without a compact form shows as its title and note (muted) when it has one: a failing section's
+        // `error: …` (the kernel's stand-in for it) shows here instead of nowhere.
         const rows: PrepRow[] = sections
-          .filter((x) => x !== fact && x.title !== ACTIONS_SECTION && x.compact !== undefined)
-          .flatMap((x) => x.compact!.lines)
-          .map((l) => ({ icon: l.icon ?? { text: "" }, text: { text: l.text.map((t) => t.text).join(""), parts: l.text }, aside: l.aside ?? { text: "" } }))
+          .filter((x) => x !== fact && x.title !== ACTIONS_SECTION)
+          .flatMap((x): PrepRow[] =>
+            x.compact !== undefined
+              ? x.compact.lines.map((l) => ({ icon: l.icon ?? { text: "" }, text: { text: l.text.map((t) => t.text).join(""), parts: l.text }, aside: l.aside ?? { text: "" } }))
+              : x.note
+                ? [{ icon: { text: "" }, text: { text: `${x.title} ${x.note}`, parts: [{ text: `${x.title} `, tone: "muted" as const }, { text: x.note, tone: "muted" as const }] }, aside: { text: "" } }]
+                : [],
+          )
         prep = { since, health: fact?.compact?.lines[0]?.text ?? null, rows, mine: await subjects.mine(s) }
       }
       return {

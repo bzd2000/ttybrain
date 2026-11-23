@@ -177,7 +177,7 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks, clos
       addMeeting: {
         input: AddMeeting,
         output: MeetingRecord,
-        describe: async (i: AddInput) => `+ meeting ${formatRef("M-", await store.nextMeetingId())} "${i.title.trim()}" ${shownDate(i.date)}`,
+        describe: async (i: AddInput) => `+ meeting "${i.title.trim()}" ${shownDate(i.date)}`,
         run: async (i: AddInput) => {
           const subject = await store.subject(i.about)
           const kind = kindFor(subject, i.kind)
@@ -240,10 +240,17 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks, clos
           const m = await store.openMeeting(i.ref, { allowHeld: true })
           const set: Record<string, unknown> = { updated_at: now() }
           if (i.title !== undefined) set.title = i.title.trim()
-          if (i.date !== undefined) set.date = date(i.date, "date")
+          if (i.date !== undefined) {
+            const day = date(i.date, "date")
+            set.date = day
+            if (m.about !== null) set.auto_close = day >= today() ? 1 : 0 // as `meeting subject` (M4)
+          }
           if (i.kind !== undefined) {
             const type = await subjectTypeOf(m)
-            set.kind = type === null ? normalizeKind(i.kind) : kindFor({ type, ref: m.about! }, i.kind)
+            const kind = normalizeKind(i.kind)
+            if (type === null && kind === "one_on_one")
+              throw new ValidationError("a 1:1 needs a person; this meeting has no subject", { field: "kind", hint: `run ttybrain meeting subject ${m.ref} @handle first` })
+            set.kind = type === null ? kind : kindFor({ type, ref: m.about! }, i.kind)
           }
           if (i.sinceDate !== undefined) set.since_date = blank(i.sinceDate) ? null : date(i.sinceDate!, "sinceDate")
           await db.updateTable("meeting").set(set).where("id", "=", m.id).execute()
@@ -267,7 +274,10 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks, clos
         },
         run: async (i: MoveMeetingInput) => {
           const m = await store.openMeeting(i.ref)
-          await db.updateTable("meeting").set({ date: date(i.to, "to"), updated_at: now() }).where("id", "=", m.id).execute()
+          const to = date(i.to, "to")
+          const set: Record<string, unknown> = { date: to, updated_at: now() }
+          if (m.about !== null) set.auto_close = to >= today() ? 1 : 0 // as `meeting subject` (M4)
+          await db.updateTable("meeting").set(set).where("id", "=", m.id).execute()
           return store.meeting(m.ref)
         },
       },

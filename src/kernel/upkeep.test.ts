@@ -197,7 +197,7 @@ describe("upkeep", () => {
     const run = io()
     expect(await runCli(["alpha", "add", "kept", "--json"], a, run.io)).toBe(0)
     expect(JSON.parse(run.o.out)).toEqual({ ref: "R-1" })
-    expect(run.o.err).toBe('warning: upkeep "u1" failed: counter is stuck\nhint: run alpha reset\nwarning: upkeep "u1" failed: boom\n')
+    expect(run.o.err).toBe('warning: upkeep "alpha/u1" failed: counter is stuck\nhint: run alpha reset\nwarning: upkeep "beta/u1" failed: boom\n')
     // Raised once: the next command of this process says nothing more (the error stays on the plugin's status).
     const next = io()
     expect(await runCli(["alpha", "add", "again"], a, next.io)).toBe(0)
@@ -211,7 +211,7 @@ describe("upkeep", () => {
     const later = io()
     expect(await runCli(["alpha", "count"], b, later.io)).toBe(0)
     expect(later.o.err).toBe("") // only failures raised during the command itself
-    expect(b.upkeepFailures()).toEqual([{ plugin: "alpha", text: 'upkeep "u1" failed: counter is stuck', hint: "run alpha reset" }])
+    expect(b.upkeepFailures()).toEqual([{ plugin: "alpha", text: 'upkeep "alpha/u1" failed: counter is stuck', hint: "run alpha reset" }])
   })
 
   test("a failed plugin's upkeeps never run; ids must be unique and non-empty; registering after activate throws", async () => {

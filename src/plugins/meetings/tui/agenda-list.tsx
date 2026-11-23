@@ -25,13 +25,6 @@ const peopleOf = (rt: Runtime, m: MeetingRecord): Promise<PersonRow[]> => {
   )
 }
 
-// The attendees' names (people.person), in the meeting's order; a handle stands in for a name it cannot find.
-export async function attendeeNames(rt: Runtime, m: MeetingRecord): Promise<string[]> {
-  if (m.attendees.length === 0) return []
-  const nameOf = new Map((await peopleOf(rt, m)).map((r) => [String(r.handle), String(r.name)]))
-  return m.attendees.map((h) => nameOf.get(h.slice(1)) ?? h)
-}
-
 export type Attendee = { name: string; tone?: Tone }
 // A stakeholder as `First L.`, anyone else by first name.
 export function shortName(name: string, stakeholder: boolean): string {
