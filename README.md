@@ -1,6 +1,6 @@
 # ttybrain
 
-A personal project-portfolio tool: a CLI (`ttybrain <thing> <verb>`, also usable by an AI agent) and, from phase 2, a terminal UI built with [OpenTUI](https://opentui.com) and Solid. It is a small plugin kernel plus plugins (`people`, `projects`, `actions`, `meetings`, `inbox`); the built-ins are ordinary plugins that can be switched off, and you can add your own. Data is one SQLite file under `TTYBRAIN_HOME` (default `~/.ttybrain`). It runs on Bun 1.3.14+ and Node.js 26.4+. See `docs/architecture.md`.
+A personal project-portfolio tool: a CLI (`ttybrain <thing> <verb>`, also usable by an AI agent) and, from phase 2, a terminal UI built with [OpenTUI](https://opentui.com) and Solid. It is a small plugin kernel plus plugins (`people`, `projects`, `actions`, `meetings` (meetings, series, talk-lists and boards), `inbox`); the built-ins are ordinary plugins that can be switched off, and you can add your own. Data is one SQLite file under `TTYBRAIN_HOME` (default `~/.ttybrain`). It runs on Bun 1.3.14+ and Node.js 26.4+. See `docs/architecture.md`.
 
 ## CLI
 
@@ -57,7 +57,7 @@ Actions are now their own plugin (`actions`), no longer part of `projects`. On t
 
 ## Upgrading to the meetings rework
 
-Meetings are now about a person (a 1:1) or a project (a project meeting or a board), can recur as a series (`ttybrain meeting series add @karim "1:1 Karim" --every "2 weeks on wed"`), and every person and project has a talk-list (`ttybrain talk add @anna "AWS training budget"`, or `t` in the TUI). A meeting not closed 3 days after its date now closes itself.
+Meetings are now about a person (a 1:1) or a project (a project meeting) (boards followed, see the next section), can recur as a series (`ttybrain meeting series add @karim "1:1 Karim" --every "2 weeks on wed"`), and every person and project has a talk-list (`ttybrain talk add @anna "AWS training budget"`, or `t` in the TUI). A meeting not closed 3 days after its date now closes itself.
 
 - Every existing meeting keeps everything: its number (`M-4` stays `M-4`), title, date, status, attendees, agenda, asks, notes, since date, and the actions and decisions linked to it. The kinds `steering` and `other` become `project`; `board` stays `board` (the CLI still accepts `--kind steering|other` as aliases of `project`).
 - Existing meetings have no subject yet: they show `—` where a subject goes, are listed under "No subject" on the Meetings screen, and never close themselves. Give one a subject with `ttybrain meeting subject M-4 #CRM`, or all of them at once with `ttybrain meeting subject --all-without #BOARD`. Once a meeting has a subject, it closes itself like a new one if it is dated today or later; past ones never do.
@@ -66,6 +66,16 @@ Meetings are now about a person (a 1:1) or a project (a project meeting or a boa
 - Occurrences of a series are created for the next 8 weeks whenever ttybrain starts for a command that writes, or the TUI opens (and each new day while it stays open). A read-only command may show yesterday's state until then.
 - External plugins: `meetings` is now 2.0.0 (the kind values of its published `meeting` view changed, and the view gained `subject_type`, `subject_id` and `series_id`). A plugin that `requires` or reads `meetings` at `^1` sees it as unavailable until you update the range to `^2`; the built-in `projects` and `actions` already read `^2`.
 - As with the actions upgrade, ttybrain copies the database to `ttybrain.db.bak-v<N>` before the first migration, and an older build should not be used on the upgraded database.
+
+## Upgrading to boards
+
+A board (`#MB`, "Management board") is now its own record in the `meetings` plugin, no longer a project such as `BOARD`: `ttybrain board add MB "Management board"`, then `ttybrain meeting series add #MB "Board" --every "monthly on the last fri"`. A board has a talk-list (`ttybrain talk add #MB "Office move"`, or `talk #MB …` in quick capture), its series and meetings, and the actions linked to it; in the TUI, screen 5 lists them under "Boards" and Enter opens one. A board's code is 2-16 letters or digits with at least one letter. Project and board codes share one namespace: adding or renaming either refuses a code the other uses, and `#MB` where a project is needed (`project show #MB`, `--project MB`) is refused as "a board, not a project". Kind `board` needs a board subject.
+
+- On the first start after upgrading (`meetings` 2.1.0), every project that was the subject of a board meeting or series gets a new board with the project's name and the code `<CODE>B` (`BOARD` becomes `#BOARDB`; a number is added if that is taken). Those meetings and series move to it, with their numbers (`M-4`, `S-2`) and everything in them unchanged. The project keeps its code, actions and its own data; archive it by hand if it only existed for the board.
+- The project's open talk items move to the board only if the project held nothing but board meetings (they were the board's talk-list). If it also had project meetings or series, they stay on the project. Discussed and dropped items, and people's items tagged with the project, always stay.
+- `ttybrain plugin list` and the Help screen (`?`) name each new board until you edit it. Rename it with `ttybrain board edit #BOARDB --code MB` (also `--name`); the notice then goes away.
+- Board meetings that had no subject stay without one until you assign it: `ttybrain meeting subject M-4 #MB`, or `--all-without #MB`.
+- As with the earlier upgrades, ttybrain copies the database to `ttybrain.db.bak-v<N>` first, and an older build should not be used afterwards. `meetings` is now 2.1.0, additive: it publishes a new `meetings.board` view, and `meetings.meeting` (v2) can now have `subject_type` `board`.
 
 ## Development
 

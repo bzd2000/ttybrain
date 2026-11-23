@@ -487,3 +487,49 @@ The user asked for a side-by-side review of the TUI against the screen designs o
 - The series form is the only form with the designed Form `look`; whether the other forms take it too.
 - Notes written after closing stay on the meeting only (a 1:1's copy on the person is not updated).
 - The actions plan's items (the board meeting's fifth `Actions` tab, Linked-to meeting labels `steering 27 Oct` against full title and date) are listed under "Actions plugin (2026-11-22)", last bullet of its deferred minors; M11 above now limits the Actions tab to board meetings.
+
+## Boards (2026-11-23)
+
+Collected from the execution ledger (`.superpowers/sdd/2026-11-23-boards/progress.md`) and the task reports. Plan: `docs/superpowers/plans/2026-11-23-boards.md`; design: `docs/superpowers/specs/2026-11-20-ttybrain-meetings-actions-design.md` §5.7. Meetings 2.1.0, additive (the new `meetings.board` view; `meetings.meeting` v2 can have `subject_type` `board`).
+
+### Rulings made during boards (and what each costs if wrong)
+
+Plan rulings:
+
+- **B1. Shared prefix in the kernel** (`sharedPrefix: true` on every record and tag type of a prefix; `resolve(ref, { type })`, `typesOfRef`). Cost: a plugin that forgets the flag is isolated at registration.
+- **B2. The namespace check lives in each owner** (meetings reads `projects.project`, projects reads `meetings.board`). Cost: with `meetings` switched off, projects skips the check, so a project code can later clash with a board's; `resolve` then reports `"#MB" is both a project and a board`.
+- **B3. Data step `boards-from-projects`:** a board `<CODE>B` per project that hosted board meetings or series; nothing is renamed. Cost: few databases are touched (existing meetings are subject-less after the meetings rework); the user renames the board.
+- **B4. Board view:** record view with two tabs, Meetings and Talk.
+- **B5. Seeds:** `seedMeetings` has the board `#BOARD` "Management board" and `seedDesign` M-2 is about `#SC` "Steering committee".
+
+Rulings during execution:
+
+- **Task 1:** `resolve()` returns null for an unknown code (every caller relies on it); only `label()` throws the named `NotFoundError` (`no project or board "#X"`). Cost: callers that need a record handle null themselves, as before.
+- **Task 2:** a board code needs at least one letter, and the board record type resolves by code only (no id fallback); an all-digit code would clash with a project's numeric id (`#12`). Cost: `board add 2027 …` is refused.
+- **Task 2 (review I2):** B3 also moves the project's open talk items to the new board when the project hosts no other (non-board) meetings or series; otherwise they stay and the notice says "open talk items stay on #CODE". Cost: a pure board project ends with no talk items (they moved with the board).
+- **Task 2:** the step moves by series (a board series moves with all its occurrences, set to kind board; a board occurrence outside a board series moves alone). The occurrences upkeep skips an archived board's series. The code is `<CODE cut to 15>B`, then `B2`, `B3` while taken (cutting to 16 would give the project's own code back).
+- **Task 2:** kind board on a project subject stayed accepted for one task (the seeds used it); Task 3 refuses it (`a board meeting needs a board; #CRM is a project`).
+- **Task 2:** the inbox's unknown-tag warning names the prefix's first type (`⚠ unknown project`), not both types, so the design frames and the 80x24 line stay unchanged. Cost: it says "project" for an unknown `#X`.
+- **Task 2:** new kernel capability `ctx.notices` (a plugin's lines for `plugin list` and Help, computed at each boot), because nothing else could say "the step made this board" without showing as an error. Migration 006 also has `board.from_project_id` (drives the notice); 007 adds `board.talk_stayed`, so the "stay" clause is decided at step time.
+- **Task 3 (review I1):** a board meeting keeps kind board: `meeting subject` with a person or project is refused (one write in bulk), with the hint to make it about a board. A person subject on a non-board meeting still makes it a 1:1.
+- **Task 3:** new kernel capability `FieldSpec.when(values)` (a hidden field takes no focus and submits null); the talk form's Project field shows only for a person's item.
+- **Task 3:** a quick-capture preview that would throw (the "is both" clash) shows as a declined reason; the text never goes silently to the inbox. The board preview uses `meetingName(next)` (`next Board Fri 27 Nov`).
+- **Task 3:** "bare tabs" means tabs without counts; the board's Meetings tab has no Prep, its right column is "Your actions for #CODE".
+
+### Deferred minor findings
+
+- The ambiguity message says "a <type>" for every type name, so a type starting with a vowel reads badly ("a alpha"); fine for project and board.
+- The inbox duplicates the kernel's `typeNames` join (not exported from `@ttybrain/api`).
+- A `Form` `show: label` field resolves each `#` word twice.
+- The talk-item edit form (`e` on a board's item) still offers an edit; the op refuses a project tag on a board's item.
+- The Boards panel has no add form: boards are added by the CLI (`board add`); its empty state is `No boards yet.`
+- Archived projects still take new meetings (only archived boards are refused).
+- Two comment lines in `upcoming.ts` run past the usual width.
+- At 80x24 the crumb cuts a long board name (`› BOARD Manageme…`), as it does a project's: the kernel's narrow-header rule. Panels and tables keep codes and names whole.
+
+### For the side-by-side review
+
+- The board view has no mock; it follows the project's Meetings and Talk tabs (§5.7). Check it against the project view at 118x36 and 80x24.
+- Screen 5: the Series panel now ends under its last row (it used to have an empty row inside) and the Boards panel follows it; design §5.7 describes it but no mock draws it.
+- Frames that changed because BOARD is a board now: `tests/design/board.test.tsx` and the "Board meeting" entry of `small.test.tsx` read `5 Meetings ▾` where they read `2 Projects ▾`.
+- The board capture preview line (`→ Management board's talk-list · next Board Fri 27 Nov`) and the Help "Notices" section are drawn by no mock.

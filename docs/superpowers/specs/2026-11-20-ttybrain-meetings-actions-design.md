@@ -131,18 +131,19 @@ type) next to a new `links` array.
 
 ### 5.1 Subjects and kinds
 
-Every meeting has one **subject**: a person or a project (a record ref). Its **kind** follows from it:
+Every meeting has one **subject**: a person, a project or a board (a record ref). Its **kind** follows from it:
 
 | Kind | Subject | Agenda | Prep |
 |---|---|---|---|
 | 1:1 | a person | that person's talk-list | their open actions, goals, last notes, projects |
 | project | a project | that project's talk-list (+ project-tagged items from people's lists) | project status since the last meeting of the series |
-| board | a board such as `#MB` (§5.7; was a project such as `BOARD`) | agenda items naming other projects, with asks; plus the board project's talk-list | one prep block per project, as today |
+| board | a board such as `#MB` (§5.7; a board is its own record, no longer a project such as `BOARD`) | agenda items naming projects, with asks; plus the board's own talk-list | one prep block per project, as today |
 
 A stakeholder can be the subject of a meeting too (kind 1:1). *(My calls:)* the kind is chosen on the series or
-one-off meeting (the form's Kind field): 1:1 needs a person, project and board need a project; any project can host
-board meetings. Existing meetings keep their kind when they get a subject: `board` stays board, `steering` and
-`other` become project, or 1:1 when the subject is a person.
+one-off meeting (the form's Kind field): 1:1 needs a person, project a project and board a board (§5.7); the kind and
+the subject type always agree, and a board meeting stays a board meeting (any other subject is refused). Existing
+meetings keep their kind when they get a subject: `board` stays board (it needs a board, so before a board is
+assigned it stays subject-less), `steering` and `other` become project, or 1:1 when the subject is a person.
 
 ### 5.2 Series and occurrences
 
@@ -195,12 +196,13 @@ skip|move <M-n>`, `ttybrain talk add|list|done|drop|move <ref> …`, existing `r
 
 *User's decision:* a board meeting does not belong to a project. Boards are their own records in the meetings plugin, and replace the "board is a project such as `BOARD`" rule of §5.1.
 
-- **A board** has a code (2–16 letters or digits, upper-cased like project codes), a name and an optional note, e.g. `#MB` "Management board". It is written with `#`, like a project: `talk add #MB …`, `meeting series add #MB "Board" --every "monthly on the last fri"`, `action add … --link #MB`, quick capture `talk #MB …`. Project and board codes share one namespace: `#MB` is either a project or a board, and adding either one refuses a code the other already uses.
-- **Subjects:** a meeting's subject is a person, a project or a board. Kind `board` needs a board subject, and a board subject always means kind `board`. Kind `project` needs a project; `1:1` a person.
-- **What a board has:** its series and one-off meetings, its talk-list (the "Board talk-list" in a board meeting; `A` adds an item to the agenda), and the actions linked to it. Board meetings keep the board machinery: agenda items naming projects with asks, a prep block per project, the board pack and the minutes.
-- **TUI:** screen 5 gets a "Boards · n" panel under Series (code cyan, name); Enter opens the board's view with two tabs, Meetings and Talk, laid out like a project's Meetings and Talk tabs. A board meeting's crumb runs under its board (`5 Meetings ▾ › #MB Management board › Board Fri 27 Nov`). Boards show as `About` on Attention and screen 5 like project codes (cyan).
-- **CLI:** `ttybrain board add <CODE> <name> [--note]`, `board list`, `board show <#CODE>`, `board edit <#CODE> [--name] [--code] [--note]`, `board archive|restore <#CODE>`.
-- **Existing data:** a project that is the subject of board-kind meetings or series gets a board with its name and the code `<CODE>B` (codes can't be shared); those meetings and series move to it, and a notice names the new board so it can be renamed. The project, its talk items and its other data stay as they are (it can be archived by hand). Subject-less board meetings stay subject-less until `meeting subject … #MB`.
+- **A board** has a code (2–16 letters or digits, **at least one letter**, so `#12` stays a project id; upper-cased like project codes), a name and an optional note, e.g. `#MB` "Management board". It is written with `#`, like a project: `talk add #MB …`, `meeting series add #MB "Board" --every "monthly on the last fri"`, `action add … --link #MB`, quick capture `talk #MB …`. Project and board codes share one namespace: `#MB` is either a project or a board, and adding or renaming either refuses a code the other already uses (`code "MB" is already used by the board #MB`, exit 3, with a hint; case-insensitive). The kernel lets both record types share the `#` prefix (`resolve("#MB")` gives whichever exists). Where a project is needed (`project show`, `--project`, a talk item's project tag, a project form's field) a board's code is refused: `#MB is a board, not a project`, with a hint; a project's code where a board is needed is refused likewise.
+- **Subjects:** a meeting's subject is a person, a project or a board. Kind `board` needs a board subject, and a board subject always means kind `board`. Kind `project` needs a project; `1:1` a person. A board meeting stays a board meeting: `meeting subject` with a person or project is refused.
+- **What a board has:** its series and one-off meetings, its talk-list (the "Board talk-list" in a board meeting; `A` adds an item to the agenda; an item on a board takes no project tag), and the actions linked to it. Board meetings keep the board machinery: agenda items naming projects with asks, a prep block per project, the board pack and the minutes.
+- **Archived boards:** `board archive` hides a board from the Boards panel and search, and refuses new meetings, series, talk items and action links on it (`#MB is archived`, hint `board restore`). Its series stop making new occurrences until it is restored; existing meetings stay.
+- **TUI:** screen 5 gets a "Boards · n" panel under Series (code cyan, name; Tab cycles the panels; Enter opens the board); the board's view has two tabs, Meetings (its series, meetings and "Your actions for #MB"; no Prep) and Talk (no Project column), laid out like a project's. A board meeting's crumb runs under its board (`5 Meetings ▾ › #MB Management board › Board Fri 27 Nov`). Boards show as `About` on Attention and screen 5 like project codes (cyan). There is no form to add a board: it is CLI only. Quick capture `talk #MB …` goes to the board's talk-list; its preview names the board and its next meeting.
+- **CLI:** `ttybrain board add <CODE> <name> [--note]`, `board list [--archived]`, `board show <#CODE>`, `board edit <#CODE> [--name] [--code] [--note|--no-note]`, `board archive|restore <#CODE>`.
+- **Existing data:** a project that is the subject of board-kind meetings or series gets a board with its name and the code `<CODE>B` (codes can't be shared; the code is cut to leave room for the `B`, and a number is added if it is taken: `CRMB2`); those meetings and series move to it (a series with all its occurrences), keeping their numbers (`M-n`, `S-n`, `T-n`). The project keeps its code, actions and everything else (it can be archived by hand). Its **open talk items move to the board only when the project hosts no other (non-board) meetings or series** (then they were the board's talk-list); otherwise they stay on the project and the notice says so. Discussed and dropped items, kept items and people's items tagged with the project always stay. The step runs once; a notice in `plugin list` and in Help names each new board until it is first edited, so it can be renamed (`board edit #CRMB --code MB`). Subject-less board meetings stay subject-less until `meeting subject … #MB`.
 
 ## 6. Constraints
 
