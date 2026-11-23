@@ -18,6 +18,7 @@ export type {
   RecordCrumbDef,
   RecordFormDef,
   RecordFormProps,
+  RecordKeyDef,
   RecordTabDef,
   Route,
   ScreenDef,

@@ -49,9 +49,9 @@ const FACT_LABEL = 10 // the label column of the Meetings facts: 8 cells and the
 
 const columns = (who: string): TableColumn[] => [
   { id: "n", title: "", width: 3 },
-  { id: "text", title: "Item", width: "grow" },
-  { id: "project", title: who, width: 7, drop: 2 },
-  { id: "added", title: "Added", width: 8, drop: 1 },
+  { id: "text", title: "Item", width: "grow", minWidth: 24 }, // on a narrow terminal Added gives way first
+  { id: "project", title: who, width: 7, drop: 1 },
+  { id: "added", title: "Added", width: 8, drop: 2 },
 ]
 const actionColumns: TableColumn[] = [
   { id: "ref", title: "", width: 5 },

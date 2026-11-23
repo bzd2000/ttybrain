@@ -79,6 +79,10 @@ export type OverviewPanelDef = {
   detail?: { rows: number; columns?: OverviewColumn[]; keys?: OverviewKeyDef[]; load(ref: string): Promise<OverviewDetail | null> }
   load(): Promise<OverviewRow[]>
 }
+// A key on every view of a record of a type, whatever tab is active (a plugin's `t` on a person): `run` gets the
+// record's ref and the overlays. The active tab's own keys come first, so a tab's letter wins; its hint shows after
+// the tab's (an exact bar leaves it out, as it does a block's).
+export type RecordKeyDef = { key: string; label: string; run(recordRef: string, ui: OverviewKeyContext): void | Promise<void> }
 export type ListColumnDef = { id: string; title: string; width: number; value(ref: string): Promise<string | null> }
 // `draftFor`: what a new record's form is for (its draft key names it: a talk item for @anna keeps its own draft).
 export type RecordFormProps = { recordRef?: string; prefill?: Record<string, string>; origin?: Origin; draftFor?: string; close(savedRef?: string): void }
@@ -120,6 +124,8 @@ export interface TuiContext extends PluginRuntime {
   recordCrumb(recordType: string, def: RecordCrumbDef): void
   // Asked in registration order; the first whose preview is not null has the text.
   captureRoute(def: CaptureRouteDef): void
+  // A key on the record views of `recordType` (one per type and key).
+  recordKey(recordType: string, def: RecordKeyDef): void
 }
 
 export type TuiDef = { plugin: string; activate(ui: TuiContext): void }

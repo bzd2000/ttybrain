@@ -3,8 +3,10 @@
 // · n", the board project's open talk items (`·`), then `A adds one to the agenda`. Keys (the design's bar): n add an
 // item, J/K move it down/up (the selection follows it), A take the talk-list's selected item (the first one until
 // Tab moves to that panel) onto the agenda (ruling M8: added as an item and ticked discussed in this meeting, in one
-// act), e edit the item (its ask); kept beyond the bar: Tab the other panel, Del remove an item (after a
-// confirmation), p attendees, x close the meeting. A cancelled meeting is read-only: its write keys say so.
+// act, with the item's project tag), e edit the item (its ask), a log an action and D a decision (both linked to the
+// meeting and the selected item's project, as the design's key strip has them); kept beyond the bar: Tab the other
+// panel, Del remove an item (after a confirmation), p attendees, x close the meeting. A cancelled meeting is
+// read-only: its write keys say so.
 import { createMemo, createSignal, Show } from "solid-js"
 import {
   act,
@@ -141,7 +143,7 @@ export function AgendaTab(props: { recordRef: string }) {
     if (t === undefined) return
     const r = await act(
       async () => {
-        await rt.self().write.addAgendaItem!({ meeting: m.ref, text: t.text })
+        await rt.self().write.addAgendaItem!({ meeting: m.ref, text: t.text, ...(t.project !== null && t.project.startsWith("#") ? { project: t.project } : {}) })
         return rt.self().write.discussTalk!({ ref: t.ref, meeting: m.ref })
       },
       { ok: () => `added "${t.text}" to the agenda` },
@@ -161,6 +163,8 @@ export function AgendaTab(props: { recordRef: string }) {
     else if (ch === "J") writes.live(m, () => item && void move(m, item, item.position + 1))
     else if (ch === "K") writes.live(m, () => item && void move(m, item, item.position - 1))
     else if (ch === "A") writes.live(m, () => void takeOn(m))
+    else if (ch === "a") writes.live(m, () => writes.logAction(m, item?.project ?? null))
+    else if (ch === "D") writes.live(m, () => writes.logDecision(m, item?.project ?? null))
     else if (key.name === "delete") writes.live(m, () => item && void remove(m, item))
     else if (ch === "p") writes.live(m, () => void overlay.openForm("meeting", "attendees", { recordRef: m.ref }))
     else if (ch === "x") writes.live(m, () => void writes.close(m))

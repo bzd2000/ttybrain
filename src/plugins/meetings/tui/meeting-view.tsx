@@ -8,8 +8,10 @@
 // Keys (the design's bar): Space ticks the selected item discussed in this meeting, or reopens a ticked one (M5: at
 // once); Tab the next panel; e edits the notes (a draft per meeting), E in $VISUAL/$EDITOR; a agrees an action (the
 // action form, linked to the meeting and its subject: agreeLinks); D logs a decision; x closes the meeting (closeMeeting's
-// message); Enter on an action opens it.
-import { createMemo, createSignal, Show } from "solid-js"
+// message); Enter on an action opens it. A held or cancelled meeting says so (its crumb and the Talk title end in
+// `· held` / `· cancelled`), and the bar shows only the keys that work there: a held meeting is not closed again; a
+// cancelled one is read-only (its keys say so).
+import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
 import {
   act,
   dueLabel,
@@ -43,13 +45,20 @@ const HINTS: Hint[] = [
   { key: "x", label: "close" },
   { key: "Esc", label: "back" },
 ]
+// The bar by status: a held meeting keeps all but close; a cancelled one only moves.
+const HELD = new Set(["x"])
+const CANCELLED_KEEP = new Set(["Tab", "Esc"])
+export const barFor = (status: string): Hint[] =>
+  status === "planned" ? HINTS : status === "held" ? HINTS.filter((h) => !HELD.has(h.key)) : HINTS.filter((h) => CANCELLED_KEEP.has(h.key))
+// `· held`, `· cancelled`; nothing while planned.
+export const statusTail = (status: string) => (status === "planned" ? "" : ` · ${status}`)
 export const NOTES_EMPTY = "No notes yet. Press e to write them."
 export const TALK_EMPTY = "Nothing to talk about. Add items on the Talk tab."
 const NOTES_FOOTER = "e edit · E $EDITOR"
 
 const talkColumns: TableColumn[] = [
   { id: "mark", title: "", width: 3 },
-  { id: "text", title: "", width: "grow" },
+  { id: "text", title: "", width: "grow", minWidth: 30 }, // the project tag gives way first on a narrow terminal
   { id: "project", title: "", width: 6, drop: 1 },
 ]
 const actionColumns: TableColumn[] = [
@@ -72,8 +81,6 @@ export function MeetingView(props: { recordRef: string }) {
   const keys = useKeys()
   const editExternal = useEditExternal()
   const writes = useMeetingWrites()
-  keys.hints(HINTS, { exact: true, frame: [], globals: false })
-
   // The actions linked to these meetings (the people who own them by first name), by id.
   const actionsOf = async (meetings: number[], opts: { open?: boolean } = {}): Promise<Act[]> => {
     if (meetings.length === 0) return []
@@ -125,6 +132,11 @@ export function MeetingView(props: { recordRef: string }) {
     { key: () => props.recordRef },
   )
   const meeting = () => q.data()?.meeting
+  const status = () => meeting()?.status ?? "planned"
+  createEffect(() => {
+    const drop = keys.hints(barFor(status()), { exact: true, frame: [], globals: false })
+    onCleanup(drop)
+  })
 
   const [focus, setFocus] = createSignal<0 | 1 | 2>(0)
   const [item, setItem] = createSignal<string | undefined>()
@@ -225,7 +237,7 @@ export function MeetingView(props: { recordRef: string }) {
           <box flexDirection="row" flexShrink={1} minHeight={0} gap={1} overflow="hidden">
             <box flexDirection="column" flexGrow={1} flexBasis={0} minWidth={0}>
               <box flexDirection="column" flexShrink={1} minHeight={0} overflow="hidden">
-                <Panel title={`Talk · ${discussed()} of ${d().items.length} discussed`} focused={keys.active() && focus() === 0}>
+                <Panel title={`Talk · ${discussed()} of ${d().items.length} discussed${statusTail(d().meeting.status)}`} focused={keys.active() && focus() === 0}>
                   <Table columns={talkColumns} rows={talkRows()} header={false} onSelect={setItem} focused={keys.active() && focus() === 0} empty={TALK_EMPTY} />
                 </Panel>
               </box>

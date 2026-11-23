@@ -45,6 +45,13 @@ type Screen = {
   meetings?: boolean // seeded with the 2026-11-20 meeting designs' data (today Fri 20 Nov 2026)
 }
 
+// Waits for `check`, lets the loads and the measured layout settle, then returns the frame that still passes it.
+const settled = async (t: RenderedTui, check: (frame: string) => boolean) => {
+  await until(t, check)
+  await t.settle()
+  return until(t, check)
+}
+
 const crm = async (t: RenderedTui) => {
   t.input.pressKey("2")
   await until(t, (f) => f.includes("CRM replatforming"))
@@ -82,7 +89,7 @@ const SCREENS: Screen[] = [
     panels: true,
     open: async (t) => {
       await crm(t)
-      for (let i = 0; i < 7; i++) t.input.pressArrow("right")
+      for (let i = 0; i < 9; i++) t.input.pressArrow("right") // past the meetings plugin's Meetings and Talk
       return until(t, (f) => f.includes("Background") && f.includes("100%"))
     },
   },
@@ -154,6 +161,82 @@ const SCREENS: Screen[] = [
       await until(t, (f) => f.includes("New recurring meeting"))
       await t.input.typeText("@karim")
       return until(t, (f) => f.includes("@karim"))
+    },
+  },
+  {
+    name: "Person · Talk",
+    meetings: true,
+    must: ["ERP", "CRM", "Anna Peeters"],
+    chip: "3 People",
+    panels: true,
+    open: async (t) => {
+      await t.nav.open("@anna", "talk")
+      return settled(t, (f) => f.includes("To talk about · 4 open") && f.includes("AWS training") && f.includes("Anna's actions"))
+    },
+  },
+  {
+    name: "1:1 in progress",
+    meetings: true,
+    must: ["Anna Peeters"], // the project tags give way to the items' text
+    chip: "3 People",
+    panels: true,
+    open: async (t) => {
+      await t.nav.open("@anna", "meetings")
+      await until(t, (f) => f.includes("Past meetings"))
+      await t.settle()
+      t.input.pressEnter()
+      return settled(t, (f) => f.includes("Talk · 0 of 5 discussed") && f.includes("Open from before") && f.includes("Feedback from Marie on"))
+    },
+  },
+  {
+    name: "Project · Meetings",
+    meetings: true,
+    must: ["CRM"],
+    chip: "2 Projects",
+    panels: true,
+    open: async (t) => {
+      await t.nav.open("#CRM", "meetings")
+      return settled(t, (f) => f.includes("Past meetings") && f.includes("A-1 Send"))
+    },
+  },
+  {
+    name: "Project · Talk",
+    meetings: true,
+    must: ["CRM", "Anna"],
+    chip: "2 Projects",
+    panels: true,
+    open: async (t) => {
+      await t.nav.open("#CRM", "talk")
+      return settled(t, (f) => f.includes("To talk about · 3 open") && f.includes("Shift design") && f.includes("Your actions for CRM"))
+    },
+  },
+  {
+    name: "Board meeting",
+    meetings: true,
+    must: ["BOARD", "CRM", "ERP", "HRP"],
+    chip: "2 Projects",
+    panels: true,
+    open: async (t) => {
+      await t.nav.open("#BOARD", "meetings")
+      await until(t, (f) => f.includes("Past meetings"))
+      await t.settle()
+      t.input.pressEnter()
+      return settled(t, (f) => f.includes("Board talk-list · 2") && f.includes("Budget 2027"))
+    },
+  },
+  {
+    name: "Capture to a talk-list",
+    meetings: true,
+    must: [],
+    chip: "4 Actions",
+    panels: true,
+    open: async (t) => {
+      t.input.pressKey("4")
+      await until(t, (f) => f.includes("Actions · 7 open"))
+      t.input.pressKey("i")
+      await until(t, (f) => f.includes("Capture to inbox"))
+      await t.input.typeText("talk @anna holiday planning #CRM ")
+      return settled(t, (f) => f.includes("talk-list"))
     },
   },
   {

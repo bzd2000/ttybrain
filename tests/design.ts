@@ -445,6 +445,17 @@ export async function seedMeetings(kernel: Kernel): Promise<void> {
   const karim18 = await meeting("1:1 Karim", "2026-11-18")
   await on("2026-11-18", () => meetings.setNotes!({ meeting: karim18, markdown: "IAM wave 2 readiness: test accounts still missing." }))
 
+  // CRM's prep since its last steering (the `project` design): the solution outline approved in October (before that
+  // steering, so the prep leaves it out), the design milestone ahead, the solution design in review, the decision of
+  // 28 Oct.
+  await on("2026-10-14", async () => {
+    const ms = await projects.addMilestone!({ project: "CRM", title: "Solution outline approved", due: "2026-10-14" })
+    await projects.completeMilestone!({ ref: ms.ref, date: "2026-10-14" })
+    await projects.addMilestone!({ project: "CRM", title: "Design approved", due: "2026-12-10" })
+  })
+  await on("2026-10-28", () => projects.addDecision!({ project: "CRM", title: "Phase 1 excludes marketing autom.", date: "2026-10-28" }))
+  await on("2026-11-12", () => projects.addDeliverable!({ project: "CRM", title: "Solution design", owner: "anna", due: "2026-12-04", status: "in_review" }))
+
   // Health and the talk items of the week.
   await on("2026-11-16", async () => {
     await projects.setHealth!({ project: "HRP", health: "green", comment: "On track", date: "2026-11-16" })

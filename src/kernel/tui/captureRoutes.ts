@@ -12,14 +12,18 @@ export function useCaptureRoutes(): CaptureRoute[] {
   return useApp().registry.captureRoutes()
 }
 
-// The first route whose preview of `text` is not null, with that preview; null when none takes it. A preview that
-// throws counts as null (a broken route never blocks capture).
+// The first route that takes `text` (a preview neither null nor declined), with its preview; without one, the first
+// declined preview (its lines say why the text goes to the inbox); null when no route has anything to say. A
+// preview that throws counts as null (a broken route never blocks capture).
 export async function matchCapture(routes: CaptureRoute[], text: string): Promise<CaptureMatch | null> {
+  let declined: CaptureMatch | null = null
   for (const route of routes) {
     const preview = await Promise.resolve()
       .then(() => route.preview(text))
       .catch(() => null)
-    if (preview !== null) return { route, preview }
+    if (preview === null) continue
+    if (preview.declined !== true) return { route, preview }
+    declined ??= { route, preview }
   }
-  return null
+  return declined
 }

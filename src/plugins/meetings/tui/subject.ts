@@ -163,23 +163,27 @@ export function makeSubjects(rt: Runtime) {
     return toActions(rows)
   }
 
-  // People by @handle (a series' attendees): name, first name, stakeholder, team; the gone ones left out.
-  async function people(handles: string[]): Promise<Person[]> {
-    const names = handles.map((h) => h.replace(/^@/, ""))
-    if (names.length === 0) return []
+  // A series' or a meeting's attendees in the order they are stored (series_attendee / attendee rows): name, first
+  // name, stakeholder, team; the gone ones left out.
+  async function attendees(of: { series: number } | { meeting: number }): Promise<Person[]> {
+    const ids =
+      "series" in of
+        ? (await db.selectFrom("series_attendee").select("person_id").where("series_id", "=", of.series).execute()).map((r) => Number(r.person_id))
+        : (await db.selectFrom("attendee").select("person_id").where("meeting_id", "=", of.meeting).execute()).map((r) => Number(r.person_id))
+    if (ids.length === 0) return []
     const rows = await store.unlessUnavailable([] as Array<Record<string, unknown>>, () =>
-      db.selectFrom("people.person").select(["id", "handle", "name", "is_stakeholder", "is_team"]).where("handle", "in", names).execute(),
+      db.selectFrom("people.person").select(["id", "name", "is_stakeholder", "is_team"]).where("id", "in", ids).execute(),
     )
-    const byHandle = new Map(rows.map((r) => [String(r.handle), r]))
-    return names.flatMap((h) => {
-      const r = byHandle.get(h)
+    const byId = new Map(rows.map((r) => [Number(r.id), r]))
+    return ids.flatMap((id) => {
+      const r = byId.get(id)
       if (!r) return []
       const name = String(r.name)
-      return [{ id: Number(r.id), name, first: name.split(/\s+/)[0]!, stakeholder: Number(r.is_stakeholder) === 1, team: Number(r.is_team) === 1 }]
+      return [{ id, name, first: name.split(/\s+/)[0]!, stakeholder: Number(r.is_stakeholder) === 1, team: Number(r.is_team) === 1 }]
     })
   }
 
-  return { store, subject, talkList, next, last, series, rhythm, past, mine, owned, people }
+  return { store, subject, talkList, next, last, series, rhythm, past, mine, owned, attendees }
 }
 
 export type Subjects = ReturnType<typeof makeSubjects>

@@ -6,10 +6,13 @@
 // meeting, in progress, under the project's crumb) and on a past meeting. Seeded with the meeting designs' data
 // (seedMeetings), today Fri 20 Nov 2026, 118×36 and 80×24.
 // Differences from the mock, from the seed (ruling: CRM's talk-list keeps the seed's 3: its own 2 and Anna's
-// CRM-tagged item, where the mock's 3rd row is "Marie's request"): CRM has no milestones, deliverables, risks or
-// decisions (adding them would change the home design's panels), so the prep shows its sections empty; the 27 Oct
-// steering logged one action; With lists the stakeholders by name (Marie D. before Peter J.). The tab row with Meetings
-// and Talk is wider than 118 cells (in the mock too): it windows around the active tab.
+// CRM-tagged item, where the mock's 3rd row is "Marie's request"): the prep has no R-9 `high · issue` (a high risk
+// would change the home design's panels); "Solution outline approved" (done 14 Oct) is before the 27 Oct steering,
+// so the prep (since then) leaves it out, where the mock lists it; "Design approved" reads its due date `10 Dec`
+// (muted: not due before the meeting) where the mock has `26 Nov → 10 Dec?` (no planned/forecast date in the data);
+// the 27 Oct steering logged one action; With has the stakeholders in their stored order (by person, so Marie D.
+// before Peter J.; the store keeps no insertion order). The tab row with Meetings and Talk is wider than 118 cells
+// (in the mock too): it windows around the active tab.
 import { afterEach, expect, test } from "bun:test"
 import { builtinPlugins } from "../builtins"
 import { fgAt, isSelected, line, seedMeetings } from "../design"
@@ -39,7 +42,12 @@ const cols = (widths: number[], texts: string[]) =>
     .map((s, i) => s.padEnd(widths[i]!))
     .join(" ")
     .trimEnd()
-const inside = (frame: string, i: number, side: 0 | 1) => (line(frame, i).split("│")[1 + 2 * side] ?? "").slice(1).trimEnd()
+// The text inside the left or right panel on line `i` (the right one: the last cell between borders, whatever the
+// left column draws there), without trailing spaces.
+const inside = (frame: string, i: number, side: 0 | 1) => {
+  const parts = line(frame, i).split("│")
+  return (side === 0 ? (parts[1] ?? "") : (parts[parts.length - 2] ?? "")).slice(1).trimEnd()
+}
 
 const TALK = [3]
 const PAST = [9, 25, 13]
@@ -49,7 +57,7 @@ async function crm(tab: "meetings" | "talk", width = 118, height = 36): Promise<
   await seedMeetings(kernel)
   tui = await renderTui(kernel, { width, height })
   await tui.nav.open("#CRM", tab)
-  const ready = (f: string) => (tab === "meetings" ? f.includes("Past meetings") && f.includes("Prep · since 27 Oct") && f.includes("Overdue actions") : f.includes("To talk about · 3 open"))
+  const ready = (f: string) => (tab === "meetings" ? f.includes("Past meetings") && f.includes("Prep · since 27 Oct") && f.includes("A-1 Send revised budget to Peter") : f.includes("To talk about · 3 open"))
   await until(tui, ready)
   await tui.settle()
   return { t: tui, frame: await until(tui, ready) }
@@ -76,9 +84,19 @@ test("Project · Meetings as designed", async () => {
     cols(PAST, ["22 Sep", "CRM steering", "—"]),
     cols(PAST, ["14 Sep", "Kick-off one-off", "—"]),
   ])
-  // The prep: the project's status since the last steering, generated (the board pack's compact form).
-  expect(inside(frame, 4, 1)).toMatch(/^Health +● amber {2}Design slipping 2 weeks$/)
-  expect(frame).toMatch(/!  A-1 Send revised budget to Peter +me · -6d/)
+  // The prep as the mock draws it: a 9-cell fact column, the status rows without headings, your actions for CRM.
+  expect([4, 5, 6, 7, 8, 9, 10, 11].map((i) => inside(frame, i, 1))).toEqual([
+    "Health     ● amber  Design slipping 2 weeks",
+    "",
+    cols([2, 40, 14], ["○", "Design approved", "10 Dec"]),
+    cols([2, 40, 14], ["◐", "Solution design · Anna", "in review"]),
+    cols([2, 40, 14], ["·", "Phase 1 excludes marketing autom.", "28 Oct"]),
+    "",
+    "Your actions for CRM",
+    cols([2, 40, 14], ["!", "A-1 Send revised budget to Peter", "-6d"]),
+  ])
+  expect(frame).not.toContain("Overdue actions")
+  expect(frame).not.toContain("Solution outline approved")
   // Both columns end on the same line.
   expect(line(frame, 16)).toMatch(/^ ╰─+╯ ╰─+ generated from data ─╯$/)
   expect(line(frame, 35)).toBe(" ←→ tabs   tab panel   t to talk   enter open   N series   n one-off   esc back")
@@ -101,6 +119,17 @@ test("Project · Meetings as designed", async () => {
   expect(fgAt(spans, "one-off", 15)).toBe(theme.muted)
   expect(fgAt(spans, "Kick-off", 15)).toBe(theme.text)
   expect(fgAt(spans, "generated from data", 16)).toBe(theme.muted)
+  expect(fgAt(spans, "Health", 4)).toBe(theme.muted)
+  expect(fgAt(spans, "● amber", 4)).toBe(theme.amber)
+  expect(fgAt(spans, "○", 6)).toBe(theme.muted)
+  expect(fgAt(spans, "10 Dec", 6)).toBe(theme.muted)
+  expect(fgAt(spans, "◐", 7)).toBe(theme.cyan)
+  expect(fgAt(spans, "Solution design · Anna", 7)).toBe(theme.text)
+  expect(fgAt(spans, "28 Oct", 8)).toBe(theme.muted)
+  expect(fgAt(spans, "Your actions for CRM", 10)).toBe(theme.muted)
+  expect(fgAt(spans, "!", 11)).toBe(theme.red)
+  expect(fgAt(spans, "A-1 Send revised", 11)).toBe(theme.text)
+  expect(fgAt(spans, "-6d", 11)).toBe(theme.red)
 })
 
 test("Project · Talk: the same list on its own, Anna's CRM-tagged item from her", async () => {
@@ -154,6 +183,7 @@ test("Project · Meetings keys: t, N and n with the project filled in; Enter ope
   expect(isSelected(await t.spans(), "27 Oct")).toBe(true)
   t.input.pressEnter()
   frame = await until(t, (f) => f.includes("Agreed actions · 1") && f.includes("Send revised budget to Peter"))
-  expect(line(frame, 0)).toContain("› CRM CRM replatforming › CRM steering Tue 27 Oct")
+  // Held: the crumb says so; the parent's name gives way first.
+  expect(line(frame, 0)).toMatch(/› CRM CRM replatform\S* › CRM steering Tue 27 Oct · held +●/)
   expect(frame).toContain("Send revised budget to Peter")
 })

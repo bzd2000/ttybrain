@@ -14,7 +14,7 @@ import { registerPanels } from "./panels"
 import { SERIES_TITLE, SeriesForm } from "./series-form"
 import { NotesTab } from "./notes-tab"
 import { PrepTab } from "./prep-tab"
-import { MeetingView } from "./meeting-view"
+import { MeetingView, statusTail } from "./meeting-view"
 import { PersonMeetings } from "./person-meetings"
 import { PersonTalk } from "./person-talk"
 import { ProjectMeetings } from "./project-meetings"
@@ -38,7 +38,7 @@ export const meetingsTui = defineTui({
       },
     })
     const store = makeStore(ui)
-    // The header crumb's muted tail: `Fri 4 Dec · 8 attendees`. Opened from what it is about (a person's or project's
+    // The header crumb's muted tail: `Fri 4 Dec · 8 attendees` (`Mon 9 Nov · held · 2 attendees` once it is not planned). Opened from what it is about (a person's or project's
     // view): `› Anna Peeters › 1:1 Mon 23 Nov`, `› BOARD Management board › Board Fri 27 Nov`.
     const same = async (a: string, b: string) => {
       const [x, y] = await Promise.all([ui.records.resolve(a), ui.records.resolve(b)])
@@ -48,11 +48,11 @@ export const meetingsTui = defineTui({
       detail: async (ref) => {
         const m = await store.meeting(ref)
         const n = m.attendees.length
-        return `${dayDate(m.date)} · ${n} attendee${n === 1 ? "" : "s"}`
+        return `${dayDate(m.date)}${statusTail(m.status)} · ${n} attendee${n === 1 ? "" : "s"}`
       },
       under: async (ref, parent) => {
         const m = await store.meeting(ref)
-        return m.about !== null && (await same(m.about, parent)) ? `${meetingName(m)} ${dayDate(m.date)}` : null
+        return m.about !== null && (await same(m.about, parent)) ? `${meetingName(m)} ${dayDate(m.date)}${statusTail(m.status)}` : null
       },
     })
     const isBoard = async (ref: string) => (await store.meeting(ref)).kind === "board"
@@ -70,6 +70,18 @@ export const meetingsTui = defineTui({
     ui.recordTab("person", { id: "meetings", title: "Meetings", order: 15, component: PersonMeetings })
     ui.recordTab("project", { id: "meetings", title: "Meetings", order: 72, component: ProjectMeetings })
     ui.recordTab("project", { id: "talk", title: "Talk", order: 75, count: open, component: ProjectTalk })
+    // M9: `t` on any tab of a person or project adds to its talk-list (the talk form, the subject filled in).
+    for (const type of ["person", "project"])
+      ui.recordKey(type, {
+        key: "t",
+        label: "to talk",
+        run: async (ref, { overlay }) => {
+          const found = await ui.records.resolve(ref)
+          if (!found) return
+          const about = await ui.records.refOf(found.type, found.id)
+          await overlay.openForm("talk_item", "talk", { prefill: { about }, draftFor: about })
+        },
+      })
     ui.recordForm("meeting", { id: "meeting", label: "Meeting", component: MeetingForm })
     ui.recordForm("meeting", { id: "agenda-item", label: "Agenda item", component: AgendaItemForm })
     ui.recordForm("meeting", { id: "attendees", label: "Attendees", component: AttendeesForm })

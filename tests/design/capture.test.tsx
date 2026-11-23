@@ -188,9 +188,9 @@ test("Quick capture to a talk-list as designed", async () => {
 test("Quick capture that is almost a talk item goes to the inbox, and says so first", async () => {
   const t = await captureOnActions()
   const cases: Array<[text: string, why: string]> = [
-    ["talk about lunch", "→ the inbox · no person or project tagged"],
-    ["talk @anna @bob budget for the offsite", "→ the inbox · 2 people tagged"],
-    ["talk @nobody about the offsite", "→ the inbox · @nobody is not a person"],
+    ["talk about lunch", "→ goes to the inbox · no person or project tagged"],
+    ["talk @anna @bob budget for the offsite", "→ goes to the inbox · 2 people tagged"],
+    ["talk @nobody about the offsite", "→ goes to the inbox · @nobody is not a person"],
   ]
   const before = (await talkItems("@anna")).length
   for (const [n, [text, why]] of cases.entries()) {

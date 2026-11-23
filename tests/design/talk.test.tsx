@@ -120,7 +120,7 @@ test("Person · Talk at 80×24: codes and names whole, the bar whole hints only"
   const { frame } = await annaTalk(80, 24)
   expect(line(frame, 0)).toMatch(/^ ttybrain · {2}3 People ▾ {2}› Anna Peeters/)
   expect(frame).toContain("To talk about · 4 open")
-  expect(frame).toMatch(/2\. +Her view on Vendor … ERP +Wed/)
+  expect(frame).toMatch(/2\. +Her view on Vendor B's archi… ERP +│/) // Added gives way first
   expect(frame).not.toMatch(/ER…|CR…|Ann…/)
   for (const i of [3, 13]) expect(line(frame, i)).toMatch(/^ ╭|^ ╰/)
   expect(line(frame, 23)).toMatch(/^ ←→ tabs {3}n add {3}e edit {3}J\/K reorder/)
@@ -164,4 +164,27 @@ test("Talk keys: J/K reorder, Del drops after a confirmation, n adds for Anna, e
   t.input.pressEscape()
   frame = await until(t, (f) => f.includes("To talk about · 4 open"))
   expect(line(frame, 0)).toContain("› Anna Peeters · Architect · team")
+})
+
+// M9: `t` on any tab of a person or project (the meetings plugin's record key) opens the talk form for it.
+test("t on a person's Summary and a project's Overview opens the talk-item form with the subject filled in", async () => {
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
+  await seedMeetings(kernel)
+  tui = await renderTui(kernel, { width: 118, height: 36 })
+  const t = tui
+  await t.nav.open("@anna")
+  await until(t, (f) => f.includes("Summary") && f.includes("Architect"))
+  await t.settle()
+  t.input.pressKey("t")
+  await until(t, (f) => f.includes("New talk item") && f.includes("Anna Peeters · person"))
+  await t.input.typeText("Mentoring plan")
+  t.input.pressKey("s", { ctrl: true })
+  await until(t, (f) => !f.includes("New talk item"))
+  expect((await talkList("@anna")).open.at(-1)!.text).toBe("Mentoring plan")
+  await t.nav.open("#CRM")
+  await until(t, (f) => f.includes("Overview") && f.includes("Health"))
+  await t.settle()
+  t.input.pressKey("t")
+  const frame = await until(t, (f) => f.includes("New talk item") && f.includes("CRM replatforming · project"))
+  expect(frame).toContain("CRM replatforming · project")
 })

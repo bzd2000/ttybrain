@@ -173,11 +173,42 @@ test("closing the 1:1 (x): closeMeeting's message, notes on Anna, unticked items
   expect(notes.map((n) => n.text)).toEqual([NOTES])
 })
 
+// A held meeting says so in its crumb and Talk title; its bar has every key but close (it is closed already).
+test("a held 1:1 (Anna's of 9 Nov, from her Past meetings) says held; no x close in the bar", async () => {
+  const t = await inProgress()
+  t.input.pressEscape()
+  await until(t, (f) => f.includes("Past meetings"))
+  t.input.pressTab()
+  await t.settle()
+  t.input.pressEnter()
+  const frame = await until(t, (f) => f.includes("Talk · 3 of 4 discussed · held"))
+  expect(line(frame, 0)).toMatch(/› Anna Peeters › 1:1 Mon 9 Nov · held +●/)
+  expect(line(frame, 35)).toBe(" space discussed   tab panel   e notes   a action   D decision   esc back")
+  // Opened elsewhere, the crumb's detail says it too.
+  await t.nav.open("M-6")
+  const other = await until(t, (f) => line(f, 0).includes("› M-6"))
+  expect(line(other, 0)).toContain("› M-6 1:1 Anna · Mon 9 Nov · held · 1 attendee")
+})
+
+// A cancelled meeting is read-only: it says so, its bar only moves, and its write keys say it is cancelled.
+test("a cancelled meeting says cancelled; its bar only moves and its keys open nothing", async () => {
+  const t = await inProgress()
+  await inCtx(() => write("meetings").cancelMeeting!({ ref: "M-7" }))
+  const frame = await until(t, (f) => f.includes("Talk · 0 of 5 discussed · cancelled"))
+  expect(line(frame, 0)).toMatch(/› Anna Peeters › 1:1 Mon 23 Nov · cancelled/)
+  expect(line(frame, 35)).toBe(" tab panel   esc back")
+  t.input.pressKey(" ")
+  expect(line(await until(t, (f) => line(f, 35).includes("is cancelled")), 35)).toContain("M-7 is cancelled")
+  t.input.pressKey("a")
+  await t.settle()
+  expect(await t.frame()).not.toContain("New action")
+})
+
 test("1:1 in progress at 80×24: panels keep their borders, the bar shows whole hints", async () => {
   const t = await inProgress(80, 24)
   const frame = await t.frame()
   expect(line(frame, 0)).toMatch(/^ ttybrain · {2}3 People ▾ {2}› Anna Peeters › 1… {2}● 2 new in inbox {2}Mon 23 Nov 2026$/)
   expect(line(frame, 1)).toMatch(/^ ╭─ Talk · 0 of 5 discussed ─+╮ ╭─ Notes ─+╮$/)
-  expect(frame).toMatch(/○ +Her view on Vendor B's.*ERP/)
+  expect(frame).toMatch(/○ +Her view on Vendor B's archite…/) // the project tag gives way
   expect(line(frame, 23)).toMatch(/^ space discussed {3}tab panel {3}e notes {3}a action {3}D decision {3}x close/)
 })

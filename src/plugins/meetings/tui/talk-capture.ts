@@ -66,7 +66,7 @@ export function registerTalkCapture(ui: TuiContext): void {
       return {
         declined: true,
         lines: [
-          [{ text: "→", tone: "green" }, { text: " the inbox" }, { text: ` · ${p.why}`, tone: "muted" }],
+          [{ text: "→", tone: "green" }, { text: " goes to the inbox" }, { text: ` · ${p.why}`, tone: "muted" }],
           [{ text: `  ${HINT}`, tone: "muted" }],
         ],
       }
