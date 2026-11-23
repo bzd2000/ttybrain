@@ -54,10 +54,10 @@ const lineWith = (frame: string, s: string) => frame.split("\n").find((l) => l.i
 // Opens `ref` and moves right to its Actions tab.
 // `ready`: a text the settled tab shows (the Action column is measured after the first draw).
 async function actionsTab(t: RenderedTui, ref: string, tabs: number, ready: string): Promise<string> {
-  await t.nav.open(ref)
+  void tabs
+  await t.nav.open(ref, "actions")
   await until(t, (f) => line(f, 2).includes("Actions"))
-  for (let i = 0; i < tabs; i++) t.input.pressArrow("right")
-  return until(t, (f) => f.includes("Actions ·") && f.includes(ready))
+  return until(t, (f) => t.nav.crumb() === ref && f.includes("Actions ·") && f.includes(ready))
 }
 
 // The Actions screen's columns at 118: ID 5, Action 58, Owner 8, Linked to 30, Due 7.
@@ -68,7 +68,9 @@ test("a project's Actions tab: the screen's columns, the project left out of Lin
   await seedDesign(kernel)
   tui = await renderTui(kernel, { width: 118, height: 36 })
   const frame = await actionsTab(tui, "#CRM", 5, "Invite Marie to design walkthrough")
-  expect(line(frame, 2)).toBe("  Overview   Milestones 5   Deliverables 6   Risks & issues 4   Decisions 7   Actions 9   People 7   Context")
+  // The meetings plugin's Meetings and Talk sit before Context (the 2026-11-20 `project` design); the tabs no longer
+  // fit, so they window around the active one.
+  expect(line(frame, 2)).toBe(" ‹  Deliverables 6   Risks & issues 4   Decisions 7   Actions 9   People 7   Meetings   Talk   Context")
   expect(line(frame, 3)).toMatch(/^ ╭─ Actions · 9 open ─+╮$/)
   expect([4, 5, 6, 7, 8, 9].map((i) => inside(frame, i))).toEqual([
     cols(["ID", "Action", "Owner", "Linked to", "Due"], WIDE),
@@ -94,11 +96,11 @@ test("a person's and a meeting's Actions tabs list the actions linked to them; n
   await seedDesign(kernel)
   tui = await renderTui(kernel, { width: 118, height: 36 })
   let frame = await actionsTab(tui, "@peter", 3, "Send revised budget to Peter")
-  expect(line(frame, 2)).toBe("  Summary   Notes 3   Projects & roles 2   Actions 1")
+  expect(line(frame, 2)).toBe("  Summary   Talk 0   Meetings   Notes 3   Projects & roles 2   Actions 1")
   expect(inside(frame, 5)).toBe(cols(["A-1", "Send revised budget to Peter", "me", "CRM", "9 Nov"], WIDE))
   expect(fgAt(await tui.spans(), "CRM", 5)).toBe(theme.cyan)
   tui.input.pressEscape()
-  await until(tui, (f) => !f.includes("› @peter"))
+  await until(tui, (f) => !f.includes("› Peter Janssens"))
 
   // The meeting's tab comes after its Export tab; its new action is linked to it, opened as the meetings plugin's
   // "log action" opens it.

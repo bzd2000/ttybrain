@@ -191,7 +191,7 @@ test("the crumb names the active tab; a person's record view has its tabs on row
   frame = await until(t, (f) => f.includes("Summary"))
   expect(line(frame, 0)).not.toContain("› Team")
   expect(line(frame, 1)).toBe("")
-  expect(line(frame, 2)).toMatch(/^ {2}Summary {3}Notes/)
+  expect(line(frame, 2)).toMatch(/^ {2}Summary {3}Talk 0 {3}Meetings {3}Notes/)
 })
 
 // At 80×24 the detail panel is gone (it shows from 110 columns); names and codes stay whole.

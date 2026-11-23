@@ -2,7 +2,7 @@
 // `{ recordRef }`, in that tab's plugin scope; the header shows its breadcrumb (frame.tsx). ←→ switch tabs.
 // A tab with `when` shows only once its check resolved true (or threw: a broken check never hides data); a
 // `tab` that is not shown falls back to the first tab. As the screen designs draw it, a blank line sits between the
-// header and the tabs.
+// header and the tabs; a `bare` tab shown alone has neither (the meeting in progress).
 import { createMemo, createSignal, Show } from "solid-js"
 import { useQuery, useRecord } from "../data"
 import { useKeys } from "../keys"
@@ -49,15 +49,18 @@ export function RecordView(props: { recordRef: string; tab?: string }) {
   const shownTabs = () => tabs().filter((t) => t.when === undefined || loaded.data()?.shown.has(t.id) === true)
   const [chosen, setChosen] = createSignal(props.tab)
   const active = () => shownTabs().find((t) => t.id === chosen()) ?? shownTabs()[0]
+  const bare = () => shownTabs().length === 1 && shownTabs()[0]!.bare === true
 
   return (
-    <box flexDirection="column" flexGrow={1} minHeight={0} paddingTop={1} paddingLeft={1} paddingRight={1}>
-      <Tabs
-        tabs={shownTabs().map((t) => ({ id: t.id, title: t.title, count: loaded.data()?.counts.get(t.id) ?? null }))}
-        active={active()?.id ?? ""}
-        onChange={setChosen}
-        focused={keys.active()}
-      />
+    <box flexDirection="column" flexGrow={1} minHeight={0} paddingTop={bare() ? 0 : 1} paddingLeft={1} paddingRight={1}>
+      <Show when={!bare()}>
+        <Tabs
+          tabs={shownTabs().map((t) => ({ id: t.id, title: t.title, count: loaded.data()?.counts.get(t.id) ?? null }))}
+          active={active()?.id ?? ""}
+          onChange={setChosen}
+          focused={keys.active()}
+        />
+      </Show>
       <Show when={active()} keyed>
         {(t: Registered<RecordTabDef>) => (
           <box flexDirection="column" flexGrow={1} flexBasis={0} minHeight={0}>

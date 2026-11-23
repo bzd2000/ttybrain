@@ -7,10 +7,6 @@
 import { afterEach, expect, test } from "bun:test"
 import { builtinPlugins } from "../builtins"
 import { bgAt, fgAt, isSelected, line, seedMeetings } from "../design"
-import { builtinTuiParts } from "../builtins"
-import { onMount } from "solid-js"
-import { defineTui, type TuiDef } from "../../src/kernel/tui/types"
-import { useOverlay } from "../../src/kernel/tui/overlay"
 import { makeTestKernel, type TestKernel } from "../helpers"
 import { renderTui, type RenderedTui } from "../tui"
 import { theme } from "../../src/kernel/tui/theme"
@@ -125,37 +121,16 @@ test("Meetings at 80×24: Talk and Act. give way, codes and names whole", async 
   expect(line(frame, 23)).toBe(" tab panel   enter open   n one-off   N series   s skip date   m move date")
 })
 
-// Opens the series form for the person whose record is open, as the person's Meetings tab will (Task 5): a global
-// action of this test's own (`w`), so the form opens over Karim's person view as the `series` design draws it.
-const meetingsPart = builtinTuiParts.find((p) => p.plugin === "meetings")!
-const opener: TuiDef = defineTui({
-  plugin: "meetings",
-  activate: (ui) => {
-    meetingsPart.activate(ui)
-    ui.globalAction({
-      id: "test-series",
-      key: "w",
-      label: "series",
-      overlay: (props: { close(): void }) => {
-        const overlay = useOverlay()
-        onMount(() => {
-          props.close()
-          void overlay.openForm("series", "series", { prefill: { about: "@karim" }, draftFor: "@karim" })
-        })
-        return null
-      },
-    })
-  },
-})
-
 test("New recurring meeting as designed (from Karim's person view): rows, read-back, title, footer and bar", async () => {
   kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
   await seedMeetings(kernel)
-  tui = await renderTui(kernel, { width: 118, height: 36, parts: builtinTuiParts.map((p) => (p === meetingsPart ? opener : p)) })
+  tui = await renderTui(kernel, { width: 118, height: 36 })
   const t = tui
-  await t.nav.open("@karim")
-  await until(t, (f) => f.includes("Karim Haddad"))
-  t.input.pressKey("w")
+  // N on Karim's Meetings tab, as the design's form is opened.
+  await t.nav.open("@karim", "meetings")
+  await until(t, (f) => f.includes("Karim Haddad") && f.includes("Past meetings"))
+  await t.settle()
+  t.input.pressKey("N")
   // The form has the keys once its bar shows.
   await until(t, (f) => f.includes("Karim Haddad · person") && line(f, 35) === " tab field   ctrl+s save   esc cancel")
   // It starts on Rhythm, with About, Title, Kind and Attendees filled in.
@@ -163,7 +138,10 @@ test("New recurring meeting as designed (from Karim's person view): rows, read-b
   let frame = await until(t, (f) => f.includes("→ Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …") && f.includes("Wed 25 Nov "))
   const rows = frame.split("\n")
   const top = rows.findIndex((l) => l.includes("New recurring meeting"))
-  const body = rows.slice(top, top + 11).map((l) => l.slice(l.indexOf(l.includes("╭") ? "╭" : l.includes("╰") ? "╰" : "│")).trimEnd())
+  // The overlay's columns (Karim's Meetings tab is behind it, dimmed).
+  const from = rows[top]!.indexOf("╭")
+  const to = rows[top]!.indexOf("╮", from)
+  const body = rows.slice(top, top + 11).map((l) => l.slice(from, to + 1).trimEnd())
   // In the box: the text between `│ ` and ` │`, without trailing spaces; the borders as drawn.
   const insideBox = (l: string) => (l.startsWith("│") ? l.slice(2, l.lastIndexOf("│")).trimEnd() : l)
   expect(body[0]).toMatch(/^╭─ New recurring meeting ─+╮$/)

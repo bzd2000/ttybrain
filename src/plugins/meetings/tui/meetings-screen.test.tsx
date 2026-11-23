@@ -191,11 +191,11 @@ describe("Meetings screen", () => {
     spans = await t.spans()
     expect(isSelected(spans, "1:1 Bob")).toBe(true)
     t.input.pressEnter()
-    frame = await until(t, (f) => f.includes("› @bob"))
-    expect(frame).toContain("› @bob Bob Willems")
+    frame = await until(t, (f) => f.includes("› Bob Willems"))
+    expect(frame).toContain("› Bob Willems · Integration lead · team")
   })
 
-  test("closing on a meeting's Agenda tab says what closeMeeting did", async () => {
+  test("closing a meeting in progress says what closeMeeting did", async () => {
     const t = await designed()
     await t.nav.open("M-11") // Karim's 1:1 of Wed 18, with notes
     await until(t, (f) => f.includes("› M-11"))

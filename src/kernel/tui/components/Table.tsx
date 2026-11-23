@@ -7,11 +7,11 @@
 // ` · n`; `tone` colours the header, muted by default; `space` puts a blank line above it; `rowSpace` a blank line
 // between its rows). A row's `detail` is a second line under it, not selectable (a processed inbox item's
 // outcome): one cell aligned with its second column, or `{ cells }` laid out in the row's own columns. A cell's
-// `parts` colour pieces of its text. A focused table with rows and `onOpen`
+// `parts` colour pieces of its text; `strike` strikes it through. A focused table with rows and `onOpen`
 // adds the `↑↓ select` and `Enter open` hints. With `listId`, the columns other plugins registered for that list (registry `columns(listId)`) are
 // appended and filled through their `value(ref)`. While a text field holds text focus, the Table takes no keys,
 // nor keys a handler before it (its screen's) already claimed with preventDefault().
-import type { KeyEvent } from "@opentui/core"
+import { TextAttributes, type KeyEvent } from "@opentui/core"
 import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
 import { useQuery } from "../data"
 import { displayWidth, truncate } from "../format"
@@ -252,14 +252,14 @@ export function Table(props: TableProps) {
     )
   })
 
-  const ColumnText = (cp: { col: TableColumn; text: string; fg: string }) => (
-    <text fg={cp.fg} width={widthOf(cp.col)} flexShrink={0} wrapMode="none">
+  const ColumnText = (cp: { col: TableColumn; text: string; fg: string; strike?: boolean }) => (
+    <text fg={cp.fg} width={widthOf(cp.col)} flexShrink={0} wrapMode="none" attributes={cp.strike ? TextAttributes.STRIKETHROUGH : 0}>
       {truncate(cp.text, widthOf(cp.col))}
     </text>
   )
   // A cell: its text in one colour, or its parts side by side.
   const CellText = (cp: { col: TableColumn; cell: Cell }) => (
-    <Show when={cp.cell.parts} fallback={<ColumnText col={cp.col} text={cp.cell.text} fg={toneColor(cp.cell.tone)} />}>
+    <Show when={cp.cell.parts} fallback={<ColumnText col={cp.col} text={cp.cell.text} fg={toneColor(cp.cell.tone)} strike={cp.cell.strike === true} />}>
       <box flexDirection="row" width={widthOf(cp.col)} flexShrink={0} height={1}>
         <For each={fitParts(cp.cell, widthOf(cp.col))}>
           {(p) => (

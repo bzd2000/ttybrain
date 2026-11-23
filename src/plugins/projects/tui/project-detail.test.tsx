@@ -107,7 +107,9 @@ describe("project detail", () => {
     expect(frame).toContain("Milestones 1")
     expect(frame).toContain("Risks & issues 1")
     expect(frame).toContain("People 2")
-    expect(lineWith(frame, "Overview")).toContain("Context")
+    // The meetings plugin's Meetings and Talk come before Context (the 2026-11-20 `project` design): the tabs no
+    // longer fit and window around the active one.
+    expect(lineWith(frame, "Overview")).toMatch(/People 2 {3}Meetings/)
   })
 
   test("at 80 columns the tabs drop zero counts, then window around the active tab with ‹ › instead of cutting words", async () => {
@@ -119,7 +121,7 @@ describe("project detail", () => {
     await tui.frame()
     await tui.nav.open("#CRM")
     const tabLine = async () => (await tui!.frame()).split("\n")[2]!
-    const words = ["Overview", "Milestones", "Deliverables", "Risks & issues", "Decisions", "Actions", "People", "Context"]
+    const words = ["Overview", "Milestones", "Deliverables", "Risks & issues", "Decisions", "Actions", "People", "Meetings", "Talk", "Context"]
     const check = (line: string) => {
       // every word on the tab line is a whole tab title or count, or a marker
       for (const piece of line.replace(/[‹›]/g, " ").trim().split(/\s{2,}/)) {
@@ -135,7 +137,7 @@ describe("project detail", () => {
     line = (await tui.frame()).split("\n")[2]!
     expect(line).toContain("Milestones 1")
     check(line)
-    for (let i = 0; i < 6; i++) tui.input.pressArrow("right")
+    for (let i = 0; i < 8; i++) tui.input.pressArrow("right")
     line = (await tui.frame()).split("\n")[2]!
     expect(line).toContain("Context")
     expect(line).toContain("‹")
@@ -147,20 +149,20 @@ describe("project detail", () => {
     const t = await open()
     let frame = await right(t, 6)
     expect(frame).toContain("Team/Stakeholder")
-    frame = await right(t)
+    frame = await right(t, 3)
     expect(frame).toContain("Context · markdown")
   })
 
   test("empty context", async () => {
     const t = await open()
-    const frame = await right(t, 7)
+    const frame = await right(t, 9)
     expect(frame).toContain("No context yet. Press e to write it, or let your MCP integration fill it in.")
   })
 
   test("context renders markdown", async () => {
     const t = await open()
     await inCtx(() => write().setContext!({ project: "CRM", markdown: "# Background\nLegacy CRM" }))
-    await right(t, 7)
+    await right(t, 9)
     // <markdown> lays out its blocks a moment after the first frame.
     let frame = await t.frame()
     for (let i = 0; i < 40 && !frame.includes("Legacy CRM"); i++) {
@@ -175,7 +177,7 @@ describe("project detail", () => {
   test("a list item with two paragraphs keeps them on their own lines, under the bullet's text", async () => {
     const t = await open()
     await inCtx(() => write().setContext!({ project: "CRM", markdown: "- first para\n\n  second para\n- other item\n" }))
-    await right(t, 7)
+    await right(t, 9)
     const frame = await until(t, "other item")
     const at = frame.split("\n").findIndex((l) => l.includes("• first para"))
     expect(at).toBeGreaterThan(0)
@@ -194,7 +196,7 @@ describe("project detail", () => {
     await tui.frame()
     await tui.nav.open("#CRM")
     await tui.frame()
-    await right(tui, 7)
+    await right(tui, 9)
     const frame = await until(tui, "Paragraph 1")
     expect(frame).toContain("Context · markdown")
     expect(frame).toContain("Paragraph 1")
@@ -204,7 +206,7 @@ describe("project detail", () => {
   test("e edits context", async () => {
     const t = await open()
     await inCtx(() => write().setContext!({ project: "CRM", markdown: "# A" }))
-    await right(t, 7)
+    await right(t, 9)
     t.input.pressKey("e")
     await t.frame()
     t.input.pressKey("END")
@@ -217,7 +219,7 @@ describe("project detail", () => {
   test("the context editor keeps a draft per project: a quit keeps it, reopening offers it, a save deletes it", async () => {
     let t = await open()
     await inCtx(() => write().setContext!({ project: "CRM", markdown: "# A" }))
-    await right(t, 7)
+    await right(t, 9)
     t.input.pressKey("e")
     await until(t, "ctrl+s save")
     t.input.pressKey("END")
@@ -228,7 +230,7 @@ describe("project detail", () => {
     await t.frame()
     await t.nav.open("#CRM")
     await t.frame()
-    await right(t, 7)
+    await right(t, 9)
     const dir = join(kernel!.home, "drafts")
     expect(readdirSync(dir)).toEqual([`${encodeURIComponent("projects:context:#CRM")}.json`])
     expect(JSON.parse(readFileSync(join(dir, readdirSync(dir)[0]!), "utf8")).values).toEqual({ text: "# A draft" })
@@ -250,7 +252,7 @@ describe("project detail", () => {
   test("E without an external editor (container mode) leaves the context unchanged", async () => {
     const t = await open()
     await inCtx(() => write().setContext!({ project: "CRM", markdown: "# A" }))
-    await right(t, 7)
+    await right(t, 9)
     process.env.TTYBRAIN_MODE = "container"
     try {
       t.input.pressKey("E")

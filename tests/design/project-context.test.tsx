@@ -39,7 +39,7 @@ async function openContext(width: number, height: number): Promise<{ t: Rendered
   await until(tui, (f) => f.includes("CRM replatforming"))
   await tui.nav.open("#CRM")
   await until(tui, (f) => f.includes("Milestones 5"))
-  for (let i = 0; i < 7; i++) tui.input.pressArrow("right")
+  for (let i = 0; i < 9; i++) tui.input.pressArrow("right") // past the meetings plugin's Meetings and Talk
   const frame = await until(tui, (f) => f.includes("Solution outline v1.2") && f.includes("Background") && f.includes("nightly extract") && f.includes("100%"))
   return { t: tui, frame }
 }
@@ -49,7 +49,9 @@ test("Project context as designed", async () => {
 
   expect(line(frame, 0)).toContain(" 2 Projects ▾  › CRM CRM replatforming")
   expect(line(frame, 1)).toBe("")
-  expect(line(frame, 2)).toBe("  Overview   Milestones 5   Deliverables 6   Risks & issues 4   Decisions 7   Actions 9   People 7   Context")
+  // The meetings plugin's Meetings and Talk sit before Context (the 2026-11-20 `project` design): the row no longer
+  // fits at 118, so it windows around the active tab.
+  expect(line(frame, 2)).toBe(" ‹  Deliverables 6   Risks & issues 4   Decisions 7   Actions 9   People 7   Meetings   Talk   Context")
   // A focused panel filling the tab, the footer on its bottom border.
   expect(line(frame, 3)).toMatch(/^ ╭─ Context · markdown ─+╮$/)
   expect(line(frame, 34)).toMatch(/^ ╰─+ updated 12 Nov · 100% ─╯$/)

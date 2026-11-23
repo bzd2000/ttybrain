@@ -213,7 +213,7 @@ test("TUI: screen 7 and the project tab", async () => {
   await until(t, (f) => (f.split("\n")[0] ?? "").includes("ttybrain ·  2 Projects"))
   await t.nav.open("#CRM", "contracts")
   frame = await until(t, (f) => f.includes("› CRM CRM") && f.includes("1 contract"))
-  expect(frame.split("\n")[2]).toMatch(/\bPeople +Context +Contracts 1\b/) // the tab bar (a blank line under the header), scrolled to the new tab
+  expect(frame.split("\n")[2]).toMatch(/\bPeople +Meetings +Talk +Context +Contracts 1\b/) // the tab bar (a blank line under the header), scrolled to the new tab
   expect(frame).toContain("C-1 Support")
 })
 

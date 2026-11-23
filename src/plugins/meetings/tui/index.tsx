@@ -1,16 +1,26 @@
 // The meetings plugin's tui part: the Meetings screen (slot 5), the Attention panel "Upcoming meetings · next 7 days",
-// the meeting record view's Agenda, Prep, Notes and Export tabs, the meeting, agenda item, attendees and move forms,
-// the new recurring meeting form (record type `series`) and the talk-item form (record type `talk_item`).
+// a 1:1 or project meeting's in-progress view (its only view, ruling M11) and a board meeting's Agenda, Prep, Notes
+// and Export tabs, a person's Talk (order 12) and Meetings (15) tabs, a project's Meetings (72) and Talk (75) tabs,
+// the meeting, agenda item, attendees and move forms, the new recurring meeting form (record type `series`), the
+// talk-item form (record type `talk_item`) and quick capture's route to a talk-list (`talk @anna …`).
 import { dayDate, defineTui } from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
 import { AgendaTab } from "./agenda-tab"
 import { ExportTab } from "./export-tab"
-import { AgendaItemForm, AttendeesForm, MeetingForm, MoveForm, TalkForm } from "./forms"
+import { AgendaItemForm, AttendeesForm, MeetingForm, MoveForm } from "./forms"
+import { TalkForm } from "./talk-form"
 import { MeetingsScreen } from "./meetings-screen"
 import { registerPanels } from "./panels"
 import { SERIES_TITLE, SeriesForm } from "./series-form"
 import { NotesTab } from "./notes-tab"
 import { PrepTab } from "./prep-tab"
+import { MeetingView } from "./meeting-view"
+import { PersonMeetings } from "./person-meetings"
+import { PersonTalk } from "./person-talk"
+import { ProjectMeetings } from "./project-meetings"
+import { ProjectTalk } from "./project-talk"
+import { meetingName } from "./subject"
+import { registerTalkCapture } from "./talk-capture"
 
 export const meetingsTui = defineTui({
   plugin: "meetings",
@@ -28,19 +38,38 @@ export const meetingsTui = defineTui({
       },
     })
     const store = makeStore(ui)
-    // The header crumb's muted tail: `Fri 4 Dec · 8 attendees`.
+    // The header crumb's muted tail: `Fri 4 Dec · 8 attendees`. Opened from what it is about (a person's or project's
+    // view): `› Anna Peeters › 1:1 Mon 23 Nov`, `› BOARD Management board › Board Fri 27 Nov`.
+    const same = async (a: string, b: string) => {
+      const [x, y] = await Promise.all([ui.records.resolve(a), ui.records.resolve(b)])
+      return x !== null && y !== null && x.type === y.type && x.id === y.id
+    }
     ui.recordCrumb("meeting", {
       detail: async (ref) => {
         const m = await store.meeting(ref)
         const n = m.attendees.length
         return `${dayDate(m.date)} · ${n} attendee${n === 1 ? "" : "s"}`
       },
+      under: async (ref, parent) => {
+        const m = await store.meeting(ref)
+        return m.about !== null && (await same(m.about, parent)) ? `${meetingName(m)} ${dayDate(m.date)}` : null
+      },
     })
-    // The tabs, without counts (as the design draws them).
-    ui.recordTab("meeting", { id: "agenda", title: "Agenda", order: 10, component: AgendaTab })
-    ui.recordTab("meeting", { id: "prep", title: "Prep", order: 20, component: PrepTab })
-    ui.recordTab("meeting", { id: "notes", title: "Notes", order: 30, component: NotesTab })
-    ui.recordTab("meeting", { id: "export", title: "Export", order: 40, component: ExportTab })
+    const isBoard = async (ref: string) => (await store.meeting(ref)).kind === "board"
+    const notBoard = async (ref: string) => !(await isBoard(ref))
+    // A 1:1 or project meeting: the meeting in progress, alone (no tab row). A board meeting: its tabs, without
+    // counts (as the designs draw them).
+    ui.recordTab("meeting", { id: "meeting", title: "Meeting", order: 5, bare: true, when: notBoard, component: MeetingView })
+    ui.recordTab("meeting", { id: "agenda", title: "Agenda", order: 10, when: isBoard, component: AgendaTab })
+    ui.recordTab("meeting", { id: "prep", title: "Prep", order: 20, when: isBoard, component: PrepTab })
+    ui.recordTab("meeting", { id: "notes", title: "Notes", order: 30, when: isBoard, component: NotesTab })
+    ui.recordTab("meeting", { id: "export", title: "Export", order: 40, when: isBoard, component: ExportTab })
+    // A person's and a project's: Talk counts the open items (not the carried ones), Meetings has no count.
+    const open = async (ref: string) => ((await ui.self().read.talkList!({ about: ref })) as { open: unknown[] }).open.length
+    ui.recordTab("person", { id: "talk", title: "Talk", order: 12, count: open, component: PersonTalk })
+    ui.recordTab("person", { id: "meetings", title: "Meetings", order: 15, component: PersonMeetings })
+    ui.recordTab("project", { id: "meetings", title: "Meetings", order: 72, component: ProjectMeetings })
+    ui.recordTab("project", { id: "talk", title: "Talk", order: 75, count: open, component: ProjectTalk })
     ui.recordForm("meeting", { id: "meeting", label: "Meeting", component: MeetingForm })
     ui.recordForm("meeting", { id: "agenda-item", label: "Agenda item", component: AgendaItemForm })
     ui.recordForm("meeting", { id: "attendees", label: "Attendees", component: AttendeesForm })
@@ -48,6 +77,7 @@ export const meetingsTui = defineTui({
     ui.recordForm("series", { id: "series", label: SERIES_TITLE, component: SeriesForm })
     ui.recordForm("talk_item", { id: "talk", label: "Talk item", component: TalkForm })
     registerPanels(ui)
+    registerTalkCapture(ui)
   },
 })
 

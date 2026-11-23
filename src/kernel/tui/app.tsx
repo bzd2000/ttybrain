@@ -10,19 +10,20 @@ import { Help } from "./components/Help"
 import { OverviewScreen } from "./components/OverviewScreen"
 import { RecordView } from "./components/RecordView"
 import { Switcher, type SwitcherEntry } from "./components/Switcher"
-import { bindDataSession, DataContext } from "./data"
+import { bindDataSession, DataContext, useQuery } from "./data"
 import { createDraftStore } from "./drafts"
 import { longDate } from "./format"
-import { CHIP_COLUMN, Header, StatusBar } from "./frame"
+import { CHIP_COLUMN, Header, StatusBar, type UnderCrumb } from "./frame"
 import { createGlobalKeyHandler, frameHints, KeysContext, KeysStore, LayerContext, SCREEN_LAYER, useGlobalKeys, type Hint } from "./keys"
 import { clearMessages, currentMessage, notify } from "./messages"
-import { createNav, NavContext, OVERVIEW_ID, type Nav } from "./nav"
+import { createNav, NavContext, OVERVIEW_ID, useNav, type Nav } from "./nav"
 import { createOverlay, createOverlayStack, OverlayContext } from "./overlay"
 import { createLiveRefresh } from "./refresh"
 import { OVERVIEW_SLOT, type TuiRegistry } from "./registry"
-import { AppContext, PluginScope } from "./scope"
+import { AppContext, PluginScope, useApp } from "./scope"
 import { theme } from "./theme"
-import type { Route } from "./types"
+import type { Route, StatusBadgeDef } from "./types"
+import type { Registered } from "./registry"
 
 export { PluginScope, useApp, type TuiAppContext } from "./scope"
 
@@ -50,6 +51,49 @@ const OVERLAY_ABOVE = 44
 const OVERLAY_BELOW = 56
 
 type Screen = SwitcherEntry & { component: Component<{}>; plugin?: string }
+
+// The header for the current route. A record opened from another record's view whose crumb has `under` shows after
+// that record's crumb, with the chip of that record's screen (`3 People ▾ › Anna Peeters › 1:1 Mon 23 Nov`).
+function AppHeader(props: { chip(screen: string): string; badges: Array<Registered<StatusBadgeDef>>; date: string }) {
+  const app = useApp()
+  const nav = useNav()
+  const pair = () => {
+    const s = nav.stack()
+    const top = s[s.length - 1]
+    const below = s[s.length - 2]
+    return top?.kind === "record" && below?.kind === "record" ? { top, below } : undefined
+  }
+  const under = useQuery(
+    async (): Promise<(UnderCrumb & { ref: string; screen: string }) | null> => {
+      const p = pair()
+      if (p === undefined) return null
+      const found = await app.kernel.records.resolveAny(p.top.ref)
+      const def = found ? app.registry.crumbFor(found.type) : undefined
+      if (!def?.under) return null
+      const text = await Promise.resolve()
+        .then(() => def.under!(p.top.ref, p.below.ref))
+        .catch(() => null)
+      return text === null ? null : { ref: p.top.ref, parent: p.below.ref, text, screen: p.below.screen }
+    },
+    { key: () => nav.stack().map((r) => (r.kind === "record" ? r.ref : r.screen)).join("\n") },
+  )
+  // Only while it is about the routes shown now (a reload keeps the last data).
+  const current = () => {
+    const u = under.data()
+    const p = pair()
+    return u && p && u.ref === p.top.ref && u.parent === p.below.ref ? u : undefined
+  }
+  return (
+    <Header
+      chip={props.chip(current()?.screen ?? nav.route().screen)}
+      crumb={nav.crumb()}
+      under={current()}
+      screenCrumb={nav.screenCrumb()}
+      badges={props.badges}
+      date={props.date}
+    />
+  )
+}
 
 // `refreshMs`: how often live refresh checks PRAGMA data_version (spec §10: about every second); `draftMs`: how
 // long after the last change a draft is written (drafts.ts, 1 s).
@@ -172,10 +216,11 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
           <KeysContext.Provider value={keys}>
             <OverlayContext.Provider value={overlay}>
               <box flexDirection="column" width="100%" height="100%" backgroundColor={theme.bg}>
-                <Header
-                  chip={`${current().slot} ${current().title} ${switcherOpen() ? "▴" : "▾"}`}
-                  crumb={nav.crumb()}
-                  screenCrumb={nav.screenCrumb()}
+                <AppHeader
+                  chip={(screen) => {
+                    const s = screenOf(screen) ?? current()
+                    return `${s.slot} ${s.title} ${switcherOpen() ? "▴" : "▾"}`
+                  }}
                   badges={registry.badges()}
                   date={longDate(refresh.today())}
                 />

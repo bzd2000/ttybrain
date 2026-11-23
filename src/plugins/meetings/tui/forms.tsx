@@ -1,7 +1,7 @@
 // The meetings plugin's record forms on the record type `meeting`: `meeting` (an add, or an edit with a
 // recordRef; About first, the kind read as `1:1 (project · board)`), `agenda-item` (recordRef the meeting; an edit
-// names its position in `prefill.item`), `attendees` and `move` (a planned meeting's new date); and on `talk_item`
-// the form `talk` (a new item; `prefill.about` fills in its subject, as `t` on an upcoming meeting does).
+// names its position in `prefill.item`), `attendees` and `move` (a planned meeting's new date). The talk-item form
+// is in talk-form.tsx.
 // Attendees and projects are typed as tags separated by spaces and/or commas (`@marie, @luc`, `#CRM #ERP`); the
 // `@` and `#` are optional. An unknown person or project shows under its field. An edit sends only the fields that
 // changed, and closes without a write when nothing did.
@@ -231,24 +231,4 @@ export function MoveForm(props: RecordFormProps) {
       }}
     </With>
   )
-}
-
-// A new talk item: what it is about (a person or a project, `prefill.about`), its text and, for a person's item, the
-// project it is about too (it then also shows at that project's meetings).
-export function TalkForm(props: RecordFormProps) {
-  const rt = useRuntime()
-  const fields: FieldSpec[] = [
-    { name: "about", label: "About", kind: "refs", required: true },
-    { name: "text", label: "Text", kind: "text", required: true },
-    { name: "project", label: "Project", kind: "record", recordType: "project" },
-  ]
-  const submit = (v: FormValues) =>
-    save(
-      () => rt.self().write.addTalk!(defined({ about: (v.about ?? "").trim(), text: v.text ?? "", project: given(v.project) })),
-      props,
-      "added",
-      { project: "project", about: "about" },
-    )
-  const start = props.prefill?.about === undefined ? undefined : "text"
-  return <Form title="New talk item" fields={withPrefill(fields, props.prefill)} {...(start ? { start } : {})} submit={submit} close={props.close} />
 }

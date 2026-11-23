@@ -1,12 +1,14 @@
-// The meeting record view's Agenda tab: `Thu 4 Dec 2026 · project · planned · 8 attendees`, the agenda as a
-// table (#, item, project, the ask's first line) and the attendees. Keys: n add an item, e edit it, J/K move it
-// down/up (the selection follows it), Del remove it (after a confirmation), p attendees, x close the meeting.
-// A cancelled meeting is read-only: its write keys say so and open nothing.
+// A board meeting's Agenda tab (the 2026-11-20 `board` design): on the left (1.3 : 1) "Agenda · n", the agenda as a
+// table (# muted `1.`, Item, Project cyan, the ask's first line, `—` muted for none); on the right "Board talk-list
+// · n", the board project's open talk items (`·`), then `A adds one to the agenda`. Keys (the design's bar): n add an
+// item, J/K move it down/up (the selection follows it), A take the talk-list's selected item (the first one until
+// Tab moves to that panel) onto the agenda (ruling M8: added as an item and ticked discussed in this meeting, in one
+// act), e edit the item (its ask); kept beyond the bar: Tab the other panel, Del remove an item (after a
+// confirmation), p attendees, x close the meeting. A cancelled meeting is read-only: its write keys say so.
 import { createMemo, createSignal, Show } from "solid-js"
 import {
   act,
   fitWidth,
-  longDate,
   notify,
   Panel,
   printable,
@@ -22,31 +24,32 @@ import {
   type TableRow,
 } from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
-import { KIND_LABELS, type AgendaItem, type MeetingRecord } from "../logic/schema"
-import { attendeeNames } from "./agenda-list"
+import type { AgendaItem, MeetingRecord, TalkRecord } from "../logic/schema"
 import { closedMessage, closeQuestion } from "./meetings-screen"
 
 export const EMPTY = "No agenda yet. Press n to add an item."
 const HINTS: Hint[] = [
-  { key: "n", label: "add" },
-  { key: "e", label: "edit" },
-  { key: "J/K", label: "move" },
-  { key: "Del", label: "remove" },
-  { key: "p", label: "attendees" },
-  { key: "x", label: "close" },
+  { key: "←→", label: "tabs" },
+  { key: "n", label: "agenda item" },
+  { key: "J/K", label: "reorder" },
+  { key: "A", label: "talk-list → agenda" },
+  { key: "e", label: "edit ask" },
+  { key: "Esc", label: "back" },
 ]
-// The project column fits the longest code shown (8 to 16): codes are never cut.
+// The project column fits the longest code shown (7 to 16): codes are never cut.
 const columns = (codes: string[]): TableColumn[] => [
-  { id: "pos", title: "#", width: 3 },
+  { id: "pos", title: "", width: 3 },
   { id: "text", title: "Item", width: "grow" },
-  { id: "project", title: "Project", width: fitWidth(codes, 8, 16) },
-  { id: "ask", title: "Ask", width: "grow" },
+  { id: "project", title: "Project", width: fitWidth(codes, 7, 16) },
+  { id: "ask", title: "Ask", width: "grow", drop: 1 },
 ]
+const talkColumns: TableColumn[] = [
+  { id: "dot", title: "", width: 3 },
+  { id: "text", title: "", width: "grow" },
+]
+export const TALK_LIST_EMPTY = "Nothing on the board's talk-list."
 
 const firstLine = (s: string | null) => (s ?? "").split("\n")[0] ?? ""
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`
-// `Thu 4 Dec 2026 · project · planned · 8 attendees`.
-const meetingHeader = (m: MeetingRecord) => [longDate(m.date), KIND_LABELS[m.kind], m.status, plural(m.attendees.length, "attendee")].join(" · ")
 
 // The writes the meeting tabs share: a guard for a cancelled meeting, closing, and logging an action or decision
 // against the meeting (and the item's project, when it has one).
@@ -83,12 +86,13 @@ export function AgendaTab(props: { recordRef: string }) {
   const overlay = useOverlay()
   const keys = useKeys()
   const writes = useMeetingWrites()
-  keys.hints(HINTS)
+  keys.hints(HINTS, { exact: true, frame: [], globals: false })
 
   const q = useQuery(
     async () => {
       const m = await store.meeting(props.recordRef)
-      return { meeting: m, names: await attendeeNames(rt, m) }
+      const { items } = (await rt.self().read.agendaFor!({ meeting: m.ref })) as { items: TalkRecord[] }
+      return { meeting: m, talk: items.filter((t) => t.status === "open") }
     },
     { key: () => props.recordRef },
   )
@@ -96,13 +100,22 @@ export function AgendaTab(props: { recordRef: string }) {
   const rows = createMemo((): TableRow[] =>
     (meeting()?.agenda ?? []).map((a) => ({
       ref: String(a.position),
-      cells: { pos: String(a.position), text: a.text, project: { text: a.project === null ? "" : a.project.slice(1), tone: "cyan" }, ask: firstLine(a.ask) },
+      cells: {
+        pos: { text: `${a.position}.`, tone: "muted" },
+        text: a.text,
+        project: { text: a.project === null ? "" : a.project.slice(1), tone: "cyan" },
+        ask: a.ask === null || a.ask.trim() === "" ? { text: "—", tone: "muted" } : firstLine(a.ask),
+      },
     })),
   )
+  const talkRows = createMemo((): TableRow[] => (q.data()?.talk ?? []).map((t) => ({ ref: t.ref, cells: { dot: { text: "·", tone: "muted" }, text: t.text } })))
+  // 0: the agenda, 1: the talk-list.
+  const [focus, setFocus] = createSignal<0 | 1>(0)
   // `current`: the position the table has selected; `want`: a position to select once it is shown (a new or
   // moved item), dropped as soon as the table has selected it.
   const [current, setCurrent] = createSignal<string | undefined>()
   const [want, setWant] = createSignal<string | undefined>()
+  const [talk, setTalk] = createSignal<string | undefined>()
   const select = (ref: string | undefined) => {
     setCurrent(ref)
     if (ref !== undefined && ref === want()) setWant(undefined)
@@ -121,17 +134,33 @@ export function AgendaTab(props: { recordRef: string }) {
     if (!(await overlay.confirm(`Remove item ${item.position} "${item.text}"?`))) return
     await act(() => rt.self().write.removeAgendaItem!({ meeting: m.ref, item: item.position }))
   }
+  // M8: onto the agenda, and discussed in this meeting, all or nothing.
+  const takeOn = async (m: MeetingRecord) => {
+    const list = q.data()?.talk ?? []
+    const t = list.find((x) => x.ref === talk()) ?? list[0]
+    if (t === undefined) return
+    const r = await act(
+      async () => {
+        await rt.self().write.addAgendaItem!({ meeting: m.ref, text: t.text })
+        return rt.self().write.discussTalk!({ ref: t.ref, meeting: m.ref })
+      },
+      { ok: () => `added "${t.text}" to the agenda` },
+    )
+    if (r.ok) setWant(String(m.agenda.length + 1))
+  }
 
   useScreenKeys((key) => {
     if (keys.typing()) return
     const m = meeting()
     if (m === undefined) return
     const ch = printable(key)
-    const item = selected()
-    if (ch === "n") writes.live(m, () => void add(m))
+    const item = focus() === 0 ? selected() : undefined
+    if (key.name === "tab") setFocus((f) => (f === 0 ? 1 : 0))
+    else if (ch === "n") writes.live(m, () => void add(m))
     else if (ch === "e") writes.live(m, () => item && writes.editItem(m, item))
     else if (ch === "J") writes.live(m, () => item && void move(m, item, item.position + 1))
     else if (ch === "K") writes.live(m, () => item && void move(m, item, item.position - 1))
+    else if (ch === "A") writes.live(m, () => void takeOn(m))
     else if (key.name === "delete") writes.live(m, () => item && void remove(m, item))
     else if (ch === "p") writes.live(m, () => void overlay.openForm("meeting", "attendees", { recordRef: m.ref }))
     else if (ch === "x") writes.live(m, () => void writes.close(m))
@@ -139,35 +168,44 @@ export function AgendaTab(props: { recordRef: string }) {
     key.preventDefault()
   })
 
+  // Both panels as tall as the taller one's rows (the agenda: its header and items; the talk-list: its items, a blank
+  // line and the `A` line), as the design's grid draws them.
+  const agendaNeed = () => 2 + 1 + (meeting()?.agenda.length ?? 0)
+  const talkNeed = () => 2 + Math.max(1, q.data()?.talk.length ?? 0) + 2
   return (
-    <box flexDirection="column" flexGrow={1} minHeight={0} paddingTop={1}>
-      <Show when={meeting()}>
-        {(m: () => MeetingRecord) => (
-          <text fg={theme.text} flexShrink={0} marginBottom={1}>
-            {meetingHeader(m())}
-          </text>
-        )}
-      </Show>
-      <Panel title="Agenda" count={meeting()?.agenda.length} focused={keys.active()} grow>
-        <Show when={q.data() !== undefined}>
-          <Table
-            columns={columns((meeting()?.agenda ?? []).map((a) => a.project?.slice(1) ?? ""))}
-            rows={rows()}
-            selectedRef={rows().some((r) => r.ref === want()) ? want() : undefined}
-            onSelect={select}
-            focused={keys.active()}
-            empty={EMPTY}
-          />
-        </Show>
-      </Panel>
-      <Show when={q.data()}>
-        {(d: () => { names: string[] }) => (
-          <box flexDirection="column" flexShrink={0} paddingLeft={1} paddingRight={1}>
-            <text fg={theme.accent}>Attendees</text>
-            <text fg={d().names.length === 0 ? theme.muted : theme.text}>{d().names.length === 0 ? "No attendees." : d().names.join(", ")}</text>
+    <box flexDirection="column" flexGrow={1} minHeight={0}>
+    <box flexDirection="row" flexShrink={1} minHeight={0} gap={1} overflow="hidden">
+      <box flexDirection="column" flexGrow={13} flexBasis={0} minWidth={0} minHeight={agendaNeed()}>
+        <Panel title="Agenda" count={meeting()?.agenda.length} focused={keys.active() && focus() === 0} grow>
+          <Show when={q.data() !== undefined}>
+            <Table
+              columns={columns((meeting()?.agenda ?? []).map((a) => a.project?.slice(1) ?? ""))}
+              rows={rows()}
+              selectedRef={rows().some((r) => r.ref === want()) ? want() : undefined}
+              onSelect={select}
+              focused={keys.active() && focus() === 0}
+              empty={EMPTY}
+            />
+          </Show>
+        </Panel>
+      </box>
+      <box flexDirection="column" flexGrow={10} flexBasis={0} minWidth={0} minHeight={talkNeed()}>
+        <Panel title="Board talk-list" count={q.data()?.talk.length} focused={keys.active() && focus() === 1} grow>
+          <box flexDirection="column" height={Math.max(1, talkRows().length)} flexShrink={0}>
+            <Table columns={talkColumns} rows={talkRows()} header={false} onSelect={setTalk} focused={keys.active() && focus() === 1} empty={TALK_LIST_EMPTY} />
           </box>
-        )}
-      </Show>
+          <text> </text>
+          <box flexDirection="row" height={1}>
+            <text fg={theme.accent} flexShrink={0}>
+              A
+            </text>
+            <text fg={theme.muted} flexShrink={0}>
+              {" adds one to the agenda"}
+            </text>
+          </box>
+        </Panel>
+      </box>
+    </box>
     </box>
   )
 }

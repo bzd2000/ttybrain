@@ -43,6 +43,7 @@ export function bootTui(kernel: Kernel, parts: TuiDef[], opts: { builtin?: boole
       globalAction: (def) => (live(), registry.addGlobalAction(id, def)),
       statusBadge: (def) => (live(), registry.addBadge(id, def)),
       recordCrumb: (recordType, def) => (live(), registry.addRecordCrumb(id, recordType, def)),
+      captureRoute: (def) => (live(), registry.addCaptureRoute(id, def)),
     }
     const fail = (error: string) => {
       failed = true

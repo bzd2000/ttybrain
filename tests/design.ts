@@ -52,6 +52,11 @@ export function boldAt(spans: CapturedFrame, text: string, scope?: LineScope): b
   return s && (s.attributes & TextAttributes.BOLD) !== 0
 }
 
+export function struckAt(spans: CapturedFrame, text: string, scope?: LineScope): boolean | undefined {
+  const s = spanAt(spans, text, scope)
+  return s && (s.attributes & TextAttributes.STRIKETHROUGH) !== 0
+}
+
 // Per line, the text drawn on the selected-row background (theme.selectedBg), trimmed; lines without it are left
 // out. The selection has no marker, so this is how a test finds the selected row. An active tab and the header
 // chip sit on that background too: match on a row's own text.
@@ -207,11 +212,13 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
     ]
     for (const [title, date] of decisions) await projects.addDecision!({ project: "CRM", title, date })
 
-    // M-1, the SteerCo of 28 Oct (held); M-2, the coming steering committee: both project meetings about CRM.
+    // M-1, the SteerCo of 28 Oct (held), a project meeting about CRM; M-2, the coming steering committee, about CRM
+    // and with an agenda naming other projects: a board meeting, so it keeps the Agenda · Prep · Notes · Export tabs
+    // the 2026-11-13 meeting prep design draws (ruling M11).
     const m1 = await meetings.addMeeting!({ about: "#CRM", title: "SteerCo", date: "2026-10-28", projects: ["CRM"], attendees: ["peter", "marie", "tom"] })
     await meetings.closeMeeting!({ ref: m1.ref })
     const attendees = ["peter", "marie", "luc", "tom", "anna", "bob", "karim", "sofie"]
-    const m2 = await meetings.addMeeting!({ about: "#CRM", title: "Steering committee Q4", date: "2026-12-04", attendees })
+    const m2 = await meetings.addMeeting!({ about: "#CRM", title: "Steering committee Q4", date: "2026-12-04", kind: "board", attendees })
     const ask = "Approve 2-week shift of design milestone and release of contingency budget."
     await meetings.addAgendaItem!({ meeting: m2.ref, text: "Minutes & open actions" })
     await meetings.addAgendaItem!({ meeting: m2.ref, text: "CRM status", project: "CRM", ask })

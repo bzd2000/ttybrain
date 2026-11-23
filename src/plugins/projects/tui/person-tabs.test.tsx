@@ -67,14 +67,14 @@ async function seed() {
   })
 }
 
-// Opens `ref` and moves `tabs` tabs right.
+// Opens `ref` and moves `tabs` tabs right, past the meetings plugin's Talk and Meetings (after Summary).
 async function open(ref: string, tabs = 0): Promise<RenderedTui> {
   kernel = await makeTestKernel({ plugins: builtinPlugins })
   await seed()
   tui = await renderTui(kernel, { width: 120, height: 32 })
   await tui.nav.open(ref)
-  await until(tui, (f) => f.includes(`› ${ref}`) && tabLine(f).includes("Actions"))
-  for (let i = 0; i < tabs; i++) tui.input.pressArrow("right")
+  await until(tui, (f) => tabLine(f).includes("Actions"))
+  for (let i = 0; i < (tabs > 0 ? tabs + 2 : 0); i++) tui.input.pressArrow("right")
   await tui.frame()
   return tui
 }
@@ -149,8 +149,7 @@ describe("projects' person tabs", () => {
     tui = await renderTui(kernel, { width: 80, height: 24 })
     await tui.nav.open("@marie")
     await until(tui, (f) => tabLine(f).includes("Actions"))
-    tui.input.pressArrow("right")
-    tui.input.pressArrow("right")
+    for (let i = 0; i < 4; i++) tui.input.pressArrow("right") // past Talk, Meetings and Notes
     let frame = await until(tui, (f) => f.includes("Data platform"))
     expect(lineWith(frame, "Data platform")).toMatch(/DATAPLATFORM2027 Data platform\s+sponsor\s+active/)
     tui.input.pressArrow("right")
@@ -236,6 +235,6 @@ describe("projects' person tabs", () => {
   test("tab order on a team member who is also a stakeholder", async () => {
     const t = await open("@anna")
     const frame = await until(t, (f) => tabLine(f).includes("Projects & roles 1"))
-    expect(tabLine(frame)).toMatch(/Summary\s+Notes( \d+)?\s+Goals( \d+)?\s+Projects & roles 1\s+Actions( \d+)?\s*$/)
+    expect(tabLine(frame)).toMatch(/Summary\s+Talk \d+\s+Meetings\s+Notes( \d+)?\s+Goals( \d+)?\s+Projects & roles 1\s+Actions( \d+)?\s*$/)
   })
 })

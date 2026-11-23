@@ -58,7 +58,8 @@ async function seed() {
   })
 }
 
-// Opens `ref` from the People screen and moves `tabs` tabs right (Summary → Notes is 1, Goals 2).
+// Opens `ref` from the People screen on its tab `tabs` (Summary 0, Notes 1, Goals 2; the meetings plugin's Talk and
+// Meetings tabs sit between Summary and Notes).
 async function open(ref: string, opts: { tabs?: number; extra?: () => Promise<void> } = {}): Promise<RenderedTui> {
   kernel = await makeTestKernel({ plugins: builtinPlugins })
   await seed()
@@ -66,9 +67,8 @@ async function open(ref: string, opts: { tabs?: number; extra?: () => Promise<vo
   tui = await renderTui(kernel, { width: 120, height: 32 })
   tui.input.pressKey("3")
   await until(tui, (f) => f.includes("People ·"))
-  await tui.nav.open(ref)
-  await until(tui, (f) => f.includes(`› ${ref}`))
-  for (let i = 0; i < (opts.tabs ?? 0); i++) tui.input.pressArrow("right")
+  await tui.nav.open(ref, ["summary", "notes", "goals"][opts.tabs ?? 0])
+  await until(tui, (f) => tabLine(f).includes("Summary"))
   await tui.frame()
   return tui
 }
@@ -77,15 +77,15 @@ describe("person record view", () => {
   test("Goals tab only for team members", async () => {
     let t = await open("@bob")
     let frame = await until(t, (f) => tabLine(f).includes("Goals"))
-    expect(frame).toContain("› @bob Bob Maes")
-    expect(tabLine(frame)).toMatch(/Summary\s+Notes 1\s+Goals 1/)
+    expect(frame).toContain("› Bob Maes · team") // the crumb shows the name without the handle (2026-11-20 designs)
+    expect(tabLine(frame)).toMatch(/Summary\s+Talk 0\s+Meetings\s+Notes 1\s+Goals 1/)
     t.destroy()
     tui = undefined
     await kernel!.cleanup()
 
     t = await open("@marie")
     frame = await t.frame()
-    expect(tabLine(frame)).toMatch(/Summary\s+Notes 1/)
+    expect(tabLine(frame)).toMatch(/Summary\s+Talk 0\s+Meetings\s+Notes 1/)
     expect(frame).not.toContain("Goals")
   })
 
@@ -118,8 +118,8 @@ describe("person record view", () => {
     t.input.pressEscape()
     await until(t, () => t.nav.route().kind === "screen")
     await t.nav.open("@anna")
-    frame = await until(t, (f) => f.includes("› @anna"))
-    expect(frame).toContain("@anna · Team · Stakeholder")
+    frame = await until(t, (f) => f.includes("@anna · Team · Stakeholder"))
+    expect(frame).toContain("› Anna Smit")
   })
 
   test("a handle edit from Summary follows the rename, and Esc selects the renamed person", async () => {
@@ -130,9 +130,9 @@ describe("person record view", () => {
     t.input.pressTab() // name → handle
     await t.input.typeText("by")
     t.input.pressKey("s", { ctrl: true })
-    let frame = await until(t, (f) => f.includes("› @bobby") && tabLine(f).includes("Goals"))
-    expect(frame).toContain("› @bobby Bob Maes")
-    expect(tabLine(frame)).toMatch(/Summary\s+Notes 1\s+Goals 1/)
+    let frame = await until(t, (f) => f.includes("@bobby · Team") && tabLine(f).includes("Goals"))
+    expect(frame).toContain("› Bob Maes")
+    expect(tabLine(frame)).toMatch(/Summary\s+Talk 0\s+Meetings\s+Notes 1\s+Goals 1/)
     expect(frame).toContain("@bobby · Team")
     expect((await rows("person", ["handle"])).map((r) => r.handle)).toContain("bobby")
     expect(t.nav.stack().length).toBe(3) // Overview, People, @bobby: the old route was replaced, not stacked on

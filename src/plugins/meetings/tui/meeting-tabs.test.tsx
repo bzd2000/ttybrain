@@ -1,4 +1,4 @@
-// The meeting record view's Agenda, Prep, Notes and Export tabs, against the built-in plugins seeded through write ops (the
+// A board meeting's Agenda, Prep, Notes and Export tabs, against the built-in plugins seeded through write ops (the
 // Task 6 seed: M-1 SteerCo Q3 held on 28 Oct covering #CRM, and M-2 Steering committee Q4 on 4 Dec).
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
@@ -58,14 +58,15 @@ async function seed() {
     await write("people").addPerson!({ name: "Marie Dubois", handle: "marie" })
     await p.addProject!({ code: "CRM", name: "CRM replatforming" })
     const w = write()
-    await w.addMeeting!({ about: "#CRM", title: "SteerCo Q3", date: "2026-10-28", kind: "steering", projects: ["CRM"] }) // M-1
+    await w.addMeeting!({ about: "#CRM", title: "SteerCo Q3", date: "2026-10-28", kind: "board", projects: ["CRM"] }) // M-1
     await p.setHealth!({ project: "CRM", health: "amber", comment: "Design slipping 2 weeks", date: "2026-11-02" })
     await p.addMilestone!({ project: "CRM", title: "Design approved", due: "2026-12-10" }) // MS-1
     await p.addRisk!({ project: "CRM", title: "Budget overrun ~12%", type: "issue", severity: "high" }) // R-1
     await write("actions").addAction!({ title: "Send revised budget to Peter", project: "CRM", due: "2026-11-10" }) // A-1, overdue
     await write("actions").addAction!({ title: "Share integration specs", project: "CRM", meeting: "M-1" }) // A-2, from M-1
     await w.closeMeeting!({ ref: "M-1" })
-    await w.addMeeting!({ about: "#CRM", title: "Steering committee Q4", date: "2026-12-04", kind: "steering", attendees: ["peter", "marie"] }) // M-2
+    // M-2 is a board meeting: only a board meeting has these tabs (ruling M11; the others open on the meeting in progress).
+    await w.addMeeting!({ about: "#CRM", title: "Steering committee Q4", date: "2026-12-04", kind: "board", attendees: ["peter", "marie"] }) // M-2
     await w.addAgendaItem!({ meeting: "M-2", text: "Minutes & open actions" })
     await w.addAgendaItem!({ meeting: "M-2", text: "CRM status", project: "CRM", ask: ASK })
     await w.addAgendaItem!({ meeting: "M-2", text: "AOB" })
@@ -99,11 +100,11 @@ describe("meeting tabs", () => {
     let frame = await until(t, (f) => f.includes("CRM status"))
     expect(frame).toContain("› M-2 Steering committee Q4")
     expect(frame).toContain("Agenda · 3")
-    expect(frame).toContain("Fri 4 Dec 2026 · project · planned · 2 attendees")
-    expect(lineWith(frame, "Minutes & open actions")).toMatch(/1\s+Minutes & open actions/)
-    expect(lineWith(frame, "CRM status")).toMatch(/2\s+CRM status\s+CRM\s+Approve 2-week shift/)
-    expect(frame).toContain("Attendees")
-    expect(frame).toContain("Marie Dubois, Peter Janssens")
+    // The board design's Agenda tab: no header line or attendees under it, the board's talk-list beside it.
+    expect(frame).not.toContain("Fri 4 Dec 2026 · board")
+    expect(frame).toContain("Board talk-list · 0")
+    expect(lineWith(frame, "Minutes & open actions")).toMatch(/1\.\s+Minutes & open actions\s+—/)
+    expect(lineWith(frame, "CRM status")).toMatch(/2\.\s+CRM status\s+CRM\s+Approve 2-week shift/)
 
     // n adds an item at the end, and the list selects it.
     t.input.pressKey("n")
@@ -123,13 +124,13 @@ describe("meeting tabs", () => {
 
     // K moves it up twice, J down once; the selection follows it.
     t.input.pressKey("K")
-    frame = await until(t, (_, s) => selectedText(s).some((l) => /^3\s+Budget 2027/.test(l)))
+    frame = await until(t, (_, s) => selectedText(s).some((l) => /^3\.\s+Budget 2027/.test(l)))
     expect((await agenda(2)).map((r) => r.text)).toEqual(["Minutes & open actions", "CRM status", "Budget 2027", "AOB"])
     t.input.pressKey("K")
-    frame = await until(t, (_, s) => selectedText(s).some((l) => /^2\s+Budget 2027/.test(l)))
+    frame = await until(t, (_, s) => selectedText(s).some((l) => /^2\.\s+Budget 2027/.test(l)))
     expect((await agenda(2)).map((r) => r.text)).toEqual(["Minutes & open actions", "Budget 2027", "CRM status", "AOB"])
     t.input.pressKey("J")
-    frame = await until(t, (_, s) => selectedText(s).some((l) => /^3\s+Budget 2027/.test(l)))
+    frame = await until(t, (_, s) => selectedText(s).some((l) => /^3\.\s+Budget 2027/.test(l)))
     expect(await agenda(2)).toEqual([
       { position: 1, text: "Minutes & open actions" },
       { position: 2, text: "CRM status" },
@@ -158,8 +159,8 @@ describe("meeting tabs", () => {
       },
     })
     const frame = await until(t, (f) => f.includes("Data status"))
-    expect(lineWith(frame, "Data status")).toMatch(/4\s+Data status\s+DATAPLATFORM2027 Go/)
-    expect(lineWith(frame, "CRM status")).toMatch(/2\s+CRM status\s+CRM\s+Approve/)
+    expect(lineWith(frame, "Data status")).toMatch(/4\.\s+Data status\s+DATAPLATFORM2027 Go/)
+    expect(lineWith(frame, "CRM status")).toMatch(/2\.\s+CRM status\s+CRM\s+Approve/)
   })
 
   test("prep shows the selected project's sections with marks and the ask", async () => {
@@ -277,12 +278,11 @@ describe("meeting tabs", () => {
   test("cancelled meeting: keys say so and open nothing", async () => {
     const t = await open("M-3", 0, {
       extra: async () => {
-        await write().addMeeting!({ about: "#CRM", title: "Vendor review", date: "2026-11-20", projects: ["CRM"] }) // M-3
+        await write().addMeeting!({ about: "#CRM", title: "Vendor review", date: "2026-11-20", kind: "board", projects: ["CRM"] }) // M-3
         await write().cancelMeeting!({ ref: "M-3" })
       },
     })
     let frame = await until(t, (f) => f.includes("CRM replatforming status"))
-    expect(frame).toContain("cancelled")
     const keys: Array<() => void> = [
       () => t.input.pressKey("n"),
       () => t.input.pressKey("e"),

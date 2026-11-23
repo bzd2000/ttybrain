@@ -59,13 +59,16 @@ test("a meeting's Agenda tab: codes cyan", async () => {
   expect(fgAt(spans, "CRM status")).toBe(theme.text)
 })
 
-test("a meeting's Notes tab: logged refs muted, owners magenta", async () => {
+// M-1 is a project meeting: it opens on the meeting in progress (ruling M11), its agreed actions as the 2026-11-20
+// `oneonone` design draws them: the ref muted (held), an owner by first name in text colour, `me` muted.
+test("a held project meeting's agreed actions: refs muted, owners plain", async () => {
   const t = await start()
-  await tab(t, "M-1", "Notes", "Book vendor demo slot")
+  await t.nav.open("M-1")
+  await until(t, (f) => f.includes("Agreed actions") && f.includes("Book vendor demo slot"))
   const spans = await t.spans()
   expect(fgAt(spans, "A-2", "Book vendor demo slot")).toBe(theme.muted)
   expect(fgAt(spans, "Book vendor", "Book vendor demo slot")).toBe(theme.text)
-  expect(fgAt(spans, "@bob", "Book vendor demo slot")).toBe(theme.magenta)
+  expect(fgAt(spans, "Bob", "Book vendor demo slot")).toBe(theme.text)
 })
 
 test("a person's Notes tab: refs muted, codes cyan", async () => {

@@ -273,9 +273,8 @@ test("Attention's Upcoming meetings: Enter opens the meeting, t adds to its talk
 
   // t: the talk-item form with the meeting's subject filled in.
   tui.input.pressKey("t")
-  let frame = await until(tui, (f) => f.includes("New talk item"))
-  expect(frame).toMatch(/  About\*  @anna/)
-  expect(frame).toContain("› Text*")
+  let frame = await until(tui, (f) => f.includes("New talk item") && f.includes("Anna Peeters · person"))
+  expect(frame).toMatch(/About {11}Anna Peeters · person/)
   await tui.input.typeText("Conference budget")
   tui.input.pressKey("s", { ctrl: true })
   await until(tui, (f) => !f.includes("New talk item") && f.includes("1:1 Anna r"))

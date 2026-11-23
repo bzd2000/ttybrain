@@ -23,6 +23,16 @@ export const peopleTui = defineTui({
       },
     })
     const store = makeStore(ui)
+    // The header crumb as the 2026-11-20 designs draw it: the name without the handle, then `· Architect · team`
+    // (the job title, then team or stakeholder).
+    ui.recordCrumb("person", {
+      ref: false,
+      detail: async (ref) => {
+        const p = await store.person(ref)
+        const parts = [p.job_title, p.is_team ? "team" : p.is_stakeholder ? "stakeholder" : null].filter((x): x is string => x !== null && x.trim() !== "")
+        return parts.length === 0 ? null : parts.join(" · ")
+      },
+    })
     ui.recordTab("person", { id: "summary", title: "Summary", order: 10, component: PersonSummary })
     ui.recordTab("person", {
       id: "notes",

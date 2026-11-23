@@ -9,12 +9,17 @@
 // its tag and a line says why.
 // The text is kept as a draft (`inbox:capture`): a cancel keeps it (`draft kept`), a save deletes it, and the next
 // capture first offers it (r restore · x discard · Esc close); a restored draft takes the place of the prefill.
+// Capture routes (TuiContext.captureRoute, the meetings plugin's `talk @anna …`): the first route whose preview of the
+// text is not null has it. Its lines show under the input, after a blank line; the panel is titled `Capture` and
+// Ctrl+S saves through the route (its message in the status bar). A `declined` preview (text that looks like the
+// route's but is not) only shows its lines: the text still goes to the inbox, as does text no route takes.
 import { SyntaxStyle, type TextareaRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import {
   act,
   createEscChord,
+  matchCapture,
   DRAFT_KEPT,
   DraftPrompt,
   fitWidth,
@@ -28,8 +33,11 @@ import {
   useKeys,
   useNav,
   useQuery,
+  useCaptureRoutes,
   useRuntime,
   useScreenKeys,
+  type CaptureMatch,
+  type CellPart,
   type Draft,
 } from "@ttybrain/api/tui"
 import { tagRanges, tagTone } from "./tags"
@@ -37,6 +45,8 @@ import { tagRanges, tagTone } from "./tags"
 // The designs' capture overlay is 76 cells wide (the kernel centres it); never wider than the terminal.
 const CAPTURE_WIDTH = 76
 export const CAPTURE_TITLE = "Capture to inbox"
+// The title while a route takes the text (the `capture` design of 2026-11-20).
+export const ROUTED_TITLE = "Capture"
 const CAPTURE_FOOTER = "ctrl+s save · esc cancel"
 // The suggestion box's width, and its tag column's: the designs' 10 cells, growing to the longest tag shown (a
 // 16-character code and its `#`) so tags stay whole.
@@ -160,14 +170,32 @@ export function CaptureOverlay(props: { close(): void }) {
     replace(value, before.length + s.ref.length + 1)
   }
 
+  // --- capture routes: where the text goes ---
+  const routes = useCaptureRoutes()
+  const target = useQuery(() => matchCapture(routes, text()), { key: () => text() })
+  const routed = (m: CaptureMatch | null | undefined): m is CaptureMatch => m !== null && m !== undefined && m.preview.declined !== true
+  const previewLines = (): CellPart[][] => target.data()?.preview.lines ?? []
+
   // --- save ---
   const save = async () => {
     if (saving() || !area) return
     setSaving(true)
     const value = area.plainText
-    const r = await act(() => rt.self().write.capture!({ text: value }) as Promise<{ ref: string }>, { ok: (out) => `captured ${out.ref}` })
+    const match = routes.length === 0 ? null : await matchCapture(routes, value)
+    let ok = false
+    if (routed(match)) {
+      try {
+        notify(await match.route.submit(value), "info")
+        ok = true
+      } catch (e) {
+        notify(e instanceof Error ? e.message : String(e), "error")
+      }
+    } else {
+      const r = await act(() => rt.self().write.capture!({ text: value }) as Promise<{ ref: string }>, { ok: (out) => `captured ${out.ref}` })
+      ok = r.ok
+    }
     setSaving(false)
-    if (r.ok) {
+    if (ok) {
       draft.discard()
       props.close()
     }
@@ -222,7 +250,7 @@ export function CaptureOverlay(props: { close(): void }) {
 
   return (
     <box width={CAPTURE_WIDTH} maxWidth="100%" flexDirection="column">
-      <Panel title={CAPTURE_TITLE} footer={CAPTURE_FOOTER} focused>
+      <Panel title={routed(target.data()) ? ROUTED_TITLE : CAPTURE_TITLE} footer={CAPTURE_FOOTER} focused>
         <Show when={offer()}>
           {(d: () => Draft<TextDraft>) => <DraftPrompt savedAt={d().savedAt} restore={restore} discard={discardDraft} close={() => props.close()} />}
         </Show>
@@ -260,6 +288,24 @@ export function CaptureOverlay(props: { close(): void }) {
                       </text>
                     )}
                   </Show>
+                </box>
+              )}
+            </For>
+          </box>
+        </Show>
+        <Show when={previewLines().length > 0}>
+          <box flexDirection="column">
+            <text> </text>
+            <For each={previewLines()}>
+              {(l) => (
+                <box flexDirection="row" height={1} overflow="hidden">
+                  <For each={l}>
+                    {(p) => (
+                      <text fg={toneColor(p.tone)} flexShrink={0} wrapMode="none">
+                        {p.text}
+                      </text>
+                    )}
+                  </For>
                 </box>
               )}
             </For>

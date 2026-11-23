@@ -7,9 +7,9 @@ import type { Overlay } from "./overlay"
 
 export type Tone = "red" | "amber" | "green" | "muted" | "accent" | "cyan" | "magenta" | undefined
 // `parts`: the text in differently coloured pieces (their texts joined are `text`); a part without a tone takes the
-// cell's. A Table cuts the parts together to the column's width.
+// cell's. A Table cuts the parts together to the column's width. `strike`: the text struck through (an item ticked off).
 export type CellPart = { text: string; tone?: Tone }
-export type Cell = { text: string; tone?: Tone; parts?: CellPart[] }
+export type Cell = { text: string; tone?: Tone; parts?: CellPart[]; strike?: boolean }
 export type Route =
   | { kind: "screen"; screen: string; params?: Record<string, string> }
   | { kind: "record"; screen: string; ref: string; tab?: string }
@@ -34,6 +34,9 @@ export type RecordTabDef = {
   count?: (recordRef: string) => Promise<number | null>
   // Whether the tab shows for this record (always without it). A check that throws keeps the tab.
   when?: (recordRef: string) => Promise<boolean>
+  // While it is the only tab shown, the record view draws no tab row and no blank line above it (the meeting in
+  // progress: one view, no tabs).
+  bare?: boolean
   component: Component<{ recordRef: string }>
 }
 // `group`: a row with one goes under that muted sub-heading (after a blank line); consecutive rows with the same
@@ -85,8 +88,23 @@ export type GlobalActionDef = { id: string; key: string; label: string; overlay:
 export type StatusBadgeDef = { id: string; order: number; tone?: Tone; text(): Promise<string | null> }
 // How an open record shows in the header's breadcrumb `› <ref> <label> <detail>`: `tone` colours the ref (text
 // colour by default) and `detail` adds a muted tail: `Thu 4 Dec · 8 attendees` shows as `· Thu 4 Dec · 8 attendees`
-// (null or a throw adds none).
-export type RecordCrumbDef = { tone?: Tone; detail?(recordRef: string): Promise<string | null> }
+// (null or a throw adds none). `ref: false` leaves the ref out (`› Anna Peeters · Architect · team`). `under`: for a
+// record opened from another record's view (`parentRef`), the text it shows after that record's crumb instead of its
+// own (`3 People ▾ › Anna Peeters › 1:1 Mon 23 Nov`, the chip then the parent's screen's); null (or a throw) keeps
+// the usual crumb.
+export type RecordCrumbDef = {
+  tone?: Tone
+  ref?: boolean
+  detail?(recordRef: string): Promise<string | null>
+  under?(recordRef: string, parentRef: string): Promise<string | null>
+}
+// Quick capture's routes: text the capture overlay would save to the inbox may go elsewhere instead (a talk-list).
+// `preview(text)` says whether the route takes it: null (not its text: the next route is asked, and with none the
+// text goes to the inbox), else the lines the overlay shows under its input (coloured pieces), with `declined: true`
+// when the text looks like the route's but still goes to the inbox (the lines say why). `submit(text)` saves it
+// (its own act) and resolves to the status-bar message, or throws (the message shows as an error, the overlay stays).
+export type CapturePreview = { lines: CellPart[][]; declined?: boolean }
+export type CaptureRouteDef = { id: string; preview(text: string): Promise<CapturePreview | null>; submit(text: string): Promise<string> }
 export type FieldEditorProps = { value: string | null; onChange(v: string | null): void; focused: boolean }
 
 export interface TuiContext extends PluginRuntime {
@@ -100,6 +118,8 @@ export interface TuiContext extends PluginRuntime {
   statusBadge(def: StatusBadgeDef): void
   // One per record type.
   recordCrumb(recordType: string, def: RecordCrumbDef): void
+  // Asked in registration order; the first whose preview is not null has the text.
+  captureRoute(def: CaptureRouteDef): void
 }
 
 export type TuiDef = { plugin: string; activate(ui: TuiContext): void }
