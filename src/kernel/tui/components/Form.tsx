@@ -133,7 +133,16 @@ export function Form(props: {
   const extraSpecs = extras.map(
     (x): FieldSpec => ({ name: x.key, label: x.def.label, kind: x.def.type, ...(x.def.values ? { values: x.def.values } : {}) }),
   )
-  const fields = createMemo((): FieldSpec[] => (extraInitial() === undefined ? props.fields : [...props.fields, ...extraSpecs]))
+  // A field with `when` shows only while the values say so.
+  const shownNow = (f: FieldSpec): boolean => {
+    if (f.when === undefined) return true
+    try {
+      return f.when(values())
+    } catch {
+      return true
+    }
+  }
+  const fields = createMemo((): FieldSpec[] => (extraInitial() === undefined ? props.fields : [...props.fields, ...extraSpecs]).filter(shownNow))
   const extraOf = (name: string) => extras.find((x) => x.key === name)
 
   // The derived fields that were edited (or given a value to start with): they no longer follow the others.
@@ -197,6 +206,11 @@ export function Form(props: {
     setOffer(undefined)
   }
 
+  // A field that hides while it or one after it is focused: the focus stays on the last one shown.
+  createEffect(() => {
+    const n = fields().length
+    if (index() > n - 1) setIndex(Math.max(0, n - 1))
+  })
   const current = () => fields()[index()]
   const valueOf = (name: string) => values()[name] ?? null
   const setValue = (name: string, v: string | null) => setValues((all) => ({ ...all, [name]: v }))
@@ -328,7 +342,7 @@ export function Form(props: {
     }
     return v
   }
-  const collect = (): FormValues => Object.fromEntries(props.fields.map((f) => [f.name, collectOne(f)]))
+  const collect = (): FormValues => Object.fromEntries(props.fields.map((f) => [f.name, shownNow(f) ? collectOne(f) : null]))
 
   // The extra fields whose value differs from the one loaded, each saved through its plugin's `set` operation; a
   // number field's text goes as a number when it is a plain decimal (NaN otherwise, `0x10` included, so the

@@ -295,9 +295,9 @@ export function registerOps(ctx: PluginContext, store: Store, talks: Talks, clos
             throw new ValidationError("give either meeting or allWithout", { field: "meeting" })
           const subject = await store.activeSubject(i.about)
           const assign = async (m: Meeting) => {
-            // A person makes it a 1:1; otherwise a board meeting stays one, so it needs a board (kindFor), and the
-            // others follow the subject.
-            const kind = subject.type === "person" ? "one_on_one" : kindFor(subject, m.kind === "board" ? "board" : undefined)
+            // A board meeting stays one, so it needs a board (kindFor; design §5.1, §5.7); the others follow the
+            // subject (a person: 1:1, a project: project).
+            const kind = kindFor(subject, m.kind === "board" ? "board" : undefined)
             const set: Record<string, unknown> = { subject_type: subject.type, subject_id: subject.id, kind, updated_at: now() }
             if (m.date >= today()) set.auto_close = 1
             await db.updateTable("meeting").set(set).where("id", "=", m.id).execute()

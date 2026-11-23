@@ -194,7 +194,19 @@ describe("boards as subjects", () => {
     // `meeting subject` to a board makes it a board meeting.
     await ok("meeting", "add", "Steering", "--about", "#CRM", "--date", "2026-12-04")
     expect((await ok("meeting", "subject", "M-3", "#MB")).out).toBe("M-3 about #MB (board)\n")
-    expect((await ok("meeting", "subject", "M-3", "@anna")).out).toBe("M-3 about @anna (one_on_one)\n")
+    // A board meeting stays one: a person is refused as a project is, nothing changes.
+    const toPerson = await cli("meeting", "subject", "M-3", "@anna")
+    expect([toPerson.code, toPerson.err]).toEqual([1, `error: a board meeting needs a board; @anna is a person\nhint: ${HINT}\n`])
+    expect(sql("SELECT kind, subject_type FROM meetings_meeting WHERE id = 3")).toEqual([{ kind: "board", subject_type: "board" }])
+    // In bulk too: a board meeting among the meetings without a subject refuses the whole write.
+    k!.db.raw.prepare("UPDATE meetings_meeting SET subject_type = NULL, subject_id = NULL WHERE id IN (2, 3)").run([])
+    const bulk = await cli("meeting", "subject", "--all-without", "@anna")
+    expect([bulk.code, bulk.err.split("\n")[0]]).toEqual([1, "error: a board meeting needs a board; @anna is a person"])
+    expect(sql("SELECT id, kind, subject_type FROM meetings_meeting WHERE id IN (2, 3) ORDER BY id")).toEqual([
+      { id: 2, kind: "board", subject_type: null },
+      { id: 3, kind: "board", subject_type: null },
+    ])
+    expect((await ok("meeting", "subject", "--all-without", "#MB")).out).toBe("M-3 about #MB (board)\nM-2 about #MB (board)\n")
     await ok("meeting", "add", "Steering 2", "--about", "#CRM", "--date", "2026-12-11")
     const kind = await failure(w("editMeeting", { ref: "M-4", kind: "board" }))
     expect(kind.message).toBe("a board meeting needs a board; #CRM is a project")

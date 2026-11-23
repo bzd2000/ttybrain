@@ -194,14 +194,14 @@ test("Quick capture to a board's talk-list", async () => {
   const lines = box(frame, rows[top]!.indexOf("╭")).slice(top, top + 8)
   expect(lines[0]).toMatch(/^╭─ Capture ─+╮$/)
   expect(lines[2]).toBe(`│ │ ${"talk #BOARD office move in January".padEnd(68)} │ │`)
-  expect(lines[5]).toBe(`│ ${"→ Management board's talk-list · next board Fri 27 Nov".padEnd(72)} │`)
+  expect(lines[5]).toBe(`│ ${"→ Management board's talk-list · next Board Fri 27 Nov".padEnd(72)} │`)
   expect(lines[6]).toBe(`│ ${'  without "talk" it goes to the inbox as before'.padEnd(72)} │`)
   expect(lines[7]).toMatch(/^╰─+ ctrl\+s save · esc cancel ─╯$/)
   const spans = await t.spans()
   expect(fgAt(spans, "#BOARD", top + 2)).toBe(theme.cyan)
   expect(fgAt(spans, "→", top + 5)).toBe(theme.green)
   expect(fgAt(spans, "Management board's talk-list", top + 5)).toBe(theme.text)
-  expect(fgAt(spans, " · next board Fri 27 Nov", top + 5)).toBe(theme.muted)
+  expect(fgAt(spans, " · next Board Fri 27 Nov", top + 5)).toBe(theme.muted)
 
   t.input.pressKey("s", { ctrl: true })
   const after = await until(t, (f) => line(f, HEIGHT - 1).includes("Management board's talk-list"))
@@ -237,7 +237,8 @@ test("Quick capture to a board's talk-list", async () => {
 test("Quick capture that is almost a talk item goes to the inbox, and says so first", async () => {
   const t = await captureOnActions()
   const cases: Array<[text: string, why: string]> = [
-    ["talk about lunch", "→ goes to the inbox · no person or project tagged"],
+    ["talk about lunch", "→ goes to the inbox · no person, project or board tagged"],
+    ["talk #ERP #BOARD who decides", "→ goes to the inbox · 2 codes tagged"],
     ["talk @anna @bob budget for the offsite", "→ goes to the inbox · 2 people tagged"],
     ["talk @nobody about the offsite", "→ goes to the inbox · @nobody is not a person"],
   ]
@@ -250,7 +251,7 @@ test("Quick capture that is almost a talk item goes to the inbox, and says so fi
     await t.input.typeText(text)
     const frame = await until(t, (f) => f.includes(why))
     expect(frame).toContain("Capture to inbox")
-    expect(frame).toContain("a talk item needs one person or project tag: talk @anna …")
+    expect(frame).toContain("a talk item needs one person, project or board tag: talk @anna …")
     const spans = await t.spans()
     expect(fgAt(spans, "→", why)).toBe(theme.green)
     expect(fgAt(spans, why.slice(why.indexOf(" · ")), why)).toBe(theme.muted)

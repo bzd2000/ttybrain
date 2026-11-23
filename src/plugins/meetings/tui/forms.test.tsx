@@ -190,6 +190,39 @@ describe("talk item form", () => {
     const list: any = await inCtx(() => (kernel!.runtime("meetings")!.self().read as any).talkList({ about: "@marie" }))
     expect(list.open.map((i: any) => [i.ref, i.text, i.project])).toEqual([["T-1", "Sales lead walkthrough", "#CRM"]])
   })
+
+  test("Project shows only for a person's item: new (as About is typed) and edit", async () => {
+    const t = await open()
+    void overlay!.openForm("talk_item", "talk", { prefill: { about: "#CRM" }, draftFor: "#CRM" })
+    let frame = await until(t, (f) => f.includes("CRM replatforming · project"))
+    expect(frame).not.toContain("Project")
+    t.input.pressEscape()
+    await until(t, (f) => !f.includes("New talk item"))
+    void overlay!.openForm("talk_item", "talk", {})
+    await until(t, (f) => f.includes("New talk item"))
+    await t.input.typeText("#CRM ")
+    frame = await t.frame()
+    expect(frame).not.toContain("Project")
+    for (let i = 0; i < 5; i++) t.input.pressBackspace()
+    await t.input.typeText("@marie ")
+    frame = await until(t, (f) => f.includes("Project"))
+    expect(lineWith(frame, "Project")).toMatch(/Project/)
+    t.input.pressEscape()
+    await until(t, (f) => !f.includes("New talk item"))
+    // An edit: a project's item has no Project field, a person's has.
+    await inCtx(async () => {
+      await write().addTalk!({ about: "#CRM", text: "Budget" }) // T-1
+      await write().addTalk!({ about: "@marie", text: "Demo", project: "CRM" }) // T-2
+    })
+    void overlay!.openForm("talk_item", "talk", { recordRef: "T-1" })
+    frame = await until(t, (f) => f.includes("Edit T-1"))
+    expect(frame).not.toContain("Project")
+    t.input.pressEscape()
+    await until(t, (f) => !f.includes("Edit T-1"))
+    void overlay!.openForm("talk_item", "talk", { recordRef: "T-2" })
+    frame = await until(t, (f) => f.includes("Edit T-2"))
+    expect(lineWith(frame, "Project")).toContain("CRM")
+  })
 })
 
 describe("series form", () => {

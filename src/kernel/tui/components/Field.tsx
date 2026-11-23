@@ -41,6 +41,9 @@ export type FieldSpec = {
   // The value worked out from the form's other values, followed until the field is edited (a kind from what the
   // meeting is about); undefined: leave it.
   derive?: (values: Record<string, string | null>) => string | null | undefined
+  // Whether the field is shown, from the form's current values (own fields, by name): a hidden field takes no
+  // focus and reaches `submit` as null (a talk item's Project only for a person's item). One that throws shows.
+  when?: (values: Record<string, string | null>) => boolean
 }
 
 // A value as a Form with a `look` shows it: pieces of text, some muted.

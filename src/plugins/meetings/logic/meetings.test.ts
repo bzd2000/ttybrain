@@ -126,10 +126,12 @@ describe("meetings operations", () => {
     await w("addPerson", { name: "Crm Bot", handle: "crm" }, "people")
     const both = await failure(w("addMeeting", { about: "crm", title: "g", date: "today" }))
     expect([both.name, both.message, both.hint]).toEqual(["ValidationError", '"crm" is both a person and a project', "use @crm or #CRM"])
-    // setSubject: a person makes a 1:1; board stays board; from today on it closes itself.
-    expect(await d("setSubject", { meeting: "M-2", about: "@tom" })).toBe("~ M-2 about @tom")
-    expect(await w("setSubject", { meeting: "M-2", about: "@tom" })).toMatchObject({ ref: "M-2", kind: "one_on_one", about: "@tom" })
-    expect(await w("setSubject", { meeting: "M-2", about: "#ERP" })).toMatchObject({ kind: "project", about: "#ERP" })
+    // setSubject: a person makes a 1:1, a project a project meeting; a board meeting stays one, so it needs a board.
+    expect(await d("setSubject", { meeting: "M-3", about: "@tom" })).toBe("~ M-3 about @tom")
+    expect(await w("setSubject", { meeting: "M-3", about: "@tom" })).toMatchObject({ ref: "M-3", kind: "one_on_one", about: "@tom" })
+    expect(await w("setSubject", { meeting: "M-3", about: "#ERP" })).toMatchObject({ kind: "project", about: "#ERP" })
+    const board = await failure(w("setSubject", { meeting: "M-2", about: "@tom" }))
+    expect([board.name, board.message]).toEqual(["ValidationError", "a board meeting needs a board; @tom is a person"])
   })
 
   test("edit, attendees and agenda change lines", async () => {

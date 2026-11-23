@@ -4,7 +4,7 @@
 //   → Anna Peeters' talk-list · next 1:1 Mon 23 Nov
 //     linked to #CRM, so it also shows at CRM steering until discussed
 //     without "talk" it goes to the inbox as before
-// A board's (design §5.7) names the board and its next board meeting: `→ Management board's talk-list · next board
+// A board's (design §5.7) names the board and its next board meeting: `→ Management board's talk-list · next Board
 // Fri 27 Nov`; a board's item takes no project tag, and a board is no person's item's project tag.
 // Text that starts with `talk ` but is not one (no tag, two people, a tag that does not resolve) still goes to the
 // inbox, and the lines say why (Review Focus 5). Anything else is not this route's (null: no lines, as before). An
@@ -16,11 +16,11 @@ import { makeSubjects, meetingName } from "./subject"
 
 const START = /^talk\s/i
 const TAG = /(^|[\s([])([@#][A-Za-z0-9][A-Za-z0-9-]*)/g
-const HINT = 'a talk item needs one person or project tag: talk @anna …'
+const HINT = 'a talk item needs one person, project or board tag: talk @anna …'
 const INBOX_TOO = 'without "talk" it goes to the inbox as before'
 
 export type TalkCapture = { about: string; project?: string; text: string }
-type Parsed = { ok: true; capture: TalkCapture; name: string; board: boolean; projectCode?: string } | { ok: false; why: string }
+type Parsed = { ok: true; capture: TalkCapture; name: string; projectCode?: string } | { ok: false; why: string }
 
 // The tags of a text, in order (`@anna`, `#CRM`).
 export const tagsOf = (text: string) => [...text.matchAll(TAG)].map((m) => m[2]!)
@@ -43,10 +43,10 @@ export function registerTalkCapture(ui: TuiContext): void {
     if (!START.test(text)) return null
     const tags = tagsOf(text)
     const people = tags.filter((t) => t.startsWith("@"))
-    const projects = tags.filter((t) => t.startsWith("#"))
-    if (tags.length === 0) return { ok: false, why: "no person or project tagged" }
+    const codes = tags.filter((t) => t.startsWith("#"))
+    if (tags.length === 0) return { ok: false, why: "no person, project or board tagged" }
     if (people.length > 1) return { ok: false, why: `${people.length} people tagged` }
-    if (projects.length > 1) return { ok: false, why: `${projects.length} projects tagged` }
+    if (codes.length > 1) return { ok: false, why: `${codes.length} codes tagged` }
     // Each tag as its record's own ref (`@anna`, `#CRM`, `#MB`), or why it is not one.
     const refs: string[] = []
     let board = false
@@ -68,7 +68,7 @@ export function registerTalkCapture(ui: TuiContext): void {
     const about = refs.find((r) => r.startsWith("@")) ?? refs[0]!
     const project = people.length === 1 ? refs.find((r) => r.startsWith("#")) : undefined
     const name = about.startsWith("@") || board ? await ui.records.label(about) : about.slice(1)
-    return { ok: true, capture: { about, text: body, ...(project ? { project } : {}) }, name, board, ...(project ? { projectCode: project } : {}) }
+    return { ok: true, capture: { about, text: body, ...(project ? { project } : {}) }, name, ...(project ? { projectCode: project } : {}) }
   }
 
   async function preview(text: string): Promise<CapturePreview | null> {
@@ -87,7 +87,7 @@ export function registerTalkCapture(ui: TuiContext): void {
       [
         { text: "→", tone: "green" },
         { text: ` ${possessive(p.name)} talk-list` },
-        { text: next === null ? " · no meeting planned" : ` · next ${p.board ? "board" : meetingName(next)} ${dayDate(next.date)}`, tone: "muted" },
+        { text: next === null ? " · no meeting planned" : ` · next ${meetingName(next)} ${dayDate(next.date)}`, tone: "muted" },
       ],
     ]
     if (p.projectCode !== undefined) {
