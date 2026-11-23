@@ -12,7 +12,10 @@
     "build:node": "node scripts/build-node.mjs",
     "start:node": "npm run build:node && node --experimental-ffi dist-node/bin/pm.js",
     "run:node": "node --experimental-ffi dist-node/bin/pm.js",
-    "pm": "bun src/bin/pm.ts"
+    "pm": "bun src/bin/pm.ts",
+    "seed:dev": "bun scripts/seed-dev.ts",
+    "start:dev": "bun scripts/start-dev.ts",
+    "pm:dev": "bun scripts/start-dev.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
