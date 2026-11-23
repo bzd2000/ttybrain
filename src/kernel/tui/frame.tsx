@@ -33,13 +33,13 @@ function CrumbDetail(props: { def: RecordCrumbDef; recordRef: string }) {
 }
 
 // `› <ref> <label>` for the open record (`#CRM` shows as `CRM`): the ref in its type's crumb tone, the label in
-// text colour, then the crumb's muted detail. Only the ref, muted, until the record is resolved. The crumb takes the
-// room the badges leave (the space between them gives way first); when that is too little, the detail is clipped,
-// then the label is cut with `…`; the `› ` and the ref stay whole.
+// text colour, then the crumb's muted detail. Only the ref, muted, until the record is resolved; a crumb with
+// `ref: false` shows the label alone. The crumb takes the room the badges leave (the space between them gives way
+// first); when that is too little, the detail is clipped, then the label is cut with `…`; the `› ` and the ref stay
+// whole.
 function RecordCrumb(props: { recordRef: string }) {
   const app = useApp()
   const rec = useRecord(() => props.recordRef)
-  const shown = () => (props.recordRef.startsWith("#") ? props.recordRef.slice(1) : props.recordRef)
   // Memos: every reload gives new record data, and crumbFor builds a new object each call; without them the keyed
   // detail below would remount (and its tail blink out) on every live refresh.
   const type = createMemo(() => rec.type())
@@ -47,13 +47,19 @@ function RecordCrumb(props: { recordRef: string }) {
     const t = type()
     return t === undefined ? undefined : app.registry.crumbFor(t)
   })
+  const bareRef = () => (props.recordRef.startsWith("#") ? props.recordRef.slice(1) : props.recordRef)
+  const withRef = () => def()?.ref !== false
+  const shown = () => (withRef() ? bareRef() : "")
   // The crumb's measured width, and from it the room for the label (after `› `, the ref and a space).
   const [width, setWidth] = createSignal(0)
   const label = () => {
-    const full = ` ${rec.label() ?? ""}`
+    const text = rec.label() ?? ""
+    const full = withRef() ? ` ${text}` : text
     if (width() === 0) return full
     const room = width() - displayWidth(CRUMB_MARK) - displayWidth(shown())
-    return room >= displayWidth(full) ? full : room < 2 ? "" : ` ${truncate(rec.label() ?? "", room - 1)}`
+    if (room >= displayWidth(full)) return full
+    if (!withRef()) return room < 1 ? "" : truncate(text, room)
+    return room < 2 ? "" : ` ${truncate(text, room - 1)}`
   }
   return (
     <box
@@ -69,17 +75,19 @@ function RecordCrumb(props: { recordRef: string }) {
       <text fg={theme.muted} flexShrink={0}>
         {CRUMB_MARK}
       </text>
-      <Show when={rec.label() !== undefined} fallback={<text fg={theme.muted}>{shown()}</text>}>
-        <text fg={toneColor(def()?.tone)} flexShrink={0}>
-          {shown()}
-        </text>
+      <Show when={rec.label() !== undefined} fallback={<text fg={theme.muted}>{bareRef()}</text>}>
+        <Show when={shown() !== ""}>
+          <text fg={toneColor(def()?.tone)} flexShrink={0}>
+            {shown()}
+          </text>
+        </Show>
         <text fg={theme.text} flexShrink={0} wrapMode="none">
           {label()}
         </text>
         <Show when={def()} keyed>
           {(d: Registered<RecordCrumbDef>) => (
             <Show when={d.detail}>
-              <PluginScope kernel={app.kernel} plugin={d.plugin} label={`${shown()} crumb`}>
+              <PluginScope kernel={app.kernel} plugin={d.plugin} label={`${bareRef()} crumb`}>
                 <CrumbDetail def={d} recordRef={props.recordRef} />
               </PluginScope>
             </Show>
@@ -90,6 +98,72 @@ function RecordCrumb(props: { recordRef: string }) {
   )
 }
 
+// A record opened from another record's view whose crumb has `under`: the parent's crumb without its detail, then
+// `› <text>` (`› Anna Peeters › 1:1 Mon 23 Nov`). When the room is short the parent's label gives way first, then the
+// text is cut with `…`; the `›`s and the parent's ref stay whole, and so does the label of a parent shown without
+// its ref (a person's name).
+function NestedCrumb(props: { parent: string; text: string }) {
+  const app = useApp()
+  const rec = useRecord(() => props.parent)
+  const type = createMemo(() => rec.type())
+  const def = createMemo(() => {
+    const t = type()
+    return t === undefined ? undefined : app.registry.crumbFor(t)
+  })
+  const ref = () => (def()?.ref === false ? "" : props.parent.startsWith("#") ? props.parent.slice(1) : props.parent)
+  const [width, setWidth] = createSignal(0)
+  const shown = createMemo(() => {
+    const label = rec.label() ?? ""
+    const lead = ref() === "" ? "" : " "
+    const full = { label: `${lead}${label}`, text: props.text }
+    if (width() === 0) return full
+    const room = width() - 2 * displayWidth(CRUMB_MARK) - displayWidth(ref())
+    const need = displayWidth(full.label) + displayWidth(props.text)
+    if (room >= need) return full
+    const keep = ref() === "" ? displayWidth(label) : 0
+    const labelRoom = Math.max(keep, room - displayWidth(props.text))
+    const cut = labelRoom <= displayWidth(lead) ? "" : `${lead}${truncate(label, labelRoom - displayWidth(lead))}`
+    const textRoom = room - displayWidth(cut)
+    return { label: cut, text: textRoom < 1 ? "" : truncate(props.text, textRoom).replace(/\s+…$/, "…") }
+  })
+  return (
+    <box
+      flexDirection="row"
+      flexGrow={1}
+      flexShrink={1}
+      minWidth={0}
+      overflow="hidden"
+      onSizeChange={function () {
+        setWidth(this.width)
+      }}
+    >
+      <text fg={theme.muted} flexShrink={0}>
+        {CRUMB_MARK}
+      </text>
+      <Show when={ref() !== ""}>
+        <text fg={toneColor(def()?.tone)} flexShrink={0}>
+          {ref()}
+        </text>
+      </Show>
+      <Show when={shown().label !== ""}>
+        <text fg={theme.text} flexShrink={0} wrapMode="none">
+          {shown().label}
+        </text>
+      </Show>
+      <text fg={theme.muted} flexShrink={0}>
+        {CRUMB_MARK}
+      </text>
+      <Show when={shown().text !== ""}>
+        <text fg={theme.text} flexShrink={0} wrapMode="none">
+          {shown().text}
+        </text>
+      </Show>
+    </box>
+  )
+}
+
+export type UnderCrumb = { parent: string; text: string }
+
 const CRUMB_MARK = " › "
 const HEADER_PADDING = 1
 const BRAND = "ttybrain"
@@ -97,12 +171,13 @@ const BRAND_DOT = " · "
 // The column where the chip (its padding cell) starts: the switcher drops down under it.
 export const CHIP_COLUMN = HEADER_PADDING + displayWidth(BRAND + BRAND_DOT)
 
-// `chip`: `<slot> <title> ▾` (▴ while the switcher is open); `crumb`: the open record's ref, if any, else
-// `screenCrumb`: the screen's own crumb (useScreenCrumb). `badges` are rendered in the given order (the registry
+// `chip`: `<slot> <title> ▾` (▴ while the switcher is open); `crumb`: the open record's ref, if any (`under`: shown
+// after its parent's crumb instead), else `screenCrumb`: the screen's own crumb (useScreenCrumb). `badges` are rendered in the given order (the registry
 // sorts them by `order`), each in its plugin's scope.
 export function Header(props: {
   chip: string
   crumb: string | undefined
+  under?: UnderCrumb | undefined
   screenCrumb?: string | undefined
   badges: Array<Registered<StatusBadgeDef>>
   date: string
@@ -143,7 +218,11 @@ export function Header(props: {
             </Show>
           }
         >
-          {(ref: string) => <RecordCrumb recordRef={ref} />}
+          {(ref: string) => (
+            <Show when={props.under} keyed fallback={<RecordCrumb recordRef={ref} />}>
+              {(u: UnderCrumb) => <NestedCrumb parent={u.parent} text={u.text} />}
+            </Show>
+          )}
         </Show>
       </box>
       <box flexDirection="row" flexShrink={0} gap={2}>

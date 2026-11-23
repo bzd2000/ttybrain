@@ -48,7 +48,7 @@ beforeEach(async () => {
   await ok("project", "add", "ERP", "ERP upgrade")
   await ok("person", "add", "Peter Stone", "--handle", "peter", "--stakeholder")
   await ok("person", "add", "Bob Smith", "--handle", "bob", "--team")
-  await ok("meeting", "add", "SteerCo Q4", "--date", "2026-11-20")
+  await ok("meeting", "add", "SteerCo Q4", "--about", "CRM", "--date", "2026-11-20")
 })
 afterEach(async () => {
   await k.cleanup()

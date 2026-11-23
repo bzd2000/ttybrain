@@ -262,7 +262,7 @@ describe("actions screen", () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await seed()
     await inCtx(async () => {
-      await write("meetings").addMeeting!({ title: "SteerCo Q4", date: "2026-12-04" }) // M-1
+      await write("meetings").addMeeting!({ about: "#CRM", title: "SteerCo Q4", date: "2026-12-04" }) // M-1
       await write("actions").addAction!({ title: "Send the minutes", meeting: "M-1" })
     })
     tui = await renderTui(kernel, { width: 120, height: 32 })
@@ -276,7 +276,7 @@ describe("actions screen", () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await seed()
     await inCtx(async () => {
-      await write("meetings").addMeeting!({ title: "季度指导委员会会议", date: "2026-12-04" }) // 18 cells
+      await write("meetings").addMeeting!({ about: "#CRM", title: "季度指导委员会会议", date: "2026-12-04" }) // 18 cells
       await write("actions").addAction!({ title: "Send the minutes", meeting: "M-1" })
     })
     tui = await renderTui(kernel, { width: 120, height: 32 })
@@ -308,7 +308,7 @@ describe("actions screen", () => {
     await inCtx(async () => {
       await write("people").addPerson!({ name: "Gone Person", handle: "gone", is_stakeholder: true })
       await write("projects").addProject!({ code: "TMP", name: "Short-lived" })
-      await write("meetings").addMeeting!({ title: "SteerCo", date: "2026-11-10" })
+      await write("meetings").addMeeting!({ about: "#TMP", title: "SteerCo", date: "2026-11-10" })
       await write("actions").addAction!({ title: "Follow up the steerco", due: "2026-11-16", meeting: "M-1" })
       await write("actions").addAction!({ title: "Close the project", due: "2026-11-16", project: "TMP", forPerson: "gone" })
     })

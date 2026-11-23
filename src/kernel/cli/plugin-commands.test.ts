@@ -110,7 +110,8 @@ test("unknown id", async () => {
 
 test("data survives disable and enable", async () => {
   let k = await boot()
-  expect((await run(k, "meeting", "add", "Board", "--date", "2026-12-04")).code).toBe(0)
+  expect((await run(k, "project", "add", "BOARD", "Management board")).code).toBe(0)
+  expect((await run(k, "meeting", "add", "Board", "--about", "BOARD", "--date", "2026-12-04")).code).toBe(0)
   const shown = await run(k, "meeting", "show", "M-1")
   expect(shown.code).toBe(0)
   expect((await run(k, "plugin", "disable", "meetings")).code).toBe(0)

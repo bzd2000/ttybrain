@@ -61,10 +61,10 @@ test("seedDesign seeds the designs' people, projects, actions, meetings and inbo
     const highRisks = await db("projects").selectFrom("risk").select("title").where("status", "=", "open").where("severity", "=", "high").execute()
     expect(highRisks.map((r: any) => r.title).sort()).toEqual(["Budget overrun ~12%", "Source data quality", "Vendor B may miss go-live"])
 
-    const meetings = await db("meetings").selectFrom("meeting").select(["title", "date", "status"]).orderBy("id").execute()
+    const meetings = await db("meetings").selectFrom("meeting").select(["title", "date", "status", "kind", "subject_type"]).orderBy("id").execute()
     expect(meetings).toEqual([
-      { title: "SteerCo", date: "2026-10-28", status: "held" },
-      { title: "Steering committee Q4", date: "2026-12-04", status: "planned" },
+      { title: "SteerCo", date: "2026-10-28", status: "held", kind: "project", subject_type: "project" },
+      { title: "Steering committee Q4", date: "2026-12-04", status: "planned", kind: "board", subject_type: "project" },
     ])
     const agenda = await db("meetings").selectFrom("agenda_item").select(["text", "ask"]).where("meeting_id", "=", 2).orderBy("position").execute()
     expect(agenda.map((a: any) => a.text)).toEqual(["Minutes & open actions", "CRM status", "ERP vendor decision", "HR portal pilot go/no-go", "AOB"])

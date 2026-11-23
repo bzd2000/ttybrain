@@ -53,11 +53,10 @@ const lineWith = (frame: string, s: string) => frame.split("\n").find((l) => l.i
 
 // Opens `ref` and moves right to its Actions tab.
 // `ready`: a text the settled tab shows (the Action column is measured after the first draw).
-async function actionsTab(t: RenderedTui, ref: string, tabs: number, ready: string): Promise<string> {
-  await t.nav.open(ref)
+async function actionsTab(t: RenderedTui, ref: string, ready: string): Promise<string> {
+  await t.nav.open(ref, "actions")
   await until(t, (f) => line(f, 2).includes("Actions"))
-  for (let i = 0; i < tabs; i++) t.input.pressArrow("right")
-  return until(t, (f) => f.includes("Actions ·") && f.includes(ready))
+  return until(t, (f) => t.nav.crumb() === ref && f.includes("Actions ·") && f.includes(ready))
 }
 
 // The Actions screen's columns at 118: ID 5, Action 58, Owner 8, Linked to 30, Due 7.
@@ -67,8 +66,10 @@ test("a project's Actions tab: the screen's columns, the project left out of Lin
   kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
   await seedDesign(kernel)
   tui = await renderTui(kernel, { width: 118, height: 36 })
-  const frame = await actionsTab(tui, "#CRM", 5, "Invite Marie to design walkthrough")
-  expect(line(frame, 2)).toBe("  Overview   Milestones 5   Deliverables 6   Risks & issues 4   Decisions 7   Actions 9   People 7   Context")
+  const frame = await actionsTab(tui, "#CRM", "Invite Marie to design walkthrough")
+  // The meetings plugin's Meetings and Talk sit before Context (the 2026-11-20 `project` design); the tabs no longer
+  // fit, so they window around the active one.
+  expect(line(frame, 2)).toBe(" ‹  Deliverables 6   Risks & issues 4   Decisions 7   Actions 9   People 7   Meetings   Talk   Context")
   expect(line(frame, 3)).toMatch(/^ ╭─ Actions · 9 open ─+╮$/)
   expect([4, 5, 6, 7, 8, 9].map((i) => inside(frame, i))).toEqual([
     cols(["ID", "Action", "Owner", "Linked to", "Due"], WIDE),
@@ -78,7 +79,8 @@ test("a project's Actions tab: the screen's columns, the project left out of Lin
     cols(["A-8", "Invite Marie to design walkthrough", "me", "@marie", "17 Nov"], WIDE),
     cols(["A-10", "Draft cutover plan", "me", "—", "23 Nov"], WIDE),
   ])
-  expect(line(frame, 35)).toBe(" ←→ tabs   esc back   n add   e edit   x done   d due   l links   del delete   ↑↓ select   ? help   q quit")
+  // `t to talk`: the meetings plugin's key on every tab of a project (M9).
+  expect(line(frame, 35)).toBe(" ←→ tabs   esc back   n add   e edit   x done   d due   l links   del delete   t to talk   ↑↓ select   ? help   q quit")
   const spans = await tui.spans()
   expect(isSelected(spans, "Send revised budget to Peter")).toBe(true)
   expect(fgAt(spans, "A-4", 6)).toBe(theme.muted)
@@ -93,16 +95,16 @@ test("a person's and a meeting's Actions tabs list the actions linked to them; n
   kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
   await seedDesign(kernel)
   tui = await renderTui(kernel, { width: 118, height: 36 })
-  let frame = await actionsTab(tui, "@peter", 3, "Send revised budget to Peter")
-  expect(line(frame, 2)).toBe("  Summary   Notes 3   Projects & roles 2   Actions 1")
+  let frame = await actionsTab(tui, "@peter", "Send revised budget to Peter")
+  expect(line(frame, 2)).toBe("  Summary   Talk 0   Meetings   Notes 3   Projects & roles 2   Actions 1")
   expect(inside(frame, 5)).toBe(cols(["A-1", "Send revised budget to Peter", "me", "CRM", "9 Nov"], WIDE))
   expect(fgAt(await tui.spans(), "CRM", 5)).toBe(theme.cyan)
   tui.input.pressEscape()
-  await until(tui, (f) => !f.includes("› @peter"))
+  await until(tui, (f) => !f.includes("› Peter Janssens"))
 
   // The meeting's tab comes after its Export tab; its new action is linked to it, opened as the meetings plugin's
   // "log action" opens it.
-  frame = await actionsTab(tui, "M-2", 4, "Prepare SteerCo deck input")
+  frame = await actionsTab(tui, "M-2", "Prepare SteerCo deck input")
   expect(line(frame, 2)).toBe("  Agenda   Prep   Notes   Export   Actions 1")
   expect(line(frame, 3)).toMatch(/^ ╭─ Actions · 1 open ─+╮$/)
   expect(inside(frame, 5)).toBe(cols(["A-4", "Prepare SteerCo deck input", "me", "CRM", "Fri"], WIDE))
@@ -240,7 +242,7 @@ test("80x24: long link lists are cut whole; codes, handles and 9-character ids s
     await write("people").addPerson!({ name: "Alexandra Vandenberghe", handle: "alexandra", is_stakeholder: true })
     await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
     await write("projects").addProject!({ code: "CRM", name: "CRM replatforming" })
-    await write("meetings").addMeeting!({ title: "Steering committee Q4", date: "2026-12-04" })
+    await write("meetings").addMeeting!({ about: "#CRM", title: "Steering committee Q4", date: "2026-12-04" })
     await write("actions").addAction!({ title: "Short one", due: "2026-11-16", project: "CRM" }) // A-1
     const long = await write("actions").addAction!({ title: "Agree the ingest cut-over plan with the vendor", due: "2026-11-17" })
     // Moved before it is linked (a link references the action's id).
@@ -262,13 +264,13 @@ test("80x24: long link lists are cut whole; codes, handles and 9-character ids s
   for (const l of frame.split("\n")) expect(l.length).toBeLessThanOrEqual(80)
 
   // The project's tab leaves CRM out; the rest is cut the same way (a tab has no week groups: the due date shows).
-  frame = await actionsTab(tui, "#CRM", 5, "Short one")
+  frame = await actionsTab(tui, "#CRM", "Short one")
   expect(inside(frame, lineIndex(frame, "A-1000001"))).toBe(cols(["A-1000001", "Agree the ingest cut-ove…", "DATAPLATFORM2027 @alexandra …", "17 Nov"], narrow))
   tui.input.pressEscape()
   await until(tui, (f) => !f.includes("› CRM"))
   // The person's tab keeps Owner (owned or linked must stay visible) and lets Linked to go first: ID 9, Action
   // 74 − 9 − 8 − 7 − 3 = 47, Owner 8, Due 7.
-  frame = await actionsTab(tui, "@alexandra", 3, "with the vendor")
+  frame = await actionsTab(tui, "@alexandra", "with the vendor")
   const person = [9, 47, 8, 7]
   expect(frame).not.toContain("Linked to")
   expect(inside(frame, lineIndex(frame, "ID "))).toBe(cols(["ID", "Action", "Owner", "Due"], person))

@@ -2,16 +2,23 @@
 // types, the hooks, the building blocks, the format helpers and the theme.
 export { defineTui } from "./types"
 export type {
+  CapturePreview,
+  CaptureRouteDef,
   Cell,
   CellPart,
   FieldEditorProps,
   GlobalActionDef,
   ListColumnDef,
+  OverviewColumn,
+  OverviewDetail,
+  OverviewKeyContext,
+  OverviewKeyDef,
   OverviewPanelDef,
   OverviewRow,
   RecordCrumbDef,
   RecordFormDef,
   RecordFormProps,
+  RecordKeyDef,
   RecordTabDef,
   Route,
   ScreenDef,
@@ -22,6 +29,9 @@ export type {
 } from "./types"
 // useScreenCrumb(() => text): the screen's crumb after the header chip (`3 People ▾ › All`) while it is mounted.
 export { useNav, useScreenCrumb, type Nav } from "./nav"
+// Quick capture's routes (TuiContext.captureRoute): useCaptureRoutes() lists them, matchCapture(routes, text) finds
+// the first that takes a text.
+export { matchCapture, useCaptureRoutes, type CaptureMatch, type CaptureRoute } from "./captureRoutes"
 // Overlays above the screen: open(c), openForm(recordType, formId?, props?) and confirm(text).
 export { useOverlay, type Overlay } from "./overlay"
 // The record forms registered for a record type: Array<{ id, label, plugin }> (for a menu of forms to open).
@@ -44,7 +54,7 @@ export { DraftPrompt } from "./components/DraftPrompt"
 export { act, useQuery, useRecord, useRuntime, useToday, type ActResult, type Query, type RecordInfo } from "./data"
 // Building blocks.
 export { Field, type FieldKind, type FieldSpec } from "./components/Field"
-export { Form, numberValue, type FormValues, type SubmitResult } from "./components/Form"
+export { Form, numberValue, type FormLook, type FormValues, type SubmitResult } from "./components/Form"
 export { KeyHints } from "./components/KeyHints"
 export { Menu, type MenuItem } from "./components/Menu"
 export { Panel } from "./components/Panel"

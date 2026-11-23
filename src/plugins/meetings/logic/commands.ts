@@ -1,17 +1,25 @@
-// `ttybrain meeting …` and `ttybrain meeting agenda <M-n> <verb> …`. Reads go through the plugin's own store; writes only
-// through ctx.self().write.*, so they are validated, transactional and recorded like any other caller's.
-// The dispatcher has no nested verbs, so `agenda` is one command: first positional the meeting, second the verb.
+// `ttybrain meeting …`, `ttybrain meeting agenda <M-n> <verb> …` and `ttybrain meeting series <verb> …`. Reads go through
+// the plugin's own store; writes only through ctx.self().write.*, so they are validated, transactional and recorded
+// like any other caller's. The dispatcher has no nested verbs, so `agenda` and `series` are one command each: the
+// first positionals name the meeting and the verb.
 import { readFile } from "node:fs/promises"
 import { addDays, currentContext, formatRef, formatTable, ValidationError, type FlagDef, type PluginContext } from "@ttybrain/api"
+import type { Closed } from "./close"
 import type { Store } from "./records"
-import { MEETING_KINDS, type MeetingRecord } from "./schema"
+import { KIND_INPUTS, type MeetingRecord, type SeriesRecord, type SubjectType, type TalkRecord } from "./schema"
+import type { TalkList, Talks } from "./talk"
 
 const text = (description: string, placeholder?: string): FlagDef => ({ type: "string", description, ...(placeholder ? { placeholder } : {}) })
 const bool = (description: string): FlagDef => ({ type: "boolean", description })
-const kindFlag: FlagDef = { type: "string", values: [...MEETING_KINDS], description: "board, steering or other (default other)" }
+const kindFlag: FlagDef = {
+  type: "string",
+  values: [...KIND_INPUTS],
+  description: "one_on_one, project or board (steering and other mean project; default: one_on_one about a person, project about a project)",
+}
 
 const RECENT_DAYS = 30
 const AGENDA_VERBS = ["add", "edit", "move", "remove"]
+const SERIES_VERBS = ["add", "list", "edit", "end"]
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`
 const code = (project: string | null) => (project === null ? "" : project.replace(/^#/, ""))
 
@@ -28,6 +36,8 @@ function position(input: string | undefined, what: string): number {
 
 function meetingText(m: MeetingRecord): string {
   const lines = [`${m.ref} ${m.title}`, `  date: ${m.date}`, `  kind: ${m.kind}`, `  status: ${m.status}`]
+  if (m.about) lines.push(`  about: ${m.about}`)
+  if (m.series) lines.push(`  series: ${m.series}`)
   if (m.since_date) lines.push(`  since: ${m.since_date}`)
   if (m.attendees.length) lines.push(`  attendees: ${m.attendees.join(", ")}`)
   const blocks = [lines.join("\n")]
@@ -39,10 +49,121 @@ function meetingText(m: MeetingRecord): string {
   return blocks.join("\n\n")
 }
 
-const line = (m: MeetingRecord) => `${m.ref} ${m.title} on ${m.date}`
+// One subject's talk-list as text: a heading, then one line per item (its rank, ref, text, project tag or `—`, date
+// added); the carried group under its own line, marked `↻` instead of numbered (as the talk mock). On a project's list,
+// a person's item tagged with the project has no number (its place is on that person's list) and shows whose it is
+// instead of the tag.
+function talkBlock(about: string, list: TalkList): string {
+  const row = (t: TalkRecord) => {
+    const own = t.about === about
+    const mark = !own ? "" : t.carried ? "↻" : `${t.position}.`
+    return [mark, t.ref, t.text, own ? (t.project ?? "—") : t.about, t.added_date]
+  }
+  const open = list.open.map(row)
+  const carried = list.carried.map(row)
+  const widths = [0, 1, 2, 3].map((i) => Math.max(...[...open, ...carried].map((r) => r[i]!.length)))
+  const format = (r: string[]) => `${r[0]!.padEnd(widths[0]!)} ${r[1]!.padEnd(widths[1]!)}  ${r[2]!.padEnd(widths[2]!)}  ${r[3]!.padEnd(widths[3]!)}  ${r[4]}`
+  const head = `${about} · ${list.open.length} open${list.carried.length ? `, ${list.carried.length} carried` : ""}`
+  const lines = [head, ...open.map(format)]
+  if (carried.length) lines.push(`carried over from ${list.carriedFrom}`, ...carried.map(format))
+  return lines.join("\n")
+}
 
-export function registerCommands(ctx: PluginContext, store: Store): void {
+const line = (m: MeetingRecord) => `${m.ref} ${m.title} on ${m.date}`
+const seriesLine = (s: SeriesRecord) => `${s.ref} ${s.title}: ${s.rhythm}${s.next ? `, next ${s.next}` : ""}${s.end_date ? `, until ${s.end_date}` : ""}`
+const SUBJECT_USAGE = "usage: ttybrain meeting subject <M-n> <about>, or ttybrain meeting subject --all-without <about>"
+
+export function registerCommands(ctx: PluginContext, store: Store, talks: Talks): void {
   const write = () => ctx.self().write
+
+  ctx.command({
+    thing: "talk",
+    verb: "add",
+    summary: "add an item to a person's or project's talk-list; --project also puts a person's item on that project's meetings",
+    args: [
+      { name: "about", required: true },
+      { name: "text", required: true },
+    ],
+    flags: { project: text("tag it with a project", "code") },
+    run: async ({ args, flags }) => {
+      const t: TalkRecord = await write().addTalk!({ about: args.about, text: args.text, ...(flags.project !== undefined ? { project: flags.project } : {}) })
+      return { json: t, text: `${t.ref} added to ${t.about}'s talk-list at ${t.position}` }
+    },
+  })
+
+  ctx.command({
+    thing: "talk",
+    verb: "list",
+    summary: "show the open talk items: of one person or project (a project's include people's items tagged with it), or of everyone",
+    args: [{ name: "about" }],
+    run: async ({ args }) => {
+      if (args.about !== undefined) {
+        const subject = await store.subject(String(args.about))
+        const list = await talks.list(subject)
+        const items = [...list.open, ...list.carried]
+        return { json: items, text: items.length ? talkBlock(subject.ref, list) : `no open talk items for ${subject.ref}` }
+      }
+      const subjects = await ctx.data.selectFrom("talk_item").select(["subject_type", "subject_id"]).distinct().where("status", "=", "open").execute()
+      const blocks: Array<{ about: string; type: SubjectType; list: TalkList }> = []
+      for (const s of subjects) {
+        const list = await talks.list({ type: s.subject_type as SubjectType, id: Number(s.subject_id) }, { own: true })
+        blocks.push({ about: [...list.open, ...list.carried][0]!.about, type: s.subject_type as SubjectType, list })
+      }
+      // People, then projects, each by ref; those that no longer resolve last.
+      const key = (b: (typeof blocks)[number]) => `${b.about === "—" ? 1 : 0}${b.type === "person" ? 0 : 1}${b.about}`
+      blocks.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0))
+      return {
+        json: blocks.flatMap((b) => [...b.list.open, ...b.list.carried]),
+        text: blocks.length ? blocks.map((b) => talkBlock(b.about, b.list)).join("\n\n") : "no open talk items",
+      }
+    },
+  })
+
+  ctx.command({
+    thing: "talk",
+    verb: "done",
+    summary: "mark a talk item discussed, in a meeting it is on (--meeting) or elsewhere",
+    args: [{ name: "item", required: true }],
+    flags: { meeting: text("the meeting it was discussed in", "M-n") },
+    run: async ({ args, flags }) => {
+      const t: TalkRecord = await write().discussTalk!({ ref: args.item, ...(flags.meeting !== undefined ? { meeting: flags.meeting } : {}) })
+      return { json: t, text: `${t.ref} discussed${t.meeting ? ` in ${t.meeting}` : ""}` }
+    },
+  })
+
+  ctx.command({
+    thing: "talk",
+    verb: "drop",
+    summary: "take a talk item off its list without discussing it",
+    args: [{ name: "item", required: true }],
+    run: async ({ args }) => {
+      const t: TalkRecord = await write().dropTalk!({ ref: args.item })
+      return { json: t, text: `${t.ref} dropped` }
+    },
+  })
+
+  ctx.command({
+    thing: "talk",
+    verb: "reopen",
+    summary: "put a discussed or dropped talk item back on its list, near the place it had",
+    args: [{ name: "item", required: true }],
+    run: async ({ args }) => {
+      const t: TalkRecord = await write().reopenTalk!({ ref: args.item })
+      return { json: t, text: `${t.ref} reopened at ${t.position}` }
+    },
+  })
+
+  ctx.command({
+    thing: "talk",
+    verb: "move",
+    summary: "move a talk item to another place within its group on the list (the open items, or the carried ones)",
+    args: [{ name: "item", required: true }],
+    flags: { to: { type: "number", description: "the new place in its group (1 is first)", required: true } },
+    run: async ({ args, flags }) => {
+      const t: TalkRecord = await write().moveTalk!({ ref: args.item, to: flags.to })
+      return { json: t, text: `${t.ref} moved to ${t.position}` }
+    },
+  })
 
   ctx.command({
     thing: "meeting",
@@ -64,8 +185,13 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
         status: m.status,
         attendees: m.attendees.join(", "),
         projects: [...new Set(m.agenda.map((a) => code(a.project)).filter(Boolean))].join(", "),
+        about: m.about ?? "—",
+        series: m.series ?? "",
       }))
-      return { json: meetings, text: rows.length ? formatTable(["ref", "date", "title", "kind", "status", "attendees", "projects"], rows) : "no meetings" }
+      return {
+        json: meetings,
+        text: rows.length ? formatTable(["ref", "date", "title", "kind", "status", "attendees", "projects", "about", "series"], rows) : "no meetings",
+      }
     },
   })
 
@@ -83,9 +209,10 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
   ctx.command({
     thing: "meeting",
     verb: "add",
-    summary: "add a meeting; each project in --projects gets a status item on the agenda",
+    summary: "add a one-off meeting about a person or project; each project in --projects gets a status item on the agenda",
     args: [{ name: "title", required: true }],
     flags: {
+      about: { type: "string", description: "who or what the meeting is about: a person or a project", placeholder: "@handle|#CODE", required: true },
       date: { type: "date", description: "the meeting date", required: true },
       kind: kindFlag,
       attendees: { type: "list", description: "attendee handles", placeholder: "a,b" },
@@ -94,6 +221,7 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
     },
     run: async ({ args, flags }) => {
       const m: MeetingRecord = await write().addMeeting!({
+        about: flags.about,
         title: args.title,
         date: flags.date,
         ...(flags.kind !== undefined ? { kind: flags.kind } : {}),
@@ -143,12 +271,136 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
 
   ctx.command({
     thing: "meeting",
-    verb: "close",
-    summary: "mark a meeting held and say how many actions and decisions came from it",
+    verb: "skip",
+    summary: "skip a planned meeting (of a series: that date only)",
     args: [{ name: "meeting", required: true }],
     run: async ({ args }) => {
-      const m: MeetingRecord & { logged: { actions: number; decisions: number } } = await write().closeMeeting!({ ref: args.meeting })
-      return { json: m, text: `${m.ref} held\nlogged: ${plural(m.logged.actions, "action")}, ${plural(m.logged.decisions, "decision")}` }
+      const m: MeetingRecord = await write().skipMeeting!({ ref: args.meeting })
+      return { json: m, text: `${m.ref} skipped (${m.date})` }
+    },
+  })
+
+  ctx.command({
+    thing: "meeting",
+    verb: "move",
+    summary: "move a planned meeting to another date (of a series: that date only)",
+    args: [{ name: "meeting", required: true }],
+    flags: { to: { type: "date", description: "the new date", required: true } },
+    run: async ({ args, flags }) => {
+      const m: MeetingRecord = await write().moveMeeting!({ ref: args.meeting, to: flags.to })
+      return { json: m, text: `${m.ref} moved to ${m.date}` }
+    },
+  })
+
+  ctx.command({
+    thing: "meeting",
+    verb: "subject",
+    summary: "say who or what a meeting is about: ttybrain meeting subject <M-n> <about>, or --all-without <about> for every meeting without one",
+    // Both positionals are optional to the dispatcher: with --all-without the only one is <about>.
+    args: [{ name: "meeting" }, { name: "about" }],
+    flags: { "all-without": bool("every meeting that has no subject yet (then give only <about>)") },
+    run: async ({ args, flags }) => {
+      if (flags["all-without"]) {
+        if (args.about !== undefined) throw new ValidationError(`unexpected argument "${args.about}"`, { hint: SUBJECT_USAGE })
+        if (args.meeting === undefined) throw new ValidationError("missing argument <about>", { field: "about", hint: SUBJECT_USAGE })
+        const out: { meetings: MeetingRecord[] } = await write().setSubject!({ allWithout: true, about: args.meeting })
+        const changed = out.meetings
+        return { json: changed, text: changed.length ? changed.map((m) => `${m.ref} about ${m.about} (${m.kind})`).join("\n") : "no meetings without a subject" }
+      }
+      if (args.meeting === undefined) throw new ValidationError("missing argument <meeting>", { field: "meeting", hint: SUBJECT_USAGE })
+      if (args.about === undefined) throw new ValidationError("missing argument <about>", { field: "about", hint: SUBJECT_USAGE })
+      const m: MeetingRecord = await write().setSubject!({ meeting: args.meeting, about: args.about })
+      return { json: m, text: `${m.ref} about ${m.about} (${m.kind})` }
+    },
+  })
+
+  ctx.command({
+    thing: "meeting",
+    verb: "series",
+    summary: "recurring meetings: ttybrain meeting series add <about> <title> --every <rhythm> | list | edit <S-n> | end <S-n>",
+    args: [
+      { name: "verb", required: true },
+      { name: "rest", rest: true },
+    ],
+    flags: {
+      every: text("add, edit: the rhythm: weekly on mon, every 2 weeks on wed, monthly on the 4th tue, monthly on the last fri, monthly on day 15", "rhythm"),
+      from: { type: "date", description: "add: the first date (default today)" },
+      until: { type: "date", description: "add, edit: the last date" },
+      "no-until": bool("edit: no last date"),
+      kind: kindFlag,
+      attendees: { type: "list", description: "add, edit: the attendee handles (add: default the person it is about)", placeholder: "a,b" },
+      title: text("edit: the new title", "title"),
+      on: { type: "date", description: "end: the last date (default today)" },
+    },
+    run: async ({ args, flags }) => {
+      const verb = String(args.verb)
+      const rest = (args.rest as string[] | undefined) ?? []
+      if (!SERIES_VERBS.includes(verb)) throw new ValidationError(`unknown series verb "${verb}"`, { field: "verb", hint: `use ${SERIES_VERBS.join(", ")}` })
+      const only = (allowed: string[]) => {
+        for (const f of ["every", "from", "until", "no-until", "kind", "attendees", "title", "on"])
+          if (flags[f] !== undefined && flags[f] !== false && !allowed.includes(f)) throw new ValidationError(`--${f} does not apply to "series ${verb}"`, { field: f })
+      }
+      const arity = (names: string[]) => {
+        if (rest.length < names.length)
+          throw new ValidationError(`missing argument <${names[rest.length]}>`, { field: names[rest.length]!, hint: `usage: ttybrain meeting series ${verb} ${names.map((n) => `<${n}>`).join(" ")}` })
+        if (rest.length > names.length) throw new ValidationError(`unexpected argument "${rest[names.length]}"`)
+      }
+      switch (verb) {
+        case "add": {
+          only(["every", "from", "until", "kind", "attendees"])
+          arity(["about", "title"])
+          if (flags.every === undefined) throw new ValidationError("--every is required", { field: "every", hint: "e.g. --every \"2 weeks on wed\"" })
+          const s: SeriesRecord = await write().addSeries!({
+            about: rest[0],
+            title: rest[1],
+            every: flags.every,
+            from: flags.from ?? "today",
+            ...(flags.until !== undefined ? { until: flags.until } : {}),
+            ...(flags.kind !== undefined ? { kind: flags.kind } : {}),
+            ...(flags.attendees !== undefined ? { attendees: flags.attendees } : {}),
+          })
+          return { json: s, text: seriesLine(s) }
+        }
+        case "list": {
+          only([])
+          arity([])
+          const ids = await ctx.data.selectFrom("series").select("id").orderBy("id").execute()
+          const all: SeriesRecord[] = []
+          for (const r of ids) all.push(await store.series(formatRef("S-", Number(r.id))))
+          const rows = all.map((s) => ({ ref: s.ref, title: s.title, about: s.about, kind: s.kind, rhythm: s.rhythm, next: s.next ?? "", ends: s.end_date ?? "" }))
+          return { json: all, text: rows.length ? formatTable(["ref", "title", "about", "kind", "rhythm", "next", "ends"], rows) : "no series" }
+        }
+        case "edit": {
+          only(["every", "until", "no-until", "attendees", "title"])
+          arity(["series"])
+          exclusive(flags, "until", "no-until")
+          const s: SeriesRecord = await write().editSeries!({
+            ref: rest[0],
+            ...(flags.title !== undefined ? { title: flags.title } : {}),
+            ...(flags.every !== undefined ? { every: flags.every } : {}),
+            ...(flags.attendees !== undefined ? { attendees: flags.attendees } : {}),
+            ...(flags.until !== undefined ? { until: flags.until } : flags["no-until"] ? { until: null } : {}),
+          })
+          return { json: s, text: seriesLine(s) }
+        }
+        default: {
+          only(["on"])
+          arity(["series"])
+          const s: SeriesRecord = await write().endSeries!({ ref: rest[0], ...(flags.on !== undefined ? { on: flags.on } : {}) })
+          return { json: s, text: `${s.ref} ${s.title} ends ${s.end_date}` }
+        }
+      }
+    },
+  })
+
+  ctx.command({
+    thing: "meeting",
+    verb: "close",
+    summary: "mark a meeting held: unticked talk items stay for next time, a 1:1's notes go on the person",
+    args: [{ name: "meeting", required: true }],
+    run: async ({ args }) => {
+      const m: Closed = await write().closeMeeting!({ ref: args.meeting })
+      return { json: m, text: m.message }
     },
   })
 

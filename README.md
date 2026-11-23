@@ -55,6 +55,18 @@ Actions are now their own plugin (`actions`), no longer part of `projects`. On t
 - If the `projects` or `actions` plugin was switched off during the upgrade, the move waits until both are on. Actions you add in the meantime (while only `actions` is on, so the old ones cannot be read) get ids above 1,000,000 (`A-1000001`) so they cannot collide with the ones still to be moved; they keep those ids. If `projects` is on but the move was skipped (another process held the database at that start), new actions simply continue after the highest existing id.
 - External plugins: the `projects` plugin is now 2.0.0. A plugin that `requires` `projects ^1` fails to load, and one that reads `projects.project` at `^1` (it no longer has `open_actions`) sees that view as unavailable, until you update its ranges. The new `actions` plugin starts at 2.0.0: read `actions.action` and `actions.link` at `^2`. A new change set that names `projects.addAction` (or one of the other four action operations) is refused; name `actions.addAction` and the like instead. Change sets already applied stay in the history as they were.
 
+## Upgrading to the meetings rework
+
+Meetings are now about a person (a 1:1) or a project (a project meeting or a board), can recur as a series (`ttybrain meeting series add @karim "1:1 Karim" --every "2 weeks on wed"`), and every person and project has a talk-list (`ttybrain talk add @anna "AWS training budget"`, or `t` in the TUI). A meeting not closed 3 days after its date now closes itself.
+
+- Every existing meeting keeps everything: its number (`M-4` stays `M-4`), title, date, status, attendees, agenda, asks, notes, since date, and the actions and decisions linked to it. The kinds `steering` and `other` become `project`; `board` stays `board` (the CLI still accepts `--kind steering|other` as aliases of `project`).
+- Existing meetings have no subject yet: they show `—` where a subject goes, are listed under "No subject" on the Meetings screen, and never close themselves. Give one a subject with `ttybrain meeting subject M-4 #CRM`, or all of them at once with `ttybrain meeting subject --all-without #BOARD`. Once a meeting has a subject, it closes itself like a new one if it is dated today or later; past ones never do.
+- `ttybrain meeting close` now prints the close message (for example `1:1 Anna closed · 2 discussed, 3 kept for next time · 2 actions created · notes saved`) instead of `M-4 held` and `logged: …`. `--json` keeps the old fields and adds `discussed`, `kept`, `actions`, `notesSaved` and `message`.
+- `ttybrain meeting add` now needs `--about <@handle|#CODE>` (the person or project the meeting is about); `--kind` is optional and follows the subject.
+- Occurrences of a series are created for the next 8 weeks whenever ttybrain starts for a command that writes, or the TUI opens (and each new day while it stays open). A read-only command may show yesterday's state until then.
+- External plugins: `meetings` is now 2.0.0 (the kind values of its published `meeting` view changed, and the view gained `subject_type`, `subject_id` and `series_id`). A plugin that `requires` or reads `meetings` at `^1` sees it as unavailable until you update the range to `^2`; the built-in `projects` and `actions` already read `^2`.
+- As with the actions upgrade, ttybrain copies the database to `ttybrain.db.bak-v<N>` before the first migration, and an older build should not be used on the upgraded database.
+
 ## Development
 
 ```bash

@@ -26,7 +26,8 @@ type Hooks = Array<() => void>
 type WriteScope = { open: boolean; queue: Promise<unknown>; hooks: Hooks; parent?: WriteScope; op: boolean }
 // `noWait`: an outermost write that fails with BusyError at once, instead of waiting busy_timeout, when another
 // connection holds the write lock (boot's data steps, which a read-only command must not wait for).
-export type WriteOptions = { op?: boolean; noWait?: boolean }
+// `upkeep`: the write is the kernel's upkeep itself, so the before-write hook (setBeforeWrite) does not run for it.
+export type WriteOptions = { op?: boolean; noWait?: boolean; upkeep?: boolean }
 const newScope = (op: boolean, parent?: WriteScope): WriteScope => ({ open: true, queue: Promise.resolve(), hooks: [], parent, op })
 const LATE = "write started after its parent write ended; await nested writes"
 const NESTED_RUNNING = "a write ran a statement while one of its nested writes was running; await nested writes"
@@ -56,6 +57,7 @@ export class KernelDb {
   private readonly writing = new AsyncLocalStorage<WriteScope>() // the innermost `write`
   private readonly frames: Hooks[] = [] // after-commit hooks of plain (non-write) transactions
   private openRoot?: WriteScope // the outermost write whose transaction is open
+  private beforeWrite?: () => Promise<unknown>
   private readonly savepointOwners: WriteScope[] = [] // the nested writes whose savepoints are open, innermost last
 
   constructor(raw: RawDb) {
@@ -173,7 +175,11 @@ export class KernelDb {
   write<T>(fn: () => Promise<T>, opts: WriteOptions = {}): Promise<T> {
     const op = opts.op === true
     const parent = this.writing.getStore()
-    if (!parent) return this.outermost(fn, op, opts.noWait === true)
+    if (!parent) {
+      const before = opts.upkeep ? undefined : this.beforeWrite
+      if (before) return before().then(() => this.outermost(fn, op, opts.noWait === true))
+      return this.outermost(fn, op, opts.noWait === true)
+    }
     if (!parent.open) return Promise.reject(new Error(LATE))
     const run = parent.queue.then(async () => {
       if (!parent.open) throw new Error(LATE)
@@ -224,6 +230,12 @@ export class KernelDb {
   // `PRAGMA data_version`: changes when another connection commits to the database file.
   dataVersion(): number {
     return Number(Object.values(this.raw.prepare("PRAGMA data_version").all([])[0] ?? {})[0])
+  }
+
+  // Runs before every outermost write except the upkeep's own: the host's upkeep, which returns at once when
+  // nothing is due.
+  setBeforeWrite(hook: (() => Promise<unknown>) | undefined): void {
+    this.beforeWrite = hook
   }
 
   inWrite(): boolean {

@@ -91,7 +91,7 @@ export function createOverlay(stack: OverlayStack, kernel: Kernel, registry: Tui
           }
           return (
             <PluginScope kernel={kernel} plugin={def.plugin} label={def.label} close={() => done()}>
-              <FormDraftKey.Provider value={formDraftKey(def.plugin, def.id, props.recordRef, props.origin)}>
+              <FormDraftKey.Provider value={formDraftKey(def.plugin, def.id, props.recordRef, props.origin, props.draftFor)}>
                 <Component {...props} close={done} />
               </FormDraftKey.Provider>
             </PluginScope>

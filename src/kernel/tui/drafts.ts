@@ -194,8 +194,9 @@ export function draftPromptText(savedAt: string, today: string): string {
 // inside it keeps its draft there; a <Form> elsewhere keeps none.
 export const FormDraftKey = createContext<string | undefined>()
 
-export function formDraftKey(plugin: string, formId: string, recordRef: string | undefined, origin: { ref: string } | undefined): string {
-  return `${plugin}:${formId}:${recordRef ?? "new"}${origin ? `:from:${origin.ref}` : ""}`
+// `draftFor`: what a new record's form is for (a talk item for @anna), so its draft is not offered for another.
+export function formDraftKey(plugin: string, formId: string, recordRef: string | undefined, origin: { ref: string } | undefined, draftFor?: string): string {
+  return `${plugin}:${formId}:${recordRef ?? "new"}${draftFor ? `:for:${draftFor}` : ""}${origin ? `:from:${origin.ref}` : ""}`
 }
 
 export type DraftHandle<V> = DraftWriter<V> & {

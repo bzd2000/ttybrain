@@ -1,6 +1,8 @@
-// Lookups shared by the operations and the commands (reading the plugin's own tables), and the record type
-// `meeting` (M-). People (@handle) and projects (#CODE) are resolved through the kernel's record types.
+// Lookups shared by the operations and the commands (reading the plugin's own tables), and the record types
+// `meeting` (M-), `series` (S-) and `talk_item` (T-). People (@handle) and projects (#CODE) are resolved through the kernel's record
+// types; a subject (the person or project a meeting or series is about) is a soft reference shown through their views.
 import {
+  currentContext,
   formatRef,
   normalizeCode,
   normalizeHandle,
@@ -12,12 +14,14 @@ import {
   type PluginContext,
   type PluginRuntime,
 } from "@ttybrain/api"
-import type { AgendaItem, MeetingRecord } from "./schema"
+import type { AgendaItem, MeetingRecord, SeriesRecord, SubjectType } from "./schema"
 
 // How many records a "did you mean" looks through (a person's whole team and stakeholders, every project).
 const TAG_CANDIDATES = 1000
+export const GONE = "—" // a soft reference whose record no longer exists
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
 
+export type Subject = { type: SubjectType; id: number; ref: string }
 export type Store = ReturnType<typeof makeStore>
 
 export function makeStore(ctx: PluginRuntime) {
@@ -40,24 +44,23 @@ export function makeStore(ctx: PluginRuntime) {
     return row ? Number(row.id) : null
   }
 
+  // The @handles of people by id, sorted; ids that no longer resolve are left out.
+  async function handlesOf(ids: number[]): Promise<string[]> {
+    if (ids.length === 0) return []
+    const rows = await unlessUnavailable([] as Array<{ id: unknown; handle: unknown }>, () =>
+      db.selectFrom("people.person").select(["id", "handle"]).where("id", "in", ids).execute(),
+    )
+    const handleOf = new Map(rows.map((r) => [Number(r.id), `@${r.handle}`]))
+    return ids.map((id) => handleOf.get(id)).filter((h): h is string => h !== undefined).sort()
+  }
+
   async function meeting(input: string): Promise<MeetingRecord> {
     const n = parseRef(input, "M-")
     const row = n === null ? undefined : await db.selectFrom("meeting").selectAll().where("id", "=", n).executeTakeFirst()
     if (!row) throw new NotFoundError(`unknown meeting "${n === null ? input.trim() : formatRef("M-", n)}"`)
     const id = Number(row.id)
     const attendeeRows = await db.selectFrom("attendee").select("person_id").where("meeting_id", "=", id).execute()
-    const handles =
-      attendeeRows.length === 0
-        ? []
-        : await unlessUnavailable([] as Array<{ id: unknown; handle: unknown }>, () =>
-            db
-              .selectFrom("people.person")
-              .select(["id", "handle"])
-              .where("id", "in", attendeeRows.map((r) => Number(r.person_id)))
-              .execute(),
-          )
-    const handleOf = new Map(handles.map((r) => [Number(r.id), `@${r.handle}`]))
-    const attendees = attendeeRows.map((r) => handleOf.get(Number(r.person_id))).filter((h): h is string => h !== undefined).sort()
+    const attendees = await handlesOf(attendeeRows.map((r) => Number(r.person_id)))
     const items = await db.selectFrom("agenda_item").selectAll().where("meeting_id", "=", id).orderBy("position").execute()
     const projectIds = [...new Set(items.filter((i) => i.project_id !== null).map((i) => Number(i.project_id)))]
     const codes =
@@ -85,6 +88,8 @@ export function makeStore(ctx: PluginRuntime) {
       notes: String(row.notes),
       attendees,
       agenda,
+      about: row.subject_type === null ? null : await subjectRef(row.subject_type as SubjectType, Number(row.subject_id)),
+      series: row.series_id === null ? null : formatRef("S-", Number(row.series_id)),
     }
   }
 
@@ -117,9 +122,100 @@ export function makeStore(ctx: PluginRuntime) {
     return found.id
   }
 
-  // The id the next meeting gets (an integer primary key takes the highest id plus one), for the add line.
-  async function nextMeetingId(): Promise<number> {
-    const rows = await db.selectFrom("meeting").select("id").orderBy("id", "desc").limit(1).execute()
+  // The display ref of a subject or project tag, through the people and projects views: `@handle`, `#CODE`; `—` when
+  // the record is gone; `person:<id>` / `project:<id>` while no plugin registers the type (as actions' links show).
+  async function subjectRef(type: SubjectType, id: number): Promise<string> {
+    const row =
+      type === "person"
+        ? await unlessUnavailable(undefined as { v: unknown } | undefined, () => db.selectFrom("people.person").select("handle as v").where("id", "=", id).executeTakeFirst())
+        : await unlessUnavailable(undefined as { v: unknown } | undefined, () => db.selectFrom("projects.project").select("code as v").where("id", "=", id).executeTakeFirst())
+    if (row) return `${type === "person" ? "@" : "#"}${row.v}`
+    return ctx.records.hasType(type) ? GONE : `${type}:${id}`
+  }
+
+  // What a meeting or series is about: `@anna` or `anna` (a person), `#CRM` or `CRM` (a project). A bare word that
+  // names both is refused.
+  async function subject(input: string): Promise<Subject> {
+    const s = input.trim()
+    const handle = normalizeHandle(s)
+    const code = normalizeCode(s)
+    const person = async (): Promise<Subject | null> => {
+      const found = await ctx.records.resolve(`@${handle}`)
+      return found && found.type === "person" ? { type: "person", id: found.id, ref: `@${handle}` } : null
+    }
+    const project = async (): Promise<Subject | null> => {
+      const found = await ctx.records.resolve(`#${code}`)
+      return found && found.type === "project" ? { type: "project", id: found.id, ref: `#${code}` } : null
+    }
+    const people = async () => (await tagCandidates("@")).map((h) => `@${h}`)
+    const projects = async () => (await tagCandidates("#")).map((c) => `#${c}`)
+    // Suggestions keep their prefix: `did you mean "@anna"?`
+    const near = (word: string, refs: string[]) => {
+      const hits = suggest(word, refs.map((r) => r.slice(1)))
+      return hits.map((h) => refs.find((r) => r.slice(1) === h)!)
+    }
+    if (s.startsWith("@")) {
+      const p = await person()
+      if (!p) throw new NotFoundError(`unknown person "@${handle}"`, { suggestions: near(handle, await people()) })
+      return p
+    }
+    if (s.startsWith("#")) {
+      const p = await project()
+      if (!p) throw new NotFoundError(`unknown project "#${code}"`, { suggestions: near(code, await projects()) })
+      return p
+    }
+    const p = await person()
+    const q = await project()
+    if (p && q) throw new ValidationError(`"${s}" is both a person and a project`, { field: "about", hint: `use @${handle} or #${code}` })
+    if (p || q) return (p ?? q)!
+    throw new NotFoundError(`unknown person or project "${s}"`, { suggestions: near(s, [...(await people()), ...(await projects())]) })
+  }
+
+  async function seriesId(input: string): Promise<number | null> {
+    const id = parseRef(input, "S-")
+    if (id === null) return null
+    const row = await db.selectFrom("series").select("id").where("id", "=", id).executeTakeFirst()
+    return row ? Number(row.id) : null
+  }
+
+  async function series(input: string): Promise<SeriesRecord> {
+    const n = parseRef(input, "S-")
+    const row = n === null ? undefined : await db.selectFrom("series").selectAll().where("id", "=", n).executeTakeFirst()
+    if (!row) throw new NotFoundError(`unknown series "${n === null ? input.trim() : formatRef("S-", n)}"`, { hint: 'run "ttybrain meeting series list"' })
+    const id = Number(row.id)
+    const people = await db.selectFrom("series_attendee").select("person_id").where("series_id", "=", id).execute()
+    const next = await db
+      .selectFrom("meeting")
+      .select("date")
+      .where("series_id", "=", id)
+      .where("status", "=", "planned")
+      .where("date", ">=", currentContext().today)
+      .orderBy("date")
+      .limit(1)
+      .executeTakeFirst()
+    return {
+      ref: formatRef("S-", id),
+      id,
+      title: String(row.title),
+      kind: row.kind as SeriesRecord["kind"],
+      about: await subjectRef(row.subject_type as SubjectType, Number(row.subject_id)),
+      rhythm: String(row.rhythm),
+      first_date: String(row.first_date),
+      end_date: str(row.end_date),
+      attendees: await handlesOf(people.map((r) => Number(r.person_id))),
+      next: next ? String(next.date) : null,
+    }
+  }
+
+  async function talkId(input: string): Promise<number | null> {
+    const id = parseRef(input, "T-")
+    if (id === null) return null
+    const row = await db.selectFrom("talk_item").select("id").where("id", "=", id).executeTakeFirst()
+    return row ? Number(row.id) : null
+  }
+
+  async function nextSeriesId(): Promise<number> {
+    const rows = await db.selectFrom("series").select("id").orderBy("id", "desc").limit(1).execute()
     return rows.length ? Number(rows[0]!.id) + 1 : 1
   }
 
@@ -136,7 +232,21 @@ export function makeStore(ctx: PluginRuntime) {
     return rows.map((r) => ({ id: Number(r.id), title: String(r.title), date: String(r.date) }))
   }
 
-  return { meetingId, meeting, openMeeting, personId, projectId, nextMeetingId, heldMeetingsWith, unlessUnavailable }
+  return {
+    meetingId,
+    meeting,
+    openMeeting,
+    personId,
+    projectId,
+    nextSeriesId,
+    heldMeetingsWith,
+    unlessUnavailable,
+    subject,
+    subjectRef,
+    seriesId,
+    series,
+    talkId,
+  }
 }
 
 export function registerRecordTypes(ctx: PluginContext, store: Store): void {
@@ -155,6 +265,27 @@ export function registerRecordTypes(ctx: PluginContext, store: Store): void {
         .limit(limit)
         .execute()
       return rows.map((r) => ({ ref: formatRef("M-", Number(r.id)), label: String(r.title) }))
+    },
+  })
+  ctx.recordType({
+    name: "series",
+    prefix: "S-",
+    resolve: (input) => store.seriesId(input),
+    label: async (id) => (await store.series(formatRef("S-", id))).title,
+    search: async (text, limit) => {
+      const rows = await ctx.data.selectFrom("series").select(["id", "title"]).where("title", "like", `%${text.trim()}%`).orderBy("id").limit(limit).execute()
+      return rows.map((r) => ({ ref: formatRef("S-", Number(r.id)), label: String(r.title) }))
+    },
+  })
+  // A talk item (M12): labelled and searched by its text.
+  ctx.recordType({
+    name: "talk_item",
+    prefix: "T-",
+    resolve: (input) => store.talkId(input),
+    label: async (id) => String((await ctx.data.selectFrom("talk_item").select("text").where("id", "=", id).executeTakeFirstOrThrow()).text),
+    search: async (text, limit) => {
+      const rows = await ctx.data.selectFrom("talk_item").select(["id", "text"]).where("text", "like", `%${text.trim()}%`).orderBy("id").limit(limit).execute()
+      return rows.map((r) => ({ ref: formatRef("T-", Number(r.id)), label: String(r.text) }))
     },
   })
 }

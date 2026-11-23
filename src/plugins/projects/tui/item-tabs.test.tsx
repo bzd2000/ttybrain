@@ -331,8 +331,8 @@ describe("meeting-linked forms", () => {
   test("action and decision forms carry a prefilled meeting", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
     await seed(async () => {
-      await write("meetings").addMeeting!({ title: "SteerCo Q4", date: "2026-12-04", projects: ["CRM"] })
-      await write("meetings").addMeeting!({ title: "Board", date: "2026-12-10", kind: "board" })
+      await write("meetings").addMeeting!({ about: "#CRM", title: "SteerCo Q4", date: "2026-12-04", projects: ["CRM"] })
+      await write("meetings").addMeeting!({ about: "#ERP", title: "Board", date: "2026-12-10", kind: "board" })
     })
     tui = await renderTui(kernel, { parts: [part, actionsTui], width: 120, height: 32 })
     tui.input.pressKey("3")

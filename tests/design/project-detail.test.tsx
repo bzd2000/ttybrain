@@ -50,7 +50,9 @@ test("Project detail (Overview) as designed", async () => {
   // The record crumb (Task 2's frame), a blank line, the tabs with their totals.
   expect(line(frame, 0)).toContain(" 2 Projects ▾  › CRM CRM replatforming")
   expect(line(frame, 1)).toBe("")
-  expect(line(frame, 2)).toBe("  Overview   Milestones 5   Deliverables 6   Risks & issues 4   Decisions 7   Actions 9   People 7   Context")
+  // The meetings plugin's Meetings and Talk sit before Context (the 2026-11-20 `project` design): the row no longer
+  // fits at 118, so it windows around the active tab.
+  expect(line(frame, 2)).toBe("  Overview   Milestones 5   Deliverables 6   Risks & issues 4   Decisions 7   Actions 9   People 7   Meetings  ›")
 
   // The Overview panel beside the right-hand panels (1 : 1.25).
   expect(line(frame, 3)).toMatch(/^ ╭─ Overview ─+╮ ╭─ Milestones ─+╮$/)

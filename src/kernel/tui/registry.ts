@@ -3,7 +3,9 @@
 import type { Component } from "solid-js"
 import { IsolationError, ValidationError } from "../errors"
 import type {
+  CaptureRouteDef,
   FieldEditorProps,
+  RecordKeyDef,
   GlobalActionDef,
   ListColumnDef,
   OverviewPanelDef,
@@ -43,6 +45,8 @@ export class TuiRegistry {
   private readonly actionList: Array<Owned<{ def: GlobalActionDef }>> = []
   private readonly badgeList: Array<Owned<{ def: StatusBadgeDef }>> = []
   private readonly crumbList: Array<Owned<{ recordType: string; def: RecordCrumbDef }>> = []
+  private readonly routeList: Array<Owned<{ def: CaptureRouteDef }>> = []
+  private readonly recordKeyList: Array<Owned<{ recordType: string; def: RecordKeyDef }>> = []
   private readonly errorList: Array<{ plugin: string; error: string }> = []
 
   // --- getters ---
@@ -104,6 +108,16 @@ export class TuiRegistry {
 
   badges(): Array<Registered<StatusBadgeDef>> {
     return this.badgeList.map(registered).sort((a, b) => a.order - b.order)
+  }
+
+  // The keys on the record views of `recordType`, in registration order.
+  recordKeys(recordType: string): Array<Registered<RecordKeyDef>> {
+    return this.recordKeyList.filter((k) => k.recordType === recordType).map(registered)
+  }
+
+  // In registration order (load order).
+  captureRoutes(): Array<Registered<CaptureRouteDef>> {
+    return this.routeList.map(registered)
   }
 
   errors(): Array<{ plugin: string; error: string }> {
@@ -186,11 +200,24 @@ export class TuiRegistry {
     this.crumbList.push({ plugin, recordType, def })
   }
 
+  addCaptureRoute(plugin: string, def: CaptureRouteDef): void {
+    this.open()
+    if (this.routeList.some((r) => r.def.id === def.id)) throw new ValidationError(`capture route "${def.id}" is already registered`)
+    this.routeList.push({ plugin, def })
+  }
+
+  addRecordKey(plugin: string, recordType: string, def: RecordKeyDef): void {
+    this.open()
+    if ([...def.key].length !== 1) throw new ValidationError(`key "${def.key}" must be a single character`)
+    if (this.recordKeyList.some((k) => k.recordType === recordType && k.def.key === def.key)) throw new ValidationError(`key "${def.key}" on "${recordType}" is already registered`)
+    this.recordKeyList.push({ plugin, recordType, def })
+  }
+
   // --- lifecycle (bootTui) ---
 
   // Removes everything `plugin` registered.
   remove(plugin: string): void {
-    for (const list of [this.screenList, this.tabList, this.panelList, this.columnList, this.formList, this.editorList, this.actionList, this.badgeList, this.crumbList] as Array<Array<{ plugin: string }>>) {
+    for (const list of [this.screenList, this.tabList, this.panelList, this.columnList, this.formList, this.editorList, this.actionList, this.badgeList, this.crumbList, this.routeList, this.recordKeyList] as Array<Array<{ plugin: string }>>) {
       for (let i = list.length - 1; i >= 0; i--) if (list[i]!.plugin === plugin) list.splice(i, 1)
     }
   }

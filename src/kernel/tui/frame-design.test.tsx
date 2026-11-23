@@ -79,17 +79,18 @@ test("record breadcrumbs: screen chip, code cyan, label; no extra line", async (
   // A record opened from a record replaces the crumb; it is never stacked.
   await t.nav.open("@peter")
   frame = await until(t, (f) => line(f, 0).includes("Peter Janssens"))
-  expect(line(frame, 0)).toContain("ttybrain ·  3 People ▾  › @peter Peter Janssens")
+  // A person's crumb has no ref (the people plugin's crumb, as the 2026-11-20 designs draw it) and a muted detail.
+  expect(line(frame, 0)).toContain("ttybrain ·  3 People ▾  › Peter Janssens · CFO, Finance · stakeholder")
   await t.nav.open("@anna")
   frame = await until(t, (f) => line(f, 0).includes("Anna Peeters"))
-  expect(line(frame, 0)).toContain("3 People ▾  › @anna Anna Peeters")
-  expect(line(frame, 0)).not.toContain("@peter")
+  expect(line(frame, 0)).toContain("3 People ▾  › Anna Peeters")
+  expect(line(frame, 0)).not.toContain("Peter")
   expect(line(frame, 0)).not.toContain("CRM")
   // Esc goes back a record, and its crumb comes back alone.
   t.input.pressEscape()
   frame = await until(t, (f) => line(f, 0).includes("Peter Janssens"))
-  expect(line(frame, 0)).toContain("3 People ▾  › @peter Peter Janssens")
-  expect(line(frame, 0)).not.toContain("@anna")
+  expect(line(frame, 0)).toContain("3 People ▾  › Peter Janssens")
+  expect(line(frame, 0)).not.toContain("Anna")
   t.input.pressEscape()
   frame = await until(t, (f) => line(f, 0).includes("CRM replatforming"))
   expect(line(frame, 0)).toContain("2 Projects ▾  › CRM CRM replatforming")
@@ -97,20 +98,16 @@ test("record breadcrumbs: screen chip, code cyan, label; no extra line", async (
   expect(fgAt(spans, "CRM CRM", 0)).toBe(theme.cyan)
 })
 
-// At 80 columns the space between the crumb and the badge gives way first; only then is the label cut, with `…`,
-// never the `› ` or the code.
+// At 80 columns the space between the crumb and the badge gives way first, then the crumb's detail; only then is the
+// label cut, with `…`, never the `› ` or the code.
 test("record crumb at 80 columns: the spacer goes first, then the label is cut with …", async () => {
   kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
   await seedDesign(kernel)
   const t = (tui = await renderTui(kernel, { width: 80, height: 24 }))
   await t.nav.open("@anna")
-  // One cell short: the spacer is gone and the last letter gives way.
-  let frame = await until(t, (f) => line(f, 0).includes("Anna Peete…") && line(f, 0).includes("inbox"))
-  expect(line(frame, 0)).toBe(" ttybrain ·  3 People ▾  › @anna Anna Peete…  ● 3 new in inbox  Thu 12 Nov 2026")
-  // At 81 it fits whole.
-  t.renderer.resize(81, 24)
-  frame = await until(t, (f) => line(f, 0).includes("Anna Peeters"))
-  expect(line(frame, 0)).toBe(" ttybrain ·  3 People ▾  › @anna Anna Peeters  ● 3 new in inbox  Thu 12 Nov 2026")
+  // The spacer is gone and the detail gives way (a person's crumb has no ref); the name stays whole.
+  let frame = await until(t, (f) => line(f, 0).includes("Anna Peeters ·") && line(f, 0).includes("inbox"))
+  expect(line(frame, 0)).toBe(" ttybrain ·  3 People ▾  › Anna Peeters · Ar  ● 3 new in inbox  Thu 12 Nov 2026")
   t.renderer.resize(80, 24)
   await t.nav.open("#CRM")
   frame = await until(t, (f) => line(f, 0).includes("› CRM CRM replat…") && line(f, 0).includes("inbox"))
@@ -123,8 +120,9 @@ test("record crumb at 80 columns: the spacer goes first, then the label is cut w
 test("status bar as designed", async () => {
   const t = await open()
   const frame = await t.frame()
-  // The mock's `x done` is FEATURE A14, so it is left out.
-  expect(line(frame, HEIGHT - 1).trim()).toBe("tab panel   enter open   i capture   g or 1-6 screens   ? help   q quit")
+  // The mock's `x done` is FEATURE A14, so it is left out; the 2026-11-20 home design draws no `q quit` (and its
+  // `x done` / `t to talk` show only while the Upcoming meetings panel has rows).
+  expect(line(frame, HEIGHT - 1).trim()).toBe("tab panel   enter open   i capture   g or 1-6 screens   ? help")
   const spans = await t.spans()
   const bar = HEIGHT - 1
   expect(fgAt(spans, "tab ", bar)).toBe(theme.accent)

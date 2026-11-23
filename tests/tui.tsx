@@ -12,6 +12,9 @@ import type { Nav } from "../src/kernel/tui/nav"
 import type { TuiDef } from "../src/kernel/tui/types"
 import { builtinTuiParts } from "./builtins"
 
+// What frame(), peek(), spans() and settle() reject with once destroy() ran.
+export const TUI_DESTROYED = "renderTui: the TUI was destroyed (a test that timed out still running?)"
+
 export type RenderedTui = {
   frame(): Promise<string>
   // The frame with colours (each line's spans with fg/bg), after settling like frame().
@@ -22,6 +25,7 @@ export type RenderedTui = {
   peek(): Promise<string>
   nav: Nav
   renderer: CliRenderer
+  // Idempotent. Afterwards frame(), peek(), spans() and settle() reject with TUI_DESTROYED.
   destroy(): void
 }
 
@@ -40,9 +44,21 @@ export async function renderTui(
   })
   if (!handle) throw new Error("TuiApp did not expose its handle")
   const app = handle
+  // A test that timed out keeps running after afterEach destroyed its TUI (bun cannot stop it): from then on every
+  // read fails at once, and a settle() already waiting gives up, instead of touching a renderer whose native context
+  // is gone or waiting on loads that will never finish.
+  let destroyed = false
+  const gone = Promise.withResolvers<never>()
+  gone.promise.catch(() => {}) // nobody may be waiting
+  const alive = () => {
+    if (destroyed) throw new Error(TUI_DESTROYED)
+  }
   const settle = async () => {
-    await app.idle()
+    alive()
+    await Promise.race([app.idle(), gone.promise])
+    alive()
     await setup.renderOnce()
+    alive()
   }
   return {
     async frame() {
@@ -54,7 +70,9 @@ export async function renderTui(
       return setup.captureSpans()
     },
     async peek() {
+      alive()
       await setup.renderOnce()
+      alive()
       return setup.captureCharFrame()
     },
     input: setup.mockInput,
@@ -62,6 +80,9 @@ export async function renderTui(
     nav: app.nav,
     renderer: setup.renderer,
     destroy: () => {
+      if (destroyed) return
+      destroyed = true
+      gone.reject(new Error(TUI_DESTROYED))
       setup.renderer.destroy()
       clearMessages()
     },

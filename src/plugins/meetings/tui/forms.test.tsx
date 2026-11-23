@@ -59,7 +59,7 @@ async function open(): Promise<RenderedTui> {
     await write("people").addPerson!({ name: "Luc Peeters", handle: "luc", is_stakeholder: true })
     await write("projects").addProject!({ code: "CRM", name: "CRM replatforming" })
     await write("projects").addProject!({ code: "ERP", name: "ERP upgrade" })
-    await write().addMeeting!({ title: "SteerCo Q4", date: "2026-11-20", kind: "steering", attendees: ["marie"], projects: ["CRM"] })
+    await write().addMeeting!({ about: "#CRM", title: "SteerCo Q4", date: "2026-11-20", kind: "steering", attendees: ["marie"], projects: ["CRM"] })
   })
   tui = await renderTui(kernel, { parts: [part], width: 100, height: 34 })
   tui.input.pressKey("2")
@@ -83,8 +83,10 @@ describe("meeting form", () => {
     const t = await open()
     void overlay!.openForm("meeting", "meeting", {})
     await until(t, (f) => f.includes("New meeting"))
+    await t.input.typeText("#CRM") // about
+    t.input.pressTab() // title
     await t.input.typeText("Board")
-    for (let i = 0; i < 4; i++) t.input.pressTab() // title → attendees
+    for (let i = 0; i < 3; i++) t.input.pressTab() // title → attendees
     await t.input.typeText("@marie @zorro")
     t.input.pressKey("s", { ctrl: true })
     const frame = await until(t, (f) => f.includes('unknown person "zorro"'))
@@ -101,8 +103,9 @@ describe("meeting form", () => {
     const calls = spy()
     void overlay!.openForm("meeting", "meeting", { recordRef: "M-1" })
     await until(t, (f) => f.includes("Edit M-1"))
+    t.input.pressTab() // about → title
     await t.input.typeText(" bis")
-    for (let i = 0; i < 4; i++) t.input.pressTab() // title → attendees
+    for (let i = 0; i < 3; i++) t.input.pressTab() // title → attendees
     await t.input.typeText(", @luc")
     t.input.pressKey("s", { ctrl: true })
     const frame = await until(t, (f) => statusLine(f).includes("saved M-1"))
@@ -124,6 +127,124 @@ describe("meeting form", () => {
     const frame = await until(t, (f) => !f.includes("Edit M-1"))
     expect(statusLine(frame)).not.toContain("saved")
     expect(calls).toEqual([])
+  })
+
+  test("About: an unknown subject shows under it; an edit of it gives the meeting its new subject", async () => {
+    const t = await open()
+    void overlay!.openForm("meeting", "meeting", {})
+    await until(t, (f) => f.includes("New meeting"))
+    await t.input.typeText("@zorro") // about, first
+    t.input.pressTab()
+    await t.input.typeText("1:1")
+    t.input.pressKey("s", { ctrl: true })
+    let frame = await until(t, (f) => f.includes('unknown person "@zorro"'))
+    const lines = frame.split("\n")
+    expect(lines[lines.findIndex((l) => l.includes("About")) + 1]).toContain('✗ unknown person "@zorro"')
+    t.input.pressEscape()
+    await until(t, (f) => !f.includes("New meeting"))
+
+    const calls = spy()
+    void overlay!.openForm("meeting", "meeting", { recordRef: "M-1" })
+    frame = await until(t, (f) => f.includes("Edit M-1"))
+    expect(lineWith(frame, "About")).toContain("#CRM")
+    for (let i = 0; i < 4; i++) t.input.pressBackspace()
+    await t.input.typeText("@marie")
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, (f) => statusLine(f).includes("saved M-1"))
+    expect(calls).toEqual([{ name: "setSubject", input: { meeting: "M-1", about: "@marie" } }])
+    expect(await record("M-1")).toMatchObject({ about: "@marie", kind: "one_on_one" })
+  })
+})
+
+describe("talk item form", () => {
+  test("an unknown subject shows under About; a prefilled one starts on Text, and a project tag is saved", async () => {
+    const t = await open()
+    void overlay!.openForm("talk_item", "talk", {})
+    let frame = await until(t, (f) => f.includes("New talk item"))
+    // The series form's look: a muted label column, the footer on the border, `tab field` in the bar.
+    expect(lineWith(frame, "About")).toMatch(/│ About {11}/)
+    expect(frame).toMatch(/╰─+ ctrl\+s save · esc cancel ─╯/)
+    expect(statusLine(frame)).toContain("tab field   ctrl+s save   esc cancel")
+    await t.input.typeText("@zorro")
+    t.input.pressTab()
+    await t.input.typeText("Lunch")
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, (f) => f.includes('unknown person "@zorro"'))
+    const lines = frame.split("\n")
+    expect(lines[lines.findIndex((l) => l.includes("About")) + 1]).toContain('✗ unknown person "@zorro"')
+    t.input.pressEscape()
+    await until(t, (f) => !f.includes("New talk item"))
+
+    // The cancelled form kept its draft; one for @marie (draftFor) has its own key, so none is offered.
+    void overlay!.openForm("talk_item", "talk", { prefill: { about: "@marie" }, draftFor: "@marie" })
+    frame = await until(t, (f) => f.includes("New talk item"))
+    await t.settle()
+    frame = await t.frame()
+    expect(frame).not.toContain("restore")
+    expect(lineWith(frame, "About")).toContain("Marie Dubois · person")
+    await t.input.typeText("Sales lead walkthrough")
+    t.input.pressTab()
+    await t.input.typeText("CRM")
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, (f) => statusLine(f).includes("added T-1"))
+    const list: any = await inCtx(() => (kernel!.runtime("meetings")!.self().read as any).talkList({ about: "@marie" }))
+    expect(list.open.map((i: any) => [i.ref, i.text, i.project])).toEqual([["T-1", "Sales lead walkthrough", "#CRM"]])
+  })
+})
+
+describe("series form", () => {
+  test("prefilled with a kind and attendees of its own: they are kept, and Esc on the untouched form keeps no draft", async () => {
+    const t = await open()
+    const from = { prefill: { about: "@marie", kind: "project", attendees: "@luc" }, draftFor: "@marie:prefilled" }
+    void overlay!.openForm("series", "series", from)
+    let frame = await until(t, (f) => f.includes("Marie Dubois · person") && f.includes("Luc Peeters"))
+    expect(lineWith(frame, "Kind")).toMatch(/Kind +project \(1:1 · board\)/)
+    expect(lineWith(frame, "Attendees")).toContain("Luc Peeters")
+    t.input.pressEscape()
+    await sleep(30)
+    frame = await until(t, (f) => !f.includes("New recurring meeting"))
+    expect(statusLine(frame)).not.toContain("draft kept")
+    void overlay!.openForm("series", "series", from)
+    frame = await until(t, (f) => f.includes("Luc Peeters"))
+    await t.settle()
+    frame = await t.frame()
+    expect(frame).not.toContain("restore")
+    expect(lineWith(frame, "Kind")).toMatch(/Kind +project/)
+  })
+
+  test("opened from a subject and left untouched, Esc keeps no draft; a restored draft keeps its derived fields following", async () => {
+    const t = await open()
+    const from = { prefill: { about: "@marie" }, draftFor: "@marie" }
+    void overlay!.openForm("series", "series", from)
+    let frame = await until(t, (f) => f.includes("Marie Dubois · person"))
+    expect(lineWith(frame, "Attendees")).toContain("Marie Dubois")
+    t.input.pressEscape()
+    await sleep(30)
+    frame = await until(t, (f) => !f.includes("New recurring meeting"))
+    expect(statusLine(frame)).not.toContain("draft kept")
+    void overlay!.openForm("series", "series", from)
+    frame = await until(t, (f) => f.includes("Marie Dubois · person"))
+    await t.settle()
+    expect(await t.frame()).not.toContain("restore")
+
+    // The rhythm typed: Esc keeps it; restored, First date and Attendees still follow.
+    await until(t, (f) => statusLine(f).includes("tab field"))
+    await t.input.typeText("weekly on mon")
+    frame = await until(t, (f) => lineWith(f, "First date").includes("Mon 16 Nov"))
+    t.input.pressEscape()
+    await sleep(30)
+    frame = await until(t, (f) => !f.includes("New recurring meeting"))
+    expect(statusLine(frame)).toContain("draft kept")
+    void overlay!.openForm("series", "series", from)
+    await until(t, (f) => f.includes("restore"))
+    t.input.pressKey("r")
+    frame = await until(t, (f) => !f.includes("restore") && lineWith(f, "First date").includes("Mon 16 Nov"))
+    expect(lineWith(frame, "Rhythm")).toContain("weekly on mon")
+    for (let i = 0; i < 3; i++) t.input.pressBackspace()
+    await t.input.typeText("wed")
+    frame = await until(t, (f) => lineWith(f, "First date").includes("Wed 18 Nov"))
+    expect(lineWith(frame, "First date")).toContain("Wed 18 Nov")
+    expect(lineWith(frame, "Attendees")).toContain("Marie Dubois")
   })
 })
 

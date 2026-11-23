@@ -33,7 +33,7 @@ beforeEach(async () => {
     await write("actions").addAction!({ title: "Call vendor", project: "CRM" })
     await write().addRisk!({ project: "CRM", title: "Vendor lock-in", type: "risk", severity: "high" })
     await write().addInvolvement!({ project: "CRM", person: "@anna", role: "lead" })
-    await write("meetings").addMeeting!({ title: "SteerCo", date: "2026-11-20", kind: "steering" })
+    await write("meetings").addMeeting!({ about: "#CRM", title: "SteerCo", date: "2026-11-20", kind: "steering" })
     await write("meetings").addAgendaItem!({ meeting: "M-1", text: "CRM status", project: "CRM" })
   })
 })

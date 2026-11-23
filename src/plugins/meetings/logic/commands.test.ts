@@ -38,7 +38,7 @@ async function boot() {
   await write("projects", "addProject", { code: "CRM", name: "CRM replatforming" })
   await write("projects", "addProject", { code: "ERP", name: "ERP upgrade" })
 }
-const STEERCO = ["meeting", "add", "Steering committee Q4", "--date", "2026-12-04", "--kind", "steering", "--attendees", "peter,marie", "--projects", "CRM,ERP"]
+const STEERCO = ["meeting", "add", "Steering committee Q4", "--about", "CRM", "--date", "2026-12-04", "--kind", "steering", "--attendees", "peter,marie", "--projects", "CRM,ERP"]
 
 describe("ttybrain meeting", () => {
   test("meeting add, show and list", async () => {
@@ -48,8 +48,9 @@ describe("ttybrain meeting", () => {
       [
         "M-1 Steering committee Q4",
         "  date: 2026-12-04",
-        "  kind: steering",
+        "  kind: project",
         "  status: planned",
+        "  about: #CRM",
         "  attendees: @marie, @peter",
         "",
         "Agenda",
@@ -58,15 +59,15 @@ describe("ttybrain meeting", () => {
         "",
       ].join("\n"),
     )
-    await ok("meeting", "add", "Old board", "--date", "2026-09-01")
-    await ok("meeting", "add", "Recent board", "--date", "2026-11-05", "--kind", "board")
+    await ok("meeting", "add", "Old board", "--about", "ERP", "--date", "2026-09-01")
+    await ok("meeting", "add", "Recent board", "--about", "ERP", "--date", "2026-11-05", "--kind", "board")
     await ok("meeting", "close", "M-3")
     await ok("meeting", "cancel", "M-2")
     expect((await ok("meeting", "list")).out).toBe(
       [
-        "ref  date        title                  kind      status   attendees       projects",
-        "M-3  2026-11-05  Recent board           board     held",
-        "M-1  2026-12-04  Steering committee Q4  steering  planned  @marie, @peter  CRM, ERP",
+        "ref  date        title                  kind     status   attendees       projects  about  series",
+        "M-3  2026-11-05  Recent board           board    held                               #ERP",
+        "M-1  2026-12-04  Steering committee Q4  project  planned  @marie, @peter  CRM, ERP  #CRM",
         "",
       ].join("\n"),
     )
@@ -98,25 +99,31 @@ describe("ttybrain meeting", () => {
     expect((await cli(["meeting", "agenda", "M-1", "shuffle"])).code).toBe(1)
   })
 
-  test("close prints what was logged", async () => {
+  test("close prints the close line; --json keeps what was logged", async () => {
     await boot()
-    await ok("meeting", "add", "Board", "--date", "2026-11-10")
-    expect((await ok("meeting", "close", "M-1")).out).toBe("M-1 held\nlogged: 0 actions, 0 decisions\n")
-    await ok("meeting", "add", "Board 2", "--date", "2026-11-11")
+    await ok("meeting", "add", "Board", "--about", "ERP", "--date", "2026-11-10")
+    expect((await ok("meeting", "close", "M-1")).out).toBe("Board closed\n")
+    await ok("meeting", "add", "Board 2", "--about", "ERP", "--date", "2026-11-11")
     await ok("action", "add", "One", "--meeting", "M-2")
     await ok("action", "add", "Two", "--meeting", "M-2")
     await ok("action", "add", "Three", "--meeting", "M-2")
     await ok("decision", "add", "Go", "--meeting", "M-2")
-    expect((await ok("meeting", "close", "M-2")).out).toBe("M-2 held\nlogged: 3 actions, 1 decision\n")
+    const closed = await ok("meeting", "close", "M-2", "--json")
+    expect([closed.json.ref, closed.json.status, closed.json.logged, closed.json.message]).toEqual([
+      "M-2",
+      "held",
+      { actions: 3, decisions: 1 },
+      "Board 2 closed · 3 actions created",
+    ])
     expect((await cli(["meeting", "close", "M-2"])).code).toBe(1)
-    await ok("meeting", "add", "Board 3", "--date", "2026-11-12")
+    await ok("meeting", "add", "Board 3", "--about", "ERP", "--date", "2026-11-12")
     await ok("action", "add", "Solo", "--meeting", "M-3")
-    expect((await ok("meeting", "close", "M-3")).out).toBe("M-3 held\nlogged: 1 action, 0 decisions\n")
+    expect((await ok("meeting", "close", "M-3")).out).toBe("Board 3 closed · 1 action created\n")
   })
 
   test("cancelled meeting: writes exit 1 with the message", async () => {
     await boot()
-    await ok("meeting", "add", "Board", "--date", "2026-11-20")
+    await ok("meeting", "add", "Board", "--about", "ERP", "--date", "2026-11-20")
     expect((await ok("meeting", "cancel", "M-1")).out).toBe("M-1 cancelled\n")
     const r = await cli(["meeting", "agenda", "M-1", "add", "Late"])
     expect(r.code).toBe(1)
@@ -126,7 +133,7 @@ describe("ttybrain meeting", () => {
 
   test("notes from stdin", async () => {
     await boot()
-    await ok("meeting", "add", "Board", "--date", "2026-11-20")
+    await ok("meeting", "add", "Board", "--about", "ERP", "--date", "2026-11-20")
     expect((await ok("meeting", "notes", "M-1")).out).toBe("no notes for M-1\n")
     const set = await cli(["meeting", "notes", "M-1", "--file", "-"], "# Minutes\n\n- agreed\n")
     expect([set.code, set.out]).toEqual([0, "M-1 notes updated\n"])

@@ -8,17 +8,24 @@
 // - When not even that fits, the panels are placed in two columns balanced by height instead (no grid rows): the
 //   split (kept in priority order within each column) that overflows the screen least, then the one whose taller
 //   column is lowest, with the same handing out per column.
+// - A lead (the first panel, with `lead`: its width against 1 for the other column) takes the left column of a
+//   block at the top, as tall as it wants; the next panels stack on its right while they fit its height (at least
+//   one; the last one is stretched so both columns end on the same line), and the rest follow in the grid below.
+//   When the block and the rest's smallest grid do not fit the screen, the layout above is used instead.
 // - A panel with rows shows at most MAX_ROWS, then `+N more`; capped, it shows fewer rows and a larger N.
 import { displayWidth } from "../format"
 
 export const MAX_ROWS = 5
 
-// What a panel needs: its row count (undefined while loading), its empty text and footer, which wrap, and the
-// lines its sub-headings take (`headings`, beside its rows).
-export type PanelNeed = { rows: number | undefined; empty: string; footer?: string; headings?: number }
+// What a panel needs: its row count (undefined while loading), its empty text and footer, which wrap, the lines its
+// sub-headings take (`headings`, beside its rows), and the fixed lines it adds once it has rows (`extra`: a header
+// row, a detail block).
+// `lead`: see above.
+export type PanelNeed = { rows: number | undefined; empty: string; footer?: string; headings?: number; extra?: number; lead?: number }
 // Where it goes: its column, its grid row (undefined when the columns are balanced instead), its height in lines
 // (borders included) and how many rows it shows.
-export type PanelPlace = { column: 0 | 1; row: number | undefined; height: number; rows: number }
+// `part`: "lead" or "side" for a panel in the lead block (`row` undefined there; the grid's rows count from 0 below it).
+export type PanelPlace = { column: 0 | 1; row: number | undefined; height: number; rows: number; part?: "lead" | "side" }
 
 // Lines `text` takes when word-wrapped at `width` (a word longer than the width is split).
 export function wrappedLines(text: string, width: number): number {
@@ -48,9 +55,10 @@ export function panelTextWidth(screenWidth: number): number {
 type Sized = { chrome: number; min: number; want: number; total: number | undefined }
 
 function size(need: PanelNeed, textWidth: number): Sized {
-  const chrome = 2 + (need.footer ? wrappedLines(need.footer, textWidth) : 0) + (need.headings ?? 0)
+  let chrome = 2 + (need.footer ? wrappedLines(need.footer, textWidth) : 0) + (need.headings ?? 0)
   const n = need.rows
   if (n === undefined) return { chrome, min: 1, want: 1, total: n }
+  if (n > 0) chrome += need.extra ?? 0
   if (n === 0) {
     const lines = wrappedLines(need.empty, textWidth)
     return { chrome, min: 1, want: lines, total: n }
@@ -105,8 +113,47 @@ function columns(heights: number[], height: number): Array<0 | 1> {
 
 export function layoutOverview(needs: PanelNeed[], screenHeight: number, screenWidth: number): PanelPlace[] {
   const textWidth = panelTextWidth(screenWidth)
+  const lead = needs[0]?.lead
+  if (lead !== undefined && needs.length > 1) {
+    const placed = leadBlock(needs, lead, screenHeight, screenWidth)
+    if (placed) return placed
+  }
   const sized = needs.map((n) => size(n, textWidth))
   return grid(sized, screenHeight) ?? balanced(sized, screenHeight)
+}
+
+// The inner text widths of the lead column and the column beside it (`weight` : 1 of the width after the padding
+// and the gap).
+export function leadTextWidths(screenWidth: number, weight: number): [number, number] {
+  const room = screenWidth - 3
+  const left = Math.round((room * weight) / (weight + 1))
+  return [left - 4, room - left - 4]
+}
+
+function leadBlock(needs: PanelNeed[], weight: number, height: number, width: number): PanelPlace[] | undefined {
+  const [leftText, rightText] = leadTextWidths(width, weight)
+  const lead = size(needs[0]!, leftText)
+  const leadH = lead.chrome + lead.want
+  const side: Sized[] = [size(needs[1]!, rightText)]
+  let sum = side[0]!.chrome + side[0]!.want
+  for (let i = 2; i < needs.length; i++) {
+    const s = size(needs[i]!, rightText)
+    if (sum + s.chrome + s.want > leadH) break
+    side.push(s)
+    sum += s.chrome + s.want
+  }
+  const block = Math.max(leadH, sum)
+  if (block > height) return undefined
+  const restNeeds = needs.slice(1 + side.length)
+  const rest = restNeeds.length === 0 ? [] : grid(restNeeds.map((n) => size(n, panelTextWidth(width))), height - block)
+  if (rest === undefined) return undefined
+  const heights = side.map((s) => s.chrome + s.want)
+  heights[heights.length - 1]! += block - sum
+  return [
+    { column: 0, row: undefined, height: block, rows: rowsIn(lead, Math.min(block - lead.chrome, lead.want)), part: "lead" },
+    ...side.map((s, i): PanelPlace => ({ column: 1, row: undefined, height: heights[i]!, rows: rowsIn(s, Math.min(heights[i]! - s.chrome, s.want)), part: "side" })),
+    ...rest,
+  ]
 }
 
 // One line at a time to each entry (in order) below its `want`, while `left` lasts.

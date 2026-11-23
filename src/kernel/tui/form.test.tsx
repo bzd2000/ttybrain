@@ -146,6 +146,72 @@ function OwnerErrorForm(props: RecordFormProps) {
   )
 }
 
+// The look options: an enum read through its labels, a note worked out from the values, a placeholder, a footer on
+// the bottom border, and the field focused first (`start`).
+function LooksForm(props: RecordFormProps) {
+  return (
+    <Form
+      title="Looks"
+      footer="ctrl+s save · esc cancel"
+      start="title"
+      fields={[
+        { name: "kind", label: "Kind", kind: "enum", values: ["one_on_one", "project", "board"], labels: { one_on_one: "1:1" }, initial: "one_on_one" },
+        { name: "title", label: "Title", kind: "text", note: (v) => (v.title ? `→ ${v.title.toUpperCase()}` : undefined) },
+        { name: "ends", label: "Ends", kind: "date", placeholder: "never" },
+      ]}
+      submit={async (v) => {
+        submitted.push(v)
+        return { ok: true }
+      }}
+      close={props.close}
+    />
+  )
+}
+
+// The designs' form look: a panel, a plain label column, the other fields as read (a ref by label and type, a date
+// as its day, a placeholder), a derived value, Tab labelled `field`.
+function LookForm(props: RecordFormProps) {
+  return (
+    <Form
+      title="Plan"
+      look={{ labelWidth: 14, tabLabel: "field" }}
+      footer="ctrl+s save · esc cancel"
+      start="title"
+      fields={[
+        { name: "about", label: "About", kind: "refs", show: "labelType", initial: "TH-1" },
+        { name: "title", label: "Title", kind: "text", required: true },
+        { name: "copy", label: "Copy", kind: "text", derive: (v) => (v.title ? `${v.title}!` : null) },
+        { name: "due", label: "Due", kind: "date", show: "day", initial: "2026-11-25" },
+        { name: "ends", label: "Ends", kind: "date", show: "day", placeholder: "never" },
+      ]}
+      submit={async (v) => {
+        submitted.push(v)
+        return { ok: true }
+      }}
+      close={props.close}
+    />
+  )
+}
+
+// A derived field that follows from the start: `copy` follows `title` (filled in) until edited; with
+// `prefill.copy` it starts with a value of its own and keeps it.
+function DeriveForm(props: RecordFormProps) {
+  return (
+    <Form
+      title="Derive"
+      fields={[
+        { name: "title", label: "Title", kind: "text", initial: "Plan" },
+        { name: "copy", label: "Copy", kind: "text", initial: props.prefill?.copy, derive: (v) => (v.title ? `${v.title}!` : null) },
+      ]}
+      submit={async (v) => {
+        submitted.push(v)
+        return { ok: true }
+      }}
+      close={props.close}
+    />
+  )
+}
+
 let overlay: Overlay | undefined
 function Home() {
   overlay = useOverlay()
@@ -161,6 +227,9 @@ const todoPart: TuiDef = defineTui({
     ui.recordForm("thing", { id: "notes", label: "Notes", component: NotesForm })
     ui.recordForm("thing", { id: "owner-error", label: "Owner check", component: OwnerErrorForm })
     ui.recordForm("thing", { id: "links", label: "Links", component: LinksForm })
+    ui.recordForm("thing", { id: "looks", label: "Looks", component: LooksForm })
+    ui.recordForm("thing", { id: "look", label: "Look", component: LookForm })
+    ui.recordForm("thing", { id: "derive", label: "Derive", component: DeriveForm })
   },
 })
 
@@ -192,6 +261,122 @@ const lineWith = (frame: string, s: string) => frame.split("\n").find((l) => l.i
 const statusLine = (frame: string) => frame.trimEnd().split("\n").at(-1)!
 
 describe("forms", () => {
+  test("derived values count as where the form starts: no draft for an untouched form; a restore keeps them following", async () => {
+    const t = await open()
+    void overlay!.openForm("thing", "derive")
+    let frame = await t.frame()
+    expect(lineWith(frame, "Copy")).toContain("Plan!")
+    // Esc, then (no `s`) the cancel, once the Esc chord's window has passed.
+    const closed = async () => {
+      t.input.pressEscape()
+      let f = await t.frame()
+      for (let i = 0; i < 100 && f.includes("Derive"); i++) {
+        await sleep(25)
+        f = await t.frame()
+      }
+      return f
+    }
+    frame = await closed()
+    expect(frame).not.toContain("Derive")
+    expect(statusLine(frame)).not.toContain("draft kept")
+    void overlay!.openForm("thing", "derive")
+    await t.settle()
+    frame = await t.frame()
+    expect(frame).not.toContain("restore")
+
+    // Changed: Esc keeps a draft of the title only; restored, Copy still follows Title.
+    await t.input.typeText(" B")
+    expect(lineWith(await t.frame(), "Copy")).toContain("Plan B!")
+    expect(statusLine(await closed())).toContain("draft kept")
+    void overlay!.openForm("thing", "derive")
+    frame = await t.frame()
+    expect(frame).toContain("restore")
+    t.input.pressKey("r")
+    frame = await t.frame()
+    expect(lineWith(frame, "Title")).toContain("Plan B")
+    expect(lineWith(frame, "Copy")).toContain("Plan B!")
+    await t.input.typeText("C")
+    expect(lineWith(await t.frame(), "Copy")).toContain("Plan BC!")
+  })
+
+  test("a derived field given a value to start with keeps it, and the untouched form keeps no draft", async () => {
+    const t = await open()
+    void overlay!.openForm("thing", "derive", { prefill: { copy: "Saved" } })
+    await t.settle()
+    let frame = await t.frame()
+    expect(lineWith(frame, "Copy")).toContain("Saved")
+    t.input.pressEscape()
+    for (let i = 0; i < 100 && frame.includes("Derive"); i++) {
+      await sleep(25)
+      frame = await t.frame()
+    }
+    expect(frame).not.toContain("Derive")
+    expect(statusLine(frame)).not.toContain("draft kept")
+    void overlay!.openForm("thing", "derive", { prefill: { copy: "Saved" } })
+    await t.settle()
+    frame = await t.frame()
+    expect(frame).not.toContain("restore")
+    expect(lineWith(frame, "Copy")).toContain("Saved")
+  })
+
+  test("look: a panel with a plain label column; only the focused field is an input, the others as read", async () => {
+    const t = await open()
+    await runWithContext(kernel.context(), () => kernel.runtime("todo")!.self().write.addThing!({ title: "Write spec" }))
+    void overlay!.openForm("thing", "look")
+    let frame = await t.frame()
+    for (let i = 0; i < 20 && !frame.includes("Write spec · thing"); i++) {
+      await sleep(20)
+      frame = await t.frame()
+    }
+    const box = (l: string) => l.slice(l.indexOf("│") + 2, l.lastIndexOf("│")).trimEnd()
+    expect(frame.split("\n").find((l) => l.includes("Plan"))).toMatch(/╭─ Plan ─+╮/)
+    expect(box(lineWith(frame, "About"))).toBe("About           Write spec · thing")
+    expect(box(lineWith(frame, "Due"))).toBe("Due             Wed 25 Nov")
+    expect(box(lineWith(frame, "Ends"))).toBe("Ends            never")
+    expect(frame).toMatch(/╰─+ ctrl\+s save · esc cancel ─╯/)
+    expect(statusLine(frame).trim()).toBe("tab field   ctrl+s save   esc cancel")
+    // A phrase as long as the series design's shows whole (the look's inputs are wider).
+    await t.input.typeText("every 2 weeks on wednesday")
+    frame = await t.frame()
+    expect(box(lineWith(frame, "Title"))).toBe("Title           every 2 weeks on wednesday")
+    for (let i = 0; i < 26; i++) t.input.pressBackspace()
+    await t.input.typeText("abc")
+    frame = await t.frame()
+    expect(box(lineWith(frame, "Title"))).toBe("Title           abc")
+    expect(box(lineWith(frame, "Copy"))).toBe("Copy            abc!") // derived, until edited
+    t.input.pressTab()
+    await t.input.typeText("?")
+    t.input.pressTab({ shift: true })
+    await t.input.typeText("d")
+    frame = await t.frame()
+    expect(box(lineWith(frame, "Copy"))).toBe("Copy            abc!?") // edited: no longer follows
+    t.input.pressKey("s", { ctrl: true })
+    await t.settle()
+    expect(submitted).toEqual([{ about: "TH-1", title: "abcd", copy: "abc!?", due: "2026-11-25", ends: null }])
+  })
+
+  test("labels, a live note, a placeholder, a footer on the border, and the field focused first", async () => {
+    const t = await open()
+    void overlay!.openForm("thing", "looks")
+    let frame = await t.frame()
+    // The enum reads its value's label, then the others, muted, in brackets.
+    expect(lineWith(frame, "Kind")).toContain("Kind  1:1 (project · board)")
+    expect(lineWith(frame, "Ends")).toContain("never")
+    expect(frame.split("\n").find((l) => l.includes("ctrl+s save · esc cancel"))).toMatch(/─ ctrl\+s save · esc cancel ─┘/)
+    // `start`: typing goes into Title; its note follows the value.
+    await t.input.typeText("abc")
+    frame = await t.frame()
+    expect(lineWith(frame, "› Title")).toContain("abc")
+    const lines = frame.split("\n")
+    expect(lines[lines.findIndex((l) => l.includes("› Title")) + 1]).toContain("→ ABC")
+    t.input.pressTab({ shift: true })
+    t.input.pressArrow("right")
+    expect(lineWith(await t.frame(), "Kind")).toContain("Kind  project (1:1 · board)")
+    t.input.pressKey("s", { ctrl: true })
+    await t.settle()
+    expect(submitted).toEqual([{ kind: "project", title: "abc", ends: null }])
+  })
+
   test("submit creates record and closes", async () => {
     const t = await open()
     overlay!.openForm("thing")

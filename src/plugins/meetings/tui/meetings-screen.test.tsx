@@ -1,13 +1,16 @@
-// The Meetings screen (slot 5): the Upcoming and Past groups, the past-dated planned meeting in red, and the keys
-// that add, edit, close and cancel meetings, against the built-in plugins seeded through write ops.
-import { rgbToHex, type CapturedFrame } from "@opentui/core"
+// Screen 5, Meetings (the 2026-11-20 `meetings` design; its look is asserted in tests/design/meetings.test.tsx): the
+// groups beyond the design's frame (This week, Not closed, No subject with its hint), long codes at 80×24, and the
+// keys: s skips a date after a confirmation, m moves it, n opens the one-off form (About first), N the series form,
+// Enter opens a meeting (Esc comes back to it) or what a series is about; closing on a meeting's Agenda tab says
+// what closeMeeting did.
 import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../../tests/tui"
 import { runWithContext } from "../../../kernel/context"
 import { theme } from "../../../kernel/tui/api"
 import { builtinPlugins } from "../../../../tests/builtins"
-import { isSelected } from "../../../../tests/design"
+import { fgAt, isSelected, seedMeetings } from "../../../../tests/design"
+import { EMPTY, SERIES_EMPTY } from "./meetings-screen"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -22,254 +25,193 @@ afterEach(async () => {
 
 const write = (plugin = "meetings") => kernel!.runtime(plugin)!.self().write as Record<string, (i: any) => Promise<any>>
 const inCtx = <T,>(fn: () => Promise<T>) => runWithContext(kernel!.context(), fn)
-const store = () => (kernel!.runtime("meetings")!.data as any)
-const meetingRows = () => inCtx(async () => (await store().selectFrom("meeting").select(["id", "title", "date", "kind", "status"]).orderBy("id").execute()) as any[])
+const sql = (q: string) => kernel!.db.raw.prepare(q).all([]) as any[]
 
 const lines = (frame: string) => frame.split("\n")
 const lineWith = (frame: string, s: string) => lines(frame).find((l) => l.includes(s)) ?? ""
 const indexOf = (frame: string, s: string) => lines(frame).findIndex((l) => l.includes(s))
 const statusLine = (frame: string) => lines(frame.trimEnd()).at(-1)!
-const spansOf = async (t: RenderedTui, s: string) => (await t.spans()).lines.find((l) => l.spans.map((x) => x.text).join("").includes(s))!.spans
 
-// Waits for `ok` on the frame and its spans (the selection is a row background: isSelected(spans, text)).
-async function until(t: RenderedTui, ok: (f: string, spans: CapturedFrame) => boolean): Promise<string> {
+async function until(t: RenderedTui, ok: (f: string) => boolean): Promise<string> {
   let frame = await t.frame()
-  let spans = await t.spans()
-  for (let i = 0; i < 80 && !ok(frame, spans); i++) {
+  for (let i = 0; i < 120 && !ok(frame); i++) {
     await sleep(25)
     frame = await t.frame()
-    spans = await t.spans()
   }
   return frame
 }
-
-// Today is Fri 13 Nov 2026. Planned: M-1 SteerCo Q4 (20 Nov, @marie @luc, #CRM), M-2 Board December (4 Dec),
-// M-3 Ops sync (10 Nov: before today). Past: M-4 SteerCo Q3 (15 Sep, held), M-5 Vendor review (1 Oct, cancelled),
-// M-6 Board October (20 Oct, held).
-async function seed() {
-  await inCtx(async () => {
-    const p = write("people")
-    await p.addPerson!({ name: "Marie Dubois", handle: "marie", is_stakeholder: true })
-    await p.addPerson!({ name: "Luc Peeters", handle: "luc", is_stakeholder: true })
-    await p.addPerson!({ name: "Tom Claes", handle: "tom", is_team: true })
-    await write("projects").addProject!({ code: "CRM", name: "CRM replatforming" })
-    await write("projects").addProject!({ code: "ERP", name: "ERP upgrade" })
-    const w = write()
-    await w.addMeeting!({ title: "SteerCo Q4", date: "2026-11-20", kind: "steering", attendees: ["marie", "luc"], projects: ["CRM"] })
-    await w.addMeeting!({ title: "Board December", date: "2026-12-04", kind: "board" })
-    await w.addMeeting!({ title: "Ops sync", date: "2026-11-10", kind: "other" })
-    await w.addMeeting!({ title: "SteerCo Q3", date: "2026-09-15", kind: "steering", projects: ["CRM", "ERP"] })
-    await w.addMeeting!({ title: "Vendor review", date: "2026-10-01", kind: "other" })
-    await w.addMeeting!({ title: "Board October", date: "2026-10-20", kind: "board" })
-    await w.closeMeeting!({ ref: "M-4" })
-    await w.cancelMeeting!({ ref: "M-5" })
-    await w.closeMeeting!({ ref: "M-6" })
-  })
-}
-
-async function open(opts: { seed?: boolean } = {}): Promise<RenderedTui> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins })
-  if (opts.seed !== false) await seed()
-  tui = await renderTui(kernel, { width: 120, height: 30 })
-  tui.input.pressKey("5")
-  await until(tui, (f) => f.includes("Meetings ·") || f.includes("No meetings yet"))
-  return tui
-}
-
-// Spies on the meetings write ops the screen calls: their names and inputs.
-function spy(): Array<{ name: string; input: unknown }> {
-  const ops = kernel!.ops as any
-  const call = ops.call.bind(ops)
-  const calls: Array<{ name: string; input: unknown }> = []
-  ops.call = (plugin: string, name: string, kind: string, input: unknown) => {
-    if (plugin === "meetings" && kind === "write") calls.push({ name, input })
-    return call(plugin, name, kind, input)
-  }
-  return calls
-}
-
 const select = async (t: RenderedTui, title: string) => {
-  for (let i = 0; i < 10 && !isSelected(await t.spans(), title); i++) t.input.pressKey("j")
+  for (let i = 0; i < 12 && !isSelected(await t.spans(), title); i++) {
+    t.input.pressKey("j")
+    await t.settle()
+  }
   expect(isSelected(await t.spans(), title)).toBe(true)
 }
 
+// Today Fri 13 Nov 2026. M-1 1:1 Anna today (this week), M-2 CRM sync Mon 16 (next week), M-3 Data sync Tue 24 (the
+// week after, about DATAPLATFORM2027), M-4 Old review Mon 2 Nov (past when added: never closes itself), M-5 Board
+// October 20 Oct (held, its subject taken away as a meeting from before subjects), M-6 Far off 10 Dec (not shown),
+// M-7 Missed close Thu 5 Nov (closes itself, but the upkeep that would have closed it on 8 Nov never ran).
+async function small(width = 118, height = 36): Promise<RenderedTui> {
+  kernel = await makeTestKernel({ plugins: builtinPlugins })
+  await inCtx(async () => {
+    await write("people").addPerson!({ name: "Anna Peeters", handle: "anna", is_team: true })
+    await write("projects").addProject!({ code: "CRM", name: "CRM replatforming" })
+    await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
+    const w = write()
+    await w.addMeeting!({ about: "@anna", title: "1:1 Anna", date: "2026-11-13" })
+    await w.addMeeting!({ about: "#CRM", title: "CRM sync", date: "2026-11-16" })
+    await w.addMeeting!({ about: "#DATAPLATFORM2027", title: "Data sync", date: "2026-11-24" })
+    await w.addMeeting!({ about: "#CRM", title: "Old review", date: "2026-11-02" })
+    await w.addMeeting!({ about: "#CRM", title: "Board October", date: "2026-10-20", kind: "board" })
+    await w.closeMeeting!({ ref: "M-5" })
+    await w.addMeeting!({ about: "#CRM", title: "Far off", date: "2026-12-10" })
+    await w.addMeeting!({ about: "#CRM", title: "Missed close", date: "2026-11-05" })
+  })
+  kernel.db.raw.prepare("UPDATE meetings_meeting SET subject_type = NULL, subject_id = NULL WHERE id = 5").run([])
+  // Today's upkeep ran before the first write above, so nothing closes M-7 before the screen shows it.
+  kernel.db.raw.prepare("UPDATE meetings_meeting SET auto_close = 1 WHERE id = 7").run([])
+  tui = await renderTui(kernel, { width, height })
+  tui.input.pressKey("5")
+  await until(tui, (f) => f.includes("No subject") && f.includes("Data sync"))
+  await tui.settle()
+  return tui
+}
+
+async function designed(): Promise<RenderedTui> {
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
+  await seedMeetings(kernel)
+  tui = await renderTui(kernel, { width: 118, height: 36 })
+  tui.input.pressKey("5")
+  await until(tui, (f) => f.includes("Held, closes itself") && f.split("BOARD").length > 2)
+  await tui.settle()
+  return tui
+}
+
 describe("Meetings screen", () => {
-  test("opens on 5 with upcoming then past, cancelled muted", async () => {
-    const t = await open()
+  test("this week, next week, the week after; then Not closed and No subject (with how to give one), later dates left out", async () => {
+    const t = await small()
     const frame = await t.frame()
-    expect(lines(frame)[0]).toContain("ttybrain ·  5 Meetings")
-    const upcoming = indexOf(frame, "Upcoming · 3")
-    const past = indexOf(frame, "Past · 3")
-    expect(upcoming).toBeGreaterThan(0)
-    expect(past).toBeGreaterThan(upcoming)
-    const at = ["Ops sync", "SteerCo Q4", "Board December", "Board October", "Vendor review", "SteerCo Q3"].map((s) => indexOf(frame, s))
+    const order = ["This week · 13–15 Nov", "1:1 Anna", "Next week · 16–20 Nov", "CRM sync", "Week after · 23–27 Nov", "Data sync", "Not closed · 2", "Old review", "Missed close", "No subject · 1", "Board October"]
+    const at = order.map((s) => indexOf(frame, s))
+    expect(at.every((i) => i > 0)).toBe(true)
     expect(at).toEqual([...at].sort((a, b) => a - b))
-    expect(at[2]!).toBeLessThan(past)
-    expect(at[3]!).toBeGreaterThan(past)
-    expect(lineWith(frame, "SteerCo Q4")).toMatch(/M-1\s+Fri 20 Nov\s+SteerCo Q4\s+steering\s+planned\s+2\s+CRM/)
-    expect(lineWith(frame, "SteerCo Q3")).toMatch(/M-4\s+Tue 15 Sep\s+SteerCo Q3\s+steering\s+held\s+0\s+CRM ERP/)
-    expect(lineWith(frame, "Vendor review")).toMatch(/M-5\s+Thu 1 Oct\s+Vendor review\s+other\s+cancelled/)
-    const cancelled = (await spansOf(t, "Vendor review")).filter((s) => ["M-5", "Thu 1 Oct", "Vendor review", "cancelled"].some((x) => s.text.includes(x)))
-    expect(cancelled.length).toBeGreaterThan(0)
-    for (const s of cancelled) expect(rgbToHex(s.fg).toLowerCase()).toBe(theme.muted)
-    const held = (await spansOf(t, "Board October")).find((s) => s.text.includes("Board October"))!
-    expect(rgbToHex(held.fg).toLowerCase()).toBe(theme.text)
-    expect(statusLine(frame)).toContain("enter open   n new   e edit   x close   del cancel")
+    expect(frame).not.toContain("Far off")
+    expect(frame).not.toContain("Held, closes itself")
+    expect(lineWith(frame, "Missed close")).toMatch(/Thu 5 +Missed close +CRM +— +— /)
+    expect(lineWith(frame, "Old review")).toMatch(/Mon 2 +Old review +CRM +— +— /)
+    expect(lineWith(frame, "Board October")).toMatch(/Tue 20 +Board October +— +— +— /)
+    expect(frame).toContain("give it one: ttybrain meeting subject M-5 <ref>")
+    expect(lineWith(frame, "Data sync")).toContain(" DATAPLATFORM2027 ")
+    const spans = await t.spans()
+    expect(fgAt(spans, "Mon 2", "Old review")).toBe(theme.red)
+    expect(fgAt(spans, "Not closed", "Not closed")).toBe(theme.muted)
+    expect(fgAt(spans, "No subject", "No subject")).toBe(theme.muted)
+    expect(fgAt(spans, "give it one")).toBe(theme.muted)
+    expect(fgAt(spans, "This week", "This week")).toBe(theme.accent)
   })
 
-  test("a planned meeting in the past shows its date red", async () => {
-    const t = await open()
-    const past = (await spansOf(t, "Ops sync")).find((s) => s.text.includes("Tue 10 Nov"))!
-    expect(rgbToHex(past.fg).toLowerCase()).toBe(theme.red)
-    const ahead = (await spansOf(t, "SteerCo Q4")).find((s) => s.text.includes("Fri 20 Nov"))!
-    expect(rgbToHex(ahead.fg).toLowerCase()).toBe(theme.text)
+  test("at 80×24 a 16-character code stays whole", async () => {
+    const t = await small(80, 24)
+    const frame = await t.frame()
+    expect(lineWith(frame, "Data sync")).toMatch(/Data sync.* DATAPLATFORM2027 │/)
+    expect(frame).not.toMatch(/DATAPLAT\w*…/)
   })
 
-  test("n adds a meeting with attendees and projects; the agenda is created", async () => {
-    const t = await open()
+  test("s skips the selected date after a confirmation; another date stays", async () => {
+    const t = await designed()
+    await select(t, "1:1 Bob")
+    t.input.pressKey("s")
+    await until(t, (f) => f.includes("Skip 1:1 Bob on Wed 25 Nov?"))
+    t.input.pressKey("n")
+    await until(t, (f) => !f.includes("Skip 1:1 Bob"))
+    expect(sql("SELECT status FROM meetings_meeting WHERE id = 15")).toEqual([{ status: "planned" }])
+    t.input.pressKey("s")
+    await until(t, (f) => f.includes("Skip 1:1 Bob on Wed 25 Nov?"))
+    t.input.pressKey("y")
+    const frame = await until(t, (f) => !f.includes("Wed 25"))
+    expect(statusLine(frame)).toContain("skipped M-15")
+    expect(sql("SELECT status, series_date FROM meetings_meeting WHERE id = 15")).toEqual([{ status: "cancelled", series_date: "2026-11-25" }])
+    expect(frame).toContain("1:1 Anna")
+  })
+
+  test("m moves the selected meeting to another date; it keeps its series date", async () => {
+    const t = await designed()
+    t.input.pressKey("m")
+    let frame = await until(t, (f) => f.includes("Move 1:1 Anna · Mon 23 Nov"))
+    expect(lineWith(frame, "New date")).toContain("2026-11-23")
+    for (let i = 0; i < 10; i++) t.input.pressBackspace()
+    await t.input.typeText("2026-11-24")
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, (f) => !f.includes("Move 1:1 Anna") && /Tue 24 +1:1 Anna/.test(f))
+    expect(statusLine(frame)).toContain("moved M-7")
+    expect(sql("SELECT date, series_date FROM meetings_meeting WHERE id = 7")).toEqual([{ date: "2026-11-24", series_date: "2026-11-23" }])
+  })
+
+  test("n opens the one-off meeting form with About first; N the series form; s and m do nothing on a held meeting", async () => {
+    const t = await small()
     t.input.pressKey("n")
     let frame = await until(t, (f) => f.includes("New meeting"))
-    expect(lineWith(frame, "Date*")).toContain("2026-11-13")
-    expect(lineWith(frame, "Kind*")).toContain("steering")
-    await t.input.typeText("SteerCo Q1")
-    t.input.pressTab() // date: today
-    t.input.pressTab() // kind: steering
-    t.input.pressTab() // since
-    t.input.pressTab() // attendees
-    await t.input.typeText("@marie, luc")
-    t.input.pressTab() // projects
-    await t.input.typeText("#CRM,ERP")
-    t.input.pressKey("s", { ctrl: true })
-    frame = await until(t, (f, s) => !f.includes("New meeting") && isSelected(s, "SteerCo Q1"))
-    expect(lineWith(frame, "SteerCo Q1")).toMatch(/M-7\s+Fri 13 Nov\s+SteerCo Q1\s+steering\s+planned\s+2\s+CRM ERP/)
-    expect(frame).toContain("Upcoming · 4")
-    expect(statusLine(frame)).toContain("added M-7")
-    const m = await inCtx(async () => {
-      const agenda = await store().selectFrom("agenda_item").select(["position", "text"]).where("meeting_id", "=", 7).orderBy("position").execute()
-      const attendees = await store().selectFrom("attendee").select("person_id").where("meeting_id", "=", 7).orderBy("person_id").execute()
-      return { agenda, attendees: attendees.map((a: any) => Number(a.person_id)) }
-    })
-    expect(m.agenda).toEqual([
-      { position: 1, text: "CRM replatforming status" },
-      { position: 2, text: "ERP upgrade status" },
-    ])
-    expect(m.attendees).toEqual([1, 2]) // marie, luc
-    expect((await meetingRows()).at(-1)).toEqual({ id: 7, title: "SteerCo Q1", date: "2026-11-13", kind: "steering", status: "planned" })
-  })
-
-  test("edit changes attendees through setAttendees", async () => {
-    const t = await open()
-    const calls = spy()
-    await select(t, "SteerCo Q4")
-    t.input.pressKey("e")
-    let frame = await until(t, (f) => f.includes("Edit M-1"))
-    expect(lineWith(frame, "Attendees")).toContain("@luc @marie")
-    expect(lines(frame).filter((l) => l.includes("Projects")).length).toBe(1) // the column title: no projects field
-    for (let i = 0; i < 4; i++) t.input.pressTab() // title → attendees
-    await t.input.typeText(" @tom")
-    t.input.pressKey("s", { ctrl: true })
-    frame = await until(t, (f, s) => !f.includes("Edit M-1") && isSelected(s, "SteerCo Q4"))
-    expect(lineWith(frame, "SteerCo Q4")).toMatch(/planned\s+3\s+CRM/)
-    expect(statusLine(frame)).toContain("saved M-1")
-    expect(calls).toEqual([{ name: "setAttendees", input: { meeting: "M-1", people: ["luc", "marie", "tom"] } }])
-  })
-
-  test("x closes after confirm and says what was logged", async () => {
-    const t = await open()
-    await inCtx(async () => {
-      const p = write("projects")
-      for (const title of ["Send the minutes", "Book the room", "Draft the budget"]) await write("actions").addAction!({ title, meeting: "M-1" })
-      await p.addDecision!({ title: "Go with B", meeting: "M-1" })
-    })
-    await select(t, "SteerCo Q4")
-    t.input.pressKey("x")
-    let frame = await until(t, (f) => f.includes("Close M-1 as held?"))
-    t.input.pressKey("y")
-    frame = await until(t, (f) => f.includes("Past · 4"))
-    expect(statusLine(frame)).toContain("closed M-1: 3 actions, 1 decision")
-    expect(frame).toContain("Upcoming · 2")
-    expect(indexOf(frame, "SteerCo Q4")).toBeGreaterThan(indexOf(frame, "Past · 4"))
-    expect(lineWith(frame, "SteerCo Q4")).toContain("held")
-    expect((await meetingRows())[0].status).toBe("held")
-  })
-
-  test("Del cancels after confirm", async () => {
-    const t = await open()
-    await select(t, "Board December")
-    t.input.pressKey("DELETE")
-    await until(t, (f) => f.includes("Cancel M-2?"))
-    t.input.pressKey("n")
-    let frame = await until(t, (f) => !f.includes("Cancel M-2?"))
-    expect((await meetingRows())[1].status).toBe("planned")
-    t.input.pressKey("DELETE")
-    frame = await until(t, (f) => f.includes("Cancel M-2?"))
-    expect(frame).toContain("Cancel M-2? It stays in the list as cancelled.")
-    t.input.pressKey("y")
-    frame = await until(t, (f) => f.includes("Past · 4"))
-    expect(statusLine(frame)).toContain("cancelled M-2")
-    expect(lineWith(frame, "Board December")).toContain("cancelled")
-    expect(indexOf(frame, "Board December")).toBeGreaterThan(indexOf(frame, "Past · 4"))
-    expect((await meetingRows())[1].status).toBe("cancelled")
-    // A meeting that is not planned: x and Del ask nothing.
-    t.input.pressKey("x")
-    t.input.pressKey("DELETE")
-    frame = await t.frame()
-    expect(frame).not.toContain("Close M-2")
-    expect(frame).not.toContain("Cancel M-2?")
-  })
-
-  test("Enter opens the meeting and Esc comes back to the same row", async () => {
-    const t = await open()
-    await select(t, "Board December")
-    t.input.pressEnter()
-    let frame = await until(t, (f) => f.includes("› M-2 Board December"))
-    expect(frame).toContain("› M-2 Board December")
-    expect(frame).toContain("No agenda yet. Press n to add an item.")
-    // A meeting sorting above it: it would move the selection if it had been reset.
-    await inCtx(() => write().addMeeting!({ title: "Kick-off", date: "2026-11-11" }))
+    const form = lines(frame).filter((l) => /About\*|Title\*|Kind/.test(l))
+    expect(form[0]).toContain("› About*")
+    expect(lineWith(frame, "Kind")).toMatch(/Kind +— \(1:1 · project · board\)/)
     t.input.pressEscape()
-    frame = await until(t, (f, s) => !f.includes("› M-2 Board December") && f.includes("Kick-off") && isSelected(s, "Board December"))
-    expect(frame).not.toContain("› M-2 Board December")
-    expect(isSelected(await t.spans(), "Board December")).toBe(true)
+    await sleep(30)
+    await until(t, (f) => !f.includes("New meeting"))
+    t.input.pressKey("N")
+    frame = await until(t, (f) => f.includes("New recurring meeting"))
+    t.input.pressEscape()
+    await sleep(30)
+    await until(t, (f) => !f.includes("New recurring meeting"))
+    await select(t, "Board October")
+    t.input.pressKey("s")
+    t.input.pressKey("m")
+    await t.settle()
+    frame = await t.frame()
+    expect(frame).not.toContain("Skip Board October")
+    expect(frame).not.toContain("Move Board October")
   })
 
-  test("the Projects column shows a 16-character code whole at 80x24", async () => {
+  test("Enter opens the meeting and Esc comes back to the same row; Tab, then Enter on a series opens what it is about", async () => {
+    const t = await designed()
+    await select(t, "ERP vendor call")
+    t.input.pressEnter()
+    let frame = await until(t, (f) => f.includes("› M-24 ERP vendor call"))
+    t.input.pressEscape()
+    frame = await until(t, (f) => !f.includes("› M-24") && f.includes("Upcoming"))
+    await t.settle()
+    expect(isSelected(await t.spans(), "ERP vendor call")).toBe(true)
+    t.input.pressTab()
+    await t.settle()
+    let spans = await t.spans()
+    expect(fgAt(spans, "Series", 1)).toBe(theme.accent)
+    expect(isSelected(spans, "1:1 Anna             Anna")).toBe(true)
+    t.input.pressKey("j")
+    await t.settle()
+    spans = await t.spans()
+    expect(isSelected(spans, "1:1 Bob")).toBe(true)
+    t.input.pressEnter()
+    frame = await until(t, (f) => f.includes("› Bob Willems"))
+    expect(frame).toContain("› Bob Willems · Integration lead · team")
+  })
+
+  test("closing a meeting in progress says what closeMeeting did", async () => {
+    const t = await designed()
+    await t.nav.open("M-11") // Karim's 1:1 of Wed 18, with notes
+    await until(t, (f) => f.includes("› M-11"))
+    t.input.pressKey("x")
+    await until(t, (f) => f.includes("Close M-11 as held?"))
+    t.input.pressKey("y")
+    const frame = await until(t, (f) => statusLine(f).includes("closed"))
+    expect(statusLine(frame)).toContain("1:1 Karim closed · 2 kept for next time · notes saved")
+  })
+
+  test("empty: both panels say how to add one", async () => {
     kernel = await makeTestKernel({ plugins: builtinPlugins })
-    await inCtx(async () => {
-      await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
-      await write("projects").addProject!({ code: "CRM", name: "CRM" })
-      await write().addMeeting!({ title: "Data sync", date: "2026-11-20", kind: "steering", projects: ["DATAPLATFORM2027"] })
-      await write().addMeeting!({ title: "CRM sync", date: "2026-11-21", kind: "steering", projects: ["CRM"] })
-    })
-    tui = await renderTui(kernel, { width: 80, height: 24 })
+    tui = await renderTui(kernel, { width: 118, height: 36 })
     tui.input.pressKey("5")
-    const frame = await until(tui, (f) => f.includes("Data sync"))
-    expect(lineWith(frame, "Data sync")).toContain(" DATAPLATFORM2027 ")
-    expect(lineWith(frame, "CRM sync").lastIndexOf(" CRM ")).toBe(lineWith(frame, "Data sync").indexOf(" DATAPLATFORM2027 "))
-    // The columns before it are still whole: kind, status and the attendee count.
-    expect(lineWith(frame, "Data sync")).toMatch(/steering planned\s+0\s+DATAPLATFORM2027 │/)
-  })
-
-  test("a row with two codes keeps whole codes and ends with … at 80x24", async () => {
-    kernel = await makeTestKernel({ plugins: builtinPlugins })
-    await inCtx(async () => {
-      await write("projects").addProject!({ code: "DATAPLATFORM2027", name: "Data platform" })
-      await write("projects").addProject!({ code: "CRM", name: "CRM" })
-      await write().addMeeting!({ title: "Data sync", date: "2026-11-20", kind: "steering", projects: ["DATAPLATFORM2027", "CRM"] })
-      await write().addMeeting!({ title: "CRM sync", date: "2026-11-21", kind: "steering", projects: ["CRM", "DATAPLATFORM2027"] })
-    })
-    tui = await renderTui(kernel, { width: 80, height: 24 })
-    tui.input.pressKey("5")
-    const frame = await until(tui, (f) => f.includes("Data sync"))
-    // In agenda order, in an 18-wide column: the long code first, then ` …`; after CRM it gives way.
-    expect(lineWith(frame, "Data sync")).toMatch(/steering planned\s+0\s+DATAPLATFORM2027 … │/)
-    expect(lineWith(frame, "CRM sync")).toMatch(/steering planned\s+0\s+CRM …\s+│/)
-    expect(lineWith(frame, "CRM sync").lastIndexOf(" CRM …")).toBe(lineWith(frame, "Data sync").indexOf(" DATAPLATFORM2027 …"))
-    expect(frame).not.toMatch(/DATAPLAT\w*…|CRM \w+…/)
-  })
-
-  test("empty state", async () => {
-    const t = await open({ seed: false })
-    expect(await t.frame()).toContain("No meetings yet. Press n to add one.")
+    const frame = await until(tui, (f) => f.includes(SERIES_EMPTY))
+    expect(frame).toContain(EMPTY)
+    expect(frame).toContain(SERIES_EMPTY)
   })
 })

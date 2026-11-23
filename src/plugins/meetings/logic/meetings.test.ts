@@ -21,16 +21,17 @@ describe("meetings plugin skeleton", () => {
   test("meetings loads after projects and people and publishes its views", async () => {
     k = await makeTestKernel({ plugins: [meetings, projects, people, actions] })
     expect(meetings.requires).toEqual({ projects: "^2", people: "^1", actions: "^2" })
-    expect(viewCols(k, "meeting")).toEqual(["id", "title", "date", "kind", "status"])
+    expect(viewCols(k, "meeting")).toEqual(["id", "title", "date", "kind", "status", "subject_type", "subject_id", "series_id"])
     expect(viewCols(k, "agenda_item")).toEqual(["id", "meeting_id", "position", "text", "project_id", "ask"])
     expect(viewCols(k, "attendee")).toEqual(["meeting_id", "person_id"])
+    expect(viewCols(k, "series")).toEqual(["id", "subject_type", "subject_id", "title", "kind", "rhythm", "first_date", "end_date"])
     expect(k.db.raw.prepare(`SELECT * FROM "meetings__pub_meeting"`).all([])).toEqual([])
   })
 
   test("the built-in plugin list includes meetings", async () => {
     expect(builtinPlugins).toContain(meetings)
     k = await makeTestKernel({ plugins: builtinPlugins })
-    expect(viewCols(k, "meeting")).toEqual(["id", "title", "date", "kind", "status"])
+    expect(viewCols(k, "meeting")).toEqual(["id", "title", "date", "kind", "status", "subject_type", "subject_id", "series_id"])
   })
 })
 
@@ -65,19 +66,19 @@ async function boot() {
   await w("addProject", { code: "CRM", name: "CRM replatforming" }, "projects")
   await w("addProject", { code: "ERP", name: "ERP upgrade" }, "projects")
 }
-const steerco = { title: "Steering committee Q4", date: "2026-12-04", kind: "steering", attendees: ["peter", "marie"], projects: ["CRM", "ERP"] }
+const steerco = { about: "#CRM", title: "Steering committee Q4", date: "2026-12-04", kind: "steering", attendees: ["peter", "marie"], projects: ["CRM", "ERP"] }
 
 describe("meetings operations", () => {
   test("addMeeting with attendees and projects creates agenda items", async () => {
     await boot()
-    expect(await d("addMeeting", steerco)).toBe('+ meeting M-1 "Steering committee Q4" 2026-12-04')
+    expect(await d("addMeeting", steerco)).toBe('+ meeting "Steering committee Q4" 2026-12-04')
     const m: MeetingRecord = await w("addMeeting", steerco)
     expect(m).toEqual({
       ref: "M-1",
       id: 1,
       title: "Steering committee Q4",
       date: "2026-12-04",
-      kind: "steering",
+      kind: "project",
       status: "planned",
       since_date: null,
       notes: "",
@@ -86,19 +87,53 @@ describe("meetings operations", () => {
         { position: 1, text: "CRM replatforming status", project: "#CRM", project_id: 1, ask: null },
         { position: 2, text: "ERP upgrade status", project: "#ERP", project_id: 2, ask: null },
       ],
+      about: "#CRM",
+      series: null,
     })
-    const plain = await w("addMeeting", { title: "1:1", date: "tomorrow" })
-    expect([plain.ref, plain.date, plain.kind, plain.attendees, plain.agenda]).toEqual(["M-2", "2026-11-14", "other", [], []])
-    expect(await d("addMeeting", { title: "Next", date: "2026-12-01" })).toBe('+ meeting M-3 "Next" 2026-12-01')
-    const bad = await failure(w("addMeeting", { title: "Next", date: "someday" }))
+    const plain = await w("addMeeting", { about: "tom", title: "1:1", date: "tomorrow" })
+    expect([plain.ref, plain.date, plain.kind, plain.attendees, plain.agenda, plain.about]).toEqual(["M-2", "2026-11-14", "one_on_one", ["@tom"], [], "@tom"])
+    expect(await d("addMeeting", { about: "#ERP", title: "Next", date: "2026-12-01" })).toBe('+ meeting "Next" 2026-12-01')
+    const bad = await failure(w("addMeeting", { about: "#ERP", title: "Next", date: "someday" }))
     expect([bad.name, bad.field]).toEqual(["ValidationError", "date"])
+    const none = await failure(w("addMeeting", { title: "Next", date: "2026-12-01" }))
+    expect([none.name, none.message]).toEqual(["ValidationError", "meetings.addMeeting: about is required"])
+  })
+
+  test("the subject gives the kind; a 1:1 needs a person, project and board a project; steering and other mean project", async () => {
+    await boot()
+    expect((await w("addMeeting", { about: "#CRM", title: "a", date: "today" })).kind).toBe("project")
+    expect((await w("addMeeting", { about: "CRM", title: "b", date: "today", kind: "board" })).kind).toBe("board")
+    expect((await w("addMeeting", { about: "#CRM", title: "c", date: "today", kind: "other" })).kind).toBe("project")
+    expect((await w("addMeeting", { about: "@peter", title: "d", date: "today" })).kind).toBe("one_on_one")
+    const wrong = await failure(w("addMeeting", { about: "@peter", title: "e", date: "today", kind: "board" }))
+    expect([wrong.name, wrong.message, wrong.field]).toEqual(["ValidationError", "a board meeting needs a project; @peter is a person", "kind"])
+    const edit = await failure(w("editMeeting", { ref: "M-1", kind: "one_on_one" }))
+    expect([edit.message, edit.field]).toEqual(["a 1:1 needs a person; #CRM is a project", "kind"])
+    expect(await d("editMeeting", { ref: "M-1", kind: "steering" })).toBe("~ M-1 (no change)")
+    // A meeting without a subject cannot become a 1:1 (it has no person).
+    k!.db.raw.prepare("UPDATE meetings_meeting SET subject_type = NULL, subject_id = NULL WHERE id = 2").run([])
+    const bare = await failure(w("editMeeting", { ref: "M-2", kind: "one_on_one" }))
+    expect([bare.name, bare.message, bare.field, bare.hint]).toEqual(["ValidationError", "a 1:1 needs a person; this meeting has no subject", "kind", "run ttybrain meeting subject M-2 @handle first"])
+    expect((await w("editMeeting", { ref: "M-2", kind: "board" })).kind).toBe("board")
+    await w("setSubject", { meeting: "M-2", about: "#CRM" }) // restores the subject for the checks below
+    const unknown = await failure(w("addMeeting", { about: "nobody", title: "f", date: "today" }))
+    expect([unknown.name, unknown.message]).toEqual(["NotFoundError", 'unknown person or project "nobody"'])
+    const near = await failure(w("addMeeting", { about: "#CRN", title: "f", date: "today" }))
+    expect([near.message, near.hint]).toEqual(['unknown project "#CRN"', 'did you mean "#CRM", "#ERP"?'])
+    await w("addPerson", { name: "Crm Bot", handle: "crm" }, "people")
+    const both = await failure(w("addMeeting", { about: "crm", title: "g", date: "today" }))
+    expect([both.name, both.message, both.hint]).toEqual(["ValidationError", '"crm" is both a person and a project', "use @crm or #CRM"])
+    // setSubject: a person makes a 1:1; board stays board; from today on it closes itself.
+    expect(await d("setSubject", { meeting: "M-2", about: "@tom" })).toBe("~ M-2 about @tom")
+    expect(await w("setSubject", { meeting: "M-2", about: "@tom" })).toMatchObject({ ref: "M-2", kind: "one_on_one", about: "@tom" })
+    expect(await w("setSubject", { meeting: "M-2", about: "#ERP" })).toMatchObject({ kind: "project", about: "#ERP" })
   })
 
   test("edit, attendees and agenda change lines", async () => {
     await boot()
     await w("addMeeting", steerco)
     expect(await d("editMeeting", { ref: "M-1", date: "2026-12-11" })).toBe("~ M-1 date 2026-12-04 → 2026-12-11")
-    expect(await d("editMeeting", { ref: "M-1", title: "SteerCo Q4", kind: "board" })).toBe('~ M-1 title "Steering committee Q4" → "SteerCo Q4", kind steering → board')
+    expect(await d("editMeeting", { ref: "M-1", title: "SteerCo Q4", kind: "board" })).toBe('~ M-1 title "Steering committee Q4" → "SteerCo Q4", kind project → board')
     expect(await d("editMeeting", { ref: "1", sinceDate: "2026-10-01" })).toBe("~ M-1 since none → 2026-10-01")
     await w("editMeeting", { ref: "M-1", date: "2026-12-11", sinceDate: "2026-10-01" })
     expect(await d("editMeeting", { ref: "M-1", sinceDate: null })).toBe("~ M-1 since 2026-10-01 → none")
@@ -173,7 +208,7 @@ describe("meetings operations", () => {
   test("close and cancel rules", async () => {
     await boot()
     await w("addMeeting", steerco)
-    await w("addMeeting", { title: "Board", date: "2026-12-10", kind: "board" })
+    await w("addMeeting", { about: "#ERP", title: "Board", date: "2026-12-10", kind: "board" })
     await w("addAction", { title: "Send the minutes", meeting: "M-1" }, "actions")
     await w("addDecision", { title: "Go with B", meeting: "M-2" }, "projects")
     const closed = await w("closeMeeting", { ref: "M-1" })
@@ -209,7 +244,7 @@ describe("meetings operations", () => {
 
   test("sinceDate: own date, previous held meeting, default", async () => {
     await boot()
-    await w("addMeeting", { title: "SteerCo Q3", date: "2026-10-28", projects: ["CRM"] })
+    await w("addMeeting", { about: "#CRM", title: "SteerCo Q3", date: "2026-10-28", projects: ["CRM"] })
     await w("closeMeeting", { ref: "M-1" })
     await w("addMeeting", steerco)
     const previous = { ref: "M-1", title: "SteerCo Q3", date: "2026-10-28" }
@@ -223,7 +258,7 @@ describe("meetings operations", () => {
 
   test("sinceDate ignores cancelled, planned and later meetings", async () => {
     await boot()
-    const add = (title: string, date: string, projects = ["CRM"]) => w("addMeeting", { title, date, projects })
+    const add = (title: string, date: string, projects = ["CRM"]) => w("addMeeting", { about: "#CRM", title, date, projects })
     await add("Q3", "2026-10-01") // M-1 held: counts
     await add("Cancelled", "2026-10-15") // M-2 cancelled
     await add("Planned", "2026-10-20") // M-3 planned

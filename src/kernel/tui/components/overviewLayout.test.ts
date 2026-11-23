@@ -46,4 +46,29 @@ describe("overview layout", () => {
     expect(places.every((p) => p.row === undefined)).toBe(true)
     for (const c of [0, 1]) expect(places.filter((p) => p.column === c).reduce((s, p) => s + p.height, 0)).toBeLessThanOrEqual(10)
   })
+
+  test("a lead panel takes the left column; the next panels stack on the right while they fit its height; the rest follow in the grid", () => {
+    // The lead: 5 rows, a header and a 2-row detail block (5 + 1 + 4 = 10 lines, 12 with borders), as the home design.
+    const lead = { ...full(5), extra: 5, lead: 1.35 }
+    const places = layoutOverview([lead, full(3), full(0), full(2), full(0), full(3), full(1), full(3)], 34, 118)
+    expect(places.map((p) => p.part)).toEqual(["lead", "side", "side", "side", undefined, undefined, undefined, undefined])
+    expect(places.slice(0, 4).map((p) => p.column)).toEqual([0, 1, 1, 1])
+    // 5 + 3 + 4 = 12 lines on the right, as tall as the lead.
+    expect(places.slice(0, 4).map((p) => p.height)).toEqual([12, 5, 3, 4])
+    expect(places.slice(4).map((p) => [p.row, p.column])).toEqual([
+      [0, 0],
+      [0, 1],
+      [1, 0],
+      [1, 1],
+    ])
+    expect(places[0]!.rows).toBe(5)
+  })
+
+  test("a short lead keeps one panel beside it (both as tall as the taller); without room the usual layout", () => {
+    const places = layoutOverview([{ ...full(0), lead: 1.35 }, full(3), full(3)], 34, 118)
+    expect(places.map((p) => p.part)).toEqual(["lead", "side", undefined])
+    expect(places.slice(0, 2).map((p) => p.height)).toEqual([5, 5])
+    const tight = layoutOverview([{ ...full(5), extra: 5, lead: 1.35 }, full(6), full(6), full(6), full(6)], 14, 80)
+    expect(tight.every((p) => p.part === undefined)).toBe(true)
+  })
 })

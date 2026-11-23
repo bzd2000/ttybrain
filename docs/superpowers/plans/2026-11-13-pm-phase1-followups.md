@@ -412,3 +412,78 @@ Collected from the execution ledger (`.superpowers/sdd/2026-11-22-actions-plugin
 - The compat fields (`project`, `for`, `meeting`, and their ids) can disagree with `links[].ref` for gone records and for projects outside the projects view's range (`—` versus `<type>:<id>`).
 - Task 4 (resolved in the final review): the action form's edit writes the links and the field edit inside one `act`, so a failing `editAction` rolls the link writes back.
 - Side-by-side review items (after the meetings rework): a board meeting gets a fifth tab `Actions` (the design says every meeting gets one, the mock draws four); the Linked-to meeting labels show the full title and date, the mock's short `steering 27 Oct` needs series names from the meetings rework. (9-character refs such as `A-1000001` staying whole at 80×24 is covered by tests/design/actions-links.test.tsx.)
+
+## Meetings rework (2026-11-22)
+
+Collected from the execution ledger (`.superpowers/sdd/2026-11-22-meetings-rework/progress.md`). Plan: `docs/superpowers/plans/2026-11-22-meetings-rework.md`; design: `docs/superpowers/specs/2026-11-20-ttybrain-meetings-actions-design.md` §5. Meetings are about a person or a project, recur as series, carry talk-lists, and close themselves; `meetings` is 2.0.0 (`projects` and `actions` read `meetings ^2`).
+
+### Rulings made during the meetings rework (and what each costs if wrong)
+
+Plan rulings:
+
+- **M1. Upkeep hook.** `ctx.upkeep(id, run)`: like a data step but on every write-capable boot (before the first write of a process, at TUI start and on a day change), in its own write transaction, `noWait` (lock busy: skipped). Read-only commands may show yesterday's state until the next write-capable start. Cost: state can lag in read-only use.
+- **M2. Migration 002 rebuilds `attendee` and `agenda_item` without `ON DELETE CASCADE`, then `meeting`** (rule 6), remapping kinds and adding the subject, series and `auto_close` columns; children are deleted explicitly where meetings are. Cost: every future delete path must remember the children.
+- **M3. Skip = cancel the occurrence, move = change its date;** both keep `series_id`/`series_date`, so upkeep never recreates them.
+- **M4. A subject-less meeting never auto-closes;** `meeting subject` sets `auto_close = 1` only for meetings dated today or later. Cost: meetings from before the rework stay open until given a subject.
+- **M5. Ticking writes at once** (Space marks the item discussed in that meeting, Space again reopens it); a meeting's agenda is the subject's open items (a project's also the tagged person items) plus the items discussed in it.
+- **M6. Closing a 1:1 copies its notes to the person** as a `one_on_one` note; project and board notes stay on the meeting; auto-close does the same.
+- **M7. Subject-less meetings stay visible** in a last Meetings group "No subject · n".
+- **M8. Board talk-list `A`** adds the item as an agenda item and marks it discussed in that meeting.
+- **M9. `t`** on a person, project or upcoming meeting opens the talk-item form with the subject filled in; quick capture routes only `talk …` text with exactly one resolving person or project tag, the rest goes to the inbox.
+- **M10. "Her actions · 3" is `<First name>'s actions · 3`** (the app does not know pronouns); an accepted difference from the mock.
+- **M11. Non-board meetings open on the in-progress layout with no tab row;** the actions plugin's meeting Actions tab shows only on board meetings. Supersedes the actions plan's "Actions tab on every meeting".
+- **M12. Record types:** series `S-n`, talk item `T-n`.
+
+Rulings from the task reviews:
+
+- **tests/design.ts `seedDesign`** gives its meetings a subject (M-1 and M-2 about `#CRM`) so the existing design frames stay unchanged; subject-less meetings are covered by the upgrade test.
+- **Task 1, I-1:** migration 002 gives `meeting` `INTEGER PRIMARY KEY AUTOINCREMENT` so a deleted number is never reused (provenance, change-set history and drafts cannot attach to a new meeting); `removePlanned` counts a meeting's own origin rows as "holds something" and fails closed. Cost: deleted occurrence numbers leave gaps.
+- **Task 1, I-2:** after a CLI command the dispatcher prints `warning: upkeep "<id>" failed: <message>` (and the hint) on stderr; the exit code is unchanged.
+- **Task 1, folded:** series end/until edits delete only occurrences dated today or later; `meeting subject --all-without` is one op.
+- **Task 2, I1:** talk numbers are the rank within the shown group (open 1..k, carried unnumbered with `↻`); `talk move --to n` ranks within its own group. Cost: carried items are reordered only among themselves.
+- **Task 2, I2:** a talk item's display catches only `NotFoundError`/`ValidationError` (a gone subject shows `—`).
+- **Task 2, folded:** `talk reopen`; `--project` rejected on a project subject; reopen restores the item near its last position (`last_position`); `talk list --json` has `carried`; skipping or cancelling a meeting reopens the items ticked in it (it did not take place); a gone person or project shows `—` on a meeting too. `discussTalk` without a meeting is accepted (the item came up elsewhere); per-meeting counts use `meeting_id = M`.
+- **Task 3, folded into Task 4:** the "already held" error says the meeting closed itself and points to the minutes; `addMeeting` sets `auto_close = 1` only for dates today or later.
+- **Task 4, I1:** a generic Overview `lead` panel takes a left column at the mock's proportion (1.35) and the next panels stack on its right while they fit. Cost: medium kernel work; all existing panels stay.
+- **Task 4, I2:** on a meeting row the block's first action is the target and `x` completes it; Enter opens the meeting. Cost: other actions are reached through the meeting or person.
+- **Task 4, I3:** a generic Form `look` (rounded panel, muted label column, only the focused field as an input, resolved values, a configurable Tab label), used only by the series form (the one drawn form); the series form defaults First date to the first rhythm date and Attendees to the subject person.
+- **Task 4, I4:** one key handler per Overview routes to the focused panel (no `MaxListenersExceededWarning`). **I5:** the full home frame, the series form from Karim and the bars are pinned by design tests.
+- **Task 4, NB1:** derived form values count as the form's start (drafts leave untouched derived fields out, a restore marks only differing fields as edited, and `baseline()` derives only fields untouched at start).
+- **Task 4, folded:** the 11-20 home mock wins for the other panels it draws: actions' Overdue third column is the first link; projects' "needing attention" has no `upd` column. Past planned meetings that missed auto-close show under "Not closed".
+- **Task 5, I1:** the project Prep panel is drawn as the mock (9-cell fact column, rows without headings, `Your actions for <code>`), the mock's non-home Prep data is seeded; R-9 `high · issue` is left out (it would change Attention's High risks panel and Task 4's home frame).
+- **Task 5, I2:** when not planned, the in-progress crumb detail and Talk panel title show `held` or `cancelled`, and the bar shows only keys that work. **I3:** a generic kernel `recordKey` (per record type, after the active tab's keys); meetings registers `t` on person and project.
+- **Task 5, folded:** a declined capture route does not stop later routes (its lines show only when none takes the text); With order is stakeholders first, then stored attendee order; board Agenda `a` action / `D` decision; new screens are in `tests/design/small.test.tsx`; the almost-talk preview says it goes to the inbox; `A` keeps the item's project tag. Ignored: the mock contradicts itself on an indent.
+
+### Deferred minors and concerns
+
+Resolved by documentation in the final task (done):
+
+- Done: a rule-6 rebuild of an `AUTOINCREMENT` table resets its counter to the largest id left, and plugins cannot name `sqlite_sequence` (string literals naming it are refused): `docs/architecture.md`, data rules 2 and 6.
+- Done: `editSeries --every` stays anchored to the series' original first date (plugin reference §3, "Rhythms and upkeep"; the in-app guide).
+- Done: a TUI started while another process holds the write lock skips upkeep until the next day (architecture "Upkeep", "Busy"; plugin reference §3).
+- Done: notes written after closing stay on the meeting (not copied to the person again) (plugin reference §3, "Closing"; the in-app guide).
+- Done: one failing meeting blocks every auto-close of that run (residual, no known trigger) (plugin reference §3).
+- Done: `editSeries` attendee changes also overwrite moved occurrences (plugin reference §3; no test).
+
+Still open:
+
+- Task 1: the upkeep CLI warning names only the upkeep id, not the plugin.
+- Task 2: tagged items on a project's list carry their person-list rank as JSON `position`; `before()` in `registerTalk` catches everything (it only describes).
+- Task 3: `Closed` is defined twice (TypeBox and TS type).
+- Task 4: the default Form's 32-cell input scrolls the first character of a long value out of view (pre-existing); column gaps are 1 cell (the existing Table convention).
+- Task 5: the prep drops sections without a compact form, so a failing project-status section's error shows nowhere; the Health row is cut at 80 columns without `…`; a cut PrepLine loses its colours; the `withParts` comment shows the mock's order, not the code's; board `a`/`D` and `A` keeping the tag are untested; the RecordView comment says `run` is in plugin scope; the prep finds the actions section by title (kernel results carry no section id).
+
+### Side-by-side review (TUI against the designs)
+
+The user asked for a side-by-side review of the TUI against the screen designs once the meetings rework is done. Items noted while building:
+
+- CRM steering "Your act." shows `1 · 1 late` in amber; the mock's own Overdue A-27 contradicts its plain `1`.
+- CRM talk-list count: the mocks conflict three ways (home and screen 5 say 3, the project mock's third row text differs: "Marie's request…"). The seed keeps 3: CRM's own two items plus Anna's CRM-tagged item.
+- Empty Attention panels stay (the mock omits them).
+- "Her actions · 3" is `<First name>'s actions · 3` (M10).
+- Project Prep: "Solution outline approved" is omitted (14 Oct is before "since 27 Oct", the mock contradicts itself); the milestone shows `10 Dec`, not `26 Nov → 10 Dec?` (no forecast in the data); R-9 `high · issue` is not seeded.
+- With order: Marie D. before Peter J. (no stored order; a sponsor-first rule is possible).
+- `t to talk` appears only on tab bars the designs do not draw.
+- The series form is the only form with the designed Form `look`; whether the other forms take it too.
+- Notes written after closing stay on the meeting only (a 1:1's copy on the person is not updated).
+- The actions plan's items (the board meeting's fifth `Actions` tab, Linked-to meeting labels `steering 27 Oct` against full title and date) are listed under "Actions plugin (2026-11-22)", last bullet of its deferred minors; M11 above now limits the Actions tab to board meetings.
