@@ -298,7 +298,7 @@ A series' rhythm is `weekly on <day>`, `every <n> weeks on <day>`, `monthly on t
 Two upkeeps (`ctx.upkeep`, see the architecture primer) keep the data current with the date:
 
 - `occurrences` creates the planned meetings of every open series for the next 8 weeks (today through today + 55 days), once per `(series, date)`, never back-filling past dates. A skipped occurrence is a cancelled meeting and a moved one has another date; both keep `series_id`/`series_date`, so they are never made again. Editing or ending a series removes only the planned occurrences dated today or later that hold nothing (no agenda items of their own, notes, ticked talk items or provenance); `series edit` attendee changes also overwrite moved occurrences.
-- `auto-close` closes, as `meeting close` does, every planned meeting with `auto_close` more than 3 days past, so an app not opened for three weeks closes them all on the next write-capable start (their unticked talk items stay open). A meeting without a subject never closes itself (`auto_close` is set when a subject is given, only for a meeting dated today or later). One meeting that fails to close stops the rest of that run (no known trigger). A meeting that closed itself says so when you try to close it again. Read-only commands may show yesterday's state until the next write-capable start; a TUI started while another process holds the write lock skips upkeep until the next day.
+- `auto-close` closes, as `meeting close` does, every planned meeting with `auto_close` 3 or more days past, so an app not opened for three weeks closes them all on the next write-capable start (their unticked talk items stay open). A meeting without a subject never closes itself (`auto_close` is set when a subject is given, only for a meeting dated today or later). One meeting that fails to close stops the rest of that run (no known trigger). A meeting that closed itself says so when you try to close it again. Read-only commands may show yesterday's state until the next write-capable start; a TUI started while another process holds the write lock skips upkeep until the next day.
 
 ### Exposed operations
 
@@ -322,7 +322,7 @@ Two upkeeps (`ctx.upkeep`, see the architecture primer) keep the data current wi
 | `setAttendees` | `meeting`, `people[]` | `~ M-4 attendees +@tom −@luc` |
 | `addAgendaItem` / `editAgendaItem` / `moveAgendaItem` / `removeAgendaItem` | … | `~ M-4 item 2 ask: "Release contingency"` (also `+ M-4 item 3 "Budget"`, `~ M-4 item 4 → 2`, `- M-4 item 2 "AOB"`) |
 | `setNotes` | `meeting`, `markdown` | `~ M-4 notes` |
-| `addSeries` / `editSeries` / `endSeries` | `about`, `title`, `every`, `from?`, `until?`, `kind?`, `attendees?`; `ref` and the same; `ref`, `on?` | `+ series S-2 "1:1 Karim" every 2 weeks on wed from …`, `~ S-2 ends 2027-03-04` |
+| `addSeries` / `editSeries` / `endSeries` | `about`, `title`, `every`, `from` (the CLI defaults it to today), `until?`, `kind?`, `attendees?`; `ref` and the same; `ref`, `on?` | `+ series S-2 "1:1 Karim" every 2 weeks on wed from …`, `~ S-2 ends 2027-03-04` |
 | `addTalk` / `editTalk` / `moveTalk` / `dropTalk` | `about`, `text`, `project?`; `ref`, …; `ref`, `to`; `ref` | `+ talk @anna "AWS training budget"`, `~ T-7 position 3 → 1`, `~ T-7 dropped` |
 | `discussTalk` / `reopenTalk` | `ref`, `meeting?`; `ref` | `~ T-7 discussed in M-4`, `~ T-7 reopened` |
 
