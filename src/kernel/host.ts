@@ -131,14 +131,18 @@ function withTimeout<T>(p: Promise<T>, ms: number, text: string): Promise<T> {
 // type owns means the inbox plugin is not loaded. Other origins (a change set's `CS-<id>`) are no records.
 // Every path that writes with an origin awaits it first: the CLI dispatcher, change sets and the TUI's act.
 async function checkOrigin(records: RecordTypeRegistry, commands: CommandRegistry, context: () => OpContext, origin: Origin): Promise<void> {
-  const type = records.typeOfRef(origin.ref)
-  if (!type) {
+  const types = records.typesOfRef(origin.ref)
+  if (types.length === 0) {
     if (origin.type !== "inbox") return
     throw new ValidationError("--from-inbox needs the inbox plugin, which is not loaded", { field: "from-inbox", hint: 'run "ttybrain plugin list"' })
   }
   if (await runWithContext(context(), () => records.resolveAny(origin.ref))) return
-  const lists = commands.list().filter((c) => c.plugin === type.plugin && c.def.verb === "list")
-  const list = lists.find((c) => c.def.thing === type.plugin || type.name.split("_").includes(c.def.thing)) ?? (lists.length === 1 ? lists[0] : undefined)
+  // The hint: the list command of the ref's type (of a shared prefix, the first type that has one).
+  const listOf = (type: (typeof types)[number]) => {
+    const lists = commands.list().filter((c) => c.plugin === type.plugin && c.def.verb === "list")
+    return lists.find((c) => c.def.thing === type.plugin || type.name.split("_").includes(c.def.thing)) ?? (lists.length === 1 ? lists[0] : undefined)
+  }
+  const list = types.map(listOf).find((l) => l !== undefined)
   throw new NotFoundError(`no record "${origin.ref}"`, { hint: list ? `run "ttybrain ${list.def.thing} list"` : 'run "ttybrain help"' })
 }
 
@@ -341,7 +345,13 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         live()
         records.register({ ...def, plugin: id })
       },
-      records: { resolve: (ref) => records.resolveAny(ref), label: (ref) => records.label(ref), refOf: (type, id) => records.refOf(type, id), hasType: (name) => records.byName(name) !== undefined },
+      records: {
+        resolve: (ref, opts) => records.resolveAny(ref, opts),
+        typesOfRef: (ref) => records.typesOfRef(ref).map((d) => d.name),
+        label: (ref) => records.label(ref),
+        refOf: (type, id) => records.refOf(type, id),
+        hasType: (name) => records.byName(name) !== undefined,
+      },
       tagType: (def) => {
         live()
         tags.register(def, id)

@@ -26,7 +26,9 @@ export class ProvenanceStore {
   // A non-delete may name another plugin's record (a `field` set op returns the record's ref).
   async recordWrite(plugin: string, operation: string, out: WriteOutput, origin: Origin | undefined): Promise<void> {
     const key = `${plugin}.${operation}`
-    const type = this.records.typeOfRef(out.ref)
+    // Of a prefix several types share (`#`), a delete is of the writing plugin's own type; a ref is resolved by each.
+    const types = this.records.typesOfRef(out.ref)
+    const type = types.find((t) => t.plugin === plugin) ?? types[0]
     if (out.deleted === true) {
       if (!type) return // no registered type: nothing can have been recorded for it
       if (type.plugin !== plugin) {
@@ -45,9 +47,9 @@ export class ProvenanceStore {
     }
     if (!origin || sameRef(out.ref, origin.ref)) return
     if (!type) throw new Error(`write operation "${key}" returned ref "${out.ref}" of no registered record type`)
-    const id = await type.resolve(out.ref)
-    if (id === null) throw new Error(`write operation "${key}" returned ref "${out.ref}", which does not resolve`)
-    await this.record(type.name, id, origin)
+    const found = await this.records.resolveAny(out.ref)
+    if (found === null) throw new Error(`write operation "${key}" returned ref "${out.ref}", which does not resolve`)
+    await this.record(found.type, found.id, origin)
   }
 
   async forget(type: string, id: number): Promise<void> {

@@ -151,7 +151,7 @@ export function makeStore(ctx: PluginRuntime) {
   // Soft references to projects, resolved through the kernel's record types (projects may not be loaded).
   async function projectId(input: string): Promise<number> {
     const code = normalizeCode(input)
-    const found = await ctx.records.resolve(`#${code}`)
+    const found = await ctx.records.resolve(`#${code}`, { type: "project" })
     if (!found || found.type !== "project") throw new NotFoundError(`unknown project "${code}"`)
     return found.id
   }

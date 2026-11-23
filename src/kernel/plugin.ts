@@ -52,7 +52,13 @@ export interface PluginContext {
   self(): PluginApi
   recordType(def: Omit<RecordTypeDef, "plugin">): void
   readonly records: {
-    resolve(ref: string): Promise<{ type: string; id: number } | null>
+    // The record a ref names, or null. A prefix several types share (`#`: projects and boards) asks each type in
+    // registration order (a code two types both know throws a ValidationError); `type` asks only that type, so a
+    // caller that needs a project passes `{ type: "project" }`.
+    resolve(ref: string, opts?: { type?: string }): Promise<{ type: string; id: number } | null>
+    // The names of the record types a ref's prefix may be, in registration order ([] for none; two for a shared prefix).
+    typesOfRef(ref: string): string[]
+    // A NotFoundError for a ref nothing resolves: `no record "X-1"`, of a shared prefix `no project or board "#X"`.
     label(ref: string): Promise<string>
     // The display ref of (record type, id); `<type>:<id>` when the type is not registered.
     refOf(type: string, id: number): Promise<string>

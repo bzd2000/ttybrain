@@ -588,6 +588,45 @@ describe("forms", () => {
     expect(submitted).toEqual([{ links: "#CRM an @anna #ERP " }])
   })
 
+  test("refs field: a prefix two record types share suggests both types' records, ordered by ref", async () => {
+    // Two fixture plugins with a record type on `#` each (in-memory codes), both declaring sharedPrefix.
+    const hashPlugin = (id: string, codes: Record<string, number>): PluginDef =>
+      definePlugin({
+        id,
+        name: id,
+        version: "1.0.0",
+        apiVersion: 1,
+        activate(ctx) {
+          ctx.recordType({
+            name: id,
+            prefix: "#",
+            sharedPrefix: true,
+            resolve: async (input) => codes[input.replace(/^#/, "").toUpperCase()] ?? null,
+            label: async (n) => `${id} ${n}`,
+            search: async (text) =>
+              Object.keys(codes)
+                .filter((c) => c.includes(text.toUpperCase()))
+                .sort()
+                .map((c) => ({ ref: `#${c}`, label: `${id} ${codes[c]}` })),
+          })
+        },
+      })
+    const t = await open([todoPlugin, hashPlugin("alpha", { CRM: 1, ERP: 2 }), hashPlugin("beta", { MB: 7, BOARD: 8 })])
+    overlay!.openForm("thing", "links")
+    await t.frame()
+    await t.input.typeText(" #")
+    let frame = await t.frame()
+    for (const s of ["#BOARD beta 8", "#CRM alpha 1", "#ERP alpha 2", "#MB beta 7"]) expect(frame).toContain(s)
+    expect(frame.indexOf("#BOARD beta 8")).toBeLessThan(frame.indexOf("#CRM alpha 1"))
+    expect(frame.indexOf("#ERP alpha 2")).toBeLessThan(frame.indexOf("#MB beta 7"))
+    await t.input.typeText("b")
+    frame = await t.frame()
+    expect(frame).toContain("#MB beta 7")
+    expect(frame).not.toContain("#CRM alpha 1")
+    t.input.pressTab()
+    expect(lineWith(await t.frame(), "Links")).toContain("#CRM #BOARD ")
+  })
+
   test(
     "busy save keeps the form and retries",
     async () => {

@@ -22,8 +22,10 @@ export function tagParts(text: string, opts: { tone?: Tone; unresolved?: string[
     if (t.start > at) parts.push({ text: text.slice(at, t.start), tone: opts.tone })
     parts.push({ text: t.raw, tone: tagTone(t.prefix) ?? opts.tone })
     if (opts.unresolved?.includes(t.raw)) {
-      const type = opts.types?.find((x) => x.prefix === t.prefix)?.recordType ?? "tag"
-      parts.push({ text: " " }, { text: `⚠ unknown ${type.replace(/_/g, " ")}`, tone: "amber" })
+      // A prefix several types share (`#`: projects and boards) names them all: `unknown project or board`.
+      const names = (opts.types ?? []).filter((x) => x.prefix === t.prefix).map((x) => x.recordType.replace(/_/g, " "))
+      const type = names.length === 0 ? "tag" : names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`
+      parts.push({ text: " " }, { text: `⚠ unknown ${type}`, tone: "amber" })
     }
     at = t.end
   }

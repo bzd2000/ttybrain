@@ -117,7 +117,7 @@ export function makeStore(ctx: PluginRuntime) {
 
   async function projectId(code: string): Promise<number> {
     const c = normalizeCode(code)
-    const found = await ctx.records.resolve(`#${c}`)
+    const found = await ctx.records.resolve(`#${c}`, { type: "project" })
     if (!found || found.type !== "project") throw new NotFoundError(`unknown project "${c}"`, { suggestions: suggest(c, await tagCandidates("#")) })
     return found.id
   }
@@ -144,7 +144,7 @@ export function makeStore(ctx: PluginRuntime) {
       return found && found.type === "person" ? { type: "person", id: found.id, ref: `@${handle}` } : null
     }
     const project = async (): Promise<Subject | null> => {
-      const found = await ctx.records.resolve(`#${code}`)
+      const found = await ctx.records.resolve(`#${code}`, { type: "project" })
       return found && found.type === "project" ? { type: "project", id: found.id, ref: `#${code}` } : null
     }
     const people = async () => (await tagCandidates("@")).map((h) => `@${h}`)
