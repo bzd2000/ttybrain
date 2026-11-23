@@ -27,7 +27,7 @@ Project agents:
 - `bun run pm <thing> <verb> …`: run the CLI (`bun src/bin/pm.ts`); `TTYBRAIN_HOME=<dir>` or `--db <file>` points it at a scratch database
 - `bash scripts/smoke-node.sh`: build for Node, run the self-checks (including the TUI one, which prints `tui ok`), a CLI walk-through, the fixture plugin walk (build, load as a folder and via `npm pack` + `ttybrain plugin add`) and a `ttybrain plugin new` scaffold step on Node 26 (needs only node/npm); `tui ok` prints twice (built-ins, then with the fixture plugin's screen); the last line is `smoke ok`. Run it after touching SQLite, isolation, transactions, process handling or module loading
 - `bun src/kernel/isolation-selfcheck.ts`: the isolation self-check on Bun (`node dist-node/kernel/isolation-selfcheck.js` on Node)
-- `npm run start:node`: run on Node. It runs `build:node` (`scripts/build-node.mjs`, which compiles `src/` to `dist-node/` with Babel), then `node --experimental-ffi dist-node/bin/pm.js`
+- `npm run start:node`: run on Node. It runs `build:node` (`scripts/build-node.mjs`, which compiles `src/` to `dist-node/` with Babel), then `node --experimental-ffi dist-node/bin/pm.js`; `npm run run:node` runs the existing `dist-node/` build without rebuilding
 
 ## How it's wired
 

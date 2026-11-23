@@ -11,6 +11,7 @@
     "typecheck": "bun check",
     "build:node": "node scripts/build-node.mjs",
     "start:node": "npm run build:node && node --experimental-ffi dist-node/bin/pm.js",
+    "run:node": "node --experimental-ffi dist-node/bin/pm.js",
     "pm": "bun src/bin/pm.ts"
   },
   "devDependencies": {
