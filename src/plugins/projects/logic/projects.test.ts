@@ -67,11 +67,12 @@ describe("projects", () => {
   })
 
   test("project add: code rules, ref and conflict", async () => {
-    const bad = await run("project", "add", "crm", "CRM replatforming", "--json")
+    const bad = await run("project", "add", "c-1", "CRM replatforming", "--json")
     expect(bad.code).toBe(1)
     expect(bad.json.error.field).toBe("code")
+    expect(bad.json.error.message).toBe('invalid project code "C-1"')
     expect(bad.json.error.hint).toBe("2–16 letters or digits, e.g. CRM")
-    const text = await run("project", "add", "crm", "CRM replatforming")
+    const text = await run("project", "add", "c-1", "CRM replatforming")
     expect(text.err).toContain("hint: 2–16 letters or digits, e.g. CRM")
 
     const a = await ok("project", "add", "CRM", "CRM replatforming", "--effort", "220", "--start", "2026-11-02", "--json")
@@ -99,6 +100,14 @@ describe("projects", () => {
     const again = await run("project", "add", "CRM", "Other", "--json")
     expect(again.code).toBe(3)
     expect(again.json.error.message).toBe('project "CRM" already exists')
+
+    // A new lower-case code is upper-cased; a code differing only in case is a duplicate; lookups ignore case.
+    const dup = await run("project", "add", "crm", "Other", "--json")
+    expect([dup.code, dup.json.error.message]).toEqual([3, 'project "CRM" already exists'])
+    const lower = await ok("project", "add", "erp", "ERP", "--json")
+    expect([lower.json.ref, lower.json.code]).toEqual(["#ERP", "ERP"])
+    expect((await ok("project", "show", "erp", "--json")).json.code).toBe("ERP")
+    expect((await ok("project", "show", "#erp", "--json")).json.code).toBe("ERP")
 
     // Up to 16 characters; a 17th is refused.
     const long = await ok("project", "add", "#DATAPLATFORM2027", "Data platform", "--json")

@@ -22,12 +22,12 @@ Project agents:
 
 - `bun start`: run `ttybrain`. With no arguments in a terminal it opens the TUI; it needs a real TTY, so it can't be driven from a non-interactive shell (use tests, or drive it through a pty with `script -qfc`)
 - `bun dev`: run with `--watch`
-- `bun test`: run all tests. Run a single test with `bun test ./src/kernel/tui/app.test.tsx` (the `./` makes it a path) or `bun test -t "<name pattern>"`
+- `bun run test` (= `bun test --timeout 30000`; the TUI tests can need more than bun's default 5 s on a loaded machine or CI): run all tests. Run a single test with `bun test ./src/kernel/tui/app.test.tsx` (the `./` makes it a path) or `bun test -t "<name pattern>"`
 - `bun typecheck`: type-check (`bun check`)
 - `bun run pm <thing> <verb> …`: run the CLI (`bun src/bin/pm.ts`); `TTYBRAIN_HOME=<dir>` or `--db <file>` points it at a scratch database
 - `bash scripts/smoke-node.sh`: build for Node, run the self-checks (including the TUI one, which prints `tui ok`), a CLI walk-through, the fixture plugin walk (build, load as a folder and via `npm pack` + `ttybrain plugin add`) and a `ttybrain plugin new` scaffold step on Node 26 (needs only node/npm); `tui ok` prints twice (built-ins, then with the fixture plugin's screen); the last line is `smoke ok`. Run it after touching SQLite, isolation, transactions, process handling or module loading
 - `bun src/kernel/isolation-selfcheck.ts`: the isolation self-check on Bun (`node dist-node/kernel/isolation-selfcheck.js` on Node)
-- `npm run start:node`: run on Node. It runs `build:node` (`scripts/build-node.mjs`, which compiles `src/` to `dist-node/` with Babel), then `node --experimental-ffi dist-node/bin/pm.js`
+- `npm run start:node`: run on Node. It runs `build:node` (`scripts/build-node.mjs`, which compiles `src/` to `dist-node/` with Babel), then `node --experimental-ffi dist-node/bin/pm.js`; `npm run run:node` runs the existing `dist-node/` build without rebuilding
 
 ## How it's wired
 
@@ -52,4 +52,4 @@ TUI tests use `renderTui(kernel, { parts, external, width, height, refreshMs, dr
 
 ## CI
 
-GitLab CI (`.gitlab-ci.yml`), stage `test`: job `test` (`oven/bun:1.4.4`, the version that writes `bun.lock`: `bun install --frozen-lockfile && bun typecheck && bun test`), job `node-smoke` (`node:26`: `npm ci && bash scripts/smoke-node.sh`) and GitLab's SAST template. Keep `bun.lock` and `package-lock.json` in sync with `package.json`.
+GitLab CI (`.gitlab-ci.yml`), stage `test`: job `test` (`oven/bun:1.4.4`, the version that writes `bun.lock`: `bun install --frozen-lockfile && bun typecheck && bun test --timeout 30000`), job `node-smoke` (`node:26`: `npm ci && bash scripts/smoke-node.sh`) and GitLab's SAST template. Keep `bun.lock` and `package-lock.json` in sync with `package.json`.

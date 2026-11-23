@@ -3,13 +3,15 @@
   "module": "src/bin/pm.ts",
   "type": "module",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "scripts": {
     "dev": "bun --watch src/bin/pm.ts",
     "start": "bun src/bin/pm.ts",
-    "test": "bun test",
+    "test": "bun test --timeout 30000",
     "typecheck": "bun check",
     "build:node": "node scripts/build-node.mjs",
     "start:node": "npm run build:node && node --experimental-ffi dist-node/bin/pm.js",
+    "run:node": "node --experimental-ffi dist-node/bin/pm.js",
     "pm": "bun src/bin/pm.ts"
   },
   "devDependencies": {

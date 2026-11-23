@@ -75,6 +75,15 @@ bun typecheck                 # type-check
 bash scripts/smoke-node.sh    # build for Node 26 and run the self-checks and a CLI walk-through (includes "tui ok" twice, the fixture plugin walk and the scaffold step; ends with "smoke ok")
 bun start                     # `ttybrain` with no arguments: the terminal UI (needs a TTY)
 npm run start:node            # the same on Node: builds dist-node/, then runs node --experimental-ffi dist-node/bin/pm.js
+npm run run:node              # run the existing dist-node/ build without rebuilding (rebuild after pulling changes)
 ```
 
+Arguments go after `--`, e.g. `npm run run:node -- project list`.
+
 The Node FFI warning on `start:node` is expected. The CLI itself needs no flag.
+
+## License
+
+Copyright (C) 2026 Filip Delperdange.
+
+ttybrain is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See [LICENSE](LICENSE) for the full text.

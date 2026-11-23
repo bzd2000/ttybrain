@@ -64,7 +64,7 @@ const DATE_FIELDS = new Set(["startDate", "endDate"])
 const CODE_HINT = "2–16 letters or digits, e.g. CRM"
 // A code as given (`#CRM` → `CRM`): what addProject and editProject validate and store, and what their change
 // lines show, so a line names exactly the code the op will store or refuse.
-const codeInput = (input: string) => input.trim().replace(/^#/, "")
+const codeInput = (input: string) => input.trim().replace(/^#/, "").toUpperCase()
 
 export const now = () => currentContext().now
 export const today = () => currentContext().today

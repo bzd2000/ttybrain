@@ -45,10 +45,9 @@ describe("renaming a project's code", () => {
   test("editProject({ code }) renames; links follow by id; the old code no longer resolves", async () => {
     expect(await k.ops.describe("projects", "editProject", { project: "CRM", code: "CRM2027" })).toBe("~ CRM code → CRM2027")
     expect(await k.ops.describe("projects", "editProject", { project: "CRM", code: "#CRM2027", name: "CRM 2027" })).toBe("~ CRM code → CRM2027, name")
-    // The line names the code as the op checks it: trimmed, without `#`; a lower-case one is shown as given (the op
-    // refuses it, as addProject does).
+    // The line names the code as the op stores it: trimmed, without `#`, upper-cased.
     expect(await k.ops.describe("projects", "editProject", { project: "#crm", code: "  #CRM2027 " })).toBe("~ CRM code → CRM2027")
-    expect(await k.ops.describe("projects", "editProject", { project: "CRM", code: "#crm2027" })).toBe("~ CRM code → crm2027")
+    expect(await k.ops.describe("projects", "editProject", { project: "CRM", code: "#crm2027" })).toBe("~ CRM code → CRM2027")
     const out = await inCtx(() => write().editProject!({ project: "#CRM", code: "#CRM2027" }))
     expect([out.ref, out.id, out.code, out.open_actions, out.open_risks]).toEqual(["#CRM2027", 1, "CRM2027", 1, 1])
 
@@ -76,9 +75,12 @@ describe("renaming a project's code", () => {
     const bad = await cli("project", "edit", "CRM", "--code", "#C-1", "--json") // quoted as the op checks it, without `#`
     expect(bad.code).toBe(1)
     expect(bad.json.error).toMatchObject({ message: 'invalid project code "C-1"', field: "code", hint: "2–16 letters or digits, e.g. CRM" })
-    // The same casing rule as add: lower case is refused, as `project add crm` is.
-    expect((await cli("project", "edit", "CRM", "--code", "crm2", "--json")).code).toBe(1)
-    expect((await cli("project", "add", "crm2", "x", "--json")).code).toBe(1)
+    // Lower case is upper-cased, as `project add` does; one differing only in case is a duplicate.
+    expect((await cli("project", "edit", "CRM", "--code", "erp", "--json")).code).toBe(3)
+    const lower = await cli("project", "add", "crm2", "x", "--json")
+    expect([lower.code, lower.json.code]).toEqual([0, "CRM2"])
+    const ren = await cli("project", "edit", "CRM2", "--code", "erp2", "--json")
+    expect([ren.code, ren.json.ref]).toEqual([0, "#ERP2"])
 
     const long = await inCtx(() => write().editProject!({ project: "CRM", code: "DATAPLATFORM2027" }))
     expect(long.ref).toBe("#DATAPLATFORM2027")
