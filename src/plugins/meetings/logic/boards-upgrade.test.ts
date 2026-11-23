@@ -106,7 +106,10 @@ const dump = (k: Kernel) => ({
   attendees: all(k, "SELECT * FROM meetings_attendee ORDER BY meeting_id, person_id"),
   seriesAttendees: all(k, "SELECT * FROM meetings_series_attendee ORDER BY series_id, person_id"),
   agenda: all(k, "SELECT * FROM meetings_agenda_item ORDER BY id"),
-  talk: all(k, "SELECT * FROM meetings_talk_item ORDER BY id"),
+  talk: all(
+    k,
+    "SELECT id, text, project_id, added_date, position, last_position, status, meeting_id, status_date, created_at, updated_at FROM meetings_talk_item ORDER BY id",
+  ),
   kept: all(k, "SELECT * FROM meetings_talk_kept ORDER BY meeting_id, talk_id"),
   links: all(k, "SELECT action_id, record_type, record_id FROM actions_link ORDER BY id"),
   projects: all(k, "SELECT id, code, name, archived_at FROM projects_project ORDER BY id"),
@@ -133,7 +136,7 @@ describe("upgrading meetings 2.0.0 data: boards", () => {
     const { home, was, wasMeetings } = await oldDatabase()
     const k = await boot(home)
     expect(k.plugins.map((p) => [p.id, p.status, p.error ?? null])).toEqual(builtinPlugins.map((p) => [p.id, "ok", null]))
-    // Every row kept (only the subjects of the moved meetings and series change).
+    // Every row kept (only the subjects of what moved change).
     expect(dump(k)).toEqual(was)
     expect(all(k, "PRAGMA foreign_key_check")).toEqual([])
     expect(all(k, "SELECT id, code, name, note, archived_at, from_project_id FROM meetings_board ORDER BY id")).toEqual([
@@ -152,14 +155,18 @@ describe("upgrading meetings 2.0.0 data: boards", () => {
       { id: 2, subject_type: "project", subject_id: 1 },
       { id: 3, subject_type: "board", subject_id: 2 },
     ])
-    // The project keeps its own: its talk items (the one discussed in M-1, the one M-1 kept), its tag, its actions.
+    // BOARD held only board meetings, so its open talk item was the board's talk-list: it moves, in its place. The
+    // item discussed in M-1 stays as it is (history), and so does the person's item tagged with BOARD, and its actions.
     expect(subjects(k, "talk_item")).toEqual([
       { id: 1, subject_type: "project", subject_id: 2 },
-      { id: 2, subject_type: "project", subject_id: 2 },
+      { id: 2, subject_type: "board", subject_id: 1 },
       { id: 3, subject_type: "person", subject_id: 1 },
     ])
     expect((await cli(k, "project", "show", "BOARD")).out.split("\n")[0]).toBe("#BOARD Management board")
-    expect((await cli(k, "talk", "list", "#BOARD", "--json")).json.map((t: any) => t.ref)).toEqual(["T-2", "T-3"])
+    expect((await cli(k, "talk", "list", "#BOARD", "--json")).json.map((t: any) => t.ref)).toEqual(["T-3"])
+    expect((await cli(k, "talk", "list", "#BOARDB2", "--json")).json.map((t: any) => [t.ref, t.position])).toEqual([["T-2", 1]])
+    // The planned board meeting's agenda is the board's talk-list, so the item can be taken up in it.
+    expect((await r(k, "agendaFor", { meeting: "M-2" })).items.map((t: any) => t.ref)).toEqual(["T-2"])
     // The meetings read the same, about the board now.
     const m1 = (await cli(k, "meeting", "show", "M-1")).out
     expect(m1).toBe(
@@ -173,7 +180,7 @@ describe("upgrading meetings 2.0.0 data: boards", () => {
       ["S-3", "#ABCDEFGHIJKLMNOB", "board"],
     ])
     expect((await cli(k, "board", "show", "#BOARDB2")).out).toBe(
-      ["#BOARDB2 Management board", "  series: S-1 Board: monthly on the last fri, next 2026-11-27", "  next: M-2 Board on 2026-11-27", ""].join("\n"),
+      ["#BOARDB2 Management board", "  series: S-1 Board: monthly on the last fri, next 2026-11-27", "  next: M-2 Board on 2026-11-27", "  talk: 1 open item", ""].join("\n"),
     )
 
     // The notice names each new board, in plugin list (text and JSON).
@@ -201,6 +208,64 @@ describe("upgrading meetings 2.0.0 data: boards", () => {
     await close(k)
     const again = await boot(home)
     expect(again.plugins.find((p) => p.id === "meetings")!.notices).toEqual([notice("ABCDEFGHIJKLMNOB", "Programme", "ABCDEFGHIJKLMNOP")])
+  })
+
+  test("B3 by series: a board series moves with all its occurrences, a board occurrence of a project series alone; a project with other meetings keeps its open talk items", async () => {
+    old = await makeTestKernel({ plugins: [meetingsV2, projects, people, actions], today: "2026-11-20" })
+    for (const [code, name] of [["CRM", "CRM replatforming"], ["OPS", "Operations board"]]) await w(old, "projects", "addProject", { code, name })
+    const run = (q: string, ...args: unknown[]) => old!.db.raw.prepare(q).run(args as any)
+    const series = (id: number, project: number, kind: string) =>
+      run(
+        "INSERT INTO meetings_series (id, subject_type, subject_id, title, kind, rhythm, first_date, created_at, updated_at) VALUES (?, 'project', ?, 'S', ?, 'weekly on fri', '2026-11-27', ?, ?)",
+        id, project, kind, T, T,
+      )
+    series(1, 1, "project") // CRM steering
+    series(2, 2, "board") // the OPS board
+    const meeting = (id: number, project: number, seriesId: number, kind: string, date: string) =>
+      run(
+        `INSERT INTO meetings_meeting (id, title, date, kind, status, notes, subject_type, subject_id, series_id, series_date, auto_close, created_at, updated_at)
+         VALUES (?, 'M', ?, ?, 'planned', '', 'project', ?, ?, ?, 1, ?, ?)`,
+        id, date, kind, project, seriesId, date, T, T,
+      )
+    meeting(1, 1, 1, "project", "2026-11-27")
+    meeting(2, 1, 1, "board", "2026-12-04") // one board occurrence of the project series
+    meeting(3, 2, 2, "board", "2026-11-27")
+    meeting(4, 2, 2, "project", "2026-12-04") // one project occurrence of the board series
+    const talk = (id: number, project: number) =>
+      run(
+        `INSERT INTO meetings_talk_item (id, subject_type, subject_id, text, added_date, position, status, created_at, updated_at)
+         VALUES (?, 'project', ?, 'Item', '2026-11-01', 1, 'open', ?, ?)`,
+        id, project, T, T,
+      )
+    talk(1, 1)
+    talk(2, 2)
+    await old.shutdown()
+
+    const k = await boot(old.home)
+    expect(all(k, "SELECT id, code, from_project_id FROM meetings_board ORDER BY id")).toEqual([
+      { id: 1, code: "CRMB", from_project_id: 1 },
+      { id: 2, code: "OPSB", from_project_id: 2 },
+    ])
+    expect(all(k, "SELECT id, kind, subject_type, subject_id, series_id FROM meetings_meeting WHERE id <= 4 ORDER BY id")).toEqual([
+      { id: 1, kind: "project", subject_type: "project", subject_id: 1, series_id: 1 },
+      { id: 2, kind: "board", subject_type: "board", subject_id: 1, series_id: 1 }, // alone, still dated by its series
+      { id: 3, kind: "board", subject_type: "board", subject_id: 2, series_id: 2 },
+      { id: 4, kind: "board", subject_type: "board", subject_id: 2, series_id: 2 }, // with its series: on a board, a board meeting
+    ])
+    expect(subjects(k, "series")).toEqual([
+      { id: 1, subject_type: "project", subject_id: 1 },
+      { id: 2, subject_type: "board", subject_id: 2 },
+    ])
+    // CRM still has its project series: its open item stays (and the notice says so); OPS has nothing left: it moves.
+    expect(subjects(k, "talk_item")).toEqual([
+      { id: 1, subject_type: "project", subject_id: 1 },
+      { id: 2, subject_type: "board", subject_id: 2 },
+    ])
+    expect((await r(k, "agendaFor", { meeting: "M-3" })).items.map((t: any) => t.ref)).toEqual(["T-2"])
+    expect(k.plugins.find((p) => p.id === "meetings")!.notices).toEqual([
+      'board #CRMB "CRM replatforming" now holds the board meetings of project #CRM; open talk items stay on #CRM; rename it: ttybrain board edit #CRMB --code <CODE>',
+      'board #OPSB "Operations board" now holds the board meetings of project #OPS; rename it: ttybrain board edit #OPSB --code <CODE>',
+    ])
   })
 
   test("running the step again changes nothing", async () => {

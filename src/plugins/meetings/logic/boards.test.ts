@@ -156,7 +156,9 @@ describe("ttybrain board", () => {
     const agenda = await cli("meeting", "add", "Steering", "--about", "#CRM", "--date", "2026-12-04", "--projects", "CRM,MB")
     expect([agenda.code, agenda.err.split("\n")[0]]).toEqual([1, "error: #MB is a board, not a project"])
     const note = await failure(w("addNote", { person: "@anna", kind: "interaction", text: "Ship", project: "MB" }, "people"))
-    expect([note.name, note.message]).toEqual(["ValidationError", "#MB is a board, not a project"])
+    expect([note.name, note.message, note.hint]).toEqual(["ValidationError", "#MB is a board, not a project", 'run "ttybrain project list" for the project codes'])
+    const notes = await cli("note", "list", "--project", "MB")
+    expect([notes.code, notes.err]).toEqual([1, 'error: #MB is a board, not a project\nhint: run "ttybrain project list" for the project codes\n'])
     // And the reverse: a project where a board is needed.
     const board = await cli("board", "show", "#CRM")
     expect([board.code, board.err]).toEqual([1, 'error: #CRM is a project, not a board\nhint: run "ttybrain board list" for the board codes\n'])
@@ -197,6 +199,20 @@ describe("boards as subjects", () => {
     ])
     expect((await r("upcoming", { from: "today", to: "+30d" })).meetings.map((m: any) => [m.ref, m.about, m.kind])).toEqual([["M-1", "#MB", "board"]])
     expect((await ok("meeting", "series", "list")).out).toContain("S-1  Board  #MB    board  monthly on the last fri")
+  })
+
+  test("an archived board's series make no new meetings until it is restored", async () => {
+    await boot()
+    await ok("board", "add", "MB", "Management board")
+    await ok("meeting", "series", "add", "#MB", "Board", "--every", "monthly on the last fri", "--from", "today")
+    const dates = () => sql("SELECT date FROM meetings_meeting WHERE series_id = 1 ORDER BY date").map((r: any) => r.date)
+    expect(dates()).toEqual(["2026-11-27", "2026-12-25"])
+    await ok("board", "archive", "MB")
+    await ok("meeting", "series", "edit", "S-1", "--every", "weekly on fri")
+    expect(dates()).toEqual(["2026-11-27", "2026-12-25"])
+    await ok("board", "restore", "MB")
+    await ok("meeting", "series", "edit", "S-1", "--title", "Weekly board")
+    expect(dates()).toEqual(["2026-11-13", "2026-11-20", "2026-11-27", "2026-12-04", "2026-12-11", "2026-12-18", "2026-12-25", "2027-01-01"])
   })
 
   test("a board's talk-list, and its meetings' agenda: the board's items only (no project tags merged)", async () => {

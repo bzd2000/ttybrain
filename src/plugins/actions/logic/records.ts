@@ -52,7 +52,7 @@ export type ActionRecord = Static<typeof ActionRecord>
 export const PREFIX = "A-"
 const MEETING_PREFIX = "M-"
 export const GONE = "—"
-export const LINK_HINT = "link a record by its ref: a project (#CRM), a person (@anna), a meeting (M-4)"
+export const LINK_HINT = "link a record by its ref: a project (#CRM), a board (#MB), a person (@anna), a meeting (M-4)"
 
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
 const int = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v))

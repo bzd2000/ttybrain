@@ -155,7 +155,7 @@ export function makeStore(ctx: PluginRuntime) {
     const found = await ctx.records.resolve(`#${code}`, { type: "project" })
     if (found && found.type === "project") return found.id
     const other = await ctx.records.resolve(`#${code}`)
-    if (other) throw new ValidationError(`#${code} is a ${other.type}, not a project`, { field: "project" })
+    if (other) throw new ValidationError(`#${code} is a ${other.type}, not a project`, { field: "project", hint: 'run "ttybrain project list" for the project codes' })
     throw new NotFoundError(`unknown project "${code}"`)
   }
 

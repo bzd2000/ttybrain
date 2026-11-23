@@ -94,7 +94,7 @@ export const BoardRecord = Type.Object({
 })
 export type BoardRecord = Static<typeof BoardRecord>
 
-const inList =(col: string, xs: readonly string[]) => sql.raw(`${col} in (${xs.map((x) => `'${x}'`).join(", ")})`)
+const inList = (col: string, xs: readonly string[]) => sql.raw(`${col} in (${xs.map((x) => `'${x}'`).join(", ")})`)
 
 // 001 as meetings 1.0.0 shipped it (kept as is: applied databases have it; the upgrade test builds one with it).
 export async function migration001(db: Kysely<any>): Promise<void> {

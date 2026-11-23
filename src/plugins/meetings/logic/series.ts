@@ -113,10 +113,12 @@ export function makeOccurrences(ctx: PluginContext, store: Store) {
   // The series' dates from today to 55 days ahead.
   const window = (s: SeriesRow) => rhythmDates(parseRhythm(s.rhythm), s.first_date, today(), addDays(today(), AHEAD_DAYS), s.end_date)
 
-  // Makes the missing occurrences of one series (or of all of them) for the window. Returns how many it made.
+  // Makes the missing occurrences of one series (or of all of them) for the window; none for an archived board's.
+  // Returns how many it made.
   async function topUp(seriesId?: number): Promise<number> {
     let made = 0
     for (const s of await rows(seriesId)) {
+      if (s.subject_type === "board" && (await store.boardById(s.subject_id)).archived) continue // until it is restored
       const dates = window(s)
       if (dates.length === 0) continue
       const have = new Set((await db.selectFrom("meeting").select("series_date").where("series_id", "=", s.id).execute()).map((r) => String(r.series_date)))

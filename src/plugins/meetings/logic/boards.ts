@@ -259,7 +259,7 @@ function registerBoardCommands(ctx: PluginContext, store: Store): void {
   })
 
   for (const [verb, op, summary] of [
-    ["archive", "archiveBoard", "archive a board: it takes no new meetings, series or talk items (boards are never deleted)"],
+    ["archive", "archiveBoard", "archive a board: it takes no new meetings, series or talk items and its series make no new meetings, until restored (boards are never deleted)"],
     ["restore", "restoreBoard", "restore an archived board"],
   ] as const) {
     ctx.command({
@@ -276,16 +276,25 @@ function registerBoardCommands(ctx: PluginContext, store: Store): void {
 }
 
 // B3: before boards existed, a board meeting was about a project (such as BOARD). For every project that is the
-// subject of a board-kind meeting or series, one board is made with the project's name and the code `<CODE>B` (the
-// project keeps `<CODE>`: codes are one namespace), cut to 16 characters, with a digit added while that is taken; those
-// meetings and series move to it (ids, notes, agendas, talk items discussed or kept in them, linked actions: all stay
-// with the meeting). The project keeps its code, talk items, actions and everything else. Returns the boards made.
-export async function boardsFromProjects(ctx: PluginContext): Promise<Array<{ board: string; project: string }>> {
+// subject of a board-kind series or meeting, one board is made with the project's name and the code `<CODE>B` (the
+// project keeps `<CODE>`: codes are one namespace; the code is cut to fit 16 characters, with a digit added while it is
+// taken). What moves to it:
+// - each board-kind series, with all its occurrences (whatever kind one was given: on a board, it is a board meeting);
+// - each board-kind meeting outside such a series (a one-off, or one occurrence of a project series), alone;
+// - the project's open talk items, in their order, when nothing else is left on the project (no other meeting or
+//   series): they were the board's talk-list. Otherwise they stay on the project, and the notice says so.
+// Ids, notes, agendas, attendees, talk items discussed or kept in a meeting, linked actions: all stay as they are.
+// The project keeps its code and everything else. Returns the boards made.
+export async function boardsFromProjects(ctx: PluginContext): Promise<Array<{ board: string; project: string; talk: boolean }>> {
   const db = ctx.data
-  const onProjects = (table: "meeting" | "series") =>
-    db.selectFrom(table).select("subject_id").where("kind", "=", "board").where("subject_type", "=", "project").distinct().execute()
-  const ids = [...new Set([...(await onProjects("meeting")), ...(await onProjects("series"))].map((r) => Number(r.subject_id)))].sort((a, b) => a - b)
-  const made: Array<{ board: string; project: string }> = []
+  const boardSeries = (pid?: number) => {
+    let q = db.selectFrom("series").select(["id", "subject_id"]).where("kind", "=", "board").where("subject_type", "=", "project")
+    if (pid !== undefined) q = q.where("subject_id", "=", pid)
+    return q.execute()
+  }
+  const boardMeetings = () => db.selectFrom("meeting").select("subject_id").where("kind", "=", "board").where("subject_type", "=", "project").execute()
+  const ids = [...new Set([...(await boardSeries()), ...(await boardMeetings())].map((r) => Number(r.subject_id)))].sort((a, b) => a - b)
+  const made: Array<{ board: string; project: string; talk: boolean }> = []
   for (const pid of ids) {
     const p = await db.selectFrom("projects.project").select(["code", "name"]).where("id", "=", pid).executeTakeFirst()
     if (!p) continue // a project that is gone: its meetings stay as they are
@@ -301,15 +310,19 @@ export async function boardsFromProjects(ctx: PluginContext): Promise<Array<{ bo
       .values({ code: c, name: String(p.name), note: null, archived_at: null, from_project_id: pid, created_at: t, updated_at: t })
       .executeTakeFirstOrThrow()
     const bid = Number(res.insertId)
-    for (const table of ["meeting", "series"] as const)
-      await db
-        .updateTable(table)
-        .set({ subject_type: "board", subject_id: bid })
-        .where("kind", "=", "board")
-        .where("subject_type", "=", "project")
-        .where("subject_id", "=", pid)
-        .execute()
-    made.push({ board: `#${c}`, project: `#${project}` })
+    const onBoard = { subject_type: "board", subject_id: bid }
+    const series = (await boardSeries(pid)).map((s) => Number(s.id))
+    if (series.length > 0) {
+      await db.updateTable("meeting").set({ ...onBoard, kind: "board" }).where("series_id", "in", series).execute()
+      await db.updateTable("series").set(onBoard).where("id", "in", series).execute()
+    }
+    await db.updateTable("meeting").set(onBoard).where("kind", "=", "board").where("subject_type", "=", "project").where("subject_id", "=", pid).execute()
+    // Nothing else left on the project: its open talk items were the board's (positions are kept: the board is new).
+    const left = async (table: "meeting" | "series") =>
+      (await db.selectFrom(table).select("id").where("subject_type", "=", "project").where("subject_id", "=", pid).executeTakeFirst()) !== undefined
+    const talk = !(await left("meeting")) && !(await left("series"))
+    if (talk) await db.updateTable("talk_item").set(onBoard).where("subject_type", "=", "project").where("subject_id", "=", pid).where("status", "=", "open").execute()
+    made.push({ board: `#${c}`, project: `#${project}`, talk })
   }
   return made
 }
@@ -319,16 +332,27 @@ function registerBoardsFromProjects(ctx: PluginContext, store: Store): void {
     await boardsFromProjects(ctx)
     return "done"
   })
-  // Until such a board is first edited (or archived): named, so the user can give it a better code.
+  // Until such a board is first edited (or archived): named, so the user can give it a better code; and, while the
+  // project still has open talk items of its own, that they stayed there.
   ctx.notices(async () => {
     const rows = await ctx.data.selectFrom("board").select(["id", "from_project_id"]).where("from_project_id", "is not", null).orderBy("code").execute()
     const lines: string[] = []
     for (const r of rows) {
       const b = await store.boardById(Number(r.id))
-      const project = await store.subjectRef("project", Number(r.from_project_id))
-      const of = project.startsWith("#") ? `project ${project}` : "a project"
-      lines.push(`board ${b.ref} "${b.name}" now holds the board meetings of ${of}; rename it: ttybrain board edit ${b.ref} --code <CODE>`)
+      const pid = Number(r.from_project_id)
+      const project = await store.subjectRef("project", pid)
+      const known = project.startsWith("#")
+      const open = await ctx.data
+        .selectFrom("talk_item")
+        .select("id")
+        .where("subject_type", "=", "project")
+        .where("subject_id", "=", pid)
+        .where("status", "=", "open")
+        .executeTakeFirst()
+      const stay = known && open ? `; open talk items stay on ${project}` : ""
+      lines.push(`board ${b.ref} "${b.name}" now holds the board meetings of ${known ? `project ${project}` : "a project"}${stay}; rename it: ttybrain board edit ${b.ref} --code <CODE>`)
     }
     return lines
   })
 }
+
