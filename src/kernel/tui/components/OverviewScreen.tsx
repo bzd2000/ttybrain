@@ -170,9 +170,11 @@ function tableColumns(spec: OverviewColumn[] | undefined, rows: OverviewRow[], s
   const title = (i: number) => titles[i] ?? ""
   if (spec)
     return spec.map((w, i) =>
-      typeof w === "object"
-        ? { id: `c${i}`, title: title(i), width: Math.max(w.min, fitWidth(shown, `c${i}`, title(i), w.max)), ...(w.drop === undefined ? {} : { drop: w.drop }) }
-        : { id: `c${i}`, title: title(i), width: w },
+      typeof w !== "object"
+        ? { id: `c${i}`, title: title(i), width: w }
+        : "grow" in w
+          ? { id: `c${i}`, title: title(i), width: "grow" as const, minWidth: w.min }
+          : { id: `c${i}`, title: title(i), width: Math.max(w.min, fitWidth(shown, `c${i}`, title(i), w.max)), ...(w.drop === undefined ? {} : { drop: w.drop }) },
     )
   const n = Math.max(0, ...rows.map((r) => r.cells.length))
   const natural = Array.from({ length: n }, (_, i) => fitWidth(shown, `c${i}`, title(i), Infinity))

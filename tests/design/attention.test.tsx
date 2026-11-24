@@ -187,10 +187,13 @@ for (const [width, height] of [[118, 36], [80, 24]] as const)
     const at = (re: RegExp) => frame.split("\n").filter((l) => re.test(l))
     expect(at(/ A-1000 .+ DATAPLATFORM2027 +-2d /).length).toBe(1) // overdue
     expect(at(/ A-1001 .+ DATAPLATFORM2027 +Fri /).length).toBe(1) // due this week
-    expect(at(/ ● +DATAPLATFORM2027 Ingest b/).length).toBe(1) // needing attention (at 80 the reason gives way)
+    // Needing attention: the reason whole, or (at 80) cut with `…`.
+    expect(at(width === 118 ? / ● +DATAPLATFORM2027 Ingest blocked/ : / ● +DATAPLATFORM2027 Ingest \S*… +│/).length).toBe(1)
     expect(at(/│ DATAPLATFORM2027 .+ -3d /).length).toBe(1) // the late milestone
-    // The high risk (at 80 its right column, 29 cells inside with the lead's 1.35 : 1, cuts the type cell).
-    expect(at(width === 118 ? / R-1000 +DATAPLATFORM2027 .+ risk / : / R-1000 +DATAPLATFORM2027 /).length).toBe(1)
+    // The high risk with its type; at 80 (its column 29 cells inside with the lead's 1.35 : 1) the type column is
+    // dropped and the title cut with `…`, never the type cut mid-word.
+    expect(at(width === 118 ? / R-1000 +DATAPLATFORM2027 .+ risk / : / R-1000 +DATAPLATFORM2027 \S+… +│/).length).toBe(1)
+    expect(frame).not.toMatch(/ (ri|ris|is|iss|issu) +│/)
     expect(at(/ Alexandra Vandenberghe +never /).length).toBe(1) // the stakeholder: whole name and age
     expect(frame).not.toMatch(/DATAPLATFORM202?…|DATAPL\w*…|A-100…|R-100…|Alexandra Vande\w*…/)
     // One column edge on every row (the lead's 1.35 : 1).
@@ -308,6 +311,8 @@ for (const [name, today, seed] of [["2026-11-13", "2026-11-12", seedDesign], ["2
       const frame = await tui.frame()
       expectOneEdge(frame, LEAD_EDGE[width]!)
       expectAlignedEdges(frame, width)
+      // A risk's type shows whole or not at all (it drops on a narrow column, never cut mid-word).
+      expect(frame).not.toMatch(/ (ri|ris|iss|issu) +│/)
     })
 
 test("Attention's Upcoming meetings: Enter opens the meeting, t adds to its talk-list, x in the action block marks it done", async () => {

@@ -203,3 +203,14 @@ test("a column with drop gives way on a narrow terminal; the name stays", async 
   expect(lineWith(frame, "thing 1")).toContain("T-1   thing 1")
   expect(frame).not.toContain("Size")
 })
+
+// A grow column's `min`: the width it keeps before the droppable columns give way (29 cells inside at 70 wide: 5 + 1
+// + min + 1 + 6 fits with 10, not with 20).
+for (const [min, kept] of [[10, true], [20, false]] as const)
+  test(`a grow column with min ${min}: the drop column ${kept ? "stays" : "gives way"}`, async () => {
+    kernel = await makeTestKernel({ plugins: [thingPlugin] })
+    tui = await renderTui(kernel, { parts: [part([], { columns: [5, { grow: true, min }, { min: 6, max: 6, drop: 1 }] })], width: 70, height: 24 })
+    const frame = await until(tui, (f) => f.includes("thing 1") && f.includes("gadget 1"))
+    expect(lineWith(frame, "thing 1").includes("size 1")).toBe(kept)
+    expect(lineWith(frame, "thing 1")).toContain("T-1   thing 1")
+  })
