@@ -49,9 +49,16 @@ const expectEqualColumns = (frame: string, from = 0) => {
     expect({ line: i, left: a }).toEqual({ line: i, left: b! })
   }
 }
+// Every line with a top border (the lead block's and the grid rows') starts in column 1 and ends in column
+// `width - 2`: the grid's outer edges line up with the lead block's (the screen's padding is a cell each side).
+const expectAlignedEdges = (frame: string, width: number) => {
+  const tops = frame.split("\n").map((_, i) => i).filter((i) => boxWidths(frame, i).length === 2)
+  expect(tops.length).toBeGreaterThan(1)
+  for (const i of tops) expect({ line: i, from: line(frame, i).indexOf("╭"), to: line(frame, i).lastIndexOf("╮") }).toEqual({ line: i, from: 1, to: width - 2 })
+}
 const inside = (frame: string, i: number, side: 0 | 1) => (line(frame, i).split("│")[1 + 2 * side] ?? "").slice(1).trimEnd()
 
-// At 118 wide both grid panels have 53 cells inside (the cell an odd width leaves over stays empty on the right).
+// At 118 wide both grid panels have 53 cells inside, two cells apart (the gap takes the cell an uneven split leaves).
 // Beside the lead panel (Upcoming meetings, 1.35 : 1) the right column has 45 cells inside.
 const ACTIONS_L = [5, 31, 7, 7]
 const ACTIONS_SIDE = [5, 23, 7, 7]
@@ -80,7 +87,7 @@ test("Attention as designed", async () => {
 
   // Then the grid. Row 1: Due this week and Projects needing attention (no count, no on-hold BI2, no "updated"
   // column since the 2026-11-20 home design); the pair starts on the same line and closes on the same line.
-  expect(line(frame, 6)).toMatch(/^ ╭─ Due this week · 3 ─+╮ ╭─ Projects needing attention ─+╮$/)
+  expect(line(frame, 6)).toMatch(/^ ╭─ Due this week · 3 ─+╮  ╭─ Projects needing attention ─+╮$/)
   expect([7, 8, 9, 10].map((i) => inside(frame, i, 0))).toEqual([
     cols(ACTIONS_L, ["A-4", "Prepare SteerCo deck input", "CRM", "Fri"]),
     cols(ACTIONS_L, ["A-5", "Confirm licence count", "IAM", "Fri"]),
@@ -93,10 +100,10 @@ test("Attention as designed", async () => {
     cols(PROJECTS, ["●", "HRP", "Key user availability"]),
     cols(PROJECTS, ["○", "IAM", "Health not updated · 31d ago"]),
   ])
-  expect(line(frame, 11)).toMatch(/^ ╰─+╯ ╰─+╯$/)
+  expect(line(frame, 11)).toMatch(/^ ╰─+╯  ╰─+╯$/)
 
   // Row 3: Late milestones with its sub-heading and High risks & issues.
-  expect(line(frame, 12)).toMatch(/^ ╭─ Late milestones · 2 ─+╮ ╭─ High risks & issues · 3 ─+╮$/)
+  expect(line(frame, 12)).toMatch(/^ ╭─ Late milestones · 2 ─+╮  ╭─ High risks & issues · 3 ─+╮$/)
   expect([13, 14, 15, 16, 17].map((i) => inside(frame, i, 0))).toEqual([
     cols(MILESTONES, ["ERP", "Vendor selected", "-6d"]),
     cols(MILESTONES, ["DWH", "Test environment ready", "-1d"]),
@@ -111,19 +118,20 @@ test("Attention as designed", async () => {
     "",
     "",
   ])
-  expect(line(frame, 18)).toMatch(/^ ╰─+╯ ╰─+╯$/)
+  expect(line(frame, 18)).toMatch(/^ ╰─+╯  ╰─+╯$/)
 
   // Row 4: Stakeholders to contact (no count, high influence only, the footer row) and the Inbox panel after the
   // design's panels.
-  expect(line(frame, 19)).toMatch(/^ ╭─ Stakeholders to contact ─+╮ ╭─ Inbox · 3 ─+╮$/)
+  expect(line(frame, 19)).toMatch(/^ ╭─ Stakeholders to contact ─+╮  ╭─ Inbox · 3 ─+╮$/)
   expect([20, 21, 22].map((i) => inside(frame, i, 0))).toEqual([
     cols(STAKEHOLDERS, ["Marie Dubois", "41d"]),
     cols(STAKEHOLDERS, ["Luc Vermeulen", "35d"]),
     "last contact over 30 days, high influence first",
   ])
-  expect(line(frame, 23)).toMatch(/^ ╰─+╯ ╰─+╯$/)
+  expect(line(frame, 23)).toMatch(/^ ╰─+╯  ╰─+╯$/)
   // The grid's two columns have the same width in every row (57 cells each at 118: 53 inside).
   expectEqualColumns(frame, 6)
+  expectAlignedEdges(frame, 118)
   for (const i of [6, 12, 19]) expect(boxWidths(frame, i)).toEqual([57, 57])
   expect(frame).not.toContain("BI2")
   expect(frame).not.toContain("Nadia")
@@ -182,6 +190,7 @@ for (const [width, height] of [[118, 36], [80, 24]] as const)
     expect(frame).not.toMatch(/DATAPLATFORM202?…|DATAPL\w*…|A-100…|R-100…|Alexandra Vande\w*…/)
     // The grid's two columns: the same width in every row.
     expectEqualColumns(frame)
+    expectAlignedEdges(frame, width)
   })
 
 // The 2026-11-20 `home` design: "Upcoming meetings · next 7 days" first (top left, paired with Overdue actions), its
@@ -234,18 +243,19 @@ test("Attention: Upcoming meetings as designed (2026-11-20 home)", async () => {
     cols(PROJECTS_SIDE, ["●", "CRM", "Design slipping 2 weeks"]),
   ])
   // Then the grid with the other panels (design §3: Attention keeps them).
-  expect(line(frame, 13)).toMatch(/^ ╭─ Late milestones · 0 ─+╮ ╭─ High risks & issues · 0 ─+╮$/)
+  expect(line(frame, 13)).toMatch(/^ ╭─ Late milestones · 0 ─+╮  ╭─ High risks & issues · 0 ─+╮$/)
   expect([inside(frame, 14, 0), inside(frame, 14, 1)]).toEqual(["No late milestones and none in the next 14 days.", "No open high-severity risks or issues."])
-  expect(line(frame, 15)).toMatch(/^ ╰─+╯ ╰─+╯$/)
-  expect(line(frame, 16)).toMatch(/^ ╭─ Stakeholders to contact ─+╮ ╭─ Inbox · 2 ─+╮$/)
+  expect(line(frame, 15)).toMatch(/^ ╰─+╯  ╰─+╯$/)
+  expect(line(frame, 16)).toMatch(/^ ╭─ Stakeholders to contact ─+╮  ╭─ Inbox · 2 ─+╮$/)
   expect([17, 18].map((i) => [inside(frame, i, 0), inside(frame, i, 1)])).toEqual([
     [cols([17, 10], ["Marie Dubois", "49d"]), "I-1 @anna wants to swap the 1:1 to Tuesday"],
     ["last contact over 30 days, high influence first", "I-2 #ERP vendor B sent the revised offer"],
   ])
-  expect(line(frame, 19)).toMatch(/^ ╰─+╯ ╰─+╯$/)
+  expect(line(frame, 19)).toMatch(/^ ╰─+╯  ╰─+╯$/)
   for (let i = 20; i < 35; i++) expect(line(frame, i)).toBe("")
   // Below the lead block, the grid's two columns have the same width (the lead block keeps its 1.35 : 1).
   expectEqualColumns(frame, 13)
+  expectAlignedEdges(frame, 118)
   expect(line(frame, 35)).toBe(" tab panel   enter open   x done   t to talk   i capture   g or 1-6 screens   ? help")
 
   const spans = await tui.spans()

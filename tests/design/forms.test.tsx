@@ -146,7 +146,49 @@ test("New note, talk item and a meeting about a board in the form look", async (
   t.input.pressTab()
   const frame = await until(t, (f) => /About {2,}Steering committee · board/.test(f))
   expect(frame).toMatch(/│ About {2,}Steering committee · board +│/)
+  // Kind follows About for a new meeting too: a board's code gives board.
+  expect(frame).toMatch(/│ Kind {2,}board \(1:1 · project\) +│/)
   expect(o.box.at(-1)).toMatch(/ctrl\+s save · esc cancel ─╯$/)
+})
+
+// The width of the form's box (its top border) on the line with its title.
+const boxWidth = (frame: string, title: string) => {
+  const l = frame.split("\n").find((r) => r.includes(`─ ${title} ─`))!
+  return l.indexOf("╮") - l.indexOf("╭") + 1
+}
+
+// The form keeps its width wherever the focus is: a date field's preview (`→ 2026-11-06`) has its slot from the start.
+for (const [width, height] of [[118, 36], [80, 24]] as const)
+  test(`a form's width does not change as the focus moves (${width}×${height})`, async () => {
+    const t = await start(width, height)
+    for (const [type, id, props, title, fields] of [
+      ["milestone", "milestone", { recordRef: "MS-1" }, "Edit MS-1", 3],
+      ["project", "project", { recordRef: "#CRM" }, "Edit CRM", 8],
+      ["decision", "decision", { prefill: { project: "CRM" } }, "New decision", 4],
+    ] as const) {
+      await openForm(t, type, id, props, title)
+      const widths = [boxWidth(await t.frame(), title)]
+      for (let i = 1; i < fields; i++) {
+        t.input.pressTab()
+        widths.push(boxWidth(await t.frame(), title))
+      }
+      expect({ title, widths }).toEqual({ title, widths: widths.map(() => widths[0]!) })
+      t.input.pressEscape()
+      await until(t, (f) => !f.includes(`─ ${title} ─`))
+    }
+  }, 30_000)
+
+test("a date that does not parse reads red once the focus leaves it", async () => {
+  const t = await start(118, 36)
+  await openForm(t, "milestone", "milestone", { recordRef: "MS-1" }, "Edit MS-1")
+  t.input.pressTab() // Due
+  for (let i = 0; i < 12; i++) t.input.pressBackspace()
+  await t.input.typeText("notadate")
+  expect(await t.frame()).toContain("invalid date")
+  t.input.pressTab()
+  const frame = await until(t, (f) => /│ Due {2,}notadate +│/.test(f))
+  expect(frame).not.toContain("invalid date")
+  expect(fgAt(await t.spans(), "notadate", /│ Due /)).toBe(theme.red)
 })
 
 // Every registered form, new and (where one is seeded) edit, opens whole at 80×24: the box inside the terminal,

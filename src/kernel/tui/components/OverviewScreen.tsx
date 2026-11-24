@@ -111,9 +111,11 @@ export function OverviewScreen() {
       />
     </PluginScope>
   )
-  // A grid row's cell, or a column: half the width, the same for both whatever they hold (a cell left over on an
-  // odd width stays empty on the right); the lead block's columns: the lead's weight against 1.
+  // A grid row's cell, or a column: half the width, the same for both whatever they hold; the gap between them takes
+  // the cell an uneven split leaves over, so their outer edges line up with the lead block's. The lead block's
+  // columns: the lead's weight against 1.
   const half = () => Math.max(0, Math.floor((dims().width - 3) / 2))
+  const gridGap = () => 1 + ((dims().width - 3) % 2)
   const Half = (props: { indexes: number[]; weight?: number }) => (
     <box
       flexDirection="column"
@@ -144,14 +146,14 @@ export function OverviewScreen() {
         <Show
           when={isGrid()}
           fallback={
-            <box flexDirection="row" gap={1} flexGrow={1} minHeight={0} overflow="hidden">
+            <box flexDirection="row" gap={gridGap()} flexGrow={1} minHeight={0} overflow="hidden">
               <For each={groups()}>{(list) => <Half indexes={list} />}</For>
             </box>
           }
         >
           <For each={groups()}>
             {(pair) => (
-              <box flexDirection="row" gap={1} flexShrink={0}>
+              <box flexDirection="row" gap={gridGap()} flexShrink={0}>
                 <Half indexes={pair.slice(0, 1)} />
                 <Half indexes={pair.slice(1)} />
               </box>

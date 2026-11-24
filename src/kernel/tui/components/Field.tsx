@@ -47,8 +47,8 @@ export type FieldSpec = {
   when?: (values: Record<string, string | null>) => boolean
 }
 
-// A value as a Form with a `look` shows it: pieces of text, some muted.
-export type FieldDisplay = Array<{ text: string; muted?: boolean }>
+// A value as a <Form> shows it while not focused: pieces of text, some muted, some red (a date that does not parse).
+export type FieldDisplay = Array<{ text: string; muted?: boolean; error?: boolean }>
 
 export type Suggestion = { ref: string; label: string }
 
@@ -126,7 +126,7 @@ export function Field(props: {
         </text>
         <Show when={asText()}>
           <box flexDirection="row">
-            <For each={props.display ?? [{ text: props.value ?? "" }]}>{(d) => <text fg={d.muted ? theme.muted : theme.text}>{d.text}</text>}</For>
+            <For each={props.display ?? [{ text: props.value ?? "" }]}>{(d) => <text fg={d.error ? theme.red : d.muted ? theme.muted : theme.text}>{d.text}</text>}</For>
           </box>
         </Show>
         <Show when={props.editor === undefined} fallback={asText() ? null : props.editor}>
@@ -183,7 +183,7 @@ export function Field(props: {
           {/* In the value column, wrapping there at words. */}
           <box flexDirection="row">
             <box width={props.labelWidth + gap()} flexShrink={0} />
-            <text fg={theme.red} maxWidth={props.valueWidth} wrapMode="word">{`✗ ${props.error}`}</text>
+            <text fg={theme.red} width={props.valueWidth} wrapMode="word">{`✗ ${props.error}`}</text>
           </box>
         </Show>
       </Show>

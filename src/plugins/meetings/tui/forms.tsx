@@ -80,13 +80,15 @@ export function MeetingForm(props: RecordFormProps) {
       {(loaded: { meeting: MeetingRecord | null; boards: Set<string> } | null) => {
         const m = loaded?.meeting ?? null
         const boards = loaded?.boards ?? new Set<string>()
-        // An edit that gives the meeting a subject of another kind changes its Kind with it, so the change shows
-        // before saving: until Kind is edited by hand it follows About (so it has no `initial`: a field with one never follows).
+        // Kind follows About until it is edited by hand (so it has no `initial`: a field with one never follows): a
+        // person gives 1:1, a board's code board, a project's project, so a new meeting's kind shows before saving
+        // (empty while About names nothing yet), and an edit that gives the meeting a subject of another kind
+        // changes its Kind with it.
         const kindOf = (about: string | null | undefined): string | null | undefined => {
           const ref = (about ?? "").trim().split(/[\s,]+/)[0] ?? ""
-          if (m === null) return undefined
-          if (ref === (m.about ?? "")) return m.kind
-          return ref.startsWith("@") ? "one_on_one" : ref.startsWith("#") ? (boards.has(ref.slice(1).toUpperCase()) ? "board" : "project") : undefined
+          if (m !== null && ref === (m.about ?? "")) return m.kind
+          const kind = ref.startsWith("@") ? "one_on_one" : ref.startsWith("#") ? (boards.has(ref.slice(1).toUpperCase()) ? "board" : "project") : undefined
+          return kind ?? (m === null ? null : undefined)
         }
         // What it is about comes first; a new meeting's kind may be left empty: it then follows from that.
         const fields: FieldSpec[] = [

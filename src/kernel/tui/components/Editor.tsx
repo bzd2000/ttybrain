@@ -141,6 +141,7 @@ export function Editor(props: EditorOptions & { close(): void; confirm(text: str
   return (
     <box
       border
+      borderStyle="rounded"
       borderColor={theme.accent}
       backgroundColor={theme.panel}
       flexDirection="column"

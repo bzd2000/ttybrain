@@ -142,10 +142,12 @@ describe("person form", () => {
     t.input.pressArrow("right")
     t.input.pressArrow("right") // high
     t.input.pressKey("s", { ctrl: true })
-    const frame = await until(t, (f) => f.includes("influence and interest are for stakeholders only"))
+    const frame = await until(t, (f) => f.includes("✗ influence and interest"))
     const lines = frame.split("\n")
     const i = lines.findIndex((l) => l.includes("Influence"))
-    expect(lines[i + 1]).toContain("influence and interest are for stakeholders only")
+    // Under the field, wrapped at words in the value column (the form keeps its width).
+    const text = (l: string) => l.slice(l.indexOf("│") + 1, l.lastIndexOf("│")).trim()
+    expect(`${text(lines[i + 1]!)} ${text(lines[i + 2]!)}`).toBe("✗ influence and interest are for stakeholders only")
     expect(frame).toContain("New person")
     expect(await rows("person", PERSON_COLS)).toEqual([])
   })

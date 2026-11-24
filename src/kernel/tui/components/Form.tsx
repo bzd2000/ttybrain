@@ -27,9 +27,10 @@
 //   title padded on its top border, `ctrl+s save · esc cancel` on its bottom border (unless `footer` says
 //   otherwise), a muted label column (no `›` or `*`; its longest label and 4 cells, or `look.labelWidth`), only the
 //   focused field as an input and the others as read (a field's `show`: refs by label, with their type, a date as
-//   its day, which is also how a date field reads without one; the placeholder when empty; a longtext its first
-//   line; a value too long for its column ends in `…` after a whole word), and Tab's hint labelled `tab field`
-//   (`look.tabLabel`). On a narrow terminal the label column gives way first (down to its longest label), then the
+//   its day, which is also how a date field reads without one, red when it does not parse; the placeholder when
+//   empty; a longtext its first line; a value too long for its column ends in `…` after a whole word), and Tab's
+//   hint labelled `tab field` (`look.tabLabel`). The form's width is fixed (see `layout`), so moving the focus never
+//   changes it. On a narrow terminal the label column gives way first (down to its longest label), then the
 //   inputs; an error under a field wraps in the value column. A field's `note` is worked out from the current
 //   values of the own fields (Field.tsx).
 import { createEffect, createMemo, onCleanup, createSignal, For, onMount, Show, useContext } from "solid-js"
@@ -66,6 +67,7 @@ const FRAME = 4
 const GAP = 2 // between the label column and the value, and between an input and its preview
 const PREVIEW = 12 // a date field's `→ 2026-11-15` or `invalid date`
 const MIN_INPUT = 16
+const MIN_FORM = 60
 
 // Pieces of text cut to `width` cells: whole words, then `…` (a single word longer than the room is cut).
 export function fitDisplay(pieces: FieldDisplay, width: number): FieldDisplay {
@@ -293,7 +295,7 @@ export function Form(props: {
       try {
         return [{ text: dayDate(parseDate(raw, today)) }]
       } catch {
-        return [{ text: raw }]
+        return [{ text: raw, error: true }] // not a date: red, as its preview `invalid date`
       }
     }
     if (show === "label" || show === "labelType") {
@@ -527,9 +529,10 @@ export function Form(props: {
     }
   }, { whileTyping: true })
 
-  // The label column, the inputs (a value as read is cut to their width) and the value column (what the terminal
-  // leaves right of the labels: an error widens the form up to it, then wraps at words), for the terminal's width:
-  // the label column gives way first, down to its longest label, then the inputs.
+  // The label column, the inputs (a value as read is cut to their width), the form's width (fixed: the frame, the
+  // labels, an input and, when the form has a date field, the slot of its preview, at least 60 cells; so moving the
+  // focus never changes it) and the value column (what that leaves right of the labels: an error wraps there at
+  // words), for the terminal's width: the label column gives way first, down to its longest label, then the inputs.
   const layout = createMemo(() => {
     const longest = Math.max(0, ...fields().map((f) => f.label.length))
     const want = props.look?.labelWidth ?? longest + 4
@@ -537,7 +540,8 @@ export function Form(props: {
     const preview = fields().some((f) => f.kind === "date") ? GAP + PREVIEW : 0
     const label = Math.max(Math.min(longest, want), Math.min(want, room - GAP - LOOK_INPUT_WIDTH - preview))
     const input = Math.max(MIN_INPUT, Math.min(LOOK_INPUT_WIDTH, room - label - GAP - preview))
-    return { label, input, value: Math.max(input + preview, room - label - GAP) }
+    const width = Math.min(dims().width, Math.max(MIN_FORM, FRAME + label + GAP + input + preview))
+    return { label, input, width, value: Math.max(MIN_INPUT, width - FRAME - label - GAP) }
   })
 
   // A plugin's fieldEditor for an extra field, in that plugin's scope.
@@ -561,8 +565,7 @@ export function Form(props: {
       borderColor={theme.accent}
       backgroundColor={theme.panel}
       flexDirection="column"
-      minWidth={Math.min(60, dims().width)}
-      maxWidth={dims().width}
+      width={layout().width}
       paddingLeft={1}
       paddingRight={1}
       title={` ${props.title} `}
