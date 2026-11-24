@@ -445,3 +445,72 @@ describe("read() and use()", () => {
     expect(rt.read("other")).toBeUndefined()
   })
 })
+
+// `ctx.notices`: what a plugin wants the user to know (a record a data step made), said at each boot after the steps.
+describe("notices", () => {
+  const noticing = (id: string, notices: (ctx: PluginContext) => Promise<string[]>, step?: Step) => {
+    const base = plugin(id, step)
+    return definePlugin({
+      ...base,
+      activate(ctx) {
+        base.activate(ctx)
+        ctx.notices(() => notices(ctx))
+      },
+    })
+  }
+  const rows = async (ctx: PluginContext) => (await ctx.data.selectFrom("row").select("note").orderBy("id").execute()).map((r) => `row "${r.note}" was made for you`)
+  const made: Step = async (ctx) => {
+    await ctx.data.insertInto("row").values({ note: "first" }).execute()
+    return "done"
+  }
+  const all = () => [noticing("alpha", rows, made), noticing("beta", async () => []), plugin("gamma")]
+
+  test("said after the data steps, on the plugin's status and in plugin list (JSON field, text lines); [] says nothing", async () => {
+    const k = await first(all())
+    expect(k.plugins.map((p) => [p.id, p.error ?? null, p.notices ?? null])).toEqual([
+      ["alpha", null, ['row "first" was made for you']],
+      ["beta", null, null],
+      ["gamma", null, null],
+    ])
+    const { o, io: out } = io()
+    expect(await runCli(["plugin", "list", "--json"], k, out)).toBe(0)
+    expect(JSON.parse(o.out)[0]).toEqual({ id: "alpha", version: "1.0.0", source: "built-in", status: "ok", error: null, notices: ['row "first" was made for you'] })
+    expect(JSON.parse(o.out)[1]).not.toHaveProperty("notices")
+    const text = io()
+    expect(await runCli(["plugin", "list"], k, text.io)).toBe(0)
+    expect(text.o.out.trimEnd().split("\n").at(-1)).toBe('notice (alpha): row "first" was made for you')
+    // Said again at every boot, from the data as it is then.
+    await runWithContext(k.context(), () => k.ops.api("alpha")!.write.add!({ note: "second" }))
+    const b = await again(k.home, all())
+    expect(b.plugins[0]!.notices).toEqual(['row "first" was made for you', 'row "second" was made for you'])
+  })
+
+  test("a throw is the plugin's error; notices only read; once per plugin", async () => {
+    const k = await first([
+      noticing("alpha", async () => {
+        throw new ValidationError("cannot tell")
+      }),
+      noticing("beta", async (ctx) => {
+        await ctx.data.insertInto("row").values({ note: "no" }).execute()
+        return ["wrote"]
+      }),
+    ])
+    expect(k.plugins[0]).toMatchObject({ status: "ok", error: "notices failed: cannot tell" })
+    expect(k.plugins[0]).not.toHaveProperty("notices")
+    expect(k.plugins[1]!.status).toBe("ok")
+    expect(k.plugins[1]!.error).toStartWith("notices failed: ")
+    expect(notes(k, "beta")).toEqual([])
+    const twice = definePlugin({
+      id: "twice",
+      name: "twice",
+      version: "1.0.0",
+      apiVersion: 1,
+      activate(ctx) {
+        ctx.notices(async () => [])
+        ctx.notices(async () => [])
+      },
+    })
+    const t = await first([twice])
+    expect(t.plugins[0]).toMatchObject({ status: "failed", error: "notices may be registered once" })
+  })
+})

@@ -1,4 +1,5 @@
-// A person's Talk tab (the 2026-11-20 `talk` design), and the same list on a project's Talk tab (project-talk.tsx):
+// A person's Talk tab (the 2026-11-20 `talk` design), and the same list on a project's Talk tab (project-talk.tsx)
+// and a board's (board-view.tsx: its items take no project tag, so it has no Project column):
 // - left (1.4 : 1), focused: "To talk about · n open" with `next: 1:1 Mon 23 Nov` on its bottom border; # (muted
 //   `1.`), Item, Project (a code cyan, `—` muted; on a project's list: the person a tagged item comes from), Added
 //   (muted: `today`, a day of this week, else the date); then, after a blank line, "Carried over from 9 Nov" and the
@@ -47,12 +48,14 @@ const HINTS: Hint[] = [
 export const TALK_EMPTY = "Nothing to talk about yet. Press n to add an item."
 const FACT_LABEL = 10 // the label column of the Meetings facts: 8 cells and the gap
 
-const columns = (who: string): TableColumn[] => [
+const columns = (who: string | null): TableColumn[] => [
   { id: "n", title: "", width: 3 },
   { id: "text", title: "Item", width: "grow", minWidth: 24 }, // on a narrow terminal Added gives way first
-  { id: "project", title: who, width: 7, drop: 1 },
+  ...(who === null ? [] : [{ id: "project", title: who, width: 7, drop: 1 }]),
   { id: "added", title: "Added", width: 8, drop: 2 },
 ]
+// The third column: a project's list names the person a tagged item comes from, a person's the project tag.
+const WHO = { person: "Project", project: "From", board: null } as const
 const actionColumns: TableColumn[] = [
   { id: "ref", title: "", width: 5 },
   { id: "title", title: "", width: "grow" },
@@ -87,7 +90,7 @@ export const lastParts = (m: Last | null): CellPart[] =>
 export const actionRow = (a: MyAction, today: string): TableRow => ({ ref: a.ref, cells: { ref: { text: a.ref, tone: "muted" }, title: a.title, due: dueCell(a.due, today) } })
 
 type Loaded = {
-  subject: { ref: string; type: "person" | "project"; id: number; label: string; first: string }
+  subject: { ref: string; type: "person" | "project" | "board"; id: number; label: string; first: string }
   open: TalkRecord[]
   carried: TalkRecord[]
   carriedFrom: string | undefined
@@ -227,7 +230,7 @@ export function SubjectTalk(props: { recordRef: string }) {
             <box flexDirection="column" flexGrow={14} flexBasis={0} minWidth={0} minHeight={leftNeed()}>
               <Panel title={`To talk about · ${d().open.length} open`} footer={footer()} focused={keys.active()} grow>
                 <Table
-                  columns={columns(d().subject.type === "project" ? "From" : "Project")}
+                  columns={columns(WHO[d().subject.type])}
                   groups={groups()}
                   selectedRef={shownWant()}
                   onSelect={select}

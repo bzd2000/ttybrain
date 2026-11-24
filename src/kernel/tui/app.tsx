@@ -153,6 +153,8 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
       .filter((p) => p.status === "failed" || (p.status === "ok" && p.error !== undefined))
       .flatMap((p) => [`${p.id}: ${p.error ?? "failed"}`, ...(p.hint !== undefined ? [`  hint: ${p.hint}`] : [])]),
   ]
+  // What loaded plugins' ctx.notices said at boot.
+  const notices = () => kernel.plugins.flatMap((p) => (p.notices ?? []).map((n) => `${p.id}: ${n}`))
   // On a screen (not in an overlay, not while typing) the bar is the screen's hints, then the global actions'
   // (`i capture`, unless an exact registration says `globals: false`), then the frame's (`g or 1-6 screens`,
   // `? help`, `q quit`, or those an exact registration asks for).
@@ -187,7 +189,7 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
       quit: () => renderer.destroy(),
       help: () => {
         const shown = hints()
-        openOverlay("help", (close) => <Help hints={shown} actions={registry.globalActions().map((a) => ({ key: a.key, label: a.label }))} problems={problems()} close={close} />)
+        openOverlay("help", (close) => <Help hints={shown} actions={registry.globalActions().map((a) => ({ key: a.key, label: a.label }))} problems={problems()} notices={notices()} close={close} />)
       },
       switcher: () =>
         openOverlay("switcher", (close) => (

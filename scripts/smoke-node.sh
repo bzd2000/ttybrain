@@ -41,9 +41,10 @@ out="$(ttybrain plugin list)"; echo "$out"
 for p in people inbox; do
   echo "$out" | grep -Eq "^$p +1\.0\.0 +built-in +ok" || fail "plugin list: expected \"$p 1.0.0 built-in ok\", got: $out"
 done
-for p in projects actions meetings; do
+for p in projects actions; do
   echo "$out" | grep -Eq "^$p +2\.0\.0 +built-in +ok" || fail "plugin list: expected \"$p 2.0.0 built-in ok\", got: $out"
 done
+echo "$out" | grep -Eq "^meetings +2\.1\.0 +built-in +ok" || fail "plugin list: expected \"meetings 2.1.0 built-in ok\", got: $out"
 # A series makes its occurrences ahead; a later write's upkeep makes none twice.
 out="$(ttybrain meeting series add @anna "1:1 Anna" --every "2 weeks on wed" --from wed)"; echo "$out"
 expect_in "meeting series add" "S-1 1:1 Anna: every 2 weeks on wed, next " "$out"
@@ -117,6 +118,22 @@ out="$(meetings_eval 'db.prepare("SELECT seq FROM sqlite_sequence WHERE name = '
 expect_in "meetings 002: sequence" '{"seq":3}' "$out"
 out="$(TTYBRAIN_HOME="$meetings_home" ttybrain meeting add "Next board" --about BOARD --date +1w)"; echo "$out"
 expect_in "meetings 002: next id" "M-4 Next board" "$out"
+# Boards on Node (meetings 006 and the boards-from-projects step): a board meeting on a project, as before boards
+# existed, moves to a new board #BOARDB when the step runs (made to run again here), and plugin list names the board.
+# The meeting is written as before boards (kind board now needs a board subject, so the CLI refuses it).
+meetings_eval 'db.prepare("INSERT INTO meetings_meeting (id, title, date, kind, status, notes, subject_type, subject_id, auto_close, created_at, updated_at) VALUES (5, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)").run("Board", "2027-12-31", "board", "planned", "", "project", 1, "2026-01-01T00:00:00", "2026-01-01T00:00:00")' >/dev/null
+out="$(TTYBRAIN_HOME="$meetings_home" ttybrain meeting add "Board" --about BOARD --kind board --date +2w 2>&1 || true)"; echo "$out"
+expect_in "board kind needs a board" "error: a board meeting needs a board; #BOARD is a project" "$out"
+meetings_eval 'db.prepare("DELETE FROM kernel_plugin_migration WHERE plugin = ? AND id = ?").run("meetings", "upgrade:boards-from-projects")' >/dev/null
+out="$(TTYBRAIN_HOME="$meetings_home" ttybrain meeting show M-5)"; echo "$out"
+expect_in "boards step: moved" "  kind: board" "$out"
+expect_in "boards step: about" "  about: #BOARDB" "$out"
+out="$(TTYBRAIN_HOME="$meetings_home" ttybrain plugin list)"; echo "$out"
+expect_in "boards step: notice" 'notice (meetings): board #BOARDB "Management board" now holds the board meetings of project #BOARD' "$out"
+out="$(TTYBRAIN_HOME="$meetings_home" ttybrain board edit BOARDB --code MB)"; echo "$out"
+expect_in "board edit" "#MB Management board" "$out"
+out="$(TTYBRAIN_HOME="$meetings_home" ttybrain project add mb "Mobile" 2>&1 || true)"; echo "$out"
+expect_in "code namespace" 'error: code "MB" is already used by the board #MB' "$out"
 
 # The fixture plugin (tests/fixtures/plugin-contracts), built with `ttybrain plugin build` and loaded on Node: first as a
 # folder in TTYBRAIN_PLUGINS, then packed and installed with `ttybrain plugin add <tgz>` through npm (offline: no dependencies).

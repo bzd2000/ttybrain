@@ -99,14 +99,17 @@ describe("meetings operations", () => {
     expect([none.name, none.message]).toEqual(["ValidationError", "meetings.addMeeting: about is required"])
   })
 
-  test("the subject gives the kind; a 1:1 needs a person, project and board a project; steering and other mean project", async () => {
+  test("the subject gives the kind; a 1:1 needs a person, a project meeting a project, a board meeting a board; steering and other mean project", async () => {
     await boot()
+    await w("addBoard", { code: "MB", name: "Management board" })
     expect((await w("addMeeting", { about: "#CRM", title: "a", date: "today" })).kind).toBe("project")
-    expect((await w("addMeeting", { about: "CRM", title: "b", date: "today", kind: "board" })).kind).toBe("board")
+    const onProject = await failure(w("addMeeting", { about: "CRM", title: "b", date: "today", kind: "board" }))
+    expect([onProject.name, onProject.message, onProject.field]).toEqual(["ValidationError", "a board meeting needs a board; #CRM is a project", "kind"])
+    expect((await w("addMeeting", { about: "MB", title: "b", date: "today", kind: "board" })).kind).toBe("board")
     expect((await w("addMeeting", { about: "#CRM", title: "c", date: "today", kind: "other" })).kind).toBe("project")
     expect((await w("addMeeting", { about: "@peter", title: "d", date: "today" })).kind).toBe("one_on_one")
     const wrong = await failure(w("addMeeting", { about: "@peter", title: "e", date: "today", kind: "board" }))
-    expect([wrong.name, wrong.message, wrong.field]).toEqual(["ValidationError", "a board meeting needs a project; @peter is a person", "kind"])
+    expect([wrong.name, wrong.message, wrong.field]).toEqual(["ValidationError", "a board meeting needs a board; @peter is a person", "kind"])
     const edit = await failure(w("editMeeting", { ref: "M-1", kind: "one_on_one" }))
     expect([edit.message, edit.field]).toEqual(["a 1:1 needs a person; #CRM is a project", "kind"])
     expect(await d("editMeeting", { ref: "M-1", kind: "steering" })).toBe("~ M-1 (no change)")
@@ -115,18 +118,22 @@ describe("meetings operations", () => {
     const bare = await failure(w("editMeeting", { ref: "M-2", kind: "one_on_one" }))
     expect([bare.name, bare.message, bare.field, bare.hint]).toEqual(["ValidationError", "a 1:1 needs a person; this meeting has no subject", "kind", "run ttybrain meeting subject M-2 @handle first"])
     expect((await w("editMeeting", { ref: "M-2", kind: "board" })).kind).toBe("board")
-    await w("setSubject", { meeting: "M-2", about: "#CRM" }) // restores the subject for the checks below
+    await w("setSubject", { meeting: "M-2", about: "#MB" }) // restores the subject for the checks below
     const unknown = await failure(w("addMeeting", { about: "nobody", title: "f", date: "today" }))
-    expect([unknown.name, unknown.message]).toEqual(["NotFoundError", 'unknown person or project "nobody"'])
+    expect([unknown.name, unknown.message]).toEqual(["NotFoundError", 'unknown person, project or board "nobody"'])
     const near = await failure(w("addMeeting", { about: "#CRN", title: "f", date: "today" }))
-    expect([near.message, near.hint]).toEqual(['unknown project "#CRN"', 'did you mean "#CRM", "#ERP"?'])
+    expect([near.message, near.hint]).toEqual(['unknown project or board "#CRN"', 'did you mean "#CRM", "#ERP"?'])
     await w("addPerson", { name: "Crm Bot", handle: "crm" }, "people")
     const both = await failure(w("addMeeting", { about: "crm", title: "g", date: "today" }))
     expect([both.name, both.message, both.hint]).toEqual(["ValidationError", '"crm" is both a person and a project', "use @crm or #CRM"])
-    // setSubject: a person makes a 1:1; board stays board; from today on it closes itself.
-    expect(await d("setSubject", { meeting: "M-2", about: "@tom" })).toBe("~ M-2 about @tom")
-    expect(await w("setSubject", { meeting: "M-2", about: "@tom" })).toMatchObject({ ref: "M-2", kind: "one_on_one", about: "@tom" })
-    expect(await w("setSubject", { meeting: "M-2", about: "#ERP" })).toMatchObject({ kind: "project", about: "#ERP" })
+    // setSubject: a person makes a 1:1, a project a project meeting; once it has a subject the kind stays unless given.
+    expect(await d("setSubject", { meeting: "M-3", about: "@tom" })).toBe("~ M-3 about @tom")
+    const first = await failure(w("setSubject", { meeting: "M-3", about: "@tom" })) // M-3 is a project meeting about #CRM
+    expect(first.message).toBe("M-3 is a project meeting; @tom would make it a 1:1 meeting")
+    expect(await w("setSubject", { meeting: "M-3", about: "@tom", kind: "one_on_one" })).toMatchObject({ ref: "M-3", kind: "one_on_one", about: "@tom" })
+    const rekind = await failure(w("setSubject", { meeting: "M-3", about: "#ERP" }))
+    expect([rekind.name, rekind.message, rekind.hint]).toEqual(["ValidationError", "M-3 is a 1:1 meeting; #ERP would make it a project meeting", "to change its kind too: ttybrain meeting subject M-3 #ERP --kind project"])
+    expect(await w("setSubject", { meeting: "M-3", about: "#ERP", kind: "project" })).toMatchObject({ kind: "project", about: "#ERP" })
   })
 
   test("edit, attendees and agenda change lines", async () => {
@@ -208,7 +215,8 @@ describe("meetings operations", () => {
   test("close and cancel rules", async () => {
     await boot()
     await w("addMeeting", steerco)
-    await w("addMeeting", { about: "#ERP", title: "Board", date: "2026-12-10", kind: "board" })
+    await w("addBoard", { code: "MB", name: "Management board" })
+    await w("addMeeting", { about: "#MB", title: "Board", date: "2026-12-10", kind: "board" })
     await w("addAction", { title: "Send the minutes", meeting: "M-1" }, "actions")
     await w("addDecision", { title: "Go with B", meeting: "M-2" }, "projects")
     const closed = await w("closeMeeting", { ref: "M-1" })

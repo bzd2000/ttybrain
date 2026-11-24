@@ -23,11 +23,19 @@ Meetings are referenced as \`M-<n>\`. \`ttybrain meeting list\` shows the planne
 
 - A recurring meeting is a series (\`S-<n>\`): \`ttybrain meeting series add @karim "1:1 Karim" --every "2 weeks on wed" --from wed\`. The rhythm is \`weekly on <day>\`, \`every <n> weeks on <day>\`, \`monthly on the <1st|2nd|3rd|4th|last> <day>\` or \`monthly on day <n>\` (dates only, no times). Its meetings are created for the next 8 weeks and again as time passes; they are ordinary meetings (\`M-<n>\`).
 - \`ttybrain meeting series list\` shows them; \`series edit S-2 --every … --attendees … --until …\` changes what is still ahead (a changed \`--every\` still counts from the first date), and \`series end S-2 --on <date>\` stops it. Skip one date with \`ttybrain meeting skip M-9\` or change it with \`meeting move M-9 --to <date>\`; neither comes back.
-- A meeting always has a subject (a person or a project). Meetings from before this existed have none: \`ttybrain meeting subject M-4 #CRM\`, or \`--all-without #CRM\` for all.
+- A meeting always has a subject (a person, a project or a board). Meetings from before this existed have none: \`ttybrain meeting subject M-4 #CRM\`, or \`--all-without #CRM\` for all that fit (board meetings take a board, the others a project or person). A meeting with a subject keeps its kind: \`--kind\` changes both.
+
+**Boards**
+
+- A board such as \`#MB\` "Management board" holds the board meetings: \`ttybrain board add MB "Management board"\`, then \`ttybrain meeting series add #MB "Board" --every "monthly on the last fri" --from fri\`. A meeting or series about a board is a board meeting (kind board); the board has its own talk-list (\`ttybrain talk add #MB "Budget 2027 first view"\`) and actions can link to it (\`--link #MB\`).
+- Project and board codes share one namespace: \`#MB\` is either a project or a board, and adding or renaming either refuses a code the other has. Where a project is needed (\`--project\`, \`project show\`), a board's code is refused as "a board, not a project".
+- A board has its own talk-list: \`ttybrain talk add #MB "Office move"\` (in the TUI's quick capture, \`talk #MB Office move\`; \`--project\` is not allowed on a board's item). Kind \`board\` needs a board subject, and a board meeting cannot be given a person or project as subject.
+- \`ttybrain board list\`, \`board show #MB\` (its series, next meeting and open talk items), \`board edit #MB --name … --code … --note …\`, \`board archive|restore #MB\` (an archived board takes no new meetings, series or talk items).
+- Board meetings that were about a project before boards existed were moved to a board with that project's name and the code \`<CODE>B\`; \`ttybrain plugin list\` names it until it is edited (\`ttybrain board edit #BOARDB --code MB\`).
 
 **Talk-lists**
 
-- Every person and project has a talk-list: things the user wants to raise at the next meeting with them, referenced as \`T-<n>\`. Add one with \`ttybrain talk add @anna "AWS training budget"\` (or \`#CRM\` for a project). \`--project ERP\` tags a person's item with a project, so it also shows at ERP's meetings until it is discussed in either place.
+- Every person, project and board has a talk-list: things the user wants to raise at the next meeting with them, referenced as \`T-<n>\`. Add one with \`ttybrain talk add @anna "AWS training budget"\` (or \`#CRM\` for a project). \`--project ERP\` tags a person's item with a project, so it also shows at ERP's meetings until it is discussed in either place.
 - \`ttybrain talk list @anna\` shows the open items numbered in order, with those added before the last held meeting under "carried over" (marked ↻); a project's list includes people's items tagged with it. \`ttybrain talk list\` shows every list.
 - When an item has been discussed: \`ttybrain talk done T-3 --meeting M-4\` (the meeting must be about the item's person or project, or a project meeting for a tagged item); without \`--meeting\` when it came up elsewhere. \`ttybrain talk drop T-3\` takes it off the list without discussing it, and \`ttybrain talk reopen T-3\` puts it back. \`ttybrain talk move T-3 --to 1\` reorders within the item's group (the open items, or the carried ones). Only a person's item takes \`--project\`.
 `

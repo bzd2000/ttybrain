@@ -38,6 +38,7 @@ export type PluginStatus = {
   status: "ok" | "failed" | "disabled"
   error?: string
   hint?: string // what to do about `error`, when a failed data step's error carried one (a PmError's hint)
+  notices?: string[] // what the plugin's ctx.notices said at boot (left out when nothing)
   tui?: string // file URL of the plugin's tui entry (ttybrain.tui)
   dir?: string // the plugin's directory, for discovered plugins
 }
@@ -103,6 +104,8 @@ type Slot = {
   migrations: Migration[]
   steps: DataStep[] // ctx.upgrade, in registration order
   upkeeps: Upkeep[] // ctx.upkeep, in registration order
+  notices?: () => Promise<string[]> // ctx.notices
+  said?: string[] // what it said at boot
   off: Array<() => void> // event subscriptions
   ctx?: PluginContext
   runtime?: PluginRuntime
@@ -131,14 +134,18 @@ function withTimeout<T>(p: Promise<T>, ms: number, text: string): Promise<T> {
 // type owns means the inbox plugin is not loaded. Other origins (a change set's `CS-<id>`) are no records.
 // Every path that writes with an origin awaits it first: the CLI dispatcher, change sets and the TUI's act.
 async function checkOrigin(records: RecordTypeRegistry, commands: CommandRegistry, context: () => OpContext, origin: Origin): Promise<void> {
-  const type = records.typeOfRef(origin.ref)
-  if (!type) {
+  const types = records.typesOfRef(origin.ref)
+  if (types.length === 0) {
     if (origin.type !== "inbox") return
     throw new ValidationError("--from-inbox needs the inbox plugin, which is not loaded", { field: "from-inbox", hint: 'run "ttybrain plugin list"' })
   }
   if (await runWithContext(context(), () => records.resolveAny(origin.ref))) return
-  const lists = commands.list().filter((c) => c.plugin === type.plugin && c.def.verb === "list")
-  const list = lists.find((c) => c.def.thing === type.plugin || type.name.split("_").includes(c.def.thing)) ?? (lists.length === 1 ? lists[0] : undefined)
+  // The hint: the list command of the ref's type (of a shared prefix, the first type that has one).
+  const listOf = (type: (typeof types)[number]) => {
+    const lists = commands.list().filter((c) => c.plugin === type.plugin && c.def.verb === "list")
+    return lists.find((c) => c.def.thing === type.plugin || type.name.split("_").includes(c.def.thing)) ?? (lists.length === 1 ? lists[0] : undefined)
+  }
+  const list = types.map(listOf).find((l) => l !== undefined)
   throw new NotFoundError(`no record "${origin.ref}"`, { hint: list ? `run "ttybrain ${list.def.thing} list"` : 'run "ttybrain help"' })
 }
 
@@ -334,6 +341,11 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         if (!uid || s.upkeeps.some((u) => u.id === uid)) throw new ValidationError(`upkeep id "${uid}" is empty or duplicated`)
         s.upkeeps.push({ id: uid, run })
       },
+      notices: (run) => {
+        live()
+        if (s.notices) throw new ValidationError("notices may be registered once")
+        s.notices = run
+      },
       use: (other) => (required.has(other) ? ops.api(other) : undefined),
       read: readOps,
       self: () => ops.api(id) ?? { read: {}, write: {} },
@@ -341,7 +353,13 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
         live()
         records.register({ ...def, plugin: id })
       },
-      records: { resolve: (ref) => records.resolveAny(ref), label: (ref) => records.label(ref), refOf: (type, id) => records.refOf(type, id), hasType: (name) => records.byName(name) !== undefined },
+      records: {
+        resolve: (ref, opts) => records.resolveAny(ref, opts),
+        typesOfRef: (ref) => records.typesOfRef(ref).map((d) => d.name),
+        label: (ref) => records.label(ref),
+        refOf: (type, id) => records.refOf(type, id),
+        hasType: (name) => records.byName(name) !== undefined,
+      },
       tagType: (def) => {
         live()
         tags.register(def, id)
@@ -466,6 +484,21 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
   const pendingSteps = order.flatMap((s) => (s.status === "ok" ? runner.pendingSteps(s.id, s.steps).map((step) => ({ s, step })) : []))
   if (pendingSteps.length > 0) await runSteps(await runSteps(pendingSteps))
 
+  // 6b. Notices (ctx.notices), after the data steps (what a step made can be named): read only, an external plugin's
+  // raced against the activate timeout; a throw is listed as the plugin's error.
+  for (const s of order) {
+    if (s.status !== "ok" || !s.notices) continue
+    try {
+      const saying = runWithContext(context(), () => s.notices!())
+      const said = await (s.source !== "built-in" ? withTimeout(saying, activateTimeoutMs, `timed out after ${activateTimeoutMs} ms`) : saying)
+      const lines = Array.isArray(said) ? said.filter((n): n is string => typeof n === "string" && n.trim() !== "") : []
+      if (lines.length > 0) s.said = lines
+    } catch (e) {
+      const text = `notices failed: ${message(e)}`
+      s.error = s.error === undefined ? text : `${s.error}; ${text}`
+    }
+  }
+
   const plugins: PluginStatus[] = order.map((s): PluginStatus => ({
     id: s.id,
     version: s.version,
@@ -473,6 +506,7 @@ async function boot(opts: BootOptions, paths: Paths, config: Config, clock: Cloc
     status: s.status === "pending" ? "failed" : s.status,
     ...(s.error !== undefined ? { error: s.error } : {}),
     ...(s.hint !== undefined ? { hint: s.hint } : {}),
+    ...(s.said !== undefined ? { notices: s.said } : {}),
     ...(s.tui !== undefined ? { tui: s.tui } : {}),
     ...(s.dir !== undefined ? { dir: s.dir } : {}),
   }))

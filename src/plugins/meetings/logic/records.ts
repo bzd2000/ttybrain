@@ -1,6 +1,8 @@
 // Lookups shared by the operations and the commands (reading the plugin's own tables), and the record types
-// `meeting` (M-), `series` (S-) and `talk_item` (T-). People (@handle) and projects (#CODE) are resolved through the kernel's record
-// types; a subject (the person or project a meeting or series is about) is a soft reference shown through their views.
+// `meeting` (M-), `series` (S-) and `talk_item` (T-) (the `board` type, `#CODE`, is in boards.ts). People (@handle) and
+// projects (#CODE) are resolved through the kernel's record types; a subject (the person, project or board a meeting,
+// series or talk item is about) is a person or project as a soft reference shown through their views, or a board of
+// this plugin.
 import {
   currentContext,
   formatRef,
@@ -14,12 +16,14 @@ import {
   type PluginContext,
   type PluginRuntime,
 } from "@ttybrain/api"
-import type { AgendaItem, MeetingRecord, SeriesRecord, SubjectType } from "./schema"
+import type { AgendaItem, BoardRecord, MeetingRecord, SeriesRecord, SubjectType } from "./schema"
 
 // How many records a "did you mean" looks through (a person's whole team and stakeholders, every project).
 const TAG_CANDIDATES = 1000
 export const GONE = "—" // a soft reference whose record no longer exists
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
+// Which type a `#CODE` is, as an error says it.
+const NAMES: Record<string, string> = { project: "a project", board: "a board" }
 
 export type Subject = { type: SubjectType; id: number; ref: string }
 export type Store = ReturnType<typeof makeStore>
@@ -102,9 +106,59 @@ export function makeStore(ctx: PluginRuntime) {
   }
 
   // Soft references, resolved through the kernel's record types (the plugins may not be loaded).
-  // "Did you mean" candidates: every record the tag prefix completes to (`@` people, `#` projects), bare.
+  // "Did you mean" candidates: every record the tag prefix completes to (`@` people, `#` projects and boards), bare.
   async function tagCandidates(prefix: "@" | "#"): Promise<string[]> {
     return (await ctx.tags.suggest(prefix, TAG_CANDIDATES)).map((r) => r.ref.slice(prefix.length))
+  }
+  // The project codes alone, from projects.project (none while projects is not loaded).
+  const projectCodes = async () =>
+    (await unlessUnavailable([] as Array<{ code: unknown }>, () => db.selectFrom("projects.project").select("code").orderBy("code").execute())).map((r) => String(r.code))
+
+  // `#CODE` that names a record of another type than the one wanted (a board where a project is needed): that error,
+  // else undefined. A code two types both know (a data error) throws the kernel's ValidationError.
+  async function otherType(code: string, wanted: string, hint: string): Promise<ValidationError | undefined> {
+    const found = await ctx.records.resolve(`#${code}`)
+    if (!found || found.type === wanted) return undefined
+    return new ValidationError(`#${code} is ${NAMES[found.type] ?? `a ${found.type}`}, not ${NAMES[wanted] ?? `a ${wanted}`}`, { hint })
+  }
+
+  // ---- boards (this plugin's own): by code only, never by id (codes have a letter, so `#12` is never a board).
+  const toBoard = (r: Record<string, unknown>): BoardRecord => ({
+    ref: `#${r.code}`,
+    id: Number(r.id),
+    code: String(r.code),
+    name: String(r.name),
+    note: str(r.note),
+    archived: r.archived_at !== null,
+  })
+  const boardRow = () => db.selectFrom("board").select(["id", "code", "name", "note", "archived_at"])
+  async function boardCodeId(input: string): Promise<number | null> {
+    const row = await db.selectFrom("board").select("id").where("code", "=", normalizeCode(input)).executeTakeFirst()
+    return row ? Number(row.id) : null
+  }
+  async function boardById(id: number): Promise<BoardRecord> {
+    const row = await boardRow().where("id", "=", id).executeTakeFirst()
+    if (!row) throw new NotFoundError(`no board with id ${id}`)
+    return toBoard(row)
+  }
+  async function boardCodes(): Promise<string[]> {
+    return (await db.selectFrom("board").select("code").orderBy("code").execute()).map((r) => String(r.code))
+  }
+  async function board(input: string): Promise<BoardRecord> {
+    const code = normalizeCode(input)
+    const id = await boardCodeId(code)
+    if (id !== null) return boardById(id)
+    throw (
+      (await otherType(code, "board", 'run "ttybrain board list" for the board codes')) ??
+      new NotFoundError(`unknown board "${code}"`, { suggestions: suggest(code, await boardCodes()) })
+    )
+  }
+  const archivedBoard = (b: Pick<BoardRecord, "ref">) => new ValidationError(`${b.ref} is archived`, { hint: `restore it first: ttybrain board restore ${b.ref}` })
+  // A board that may take new meetings, series and talk items (and edits): not archived.
+  async function activeBoard(input: string): Promise<BoardRecord> {
+    const b = await board(input)
+    if (b.archived) throw archivedBoard(b)
+    return b
   }
 
   async function personId(handle: string): Promise<number> {
@@ -115,16 +169,22 @@ export function makeStore(ctx: PluginRuntime) {
     return found.id
   }
 
-  async function projectId(code: string): Promise<number> {
+  // A project by code; a board's code is refused as such (`hint` says what to do instead).
+  async function projectId(code: string, hint = 'run "ttybrain project list" for the project codes'): Promise<number> {
     const c = normalizeCode(code)
-    const found = await ctx.records.resolve(`#${c}`)
-    if (!found || found.type !== "project") throw new NotFoundError(`unknown project "${c}"`, { suggestions: suggest(c, await tagCandidates("#")) })
-    return found.id
+    const found = await ctx.records.resolve(`#${c}`, { type: "project" })
+    if (found && found.type === "project") return found.id
+    throw (await otherType(c, "project", hint)) ?? new NotFoundError(`unknown project "${c}"`, { suggestions: suggest(c, await projectCodes()) })
   }
 
   // The display ref of a subject or project tag, through the people and projects views: `@handle`, `#CODE`; `—` when
-  // the record is gone; `person:<id>` / `project:<id>` while no plugin registers the type (as actions' links show).
+  // the record is gone; `person:<id>` / `project:<id>` while no plugin registers the type (as actions' links show). A
+  // board's code from the own table.
   async function subjectRef(type: SubjectType, id: number): Promise<string> {
+    if (type === "board") {
+      const b = await db.selectFrom("board").select("code").where("id", "=", id).executeTakeFirst()
+      return b ? `#${b.code}` : GONE
+    }
     const row =
       type === "person"
         ? await unlessUnavailable(undefined as { v: unknown } | undefined, () => db.selectFrom("people.person").select("handle as v").where("id", "=", id).executeTakeFirst())
@@ -133,8 +193,8 @@ export function makeStore(ctx: PluginRuntime) {
     return ctx.records.hasType(type) ? GONE : `${type}:${id}`
   }
 
-  // What a meeting or series is about: `@anna` or `anna` (a person), `#CRM` or `CRM` (a project). A bare word that
-  // names both is refused.
+  // What a meeting, series or talk item is about: `@anna` or `anna` (a person), `#CRM` or `CRM` (a project or a board:
+  // they share one namespace of codes). A bare word that names a person and a code is refused.
   async function subject(input: string): Promise<Subject> {
     const s = input.trim()
     const handle = normalizeHandle(s)
@@ -144,8 +204,10 @@ export function makeStore(ctx: PluginRuntime) {
       return found && found.type === "person" ? { type: "person", id: found.id, ref: `@${handle}` } : null
     }
     const project = async (): Promise<Subject | null> => {
-      const found = await ctx.records.resolve(`#${code}`)
-      return found && found.type === "project" ? { type: "project", id: found.id, ref: `#${code}` } : null
+      const found = await ctx.records.resolve(`#${code}`, { type: "project" })
+      if (found && found.type === "project") return { type: "project", id: found.id, ref: `#${code}` }
+      const b = await boardCodeId(code)
+      return b === null ? null : { type: "board", id: b, ref: `#${code}` }
     }
     const people = async () => (await tagCandidates("@")).map((h) => `@${h}`)
     const projects = async () => (await tagCandidates("#")).map((c) => `#${c}`)
@@ -161,14 +223,21 @@ export function makeStore(ctx: PluginRuntime) {
     }
     if (s.startsWith("#")) {
       const p = await project()
-      if (!p) throw new NotFoundError(`unknown project "#${code}"`, { suggestions: near(code, await projects()) })
+      if (!p) throw new NotFoundError(`unknown project or board "#${code}"`, { suggestions: near(code, await projects()) })
       return p
     }
     const p = await person()
     const q = await project()
-    if (p && q) throw new ValidationError(`"${s}" is both a person and a project`, { field: "about", hint: `use @${handle} or #${code}` })
+    if (p && q) throw new ValidationError(`"${s}" is both a person and ${NAMES[q.type]}`, { field: "about", hint: `use @${handle} or #${code}` })
     if (p || q) return (p ?? q)!
-    throw new NotFoundError(`unknown person or project "${s}"`, { suggestions: near(s, [...(await people()), ...(await projects())]) })
+    throw new NotFoundError(`unknown person, project or board "${s}"`, { suggestions: near(s, [...(await people()), ...(await projects())]) })
+  }
+
+  // A subject that may take a new meeting, series or talk item: an archived board takes none.
+  async function activeSubject(input: string): Promise<Subject> {
+    const s = await subject(input)
+    if (s.type === "board" && (await boardById(s.id)).archived) throw archivedBoard(s)
+    return s
   }
 
   async function seriesId(input: string): Promise<number | null> {
@@ -242,7 +311,14 @@ export function makeStore(ctx: PluginRuntime) {
     heldMeetingsWith,
     unlessUnavailable,
     subject,
+    activeSubject,
     subjectRef,
+    otherType,
+    boardCodeId,
+    boardById,
+    boardCodes,
+    board,
+    activeBoard,
     seriesId,
     series,
     talkId,

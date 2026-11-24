@@ -1,4 +1,5 @@
-// A project's Meetings tab (the 2026-11-20 `project` design), and a person's (person-meetings.tsx):
+// A project's Meetings tab (the 2026-11-20 `project` design), and a person's (person-meetings.tsx) and a board's
+// (board-view.tsx):
 // - left (1 : 1.15): a panel per series, the next date first: "CRM steering · monthly, 4th Tue" with Next and With
 //   (stakeholders as `Peter J.` magenta, team members by first name), then "To talk about · n" and the subject's
 //   talk-list (numbered, muted `1.`); without a series, the next one-off meeting (or "Meetings" and how to add one).
@@ -7,7 +8,7 @@
 //   `Health   ● amber  <comment>` (a 9-cell fact column), a blank line, then the status rows without section headings
 //   (the project-status report's compact lines since its last meeting: milestones, deliverables, risks, decisions and
 //   what other plugins add), a blank line and "Your actions for CRM" (owner me, linked to the project or one of its
-//   meetings; `!` red when overdue). For a person: your actions for them (as on the Talk tab).
+//   meetings; `!` red when overdue). For a person or a board: your actions for them (as on the Talk tab).
 // Keys (the design's bar): Tab the next panel, t add to the talk-list (the talk form, the subject filled in), Enter
 // open (a series panel: its next meeting; Past meetings: the selected one), N a new series, n a one-off meeting
 // (both with the subject filled in).
@@ -172,7 +173,7 @@ function WithFact(props: { names: CellPart[] }) {
 // A meeting panel: a series (its title and rhythm, its next occurrence) or a one-off meeting.
 type Block = { title: string; next: MeetingRow | null; with: CellPart[] }
 type Loaded = {
-  subject: { ref: string; type: "person" | "project"; first: string }
+  subject: { ref: string; type: "person" | "project" | "board"; first: string }
   blocks: Block[]
   talk: TalkRecord[]
   past: Past[]
@@ -235,7 +236,7 @@ export function SubjectMeetings(props: { recordRef: string }) {
         talk: [...list.open, ...list.carried],
         past: await subjects.past(s),
         prep,
-        mine: s.type === "person" ? await subjects.mine(s) : [],
+        mine: s.type === "project" ? [] : await subjects.mine(s),
       }
     },
     { key: () => props.recordRef },

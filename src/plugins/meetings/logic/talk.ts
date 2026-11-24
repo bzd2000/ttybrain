@@ -228,15 +228,15 @@ export function registerTalk(ctx: PluginContext, store: Store, talks: Talks): vo
       return undefined
     }
   }
-  // A project tag, for a person's item only: a project's own items are on its meetings already.
+  // A project tag, for a person's item only: a project's or board's own items are on its meetings already.
   async function projectTag(subject: { type: SubjectType; ref: string }, v: string | null | undefined): Promise<number | null> {
     if (blank(v)) return null
-    if (subject.type === "project")
+    if (subject.type !== "person")
       throw new ValidationError(`a project tag is for a person's item; ${subject.ref}'s own items are on its meetings already`, {
         field: "project",
         hint: "leave out the project, or add the item to the person's talk-list",
       })
-    return store.projectId(v!)
+    return store.projectId(v!, "a talk item's project tag needs a project")
   }
 
   ctx.expose({
@@ -266,7 +266,7 @@ export function registerTalk(ctx: PluginContext, store: Store, talks: Talks): vo
           return `+ talk ${about} "${i.text.trim()}"${blank(i.project) ? "" : ` #${normalizeCode(i.project!)}`}`
         },
         run: async (i: AddInput) => {
-          const subject = await store.subject(i.about)
+          const subject = await store.activeSubject(i.about)
           const project_id = await projectTag(subject, i.project)
           const position = (await talks.openIds({ subject_type: subject.type, subject_id: subject.id })).length + 1
           const t = now()

@@ -1,10 +1,12 @@
-// The meetings plugin: every meeting is about a person (1:1) or a project (project, board), one-off or an occurrence
-// of a recurring series, with agenda and asks, and the talk-lists of people and projects (plugin reference §3,
-// meetings design §5). Tables, the M-, S- and T- record types, views, the operations, the series and their
+// The meetings plugin: every meeting is about a person (1:1), a project (project) or a board (board), one-off or an
+// occurrence of a recurring series, with agenda and asks, and the talk-lists of people, projects and boards (plugin
+// reference §3, meetings design §5). Tables, the M-, S-, T- and board (#CODE) record types, views, the operations,
+// the boards (boards.ts, with the `boards-from-projects` data step), the series and their
 // `occurrences` upkeep, the talk-lists, closing (and the `auto-close` upkeep), the `ttybrain meeting` and `ttybrain talk` commands, the
 // board and minutes reports (with the prep and report reads) and the guide section.
 import { definePlugin } from "@ttybrain/api"
 import { makeCloser, registerClose } from "./close"
+import { registerBoards } from "./boards"
 import { registerCommands } from "./commands"
 import { registerGuide } from "./guide"
 import { registerOps } from "./ops"
@@ -18,7 +20,7 @@ import { registerViews } from "./views"
 export const meetings = definePlugin({
   id: "meetings",
   name: "Meetings",
-  version: "2.0.0",
+  version: "2.1.0", // 2.1: boards (the meetings.board view; `board` subjects)
   apiVersion: 1,
   requires: { projects: "^2", people: "^1", actions: "^2" },
   // projects.project (agenda codes, subjects), people.person (attendee names, subjects), actions.action and
@@ -29,6 +31,7 @@ export const meetings = definePlugin({
     registerSchema(ctx)
     registerViews(ctx)
     registerRecordTypes(ctx, store)
+    registerBoards(ctx, store)
     const talks = makeTalks(ctx, store)
     const closer = makeCloser(ctx, store, talks)
     registerOps(ctx, store, talks, closer)

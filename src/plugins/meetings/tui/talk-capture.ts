@@ -1,18 +1,22 @@
 // Quick capture to a talk-list (the 2026-11-20 `capture` design, ruling M9): a capture that starts with `talk ` and
-// tags exactly one person or one project that resolve (a person's item may tag one project too) goes onto that
-// talk-list, not into the inbox. The lines under the input say where it lands:
+// tags exactly one person, one project or one board that resolve (a person's item may tag one project too) goes onto
+// that talk-list, not into the inbox. The lines under the input say where it lands:
 //   → Anna Peeters' talk-list · next 1:1 Mon 23 Nov
 //     linked to #CRM, so it also shows at CRM steering until discussed
 //     without "talk" it goes to the inbox as before
+// A board's (design §5.7) names the board and its next board meeting: `→ Management board's talk-list · next Board
+// Fri 27 Nov`; a board's item takes no project tag, and a board is no person's item's project tag.
 // Text that starts with `talk ` but is not one (no tag, two people, a tag that does not resolve) still goes to the
-// inbox, and the lines say why (Review Focus 5). Anything else is not this route's (null: no lines, as before).
+// inbox, and the lines say why (Review Focus 5). Anything else is not this route's (null: no lines, as before). An
+// error while resolving a tag (a code that is both a project and a board) is not swallowed: it is the reason shown
+// (`→ goes to the inbox · "#MB" is both a project and a board`).
 // The item's text is the capture without `talk` and its tags, its first letter capitalised.
 import { act, dayDate, type CapturePreview, type CaptureRouteDef, type CellPart, type TuiContext } from "@ttybrain/api/tui"
 import { makeSubjects, meetingName } from "./subject"
 
 const START = /^talk\s/i
 const TAG = /(^|[\s([])([@#][A-Za-z0-9][A-Za-z0-9-]*)/g
-const HINT = 'a talk item needs one person or project tag: talk @anna …'
+const HINT = 'a talk item needs one person, project or board tag: talk @anna …'
 const INBOX_TOO = 'without "talk" it goes to the inbox as before'
 
 export type TalkCapture = { about: string; project?: string; text: string }
@@ -39,23 +43,31 @@ export function registerTalkCapture(ui: TuiContext): void {
     if (!START.test(text)) return null
     const tags = tagsOf(text)
     const people = tags.filter((t) => t.startsWith("@"))
-    const projects = tags.filter((t) => t.startsWith("#"))
-    if (tags.length === 0) return { ok: false, why: "no person or project tagged" }
+    const codes = tags.filter((t) => t.startsWith("#"))
+    if (tags.length === 0) return { ok: false, why: "no person, project or board tagged" }
     if (people.length > 1) return { ok: false, why: `${people.length} people tagged` }
-    if (projects.length > 1) return { ok: false, why: `${projects.length} projects tagged` }
-    // Each tag as its record's own ref (`@anna`, `#CRM`), or why it is not one.
+    if (codes.length > 1) return { ok: false, why: `${codes.length} codes tagged` }
+    // Each tag as its record's own ref (`@anna`, `#CRM`, `#MB`), or why it is not one.
     const refs: string[] = []
+    let board = false
     for (const t of tags) {
-      const found = await ui.records.resolve(t).catch(() => null)
-      const type = t.startsWith("@") ? "person" : "project"
-      if (!found || found.type !== type) return { ok: false, why: `${t} is not a ${type}` }
+      let found: { type: string; id: number } | null
+      try {
+        found = await ui.records.resolve(t)
+      } catch (e) {
+        return { ok: false, why: e instanceof Error ? e.message : String(e) }
+      }
+      const types = t.startsWith("@") ? ["person"] : people.length === 1 ? ["project"] : ["project", "board"]
+      if (!found || !types.includes(found.type))
+        return { ok: false, why: found?.type === "board" ? `${t} is a board, not a project` : `${t} is not a ${types.join(" or ")}` }
+      if (found.type === "board") board = true
       refs.push(await ui.records.refOf(found.type, found.id))
     }
     const body = talkText(text, tags)
     if (body === "") return { ok: false, why: "nothing to talk about yet" }
     const about = refs.find((r) => r.startsWith("@")) ?? refs[0]!
     const project = people.length === 1 ? refs.find((r) => r.startsWith("#")) : undefined
-    const name = about.startsWith("@") ? await ui.records.label(about) : about.slice(1)
+    const name = about.startsWith("@") || board ? await ui.records.label(about) : about.slice(1)
     return { ok: true, capture: { about, text: body, ...(project ? { project } : {}) }, name, ...(project ? { projectCode: project } : {}) }
   }
 

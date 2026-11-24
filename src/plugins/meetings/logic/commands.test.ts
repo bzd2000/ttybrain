@@ -60,13 +60,14 @@ describe("ttybrain meeting", () => {
       ].join("\n"),
     )
     await ok("meeting", "add", "Old board", "--about", "ERP", "--date", "2026-09-01")
-    await ok("meeting", "add", "Recent board", "--about", "ERP", "--date", "2026-11-05", "--kind", "board")
+    await ok("board", "add", "MB", "Management board")
+    await ok("meeting", "add", "Recent board", "--about", "MB", "--date", "2026-11-05", "--kind", "board")
     await ok("meeting", "close", "M-3")
     await ok("meeting", "cancel", "M-2")
     expect((await ok("meeting", "list")).out).toBe(
       [
         "ref  date        title                  kind     status   attendees       projects  about  series",
-        "M-3  2026-11-05  Recent board           board    held                               #ERP",
+        "M-3  2026-11-05  Recent board           board    held                               #MB",
         "M-1  2026-12-04  Steering committee Q4  project  planned  @marie, @peter  CRM, ERP  #CRM",
         "",
       ].join("\n"),

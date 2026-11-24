@@ -93,7 +93,7 @@ describe("series", () => {
     expect(m1).toMatchObject({ ref: "M-1", kind: "one_on_one", about: "@karim", series: "S-1" })
   })
 
-  test("a project series: kind from the subject, explicit attendees; board kind is allowed on a project", async () => {
+  test("a project series: kind from the subject, explicit attendees; board kind needs a board", async () => {
     const k = await boot()
     const s = await w(k, "addSeries", { about: "#CRM", title: "CRM steering", every: "monthly on the 4th tue", from: "today", attendees: ["anna", "@karim"] })
     expect(s).toMatchObject({ ref: "S-1", kind: "project", about: "#CRM", rhythm: "monthly on the 4th tue", first_date: "2026-11-20", attendees: ["@anna", "@karim"], next: "2026-11-24" })
@@ -102,8 +102,11 @@ describe("series", () => {
       ["M-2", "2026-12-22", "2026-12-22", "planned"],
     ])
     expect(attendees(k, 2)).toEqual(["anna", "karim"])
-    const board = await w(k, "addSeries", { about: "CRM", title: "Board", kind: "board", every: "monthly on the last fri", from: "today" })
-    expect(board).toMatchObject({ ref: "S-2", kind: "board", attendees: [], next: "2026-11-27" })
+    const onProject = await failure(w(k, "addSeries", { about: "CRM", title: "Board", kind: "board", every: "monthly on the last fri", from: "today" }))
+    expect([onProject.name, onProject.message, onProject.field]).toEqual(["ValidationError", "a board meeting needs a board; #CRM is a project", "kind"])
+    await w(k, "addBoard", { code: "MB", name: "Management board" })
+    const board = await w(k, "addSeries", { about: "MB", title: "Board", kind: "board", every: "monthly on the last fri", from: "today" })
+    expect(board).toMatchObject({ ref: "S-2", kind: "board", about: "#MB", attendees: [], next: "2026-11-27" })
   })
 
   test("validation: rhythm, kind against the subject, unknown subject, until before from", async () => {
@@ -111,7 +114,7 @@ describe("series", () => {
     const bad = await failure(w(k, "addSeries", { about: "@karim", title: "x", every: "daily", from: "today" }))
     expect([bad.name, bad.message, bad.field]).toEqual(["ValidationError", 'invalid rhythm "daily"', "every"])
     const kind = await failure(w(k, "addSeries", { about: "@karim", title: "x", kind: "board", every: "weekly on mon", from: "today" }))
-    expect([kind.name, kind.message, kind.field]).toEqual(["ValidationError", "a board meeting needs a project; @karim is a person", "kind"])
+    expect([kind.name, kind.message, kind.field]).toEqual(["ValidationError", "a board meeting needs a board; @karim is a person", "kind"])
     const oneOnOne = await failure(w(k, "addSeries", { about: "#CRM", title: "x", kind: "one_on_one", every: "weekly on mon", from: "today" }))
     expect(oneOnOne.message).toBe("a 1:1 needs a person; #CRM is a project")
     const unknown = await failure(w(k, "addSeries", { about: "@nobody", title: "x", every: "weekly on mon", from: "today" }))

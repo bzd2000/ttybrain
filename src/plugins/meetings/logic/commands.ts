@@ -14,7 +14,7 @@ const bool = (description: string): FlagDef => ({ type: "boolean", description }
 const kindFlag: FlagDef = {
   type: "string",
   values: [...KIND_INPUTS],
-  description: "one_on_one, project or board (steering and other mean project; default: one_on_one about a person, project about a project)",
+  description: "one_on_one, project or board (steering and other mean project; default: one_on_one about a person, project about a project, board about a board)",
 }
 
 const RECENT_DAYS = 30
@@ -70,7 +70,7 @@ function talkBlock(about: string, list: TalkList): string {
 }
 
 const line = (m: MeetingRecord) => `${m.ref} ${m.title} on ${m.date}`
-const seriesLine = (s: SeriesRecord) => `${s.ref} ${s.title}: ${s.rhythm}${s.next ? `, next ${s.next}` : ""}${s.end_date ? `, until ${s.end_date}` : ""}`
+export const seriesLine = (s: SeriesRecord) => `${s.ref} ${s.title}: ${s.rhythm}${s.next ? `, next ${s.next}` : ""}${s.end_date ? `, until ${s.end_date}` : ""}`
 const SUBJECT_USAGE = "usage: ttybrain meeting subject <M-n> <about>, or ttybrain meeting subject --all-without <about>"
 
 export function registerCommands(ctx: PluginContext, store: Store, talks: Talks): void {
@@ -79,7 +79,7 @@ export function registerCommands(ctx: PluginContext, store: Store, talks: Talks)
   ctx.command({
     thing: "talk",
     verb: "add",
-    summary: "add an item to a person's or project's talk-list; --project also puts a person's item on that project's meetings",
+    summary: "add an item to a person's, project's or board's talk-list; --project also puts a person's item on that project's meetings",
     args: [
       { name: "about", required: true },
       { name: "text", required: true },
@@ -94,7 +94,7 @@ export function registerCommands(ctx: PluginContext, store: Store, talks: Talks)
   ctx.command({
     thing: "talk",
     verb: "list",
-    summary: "show the open talk items: of one person or project (a project's include people's items tagged with it), or of everyone",
+    summary: "show the open talk items: of one person, project or board (a project's include people's items tagged with it), or of everyone",
     args: [{ name: "about" }],
     run: async ({ args }) => {
       if (args.about !== undefined) {
@@ -109,8 +109,8 @@ export function registerCommands(ctx: PluginContext, store: Store, talks: Talks)
         const list = await talks.list({ type: s.subject_type as SubjectType, id: Number(s.subject_id) }, { own: true })
         blocks.push({ about: [...list.open, ...list.carried][0]!.about, type: s.subject_type as SubjectType, list })
       }
-      // People, then projects, each by ref; those that no longer resolve last.
-      const key = (b: (typeof blocks)[number]) => `${b.about === "—" ? 1 : 0}${b.type === "person" ? 0 : 1}${b.about}`
+      // People, then projects, then boards, each by ref; those that no longer resolve last.
+      const key = (b: (typeof blocks)[number]) => `${b.about === "—" ? 1 : 0}${["person", "project", "board"].indexOf(b.type)}${b.about}`
       blocks.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0))
       return {
         json: blocks.flatMap((b) => [...b.list.open, ...b.list.carried]),
@@ -209,10 +209,10 @@ export function registerCommands(ctx: PluginContext, store: Store, talks: Talks)
   ctx.command({
     thing: "meeting",
     verb: "add",
-    summary: "add a one-off meeting about a person or project; each project in --projects gets a status item on the agenda",
+    summary: "add a one-off meeting about a person, project or board; each project in --projects gets a status item on the agenda",
     args: [{ name: "title", required: true }],
     flags: {
-      about: { type: "string", description: "who or what the meeting is about: a person or a project", placeholder: "@handle|#CODE", required: true },
+      about: { type: "string", description: "who or what the meeting is about: a person, a project or a board", placeholder: "@handle|#CODE", required: true },
       date: { type: "date", description: "the meeting date", required: true },
       kind: kindFlag,
       attendees: { type: "list", description: "attendee handles", placeholder: "a,b" },
@@ -298,18 +298,26 @@ export function registerCommands(ctx: PluginContext, store: Store, talks: Talks)
     summary: "say who or what a meeting is about: ttybrain meeting subject <M-n> <about>, or --all-without <about> for every meeting without one",
     // Both positionals are optional to the dispatcher: with --all-without the only one is <about>.
     args: [{ name: "meeting" }, { name: "about" }],
-    flags: { "all-without": bool("every meeting that has no subject yet (then give only <about>)") },
+    flags: {
+      "all-without": bool("every meeting that has no subject yet whose kind fits it (then give only <about>): board meetings take a board, the others a person or project"),
+      kind: { ...kindFlag, description: "change the meeting's kind together with its subject (needed when the subject is of another kind than the meeting)" },
+    },
     run: async ({ args, flags }) => {
       if (flags["all-without"]) {
         if (args.about !== undefined) throw new ValidationError(`unexpected argument "${args.about}"`, { hint: SUBJECT_USAGE })
         if (args.meeting === undefined) throw new ValidationError("missing argument <about>", { field: "about", hint: SUBJECT_USAGE })
-        const out: { meetings: MeetingRecord[] } = await write().setSubject!({ allWithout: true, about: args.meeting })
-        const changed = out.meetings
-        return { json: changed, text: changed.length ? changed.map((m) => `${m.ref} about ${m.about} (${m.kind})`).join("\n") : "no meetings without a subject" }
+        const out: { meetings: MeetingRecord[]; skipped: number; reason?: string } = await write().setSubject!({
+          allWithout: true,
+          about: args.meeting,
+          ...(flags.kind !== undefined ? { kind: flags.kind } : {}),
+        })
+        const lines = out.meetings.map((m) => `${m.ref} about ${m.about} (${m.kind})`)
+        if (out.reason !== undefined) lines.push(`skipped ${out.reason}`)
+        return { json: { meetings: out.meetings, skipped: out.skipped, ...(out.reason === undefined ? {} : { reason: out.reason }) }, text: lines.length ? lines.join("\n") : "no meetings without a subject" }
       }
       if (args.meeting === undefined) throw new ValidationError("missing argument <meeting>", { field: "meeting", hint: SUBJECT_USAGE })
       if (args.about === undefined) throw new ValidationError("missing argument <about>", { field: "about", hint: SUBJECT_USAGE })
-      const m: MeetingRecord = await write().setSubject!({ meeting: args.meeting, about: args.about })
+      const m: MeetingRecord = await write().setSubject!({ meeting: args.meeting, about: args.about, ...(flags.kind !== undefined ? { kind: flags.kind } : {}) })
       return { json: m, text: `${m.ref} about ${m.about} (${m.kind})` }
     },
   })

@@ -151,8 +151,22 @@ describe("meeting form", () => {
     await t.input.typeText("@marie")
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, (f) => statusLine(f).includes("saved M-1"))
-    expect(calls).toEqual([{ name: "setSubject", input: { meeting: "M-1", about: "@marie" } }])
+    expect(calls).toEqual([{ name: "setSubject", input: { meeting: "M-1", about: "@marie", kind: "one_on_one" } }])
     expect(await record("M-1")).toMatchObject({ about: "@marie", kind: "one_on_one" })
+  })
+
+  test("About: a subject of another kind changes Kind with it, visibly, and the write carries it", async () => {
+    const t = await open()
+    const calls = spy()
+    void overlay!.openForm("meeting", "meeting", { recordRef: "M-1" })
+    let frame = await until(t, (f) => f.includes("Edit M-1"))
+    expect(lineWith(frame, "Kind")).toContain("project")
+    for (let i = 0; i < 4; i++) t.input.pressBackspace()
+    await t.input.typeText("@marie")
+    frame = await until(t, (f) => lineWith(f, "Kind").includes("1:1"))
+    t.input.pressKey("s", { ctrl: true })
+    await until(t, (f) => statusLine(f).includes("saved M-1"))
+    expect(calls[0]).toEqual({ name: "setSubject", input: { meeting: "M-1", about: "@marie", kind: "one_on_one" } })
   })
 })
 
@@ -189,6 +203,39 @@ describe("talk item form", () => {
     frame = await until(t, (f) => statusLine(f).includes("added T-1"))
     const list: any = await inCtx(() => (kernel!.runtime("meetings")!.self().read as any).talkList({ about: "@marie" }))
     expect(list.open.map((i: any) => [i.ref, i.text, i.project])).toEqual([["T-1", "Sales lead walkthrough", "#CRM"]])
+  })
+
+  test("Project shows only for a person's item: new (as About is typed) and edit", async () => {
+    const t = await open()
+    void overlay!.openForm("talk_item", "talk", { prefill: { about: "#CRM" }, draftFor: "#CRM" })
+    let frame = await until(t, (f) => f.includes("CRM replatforming · project"))
+    expect(frame).not.toContain("Project")
+    t.input.pressEscape()
+    await until(t, (f) => !f.includes("New talk item"))
+    void overlay!.openForm("talk_item", "talk", {})
+    await until(t, (f) => f.includes("New talk item"))
+    await t.input.typeText("#CRM ")
+    frame = await t.frame()
+    expect(frame).not.toContain("Project")
+    for (let i = 0; i < 5; i++) t.input.pressBackspace()
+    await t.input.typeText("@marie ")
+    frame = await until(t, (f) => f.includes("Project"))
+    expect(lineWith(frame, "Project")).toMatch(/Project/)
+    t.input.pressEscape()
+    await until(t, (f) => !f.includes("New talk item"))
+    // An edit: a project's item has no Project field, a person's has.
+    await inCtx(async () => {
+      await write().addTalk!({ about: "#CRM", text: "Budget" }) // T-1
+      await write().addTalk!({ about: "@marie", text: "Demo", project: "CRM" }) // T-2
+    })
+    void overlay!.openForm("talk_item", "talk", { recordRef: "T-1" })
+    frame = await until(t, (f) => f.includes("Edit T-1"))
+    expect(frame).not.toContain("Project")
+    t.input.pressEscape()
+    await until(t, (f) => !f.includes("Edit T-1"))
+    void overlay!.openForm("talk_item", "talk", { recordRef: "T-2" })
+    frame = await until(t, (f) => f.includes("Edit T-2"))
+    expect(lineWith(frame, "Project")).toContain("CRM")
   })
 })
 

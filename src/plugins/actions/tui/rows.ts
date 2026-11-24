@@ -1,6 +1,6 @@
 // What the Actions screen and the Actions tabs share: loading actions with what their rows show (the owner's first
 // name, the linked meetings' titles and dates), the columns `ID · Action · Owner · Linked to · Due` of the 2026-11-20
-// design, and the cells. "Linked to" shows each link as the project code (cyan), the `@handle` (magenta), the
+// design, and the cells. "Linked to" shows each link as the project or board code (cyan), the `@handle` (magenta), the
 // meeting's title and date (muted) or the ref (muted), joined by spaces and cut whole: a code or a handle shows whole
 // or not at all, and `…` says links were left out; only a meeting's title gives way (its date stays).
 import { displayWidth, dueLabel, fitWidth, shortDate, truncate, type Cell, type CellPart, type TableColumn, type useRuntime } from "@ttybrain/api/tui"
@@ -42,7 +42,7 @@ export async function loadRows(rt: ReturnType<typeof useRuntime>, store: Store, 
 type Piece = { text: string; tone: CellPart["tone"]; meeting?: { title: string; tail: string } }
 
 function piece(l: ActionLink, meetings: Map<number, Meeting>): Piece {
-  if (l.type === "project" && l.ref.startsWith("#")) return { text: l.ref.slice(1), tone: "cyan" }
+  if ((l.type === "project" || l.type === "board") && l.ref.startsWith("#")) return { text: l.ref.slice(1), tone: "cyan" }
   if (l.type === "person" && l.ref.startsWith("@")) return { text: l.ref, tone: "magenta" }
   const m = l.type === "meeting" ? meetings.get(l.id) : undefined
   if (m !== undefined) {

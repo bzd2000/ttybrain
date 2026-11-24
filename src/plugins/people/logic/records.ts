@@ -148,12 +148,15 @@ export function makeStore(ctx: PluginRuntime) {
     return toGoal(row)
   }
 
-  // Soft references to projects, resolved through the kernel's record types (projects may not be loaded).
+  // Soft references to projects, resolved through the kernel's record types (projects may not be loaded). A code
+  // another record type has (a board: `#` is shared) is refused as that type.
   async function projectId(input: string): Promise<number> {
     const code = normalizeCode(input)
-    const found = await ctx.records.resolve(`#${code}`)
-    if (!found || found.type !== "project") throw new NotFoundError(`unknown project "${code}"`)
-    return found.id
+    const found = await ctx.records.resolve(`#${code}`, { type: "project" })
+    if (found && found.type === "project") return found.id
+    const other = await ctx.records.resolve(`#${code}`)
+    if (other) throw new ValidationError(`#${code} is a ${other.type}, not a project`, { field: "project", hint: 'run "ttybrain project list" for the project codes' })
+    throw new NotFoundError(`unknown project "${code}"`)
   }
 
   // Reads of the projects plugin's published views; without them (projects not loaded) there is nothing to show.

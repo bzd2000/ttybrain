@@ -10,6 +10,7 @@ import {
   parseDate,
   Type,
   ValidationError,
+  ViewUnavailableError,
   type PluginContext,
   type Static,
 } from "@ttybrain/api"
@@ -108,6 +109,19 @@ export function registerProjectOps(ctx: PluginContext, store: Store): void {
     return c
   }
 
+  // A code no other project has, and no board (the meetings plugin's, read through meetings.board): project and board
+  // codes are one namespace, since both are written `#CODE`. Codes are stored upper-case on both sides.
+  async function free(c: string): Promise<void> {
+    if ((await store.codeId(c)) !== null) throw new ConflictError(`project "${c}" already exists`, { hint: "choose another code" })
+    let board: unknown
+    try {
+      board = await db.selectFrom("meetings.board").select("id").where("code", "=", c).executeTakeFirst()
+    } catch (e) {
+      if (!(e instanceof ViewUnavailableError)) throw e // meetings not loaded: no boards to clash with
+    }
+    if (board) throw new ConflictError(`code "${c}" is already used by the board #${c}`, { hint: "project and board codes share one namespace; choose another code" })
+  }
+
   const touch = (id: number) => db.updateTable("project").set({ updated_at: now() }).where("id", "=", id).execute()
 
   async function involvementRow(i: InvolvementInput, active: boolean) {
@@ -147,7 +161,7 @@ export function registerProjectOps(ctx: PluginContext, store: Store): void {
         describe: (i: Static<typeof AddProject>) => `+ project ${codeInput(i.code)} "${i.name.trim()}"`,
         run: async (i: Static<typeof AddProject>) => {
           const c = code(i.code)
-          if ((await store.codeId(c)) !== null) throw new ConflictError(`project "${c}" already exists`, { hint: "choose another code" })
+          await free(c)
           const t = now()
           const res = await db
             .insertInto("project")
@@ -172,7 +186,7 @@ export function registerProjectOps(ctx: PluginContext, store: Store): void {
           const p = await store.activeProject(i.project)
           // The same rules as addProject; the current code is no change.
           const c = i.code === undefined ? p.code : code(i.code)
-          if (c !== p.code && (await store.codeId(c)) !== null) throw new ConflictError(`project "${c}" already exists`, { hint: "choose another code" })
+          if (c !== p.code) await free(c)
           await db
             .updateTable("project")
             .set({ ...columns(i), ...(c !== p.code ? { code: c } : {}), updated_at: now() })

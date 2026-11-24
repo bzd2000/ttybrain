@@ -45,12 +45,20 @@ export function shownDate(input: string): string {
   }
 }
 
+const DEFAULT_KIND: Record<SubjectType, MeetingKind> = { person: "one_on_one", project: "project", board: "board" }
+export const BOARD_HINT = "make it about a board (#MB); add one: ttybrain board add <CODE> <name>"
+const A_SUBJECT: Record<SubjectType, string> = { person: "a person", project: "a project", board: "a board" }
+
 // The kind a meeting or series gets: as given (`steering` and `other` mean project), else from its subject (a person:
-// one_on_one, a project: project). A 1:1 needs a person; project and board need a project.
+// one_on_one, a project: project, a board: board). A 1:1 needs a person, a project meeting a project, a board meeting
+// a board, and a board is only ever the subject of board meetings (design §5.7). The `boards-from-projects` step
+// moved the board meetings that existing databases had on a project.
 export function kindFor(subject: Pick<Subject, "type" | "ref">, given?: string): MeetingKind {
-  const kind = given === undefined ? (subject.type === "person" ? "one_on_one" : "project") : normalizeKind(given)
-  if (kind === "one_on_one" && subject.type !== "person") throw new ValidationError(`a 1:1 needs a person; ${subject.ref} is a project`, { field: "kind" })
-  if (kind !== "one_on_one" && subject.type !== "project") throw new ValidationError(`a ${kind} meeting needs a project; ${subject.ref} is a person`, { field: "kind" })
+  const kind = given === undefined ? DEFAULT_KIND[subject.type] : normalizeKind(given)
+  const is = `${subject.ref} is ${A_SUBJECT[subject.type]}`
+  if (kind === "one_on_one" && subject.type !== "person") throw new ValidationError(`a 1:1 needs a person; ${is}`, { field: "kind" })
+  if (kind === "project" && subject.type !== "project") throw new ValidationError(`a project meeting needs a project; ${is}`, { field: "kind" })
+  if (kind === "board" && subject.type !== "board") throw new ValidationError(`a board meeting needs a board; ${is}`, { field: "kind", hint: BOARD_HINT })
   return kind
 }
 export const normalizeKind = (k: string): MeetingKind => (k === "steering" || k === "other" ? "project" : (k as MeetingKind))
@@ -104,10 +112,12 @@ export function makeOccurrences(ctx: PluginContext, store: Store) {
   // The series' dates from today to 55 days ahead.
   const window = (s: SeriesRow) => rhythmDates(parseRhythm(s.rhythm), s.first_date, today(), addDays(today(), AHEAD_DAYS), s.end_date)
 
-  // Makes the missing occurrences of one series (or of all of them) for the window. Returns how many it made.
+  // Makes the missing occurrences of one series (or of all of them) for the window; none for an archived board's.
+  // Returns how many it made.
   async function topUp(seriesId?: number): Promise<number> {
     let made = 0
     for (const s of await rows(seriesId)) {
+      if (s.subject_type === "board" && (await store.boardById(s.subject_id)).archived) continue // until it is restored
       const dates = window(s)
       if (dates.length === 0) continue
       const have = new Set((await db.selectFrom("meeting").select("series_date").where("series_id", "=", s.id).execute()).map((r) => String(r.series_date)))
@@ -222,7 +232,7 @@ export function registerSeries(ctx: PluginContext, store: Store, occurrences: Oc
         output: SeriesRecord,
         describe: async (i: AddInput) => `+ series ${formatRef("S-", await store.nextSeriesId())} "${i.title.trim()}" ${shownRhythm(i.every)} from ${shownDate(i.from)}`,
         run: async (i: AddInput) => {
-          const subject = await store.subject(i.about)
+          const subject = await store.activeSubject(i.about)
           const kind = kindFor(subject, i.kind)
           const rhythm = rhythmOf(i.every)
           const first = dateField(i.from, "from")

@@ -105,7 +105,7 @@ describe("actions: links", () => {
     expect(r.json.error).toEqual({
       code: "validation",
       message: 'unknown record "#NOPE"',
-      hint: "link a record by its ref: a project (#CRM), a person (@anna), a meeting (M-4)",
+      hint: "link a record by its ref: a project (#CRM), a board (#MB), a person (@anna), a meeting (M-4)",
       field: "links",
     })
     expect((await run("action", "add", "X", "--link", "M-9", "--json")).json.error.message).toBe('unknown record "M-9"')

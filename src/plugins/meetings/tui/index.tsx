@@ -1,11 +1,13 @@
 // The meetings plugin's tui part: the Meetings screen (slot 5), the Attention panel "Upcoming meetings · next 7 days",
 // a 1:1 or project meeting's in-progress view (its only view, ruling M11) and a board meeting's Agenda, Prep, Notes
 // and Export tabs, a person's Talk (order 12) and Meetings (15) tabs, a project's Meetings (72) and Talk (75) tabs,
-// the meeting, agenda item, attendees and move forms, the new recurring meeting form (record type `series`), the
-// talk-item form (record type `talk_item`) and quick capture's route to a talk-list (`talk @anna …`).
+// a board's view (board-view.tsx: Meetings and Talk, its crumb `› BOARD Management board` cyan, on screen 5), the
+// meeting, agenda item, attendees and move forms, the new recurring meeting form (record type `series`), the
+// talk-item form (record type `talk_item`) and quick capture's route to a talk-list (`talk @anna …`, `talk #MB …`).
 import { dayDate, defineTui } from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
 import { AgendaTab } from "./agenda-tab"
+import { registerBoardView } from "./board-view"
 import { ExportTab } from "./export-tab"
 import { AgendaItemForm, AttendeesForm, MeetingForm, MoveForm } from "./forms"
 import { TalkForm } from "./talk-form"
@@ -30,7 +32,7 @@ export const meetingsTui = defineTui({
       title: "Meetings",
       slot: 5,
       component: MeetingsScreen,
-      records: ["meeting"],
+      records: ["meeting", "board"],
       // The planned meetings.
       count: async () => {
         const row = await ui.data.selectFrom("meeting").select((eb) => eb.fn.countAll().as("n")).where("status", "=", "planned").executeTakeFirstOrThrow()
@@ -38,8 +40,8 @@ export const meetingsTui = defineTui({
       },
     })
     const store = makeStore(ui)
-    // The header crumb's muted tail: `Fri 4 Dec · 8 attendees` (`Mon 9 Nov · held · 2 attendees` once it is not planned). Opened from what it is about (a person's or project's
-    // view): `› Anna Peeters › 1:1 Mon 23 Nov`, `› BOARD Management board › Board Fri 27 Nov`.
+    // The header crumb's muted tail: `Fri 4 Dec · 8 attendees` (`Mon 9 Nov · held · 2 attendees` once it is not planned). Opened from what it is about (a person's, project's
+    // or board's view): `› Anna Peeters › 1:1 Mon 23 Nov`, `› BOARD Management board › Board Fri 27 Nov`.
     const same = async (a: string, b: string) => {
       const [x, y] = await Promise.all([ui.records.resolve(a), ui.records.resolve(b)])
       return x !== null && y !== null && x.type === y.type && x.id === y.id
@@ -70,8 +72,9 @@ export const meetingsTui = defineTui({
     ui.recordTab("person", { id: "meetings", title: "Meetings", order: 15, component: PersonMeetings })
     ui.recordTab("project", { id: "meetings", title: "Meetings", order: 72, component: ProjectMeetings })
     ui.recordTab("project", { id: "talk", title: "Talk", order: 75, count: open, component: ProjectTalk })
-    // M9: `t` on any tab of a person or project adds to its talk-list (the talk form, the subject filled in).
-    for (const type of ["person", "project"])
+    registerBoardView(ui)
+    // M9: `t` on any tab of a person, project or board adds to its talk-list (the talk form, the subject filled in).
+    for (const type of ["person", "project", "board"])
       ui.recordKey(type, {
         key: "t",
         label: "to talk",

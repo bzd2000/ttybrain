@@ -133,7 +133,16 @@ export function Form(props: {
   const extraSpecs = extras.map(
     (x): FieldSpec => ({ name: x.key, label: x.def.label, kind: x.def.type, ...(x.def.values ? { values: x.def.values } : {}) }),
   )
-  const fields = createMemo((): FieldSpec[] => (extraInitial() === undefined ? props.fields : [...props.fields, ...extraSpecs]))
+  // A field with `when` shows only while the values say so.
+  const shownNow = (f: FieldSpec): boolean => {
+    if (f.when === undefined) return true
+    try {
+      return f.when(values())
+    } catch {
+      return true
+    }
+  }
+  const fields = createMemo((): FieldSpec[] => (extraInitial() === undefined ? props.fields : [...props.fields, ...extraSpecs]).filter(shownNow))
   const extraOf = (name: string) => extras.find((x) => x.key === name)
 
   // The derived fields that were edited (or given a value to start with): they no longer follow the others.
@@ -197,6 +206,11 @@ export function Form(props: {
     setOffer(undefined)
   }
 
+  // A field that hides while it or one after it is focused: the focus stays on the last one shown.
+  createEffect(() => {
+    const n = fields().length
+    if (index() > n - 1) setIndex(Math.max(0, n - 1))
+  })
   const current = () => fields()[index()]
   const valueOf = (name: string) => values()[name] ?? null
   const setValue = (name: string, v: string | null) => setValues((all) => ({ ...all, [name]: v }))
@@ -220,10 +234,11 @@ export function Form(props: {
       for (const f of props.fields)
         if (f.show === "label" || f.show === "labelType")
           for (const w of refWords(valueOf(f.name))) {
-            const def = kernel.records.typeOfRef(w)
-            if (!def || out.has(w)) continue
+            if (out.has(w)) continue
             try {
-              out.set(w, { label: await kernel.records.label(w), type: def.name })
+              // The type the ref resolves to (a shared prefix such as `#` has several).
+              const found = await kernel.records.resolveAny(w)
+              if (found) out.set(w, { label: await kernel.records.label(w), type: found.type })
             } catch {}
           }
       return out
@@ -254,22 +269,26 @@ export function Form(props: {
   // --- record autocomplete: open after typing in a record field, closed once a suggestion is accepted ---
   const [suggesting, setSuggesting] = createSignal(false)
   const [picked, setPicked] = createSignal(0)
-  // A refs field searches the record type whose prefix starts its last word (`@an` people, `M-` meetings).
+  // A refs field searches the record types whose prefix starts its last word (`@an` people, `M-` meetings; `#` the
+  // types sharing it, their candidates merged by ref).
   const searchKey = () => {
     const f = current()
     if (!f || !suggesting()) return null
     const value = valueOf(f.name) ?? ""
-    if (f.kind === "record") return f.recordType && value.trim() !== "" ? { type: f.recordType, text: value.trim() } : null
+    if (f.kind === "record") return f.recordType && value.trim() !== "" ? { types: [f.recordType], text: value.trim() } : null
     if (f.kind !== "refs") return null
     const word = lastWord(value)
-    const def = word === "" ? undefined : kernel.records.typeOfRef(word)
-    return def ? { type: def.name, text: word.slice(def.prefix.length) } : null
+    const defs = word === "" ? [] : kernel.records.typesOfRef(word)
+    return defs.length > 0 ? { types: defs.map((d) => d.name), text: word.slice(defs[0]!.prefix.length) } : null
   }
   const search = useQuery(
     async (): Promise<Suggestion[]> => {
       const k = searchKey()
       if (!k) return []
-      return (await kernel.records.byName(k.type)?.search(k.text, SUGGESTION_LIMIT)) ?? []
+      const all: Suggestion[] = []
+      for (const type of k.types) all.push(...((await kernel.records.byName(type)?.search(k.text, SUGGESTION_LIMIT)) ?? []))
+      if (k.types.length === 1) return all
+      return all.sort((a, b) => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0)).slice(0, SUGGESTION_LIMIT)
     },
     { key: () => JSON.stringify(searchKey()) },
   )
@@ -323,7 +342,7 @@ export function Form(props: {
     }
     return v
   }
-  const collect = (): FormValues => Object.fromEntries(props.fields.map((f) => [f.name, collectOne(f)]))
+  const collect = (): FormValues => Object.fromEntries(props.fields.map((f) => [f.name, shownNow(f) ? collectOne(f) : null]))
 
   // The extra fields whose value differs from the one loaded, each saved through its plugin's `set` operation; a
   // number field's text goes as a number when it is a plain decimal (NaN otherwise, `0x10` included, so the

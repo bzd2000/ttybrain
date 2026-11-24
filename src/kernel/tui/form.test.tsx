@@ -212,6 +212,25 @@ function DeriveForm(props: RecordFormProps) {
   )
 }
 
+// A field shown only while another says so: Tag only while Who starts with `@`.
+function WhenForm(props: RecordFormProps) {
+  return (
+    <Form
+      title="When"
+      fields={[
+        { name: "who", label: "Who", kind: "text" },
+        { name: "tag", label: "Tag", kind: "text", when: (v) => (v.who ?? "").startsWith("@") },
+        { name: "note", label: "Note", kind: "text" },
+      ]}
+      submit={async (v) => {
+        submitted.push(v)
+        return { ok: true }
+      }}
+      close={props.close}
+    />
+  )
+}
+
 let overlay: Overlay | undefined
 function Home() {
   overlay = useOverlay()
@@ -230,6 +249,7 @@ const todoPart: TuiDef = defineTui({
     ui.recordForm("thing", { id: "looks", label: "Looks", component: LooksForm })
     ui.recordForm("thing", { id: "look", label: "Look", component: LookForm })
     ui.recordForm("thing", { id: "derive", label: "Derive", component: DeriveForm })
+    ui.recordForm("thing", { id: "when", label: "When", component: WhenForm })
   },
 })
 
@@ -297,6 +317,31 @@ describe("forms", () => {
     expect(lineWith(frame, "Copy")).toContain("Plan B!")
     await t.input.typeText("C")
     expect(lineWith(await t.frame(), "Copy")).toContain("Plan BC!")
+  })
+
+  test("a field with when shows while the values say so; hidden, Tab skips it and submit gets null", async () => {
+    const t = await open()
+    void overlay!.openForm("thing", "when")
+    let frame = await t.frame()
+    expect(frame).toContain("Who")
+    expect(frame).not.toContain("Tag")
+    await t.input.typeText("@anna")
+    frame = await t.frame()
+    expect(frame).toContain("Tag")
+    t.input.pressTab()
+    await t.input.typeText("CRM")
+    t.input.pressTab({ shift: true })
+    for (let i = 0; i < 5; i++) t.input.pressBackspace()
+    await t.input.typeText("team")
+    frame = await t.frame()
+    expect(frame).not.toContain("Tag")
+    // Hidden: Tab goes from Who straight to Note.
+    t.input.pressTab()
+    await t.input.typeText("later")
+    expect(lineWith(await t.frame(), "Note")).toContain("later")
+    t.input.pressKey("s", { ctrl: true })
+    for (let i = 0; i < 100 && submitted.length === 0; i++) await sleep(10)
+    expect(submitted).toEqual([{ who: "team", tag: null, note: "later" }])
   })
 
   test("a derived field given a value to start with keeps it, and the untouched form keeps no draft", async () => {
@@ -586,6 +631,45 @@ describe("forms", () => {
     t.input.pressKey("s", { ctrl: true })
     await t.frame()
     expect(submitted).toEqual([{ links: "#CRM an @anna #ERP " }])
+  })
+
+  test("refs field: a prefix two record types share suggests both types' records, ordered by ref", async () => {
+    // Two fixture plugins with a record type on `#` each (in-memory codes), both declaring sharedPrefix.
+    const hashPlugin = (id: string, codes: Record<string, number>): PluginDef =>
+      definePlugin({
+        id,
+        name: id,
+        version: "1.0.0",
+        apiVersion: 1,
+        activate(ctx) {
+          ctx.recordType({
+            name: id,
+            prefix: "#",
+            sharedPrefix: true,
+            resolve: async (input) => codes[input.replace(/^#/, "").toUpperCase()] ?? null,
+            label: async (n) => `${id} ${n}`,
+            search: async (text) =>
+              Object.keys(codes)
+                .filter((c) => c.includes(text.toUpperCase()))
+                .sort()
+                .map((c) => ({ ref: `#${c}`, label: `${id} ${codes[c]}` })),
+          })
+        },
+      })
+    const t = await open([todoPlugin, hashPlugin("alpha", { CRM: 1, ERP: 2 }), hashPlugin("beta", { MB: 7, BOARD: 8 })])
+    overlay!.openForm("thing", "links")
+    await t.frame()
+    await t.input.typeText(" #")
+    let frame = await t.frame()
+    for (const s of ["#BOARD beta 8", "#CRM alpha 1", "#ERP alpha 2", "#MB beta 7"]) expect(frame).toContain(s)
+    expect(frame.indexOf("#BOARD beta 8")).toBeLessThan(frame.indexOf("#CRM alpha 1"))
+    expect(frame.indexOf("#ERP alpha 2")).toBeLessThan(frame.indexOf("#MB beta 7"))
+    await t.input.typeText("b")
+    frame = await t.frame()
+    expect(frame).toContain("#MB beta 7")
+    expect(frame).not.toContain("#CRM alpha 1")
+    t.input.pressTab()
+    expect(lineWith(await t.frame(), "Links")).toContain("#CRM #BOARD ")
   })
 
   test(

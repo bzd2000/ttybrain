@@ -126,6 +126,8 @@ The portfolio, and everything you follow up per project: health, milestones, del
 | `decision` | `project_id → project` (optional), `date`, `title`, `description`, `decided_by`, `meeting_id → meeting` **(soft)** |
 | `involvement` | `project_id → project`, `person_id → person` **(soft)**, `role`; unique (project, person, role) |
 
+**Shared code namespace.** `#` is shared with the `board` record type of `meetings` (`sharedPrefix: true` on this plugin's record type and tag type): `addProject` and `editProject` refuse a code a board has (`code "MB" is already used by the board #MB`, hint, exit 3, case-insensitive) by reading `meetings.board`; while `meetings` is not loaded the check is skipped. Asked for a project by a board's code (`project show #MB`), it answers `#MB is a board, not a project` (hint `run "ttybrain project list" for the project codes`).
+
 `projects` requires `people` and stores person IDs as soft references. It validates them on every write and shows names by joining `people.person`, never the internal `person` table.
 
 ### Published views
@@ -144,7 +146,7 @@ Views take no injected clock, so nothing in them depends on "today": `actions.ac
 
 The project `context` Markdown is **not** in a view, because it's large. It's read with `getContext`.
 
-It reads `people.person`, for owner and involvement names and for validating person references, `meetings.meeting` (`^2`, optional), for meeting titles on decisions, and `actions.action` and `actions.link` (optional), for the open-action counts it shows (`open_actions` on a project record in the CLI and TUI; it is no longer a column of `projects.project`).
+It reads `people.person`, for owner and involvement names and for validating person references, `meetings.meeting` (`^2`, optional), for meeting titles on decisions, `meetings.board` (optional, for the code namespace), and `actions.action` and `actions.link` (optional), for the open-action counts it shows (`open_actions` on a project record in the CLI and TUI; it is no longer a column of `projects.project`).
 
 ### Exposed operations
 
@@ -261,19 +263,22 @@ ttybrain action list|show|add|edit|link|unlink|done|cancel|delete
 
 ## 3. `meetings`
 
-Every meeting is about a person (a 1:1) or a project (a project meeting or a board), either one-off or an occurrence of a recurring series. It covers the agenda with an "ask" per item, the generated prep, notes during the meeting, closing (also by itself), the talk-lists of people and projects, and the reports and export. Design: `docs/superpowers/specs/2026-11-20-ttybrain-meetings-actions-design.md` §5. Version 2.0.0 (the kinds in the published `meeting` view changed); it requires `projects ^2`, `people ^1`, `actions ^2`.
+Every meeting is about a person (a 1:1), a project (a project meeting) or a board (`#MB`, its own record), either one-off or an occurrence of a recurring series. It covers the agenda with an "ask" per item, the generated prep, notes during the meeting, closing (also by itself), the boards, the talk-lists of people, projects and boards, and the reports and export. Design: `docs/superpowers/specs/2026-11-20-ttybrain-meetings-actions-design.md` §5. Version 2.1.0 (2.0.0 changed the kinds in the published `meeting` view; 2.1.0 adds boards, additively); it requires `projects ^2`, `people ^1`, `actions ^2`.
 
 ### Data
 
 | Table | Columns |
 |---|---|
-| `meeting` | `title`, `date`, `kind` (`one_on_one`, `project`, `board`), `status` (planned/held/cancelled), `subject_type` (`person`/`project`) and `subject_id` **(soft)**, `series_id → series` and `series_date` (unique together: an occurrence is made once, even when skipped or moved), `auto_close` (1: it closes itself 3 days after its date), `closed_itself`, `since_date`, `notes` (Markdown). `id` is `AUTOINCREMENT`: a deleted meeting's number is never reused |
+| `meeting` | `title`, `date`, `kind` (`one_on_one`, `project`, `board`), `status` (planned/held/cancelled), `subject_type` (`person`/`project`/`board`) and `subject_id` **(soft)** (kind `board` ⇔ a board subject), `series_id → series` and `series_date` (unique together: an occurrence is made once, even when skipped or moved), `auto_close` (1: it closes itself 3 days after its date), `closed_itself`, `since_date`, `notes` (Markdown). `id` is `AUTOINCREMENT`: a deleted meeting's number is never reused |
+| `board` | `code` (unique, 2–16 `A-Z`/`0-9` with at least one letter, upper-cased), `name`, `note`, `archived_at`, `from_project_id` **(soft)** (set by the `boards-from-projects` step, cleared by the first edit or archive; it drives the notice), `talk_stayed` (1 when the step left the project's open talk items on the project), `created_at`, `updated_at`. `id` is `AUTOINCREMENT` |
 | `series` | `subject_type`, `subject_id` **(soft)**, `title`, `kind`, `rhythm` (as typed: `every 2 weeks on wed`), `first_date`, `end_date` (optional) |
 | `series_attendee` | `series_id → series`, `person_id` **(soft)** |
-| `talk_item` | `subject_type`, `subject_id` **(soft)**, `text`, `project_id` **(soft)** (the tag on a person's item), `added_date`, `position`, `last_position`, `status` (open/discussed/dropped), `meeting_id → meeting` (where it was ticked), `status_date`. `id` is `AUTOINCREMENT` |
+| `talk_item` | `subject_type` (person, project or board), `subject_id` **(soft)**, `text`, `project_id` **(soft)** (the tag on a person's item), `added_date`, `position`, `last_position`, `status` (open/discussed/dropped), `meeting_id → meeting` (where it was ticked), `status_date`. `id` is `AUTOINCREMENT` |
 | `talk_kept` | `meeting_id`, `talk_id`: the open items a closed meeting left for next time |
 | `attendee` | `meeting_id → meeting`, `person_id → person` **(soft)** |
 | `agenda_item` | `meeting_id → meeting`, `position`, `text`, `project_id → project` **(soft)**, `ask` |
+
+Migration 006 adds `board` and widens the `subject_type` CHECK of `series`, `meeting` and `talk_item` to include `board` (rebuilt the rule-6 way, ids and `AUTOINCREMENT` counters kept); 007 adds `board.talk_stayed`. The data step `boards-from-projects` (below) moves existing data.
 
 `attendee` and `agenda_item` have no `ON DELETE` action (rule 6 of the data rules): where a meeting is deleted its children are deleted explicitly. Existing meetings are kept by migration 002: `steering` and `other` become `project`, `board` stays, every meeting keeps its number, title, date, status, attendees, agenda, asks, notes and since date, and none has a subject until `meeting subject` gives it one (it is then listed under "No subject" and never closes itself).
 
@@ -281,15 +286,20 @@ Every meeting is about a person (a 1:1) or a project (a project meeting or a boa
 
 | View | Columns |
 |---|---|
-| `meetings.meeting` (v2) | id, title, date, kind, status, subject_type, subject_id, series_id |
+| `meetings.meeting` (v2) | id, title, date, kind, status, subject_type (`person`/`project`/`board`), subject_id, series_id |
 | `meetings.series` (v1) | id, subject_type, subject_id, title, kind, rhythm, first_date, end_date |
 | `meetings.talk_item` (v1) | id, subject_type, subject_id, text, project_id, added_date, position, status, meeting_id, status_date |
 | `meetings.agenda_item` (v1) | id, meeting_id, position, text, project_id, ask |
 | `meetings.attendee` (v1) | meeting_id, person_id |
+| `meetings.board` (v1) | id, code, name, archived_at |
 
-It reads `people.person` (attendee and subject names), `projects.project` (agenda project codes and names, subjects) and `actions.action` / `actions.link` (the actions linked to a meeting, for the minutes and the prep). `projects` and `actions` read `meetings.meeting` at `^2`.
+It reads `people.person` (attendee and subject names), `projects.project` (agenda project codes and names, subjects) and `actions.action` / `actions.link` (the actions linked to a meeting, for the minutes and the prep). `projects` and `actions` read `meetings.meeting` at `^2`; `projects` also reads `meetings.board` (optional) to keep codes apart, and `actions` to refuse an archived board.
 
-Record types: `meeting` (`M-n`), `series` (`S-n`), `talk_item` (`T-n`); all resolvable and searchable (a talk item by its text). A meeting's, series' or talk item's subject that is gone (a deleted person, an archived or switched-off project) shows as `—`, never an error.
+Record types: `meeting` (`M-n`), `series` (`S-n`), `talk_item` (`T-n`) and `board` (`#CODE`: shares the `#` prefix with `projects.project`, by `sharedPrefix: true` on both its record type and its tag type; it resolves by code only, never by id, and its search covers boards that are not archived); all resolvable and searchable (a talk item by its text). A meeting's, series' or talk item's subject that is gone (a deleted person, an archived or switched-off project) shows as `—`, never an error.
+
+**Boards and the kind rule.** `kindFor`: a board subject gives kind `board`; kind `board` with any other subject is refused (`a board meeting needs a board; #CRM is a project`, hint `make it about a board (#MB); add one: ttybrain board add <CODE> <name>`); `project` on a board or `1:1` on a board is refused likewise. A board meeting keeps its kind: `setSubject` with a person or a project is refused. An archived board refuses new meetings, series, talk items and (through `actions`) links (`#MB is archived`, hint `ttybrain board restore #MB`), and the `occurrences` upkeep skips its series. A talk item on a board takes no project tag. A project code where a board is needed, and the reverse, gives `#MB is a board, not a project` (or `#CRM is a project, not a board`) with a hint.
+
+**Data step `boards-from-projects`** (`ctx.upgrade`, once): for each project that is the subject of a board-kind meeting or series it makes a board with the project's name and the code `<CODE>B` (the code cut to 15 characters so the `B` stays, then `…B2`, `…B3` while taken by a board or a project) and moves the series (with all occurrences) and board-kind meetings to it. The project keeps its code, actions and everything else. Its open talk items move too when the project hosts no other meetings or series; otherwise they stay (`talk_stayed`). `ctx.notices` names each such board in `plugin list` and Help (`board #CRMB "CRM" now holds the board meetings of project #CRM; rename it: ttybrain board edit #CRMB --code <CODE>`) until it is first edited.
 
 ### Rhythms and upkeep
 
@@ -318,12 +328,14 @@ Two upkeeps (`ctx.upkeep`, see the architecture primer) keep the data current wi
 | `editMeeting` / `cancelMeeting` | … | `~ M-5 date 2027-03-04 → 2027-03-11`, `~ M-5 cancelled` |
 | `skipMeeting` / `moveMeeting` | `ref` (, `to`) | `~ M-5 skipped`, `~ M-5 date 2027-03-04 → 2027-03-11` |
 | `setSubject` | `meeting` or `allWithout`, `about` | `~ M-5 about @karim` |
+| `addBoard` / `editBoard` | `code`, `name`, `note?`; `board`, `name?`, `code?`, `note?` | `+ board #MB "Management board"`, `~ #MB code → MBX, name` |
+| `archiveBoard` / `restoreBoard` | `board` | `~ #MB archived`, `~ #MB restored` |
 | `closeMeeting` | `ref` | `~ M-4 held` (returns the closing summary, below) |
 | `setAttendees` | `meeting`, `people[]` | `~ M-4 attendees +@tom −@luc` |
 | `addAgendaItem` / `editAgendaItem` / `moveAgendaItem` / `removeAgendaItem` | … | `~ M-4 item 2 ask: "Release contingency"` (also `+ M-4 item 3 "Budget"`, `~ M-4 item 4 → 2`, `- M-4 item 2 "AOB"`) |
 | `setNotes` | `meeting`, `markdown` | `~ M-4 notes` |
 | `addSeries` / `editSeries` / `endSeries` | `about`, `title`, `every`, `from` (the CLI defaults it to today), `until?`, `kind?`, `attendees?`; `ref` and the same; `ref`, `on?` | `+ series S-2 "1:1 Karim" every 2 weeks on wed from …`, `~ S-2 ends 2027-03-04` |
-| `addTalk` / `editTalk` / `moveTalk` / `dropTalk` | `about`, `text`, `project?`; `ref`, …; `ref`, `to`; `ref` | `+ talk @anna "AWS training budget"`, `~ T-7 position 3 → 1`, `~ T-7 dropped` |
+| `addTalk` / `editTalk` / `moveTalk` / `dropTalk` | `about` (person, project or board), `text`, `project?`; `ref`, …; `ref`, `to`; `ref` | `+ talk @anna "AWS training budget"`, `~ T-7 position 3 → 1`, `~ T-7 dropped` |
 | `discussTalk` / `reopenTalk` | `ref`, `meeting?`; `ref` | `~ T-7 discussed in M-4`, `~ T-7 reopened` |
 
 Closing: `closeMeeting` marks the meeting held and returns the meeting record, what it logged, the counts discussed, kept and created, and one `message` (`1:1 Anna closed · 2 discussed, 3 kept for next time · 2 actions created · notes saved`). The unticked talk items stay open (recorded in `talk_kept`); a 1:1's notes are also added to the person as a `one_on_one` note (`people.addNote`, dated the meeting's date); the notes of project and board meetings stay on the meeting. Notes written after closing stay on the meeting only (they are not copied again). Auto-close does the same.
@@ -337,23 +349,25 @@ ttybrain meeting list|show|add|edit|cancel|skip|move|subject|close|attendees|not
 ttybrain meeting series add|list|edit|end
 ttybrain meeting agenda <M-n> add|edit|move|remove
 ttybrain talk add|list|done|drop|move|reopen
+ttybrain board add|list|show|edit|archive|restore
 ttybrain report board <M-n> | minutes <M-n>   [--format md|text|json]
 ```
 
-`meeting add` needs `--about <@handle|#CODE>`; `--kind` is optional (a person subject makes a `one_on_one`, a project subject a `project`; `board` is chosen with `--kind board` on a project) and `--kind steering|other` stay accepted as aliases of `project`. `meeting subject <M-n> <about>` gives a meeting without a subject one, and `meeting subject --all-without <about>` gives all of them one (one transaction). `meeting skip <M-n>` and `meeting move <M-n> --to <date>` act on one planned meeting (of a series: that date only). `meeting series add <about> <title> --every <rhythm> [--from <date>] [--until <date>] [--kind] [--attendees a,b]` starts a series (the attendees default to the person it is about); `series edit <S-n>` takes `--title`, `--every`, `--attendees`, `--until` / `--no-until`; `series end <S-n> [--on <date>]` stops it. `talk add <about> <text> [--project <code>]` (a project tag only on a person's item), `talk list [<about>]` (open items numbered within their group, the carried ones marked `↻`), `talk done <T-n> [--meeting <M-n>]`, `talk drop|reopen <T-n>`, `talk move <T-n> --to <n>`. `meeting close` prints the closing message. Agenda items have no ref of their own: they are addressed by meeting and position (`ttybrain meeting agenda M-4 edit 2`). `--attendees` and `--projects` take comma-separated lists; the TUI form takes them as tag text (`@peter @marie`, `#CRM #ERP`). Held meetings stay writable (notes are often finished afterwards); cancelled ones are read-only, and nothing reopens a meeting. Commands print a short result line; the change-set lines above go to the change log. After a write command, an upkeep that failed in that process prints `warning: upkeep "<plugin>/<id>" failed: …` on stderr.
+`meeting add` needs `--about <@handle|#CODE>`; `--kind` is optional (a person subject makes a `one_on_one`, a project subject a `project`; a board subject a `board`; `--kind board` with a project or person subject is refused) and `--kind steering|other` stay accepted as aliases of `project`. `meeting subject <M-n> <about>` gives a meeting without a subject one, and `meeting subject --all-without <about>` gives all of them that fit one (board meetings a board, the others a person or project; the rest are skipped and counted; one transaction). A meeting that has a subject keeps its kind: a subject of another kind needs `--kind <1:1|project|board>`. `meeting skip <M-n>` and `meeting move <M-n> --to <date>` act on one planned meeting (of a series: that date only). `meeting series add <about> <title> --every <rhythm> [--from <date>] [--until <date>] [--kind] [--attendees a,b]` starts a series (the attendees default to the person it is about); `series edit <S-n>` takes `--title`, `--every`, `--attendees`, `--until` / `--no-until`; `series end <S-n> [--on <date>]` stops it. `talk add <about> <text> [--project <code>]` (a project tag only on a person's item), `talk list [<about>]` (open items numbered within their group, the carried ones marked `↻`), `talk done <T-n> [--meeting <M-n>]`, `talk drop|reopen <T-n>`, `talk move <T-n> --to <n>`. `meeting close` prints the closing message. Agenda items have no ref of their own: they are addressed by meeting and position (`ttybrain meeting agenda M-4 edit 2`). `--attendees` and `--projects` take comma-separated lists; the TUI form takes them as tag text (`@peter @marie`, `#CRM #ERP`). Held meetings stay writable (notes are often finished afterwards); cancelled ones are read-only, and nothing reopens a meeting. Commands print a short result line; the change-set lines above go to the change log. After a write command, an upkeep that failed in that process prints `warning: upkeep "<plugin>/<id>" failed: …` on stderr.
 
 ### UI and other contributions
 
 | Extension point | What |
 |---|---|
-| `screen` | **Meetings** (5): Upcoming (by week), Held closes itself, Not closed, No subject (a last group, hint `meeting subject M-n <ref>`) and Series; keys `n` one-off, `N` series, `s` skip, `m` move date |
+| `screen` | **Meetings** (5): Upcoming (by week), Held closes itself, Not closed, No subject (a last group, hint `meeting subject M-n <ref>`), Series and **Boards · n** (code cyan, name; Tab cycles the panels, Enter opens the board); keys `n` one-off, `N` series, `s` skip, `m` move date |
 | `overviewPanel` | **Upcoming meetings · next 7 days** on Attention (the lead panel, with "Before …" and the highlighted first action: `x` completes it, `t` talks) |
 | `recordTab` on `meeting` | A 1:1 or project meeting is one **Meeting** view (the in-progress layout, no tab row; its status shows once not planned). A board has **Agenda** (with the talk-list; `A` adds a talk item to the agenda and ticks it), **Prep**, **Notes**, **Export** (board pack while planned, minutes once held, `m` switches, `w` writes `<exportDir>/<date>-<slug>.md`, `y` copies by OSC 52) |
+| `recordTab` on `board` | **Meetings** (its series and meetings, Past meetings, no Prep; the right column is "Your actions for #CODE") and **Talk** (no Project column); the record's crumb is `#CODE` (cyan) and name |
 | `recordTab` on `person` / `project` | **Talk** (open items, ticked with Space, the carried ones marked `↻`) and **Meetings** (its series and meetings; a project's also the Prep panel and Past meetings) |
-| `recordKey` on `person` / `project` | `t` opens the talk-item form with the subject filled in (`t` on an upcoming meeting does the same) |
+| `recordKey` on `person` / `project` / `board` | `t` opens the talk-item form with the subject filled in (`t` on an upcoming meeting does the same) |
 | `recordForm` | meeting, agenda item, attendees, move date (on `meeting`); series; talk item |
 | `recordCrumb` on `meeting` | `› <ref> <label>`; opened from a person or project: `› Anna Peeters › 1:1 Mon 23 Nov` |
-| `captureRoute` | quick capture of `talk @anna …` or `talk #CRM …` with exactly one tag that resolves goes to that talk-list; anything else (`talk about lunch`, two tags, an unknown tag) goes to the inbox as before, and the preview says so |
+| `captureRoute` | quick capture of `talk @anna …`, `talk #CRM …` or `talk #MB …` with exactly one tag that resolves to a person, project or board goes to that talk-list (a board's preview: `→ Management board's talk-list · next Board Fri 27 Nov`; a person's item with `#BOARD` is declined, `#BOARD is a board, not a project`); anything else (`talk about lunch`, two tags, an unknown tag) goes to the inbox as before, and the preview says so |
 | `recordTab` on `meeting` (from `actions`) | **Actions**: the actions linked to a board meeting (the other kinds show them in the Agreed actions panel) |
 | `report` | `board` and `minutes`. The board embeds `project-status` per agenda project through `ctx.reports.run`, with `since` from `sinceDate`; its title is `<title> · <date>`, and the minutes' is `Minutes · <title> · <date>`. Sections of `board`: Attendees, Agenda, Projects (one block per agenda project, with its Ask); of `minutes`: Attendees, Notes, Discussed (the talk items ticked in the meeting), Decisions, Actions |
 | keys | `x` (close) and `w` (write the export) are plain keys on the screen and tabs; `quickAction` is not used (phase 5) |

@@ -1,6 +1,6 @@
 // The actions plugin's Attention panels: overdue actions (priority 10) and due this week (20), with the designs'
-// column widths (growing for long codes and ids). The third column is the action's first project or person link (the
-// 2026-11-20 home design): a project's code (cyan) or a person's first name (magenta), `—` without one. They read through the same makeOverview the
+// column widths (growing for long codes and ids). The third column is the action's first project, board or person link
+// (the 2026-11-20 home design): a project's or a board's code (cyan) or a person's first name (magenta), `—` without one. They read through the same makeOverview the
 // `overview` report sections use.
 import { dueLabel, type Cell, type OverviewRow, type TuiContext } from "@ttybrain/api/tui"
 import { makeOverview, type OverviewAction } from "../logic/overview"
@@ -26,11 +26,11 @@ export function registerPanels(ui: TuiContext): void {
 
   const rows = async (list: OverviewAction[], tone: Cell["tone"]): Promise<OverviewRow[]> => {
     const today = ui.clock.today()
-    const first = list.map(({ a }) => a.links.find((l) => l.type === "project" || l.type === "person"))
+    const first = list.map(({ a }) => a.links.find((l) => l.type === "project" || l.type === "board" || l.type === "person"))
     const names = await namesOf(ui, first.flatMap((l) => (l?.type === "person" ? [l.id] : [])))
     const linked = (l: (typeof first)[number]): Cell => {
       if (l === undefined) return dash
-      if (l.type === "project") return l.ref.startsWith("#") ? { text: l.ref.slice(1), tone: "cyan" } : dash
+      if (l.type === "project" || l.type === "board") return l.ref.startsWith("#") ? { text: l.ref.slice(1), tone: "cyan" } : dash
       const name = names.get(l.id)
       return name === undefined ? dash : { text: name.split(/\s+/)[0]!, tone: "magenta" }
     }

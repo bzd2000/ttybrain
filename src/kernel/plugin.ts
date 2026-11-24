@@ -42,6 +42,11 @@ export interface PluginContext {
   // data steps, in its own write transaction with this context. Skipped for that boot when another process holds the
   // write lock; a throw rolls it back and shows the error with the plugin, which stays loaded.
   upkeep(id: string, run: () => Promise<void>): void
+  // Notices (docs/architecture.md, "Notices"): what the user should know about the plugin's data that is not a
+  // problem, such as a record a data step made that wants a better name. Run at each boot after the data steps, with
+  // this context (reading only); each line is shown with the plugin in `ttybrain plugin list` and Help. [] says
+  // nothing. A throw is shown as the plugin's error. Once per plugin.
+  notices(run: () => Promise<string[]>): void
   publish(name: string, def: ViewDef): void
   expose(ops: { read?: Record<string, ReadOp>; write?: Record<string, WriteOp> }): void
   // Another plugin's exposed operations; undefined unless it is in `requires`.
@@ -52,7 +57,13 @@ export interface PluginContext {
   self(): PluginApi
   recordType(def: Omit<RecordTypeDef, "plugin">): void
   readonly records: {
-    resolve(ref: string): Promise<{ type: string; id: number } | null>
+    // The record a ref names, or null. A prefix several types share (`#`: projects and boards) asks each type in
+    // registration order (a code two types both know throws a ValidationError); `type` asks only that type, so a
+    // caller that needs a project passes `{ type: "project" }`.
+    resolve(ref: string, opts?: { type?: string }): Promise<{ type: string; id: number } | null>
+    // The names of the record types a ref's prefix may be, in registration order ([] for none; two for a shared prefix).
+    typesOfRef(ref: string): string[]
+    // A NotFoundError for a ref nothing resolves: `no record "X-1"`, of a shared prefix `no project or board "#X"`.
     label(ref: string): Promise<string>
     // The display ref of (record type, id); `<type>:<id>` when the type is not registered.
     refOf(type: string, id: number): Promise<string>

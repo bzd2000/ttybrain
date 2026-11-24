@@ -94,11 +94,15 @@ export function makeStore(ctx: PluginRuntime) {
     return (await toProjects([await recordQuery().where("p.id", "=", id).executeTakeFirstOrThrow()]))[0]!
   }
 
+  // A project by code or id. A code another record type has (a board: `#` is shared) is refused as that type.
   async function project(input: string): Promise<ProjectRecord> {
     const id = await projectId(input)
     const code = normalizeCode(input)
-    if (id === null) throw new NotFoundError(`unknown project "${code}"`, { suggestions: suggest(code, await codes()) })
-    return projectById(id)
+    if (id !== null) return projectById(id)
+    const other = await ctx.records.resolve(`#${code}`)
+    if (other && other.type !== "project")
+      throw new ValidationError(`#${code} is a ${other.type}, not a project`, { hint: 'run "ttybrain project list" for the project codes' })
+    throw new NotFoundError(`unknown project "${code}"`, { suggestions: suggest(code, await codes()) })
   }
 
   // A project that may be written to (or have records written on it): not archived.
@@ -178,6 +182,7 @@ export function registerRecordTypes(ctx: PluginContext, store: Store): void {
   ctx.recordType({
     name: "project",
     prefix: "#",
+    sharedPrefix: true, // boards (the meetings plugin) are `#CODE` too; the codes are one namespace (ops-project.ts)
     resolve: (input) => store.projectId(input),
     label: async (id) => (await store.projectById(id)).name,
     ref: async (id) => (await store.projectById(id)).ref,
@@ -194,5 +199,5 @@ export function registerRecordTypes(ctx: PluginContext, store: Store): void {
       return rows.map((r) => ({ ref: `#${r.code}`, label: String(r.name) }))
     },
   })
-  ctx.tagType({ prefix: "#", recordType: "project", resolve: (token) => store.codeId(token) }) // a tag names a code, never an id
+  ctx.tagType({ prefix: "#", recordType: "project", sharedPrefix: true, resolve: (token) => store.codeId(token) }) // a tag names a code, never an id
 }

@@ -22,8 +22,11 @@ export function tagParts(text: string, opts: { tone?: Tone; unresolved?: string[
     if (t.start > at) parts.push({ text: text.slice(at, t.start), tone: opts.tone })
     parts.push({ text: t.raw, tone: tagTone(t.prefix) ?? opts.tone })
     if (opts.unresolved?.includes(t.raw)) {
-      const type = opts.types?.find((x) => x.prefix === t.prefix)?.recordType ?? "tag"
-      parts.push({ text: " " }, { text: `⚠ unknown ${type.replace(/_/g, " ")}`, tone: "amber" })
+      // A prefix several types share (`#`: projects, then boards) names the first, as the designs draw it
+      // (`⚠ unknown project`): naming them all would cut the text after it on a narrow terminal.
+      const first = (opts.types ?? []).find((x) => x.prefix === t.prefix)
+      const type = first === undefined ? "tag" : first.recordType.replace(/_/g, " ")
+      parts.push({ text: " " }, { text: `⚠ unknown ${type}`, tone: "amber" })
     }
     at = t.end
   }
