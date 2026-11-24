@@ -44,8 +44,9 @@ export type RecordTabDef = {
 export type OverviewRow = { ref: string; cells: Cell[]; group?: string }
 // A column width: a number of cells, `{ min, max }` (at least `min`, growing to the longest text shown up to `max`, so
 // codes and ids stay whole while the grow column gives way; `drop`: on a narrow terminal it gives way, higher numbers
-// first, as a Table column's `drop`) or "grow" (the width left over).
-export type OverviewColumn = number | "grow" | { min: number; max: number; drop?: number }
+// first, as a Table column's `drop`), "grow" (the width left over) or `{ grow: true, min }` (the width left over,
+// keeping `min` cells before the `drop` columns give way; "grow" keeps 16).
+export type OverviewColumn = number | "grow" | { min: number; max: number; drop?: number } | { grow: true; min: number }
 // What a key on a panel row may use: the overlays (a form to open, a question to ask before act()).
 export type OverviewKeyContext = { overlay: Overlay }
 // A key on a panel's selected row: `run` gets that row's ref. Its hint (`key label`) shows while the panel has focus.

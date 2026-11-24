@@ -136,7 +136,7 @@ describe("inbox screen", () => {
     let frame = await until(t, (f) => f.includes("New note"))
     expect(frame).toContain("New note · @peter")
     expect(frame).toContain("worried about budget")
-    expect(frame).not.toMatch(/Person\*/)
+    expect(frame).not.toMatch(/│ Person /)
     expect(lineWith(frame, "Project")).toContain("#CRM")
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, (f) => f.includes("→ Note N-1") && !f.includes("New note"))
@@ -180,7 +180,7 @@ describe("inbox screen", () => {
     await until(t, (f) => f.includes("Risk / issue"))
     t.input.pressKey("r")
     let frame = await until(t, (f) => f.includes("New risk / issue"))
-    expect(frame).toMatch(/Project\*/)
+    expect(frame).toMatch(/│ Project /)
     t.input.pressTab() // type → title
     t.input.pressTab() // title → project
     await t.input.typeText("CR")

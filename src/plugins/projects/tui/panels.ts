@@ -69,8 +69,9 @@ export function registerPanels(ui: TuiContext): void {
     title: "High risks & issues",
     priority: 50,
     empty: "No open high-severity risks or issues.",
-    // id, project, title, type.
-    columns: [ID, CODE(6), "grow", 6],
+    // id, project, title, type: on a narrow column (80×24 with long codes) the type drops rather than being cut, once
+    // the title would have fewer than 8 cells.
+    columns: [ID, CODE(6), { grow: true, min: 8 }, { min: 6, max: 6, drop: 1 }],
     load: async () =>
       (await overview.highRisks()).map(({ risk }): OverviewRow => ({
         ref: risk.ref,

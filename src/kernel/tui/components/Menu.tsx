@@ -32,7 +32,7 @@ export function Menu(props: { items: MenuItem[]; close(): void; title?: string }
     else if (ch !== undefined) run(props.items.find((i) => i.key === ch))
   })
   return (
-    <box border borderColor={theme.accent} backgroundColor={theme.panel} flexDirection="column" minWidth={24} paddingLeft={1} paddingRight={1} title={props.title}>
+    <box border borderStyle="rounded" borderColor={theme.accent} titleColor={theme.accent} backgroundColor={theme.panel} flexDirection="column" minWidth={24} paddingLeft={1} paddingRight={1} title={props.title === undefined ? undefined : ` ${props.title} `}>
       <For each={props.items}>
         {(item, i) => (
           <box flexDirection="row" gap={1} backgroundColor={i() === index() ? theme.selectedBg : theme.panel}>

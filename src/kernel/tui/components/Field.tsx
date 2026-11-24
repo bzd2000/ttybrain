@@ -5,9 +5,10 @@
 // and its height follows its lines up to LONGTEXT_MAX_LINES; a value set from outside replaces its text. An `editor` element replaces the default editor.
 // An enum field with `labels` reads `<label> (<the other labels>)`, the others muted (`1:1 (project · board)`); a
 // `note` is a muted line under the field, worked out from the form's values as they are typed (a rhythm's next
-// dates); a `placeholder` shows, muted, in an empty input (`never`). With `plain` (a Form's `look`), the label is a
-// plain muted column and a field that is not focused shows its `display` (a value as read: resolved refs, a day
-// date, the placeholder) instead of an input.
+// dates); a `placeholder` shows, muted, in an empty input (`never`). With `plain` (how every <Form> draws its
+// fields), the label is a plain muted column and a field that is not focused shows its `display` (a value as read:
+// resolved refs, a day date, the placeholder; an enum without `labels` its value) instead of an input; its inputs
+// are `inputWidth` wide and its error wraps within `valueWidth`.
 import type { TextareaRenderable } from "@opentui/core"
 import { createEffect, For, onMount, Show, type JSX } from "solid-js"
 import { theme } from "../theme"
@@ -20,7 +21,7 @@ export type FieldSpec = {
   name: string
   label: string
   kind: FieldKind
-  // Marks the label with `*`; an enum field that is required has no empty choice. Validation itself is the
+  // Marks the label with `*` (outside a <Form>, which draws no marks); an enum field that is required has no empty choice. Validation itself is the
   // owning plugin's (its ValidationError shows under the field).
   required?: boolean
   // The choices of an enum field.
@@ -46,8 +47,8 @@ export type FieldSpec = {
   when?: (values: Record<string, string | null>) => boolean
 }
 
-// A value as a Form with a `look` shows it: pieces of text, some muted.
-export type FieldDisplay = Array<{ text: string; muted?: boolean }>
+// A value as a <Form> shows it while not focused: pieces of text, some muted, some red (a date that does not parse).
+export type FieldDisplay = Array<{ text: string; muted?: boolean; error?: boolean }>
 
 export type Suggestion = { ref: string; label: string }
 
@@ -56,7 +57,7 @@ export const INPUT_WIDTH = 32
 export const LOOK_INPUT_WIDTH = 40
 export const LONGTEXT_MAX_LINES = 4
 
-function LongText(props: { value: string | null; focused: boolean; onInput(value: string): void }) {
+function LongText(props: { value: string | null; focused: boolean; width: number; onInput(value: string): void }) {
   let area: TextareaRenderable | undefined
   const initial = props.value ?? ""
   const lines = () => Math.min(LONGTEXT_MAX_LINES, Math.max(1, (props.value ?? "").split("\n").length))
@@ -74,7 +75,7 @@ function LongText(props: { value: string | null; focused: boolean; onInput(value
   return (
     <textarea
       ref={(r: TextareaRenderable) => (area = r)}
-      width={INPUT_WIDTH}
+      width={props.width}
       height={lines()}
       initialValue={initial}
       focused={props.focused}
@@ -106,12 +107,17 @@ export function Field(props: {
   // The plain look (see above), and the value shown while not focused.
   plain?: boolean
   display?: FieldDisplay
+  // The plain look's input width, and the room of the value column (an error wraps there).
+  inputWidth?: number
+  valueWidth?: number
 }) {
   const label = () => (props.plain ? props.spec.label : `${props.focused ? "›" : " "} ${props.spec.label}${props.spec.required ? "*" : ""}`)
   const gap = () => (props.plain ? 2 : 1)
   const indent = () => " ".repeat(props.labelWidth + gap())
   // Plain and not focused: the value as read (an enum keeps its labels).
-  const asText = () => props.plain === true && !props.focused && props.editor === undefined && props.spec.kind !== "enum"
+  const asText = () =>
+    props.plain === true && !props.focused && props.editor === undefined && (props.spec.kind !== "enum" || props.spec.labels === undefined)
+  const inputWidth = () => props.inputWidth ?? (props.plain ? LOOK_INPUT_WIDTH : INPUT_WIDTH)
   return (
     <box flexDirection="column">
       <box flexDirection="row" gap={gap()}>
@@ -120,7 +126,7 @@ export function Field(props: {
         </text>
         <Show when={asText()}>
           <box flexDirection="row">
-            <For each={props.display ?? [{ text: props.value ?? "" }]}>{(d) => <text fg={d.muted ? theme.muted : theme.text}>{d.text}</text>}</For>
+            <For each={props.display ?? [{ text: props.value ?? "" }]}>{(d) => <text fg={d.error ? theme.red : d.muted ? theme.muted : theme.text}>{d.text}</text>}</For>
           </box>
         </Show>
         <Show when={props.editor === undefined} fallback={asText() ? null : props.editor}>
@@ -130,10 +136,10 @@ export function Field(props: {
             when={props.spec.kind === "enum"}
             fallback={
               props.spec.kind === "longtext" ? (
-                <LongText value={props.value} focused={props.focused} onInput={(v) => props.onInput(v)} />
+                <LongText value={props.value} focused={props.focused} width={inputWidth()} onInput={(v) => props.onInput(v)} />
               ) : (
               <input
-                width={props.plain ? LOOK_INPUT_WIDTH : INPUT_WIDTH}
+                width={inputWidth()}
                 flexShrink={0}
                 value={props.value ?? ""}
                 placeholder={props.spec.placeholder ?? ""}
@@ -173,7 +179,13 @@ export function Field(props: {
         <text fg={theme.muted} wrapMode="none">{`${indent()}${props.note}`}</text>
       </Show>
       <Show when={props.error}>
-        <text fg={theme.red}>{`${indent()}✗ ${props.error}`}</text>
+        <Show when={props.valueWidth !== undefined} fallback={<text fg={theme.red}>{`${indent()}✗ ${props.error}`}</text>}>
+          {/* In the value column, wrapping there at words. */}
+          <box flexDirection="row">
+            <box width={props.labelWidth + gap()} flexShrink={0} />
+            <text fg={theme.red} width={props.valueWidth} wrapMode="word">{`✗ ${props.error}`}</text>
+          </box>
+        </Show>
       </Show>
       <For each={props.suggestions}>
         {(s, i) => (

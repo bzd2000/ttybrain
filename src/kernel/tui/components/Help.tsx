@@ -34,7 +34,7 @@ export function Help(props: { hints: Hint[]; actions: Hint[]; problems: string[]
   })
 
   return (
-    <box border borderColor={theme.accent} backgroundColor={theme.panel} flexDirection="column" width={64} paddingLeft={1} paddingRight={1} title="Help">
+    <box border borderStyle="rounded" borderColor={theme.accent} titleColor={theme.accent} backgroundColor={theme.panel} flexDirection="column" width={64} paddingLeft={1} paddingRight={1} title=" Help ">
       <text fg={theme.muted}>Keys</text>
       <box flexDirection="row" gap={2}>
         <KeyRows rows={all.slice(0, half)} />

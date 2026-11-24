@@ -14,7 +14,7 @@ import { rhythmFirst, rhythmPreview } from "../logic/rhythm"
 import { defined, KIND_FIELD_LABELS, KINDS, save, tags, With } from "./forms"
 
 export const SERIES_TITLE = "New recurring meeting"
-const LOOK = { labelWidth: 14, tabLabel: "field" }
+const LOOK = { labelWidth: 14 }
 const blank = (v: string | null | undefined) => v === null || v === undefined || v.trim() === ""
 const firstRef = (v: string | null | undefined) => (v ?? "").trim().split(/[\s,]+/)[0] ?? ""
 
@@ -74,7 +74,6 @@ export function SeriesForm(props: RecordFormProps) {
             title={SERIES_TITLE}
             fields={fields}
             look={LOOK}
-            footer="ctrl+s save · esc cancel"
             {...(about === undefined ? {} : { start: "every" })}
             submit={submit}
             close={props.close}

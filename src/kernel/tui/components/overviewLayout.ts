@@ -11,7 +11,9 @@
 // - A lead (the first panel, with `lead`: its width against 1 for the other column) takes the left column of a
 //   block at the top, as tall as it wants; the next panels stack on its right while they fit its height (at least
 //   one; the last one is stretched so both columns end on the same line), and the rest follow in the grid below.
-//   When the block and the rest's smallest grid do not fit the screen, the layout above is used instead.
+//   When the block and the rest's smallest grid do not fit the screen, the layout above is used instead. With a
+//   lead every row (and both balanced columns) splits as the lead block does, so one column edge runs down the
+//   screen (overviewColumns); without one the columns are equal halves.
 // - A panel with rows shows at most MAX_ROWS, then `+N more`; capped, it shows fewer rows and a larger N.
 import { displayWidth } from "../format"
 
@@ -46,10 +48,23 @@ export function wrappedLines(text: string, width: number): number {
   return lines
 }
 
-// The inner text width of a panel in a two-column Overview `screenWidth` wide: the row's padding (1+1) and gap
-// (1), then each panel's border (1+1) and padding (1+1).
-export function panelTextWidth(screenWidth: number): number {
-  return Math.floor((screenWidth - 3) / 2) - 4
+// The two columns' outer widths and the gap between them on an Overview `screenWidth` wide (after the screen's
+// padding, 1+1). Equal halves: the gap takes the cell an uneven split leaves (1 or 2), so the outer edges stay on
+// the screen's padding. With a lead's `weight`: `weight` : 1 of the width after a gap of 1, on every row.
+export function overviewColumns(screenWidth: number, weight?: number): { left: number; right: number; gap: number } {
+  const room = Math.max(0, screenWidth - 3)
+  if (weight === undefined) {
+    const half = Math.floor(room / 2)
+    return { left: half, right: half, gap: 1 + (room % 2) }
+  }
+  const left = Math.round((room * weight) / (weight + 1))
+  return { left, right: room - left, gap: 1 }
+}
+
+// The inner text widths of the two columns: each panel's border (1+1) and padding (1+1) off its column.
+function textWidths(screenWidth: number, weight?: number): [number, number] {
+  const c = overviewColumns(screenWidth, weight)
+  return [c.left - 4, c.right - 4]
 }
 
 type Sized = { chrome: number; min: number; want: number; total: number | undefined }
@@ -112,26 +127,16 @@ function columns(heights: number[], height: number): Array<0 | 1> {
 }
 
 export function layoutOverview(needs: PanelNeed[], screenHeight: number, screenWidth: number): PanelPlace[] {
-  const textWidth = panelTextWidth(screenWidth)
   const lead = needs[0]?.lead
+  const widths = textWidths(screenWidth, lead)
   if (lead !== undefined && needs.length > 1) {
-    const placed = leadBlock(needs, lead, screenHeight, screenWidth)
+    const placed = leadBlock(needs, widths, screenHeight)
     if (placed) return placed
   }
-  const sized = needs.map((n) => size(n, textWidth))
-  return grid(sized, screenHeight) ?? balanced(sized, screenHeight)
+  return grid(needs, widths, screenHeight) ?? balanced(needs, widths, screenHeight)
 }
 
-// The inner text widths of the lead column and the column beside it (`weight` : 1 of the width after the padding
-// and the gap).
-export function leadTextWidths(screenWidth: number, weight: number): [number, number] {
-  const room = screenWidth - 3
-  const left = Math.round((room * weight) / (weight + 1))
-  return [left - 4, room - left - 4]
-}
-
-function leadBlock(needs: PanelNeed[], weight: number, height: number, width: number): PanelPlace[] | undefined {
-  const [leftText, rightText] = leadTextWidths(width, weight)
+function leadBlock(needs: PanelNeed[], [leftText, rightText]: [number, number], height: number): PanelPlace[] | undefined {
   const lead = size(needs[0]!, leftText)
   const leadH = lead.chrome + lead.want
   const side: Sized[] = [size(needs[1]!, rightText)]
@@ -145,7 +150,7 @@ function leadBlock(needs: PanelNeed[], weight: number, height: number, width: nu
   const block = Math.max(leadH, sum)
   if (block > height) return undefined
   const restNeeds = needs.slice(1 + side.length)
-  const rest = restNeeds.length === 0 ? [] : grid(restNeeds.map((n) => size(n, panelTextWidth(width))), height - block)
+  const rest = restNeeds.length === 0 ? [] : grid(restNeeds, [leftText, rightText], height - block)
   if (rest === undefined) return undefined
   const heights = side.map((s) => s.chrome + s.want)
   heights[heights.length - 1]! += block - sum
@@ -169,8 +174,9 @@ function handOut(lines: number[], want: number[], left: number): void {
   }
 }
 
-// The grid, or undefined when its smallest rows do not fit `height`.
-function grid(sized: Sized[], height: number): PanelPlace[] | undefined {
+// The grid (each panel sized at its column's text width), or undefined when its smallest rows do not fit `height`.
+function grid(needs: PanelNeed[], widths: [number, number], height: number): PanelPlace[] | undefined {
+  const sized = needs.map((n, i) => size(n, widths[i % 2]!))
   const rows = Math.ceil(sized.length / 2)
   const pair = (r: number) => sized.slice(2 * r, 2 * r + 2)
   const min = Array.from({ length: rows }, (_, r) => Math.max(...pair(r).map((s) => s.chrome + s.min)))
@@ -185,7 +191,9 @@ function grid(sized: Sized[], height: number): PanelPlace[] | undefined {
   })
 }
 
-function balanced(sized: Sized[], height: number): PanelPlace[] {
+// Balanced columns; a panel is sized at the narrower column's text width (its column is not known yet).
+function balanced(needs: PanelNeed[], widths: [number, number], height: number): PanelPlace[] {
+  const sized = needs.map((n) => size(n, Math.min(...widths)))
   const column = columns(
     sized.map((s) => s.chrome + s.want),
     height,

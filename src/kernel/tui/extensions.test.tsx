@@ -8,6 +8,8 @@ import { budget, budgetTui } from "../../../tests/fixtures/tui-fixture"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
 import { builtinPlugins, builtinTuiParts } from "../../../tests/builtins"
+import { bgAt } from "../../../tests/design"
+import { theme } from "./theme"
 import { runWithContext } from "../context"
 import { act, defineTui, Form, type FieldEditorProps, type TuiDef } from "./api"
 
@@ -25,7 +27,7 @@ const ops = (plugin: string) => kernel!.runtime(plugin)!.self() as { read: Recor
 const getBudget = (ref: string) => inCtx(async () => (await ops("budget").read.getBudget!({ ref })).value)
 const lineWith = (frame: string, s: string) => frame.split("\n").find((l) => l.includes(s)) ?? ""
 // The form's Budget line (the table's header behind the form also says Budget, after Effort).
-const budgetLine = (frame: string) => frame.split("\n").find((l) => /[ ›] Budget /.test(l) && !l.includes("Effort")) ?? ""
+const budgetLine = (frame: string) => frame.split("\n").find((l) => /│ Budget /.test(l) && !l.includes("Effort")) ?? ""
 
 // CRM with a budget of 12000, ERP without one.
 async function boot(external: TuiDef[] = [budgetTui]): Promise<RenderedTui> {
@@ -125,7 +127,8 @@ describe("listColumn and field extension points", () => {
     expect(budgetLine(frame)).toContain("12000")
     for (let i = 0; i < 8; i++) t.input.pressTab() // past the project's own fields to Budget
     frame = await t.frame()
-    expect(budgetLine(frame)).toContain("›")
+    // Budget is focused: drawn as its input (the selection background).
+    expect(bgAt(await t.spans(), "12000", /│ Budget /)).toBe(theme.selectedBg)
     for (let i = 0; i < 5; i++) t.input.pressBackspace()
     await t.input.typeText("15000")
     t.input.pressKey("s", { ctrl: true })
@@ -162,7 +165,7 @@ describe("listColumn and field extension points", () => {
     t.input.pressKey("s", { ctrl: true })
     const frame = await until(t, (f) => f.includes("✗"))
     expect(frame).toContain("Edit CRM")
-    expect(lineWith(frame, "Name*")).toContain("Customer platform 2")
+    expect(lineWith(frame, "│ Name ")).toContain("Customer platform 2")
     expect(lineWith(frame, "✗")).toContain("value must be number") // under the Budget field
     const rows = await inCtx(() => kernel!.runtime("projects")!.data.selectFrom("projects.project").select(["name"]).where("code", "=", "CRM").execute())
     expect(rows).toEqual([{ name: "Customer platform" }])
