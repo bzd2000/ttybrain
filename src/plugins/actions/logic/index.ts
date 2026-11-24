@@ -18,8 +18,8 @@ export const actions = definePlugin({
   version: "2.0.0",
   apiVersion: 1,
   // All optional: people.person (owner and for names), projects.project (codes) and its legacyActions read (the
-  // handover), meetings (meeting titles and dates).
-  reads: { people: "^1", projects: "^2", meetings: "^2" },
+  // handover), meetings (meeting titles and dates), boards.board (whether a linked board is archived).
+  reads: { people: "^1", projects: "^2", meetings: "^3", boards: "^1" },
   activate(ctx) {
     const store = makeStore(ctx)
     registerSchema(ctx)

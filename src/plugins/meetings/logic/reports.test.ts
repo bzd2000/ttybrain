@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { runCli } from "../../../kernel/cli/dispatch"
 import { runWithContext } from "../../../kernel/context"
+import { boards } from "../../boards/logic/index"
 import { people } from "../../people/logic/index"
 import { actions } from "../../actions/logic/index"
 import { projects } from "../../projects/logic/index"
@@ -39,7 +40,7 @@ const ASK = "Approve 2-week shift of design milestone"
 // The mockup meeting (M-2, Steering committee Q4 on 2026-12-04) and the held SteerCo Q3 (M-1) before it.
 // Today is 2026-11-13; CRM's since is M-1's date, 2026-10-28.
 async function seed() {
-  k = await makeTestKernel({ plugins: [meetings, projects, people, actions] })
+  k = await makeTestKernel({ plugins: [meetings, projects, people, actions, boards] })
   await w("people", "addPerson", { name: "Peter Janssens", handle: "peter" })
   await w("people", "addPerson", { name: "Marie Dubois", handle: "marie" })
   await w("projects", "addProject", { code: "CRM", name: "CRM replatforming" })

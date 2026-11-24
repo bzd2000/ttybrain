@@ -117,7 +117,7 @@ export function makeOccurrences(ctx: PluginContext, store: Store) {
   async function topUp(seriesId?: number): Promise<number> {
     let made = 0
     for (const s of await rows(seriesId)) {
-      if (s.subject_type === "board" && (await store.boardById(s.subject_id)).archived) continue // until it is restored
+      if (s.subject_type === "board" && ((await store.boardById(s.subject_id))?.archived ?? true)) continue // until it is restored (or while boards cannot show it)
       const dates = window(s)
       if (dates.length === 0) continue
       const have = new Set((await db.selectFrom("meeting").select("series_date").where("series_id", "=", s.id).execute()).map((r) => String(r.series_date)))

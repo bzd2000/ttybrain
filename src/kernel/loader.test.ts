@@ -71,15 +71,16 @@ describe("discoverPlugins", () => {
     expect(cs[3]!.dir).toBe(join(paths.plugins, "node_modules", "ttybrain-plugin-b"))
   })
 
-  test("the real built-in folder yields the five built-ins", async () => {
+  test("the real built-in folder yields the six built-ins", async () => {
     const { paths } = setup()
     const cs = await discoverPlugins(paths, config())
-    expect(cs.map((c) => c.id).sort()).toEqual(["actions", "inbox", "meetings", "people", "projects"])
+    expect(cs.map((c) => c.id).sort()).toEqual(["actions", "boards", "inbox", "meetings", "people", "projects"])
     for (const c of cs) {
       expect(c.source).toBe("built-in")
       expect(c.error).toBeUndefined()
       expect(c.def?.id).toBe(c.id)
-      expect(c.tui).toBe(pathToFileURL(join(builtinPluginDir(), c.id, "tui", "index.tsx")).href)
+      // boards has no TUI part yet (its board view is still the meetings plugin's).
+      expect(c.tui).toBe(c.id === "boards" ? undefined : pathToFileURL(join(builtinPluginDir(), c.id, "tui", "index.tsx")).href)
     }
     const modules = (globalThis as { __TTYBRAIN_MODULES__?: Record<string, Record<string, unknown>> }).__TTYBRAIN_MODULES__
     expect(typeof modules?.["@ttybrain/api"]?.definePlugin).toBe("function")

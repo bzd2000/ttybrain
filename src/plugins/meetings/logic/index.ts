@@ -1,8 +1,8 @@
 // The meetings plugin: every meeting is about a person (1:1), a project (project) or a board (board), one-off or an
 // occurrence of a recurring series, with agenda and asks, and the talk-lists of people, projects and boards (plugin
-// reference §3, meetings design §5). Tables, the M-, S-, T- and board (#CODE) record types, views, the operations,
-// the boards (boards.ts, with the `boards-from-projects` data step), the series and their
-// `occurrences` upkeep, the talk-lists, closing (and the `auto-close` upkeep), the `ttybrain meeting` and `ttybrain talk` commands, the
+// reference §3, meetings design §5). Tables, the M-, S- and T- record types, views, the operations, what it keeps of
+// the boards, which are the boards plugin's (boards.ts: board activity, the handover, the `boards-from-projects` data
+// step), the series and their `occurrences` upkeep, the talk-lists, closing (and the `auto-close` upkeep), the `ttybrain meeting` and `ttybrain talk` commands, the
 // board and minutes reports (with the prep and report reads) and the guide section.
 import { definePlugin } from "@ttybrain/api"
 import { makeCloser, registerClose } from "./close"
@@ -20,12 +20,13 @@ import { registerViews } from "./views"
 export const meetings = definePlugin({
   id: "meetings",
   name: "Meetings",
-  version: "2.1.0", // 2.1: boards (the meetings.board view; `board` subjects)
+  version: "3.0.0", // 3: boards are the boards plugin's (no meetings.board view); 2.1: `board` subjects
   apiVersion: 1,
-  requires: { projects: "^2", people: "^1", actions: "^2" },
+  requires: { projects: "^2", people: "^1", actions: "^2", boards: "^1" },
   // projects.project (agenda codes, subjects), people.person (attendee names, subjects), actions.action and
-  // actions.link (the actions linked to a meeting)
-  reads: { projects: "^2", people: "^1", actions: "^2" },
+  // actions.link (the actions linked to a meeting), boards.board (board subjects) and boards' importedLegacy and
+  // madeFromProjects reads
+  reads: { projects: "^2", people: "^1", actions: "^2", boards: "^1" },
   activate(ctx) {
     const store = makeStore(ctx)
     registerSchema(ctx)

@@ -128,7 +128,7 @@ test("Meetings at 80×24: Talk and Act. give way, codes and names whole", async 
 
 test("Meetings (screen 5): Boards under Series, archived ones left out; Tab reaches it, Enter opens the board", async () => {
   kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
-  const w = kernel.runtime("meetings")!.self().write as Record<string, (i: unknown) => Promise<unknown>>
+  const w = kernel.runtime("boards")!.self().write as Record<string, (i: unknown) => Promise<unknown>>
   await runWithContext(kernel.context(), async () => {
     await w.addBoard!({ code: "OLD", name: "Old board" })
     await w.archiveBoard!({ board: "#OLD" })

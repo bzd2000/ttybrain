@@ -139,7 +139,7 @@ describe("upgrading meetings 2.0.0 data: boards", () => {
     // Every row kept (only the subjects of what moved change).
     expect(dump(k)).toEqual(was)
     expect(all(k, "PRAGMA foreign_key_check")).toEqual([])
-    expect(all(k, "SELECT id, code, name, note, archived_at, from_project_id FROM meetings_board ORDER BY id")).toEqual([
+    expect(all(k, "SELECT id, code, name, note, archived_at, from_project_id FROM boards_board ORDER BY id")).toEqual([
       { id: 1, code: "BOARDB2", name: "Management board", note: null, archived_at: null, from_project_id: 2 },
       { id: 2, code: "ABCDEFGHIJKLMNOB", name: "Programme", note: null, archived_at: null, from_project_id: 4 },
     ])
@@ -242,7 +242,7 @@ describe("upgrading meetings 2.0.0 data: boards", () => {
     await old.shutdown()
 
     const k = await boot(old.home)
-    expect(all(k, "SELECT id, code, from_project_id FROM meetings_board ORDER BY id")).toEqual([
+    expect(all(k, "SELECT id, code, from_project_id FROM boards_board ORDER BY id")).toEqual([
       { id: 1, code: "CRMB", from_project_id: 1 },
       { id: 2, code: "OPSB", from_project_id: 2 },
     ])
@@ -279,12 +279,12 @@ describe("upgrading meetings 2.0.0 data: boards", () => {
   test("running the step again changes nothing", async () => {
     const { home } = await oldDatabase()
     const first = await boot(home)
-    const after = { ...dump(first), subjects: [subjects(first, "meeting"), subjects(first, "series")], boards: all(first, "SELECT * FROM meetings_board ORDER BY id") }
+    const after = { ...dump(first), subjects: [subjects(first, "meeting"), subjects(first, "series")], boards: all(first, "SELECT * FROM boards_board ORDER BY id") }
     // Forget that it ran: the next start runs it once more.
     first.db.raw.prepare("DELETE FROM kernel_plugin_migration WHERE plugin = 'meetings' AND id = 'upgrade:boards-from-projects'").run([])
     await close(first)
     const second = await boot(home)
     expect(all(second, "SELECT id FROM kernel_plugin_migration WHERE plugin = 'meetings' AND id = 'upgrade:boards-from-projects'")).toHaveLength(1)
-    expect({ ...dump(second), subjects: [subjects(second, "meeting"), subjects(second, "series")], boards: all(second, "SELECT * FROM meetings_board ORDER BY id") }).toEqual(after)
+    expect({ ...dump(second), subjects: [subjects(second, "meeting"), subjects(second, "series")], boards: all(second, "SELECT * FROM boards_board ORDER BY id") }).toEqual(after)
   })
 })

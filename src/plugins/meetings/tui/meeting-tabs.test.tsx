@@ -58,7 +58,7 @@ async function seed() {
     await write("people").addPerson!({ name: "Marie Dubois", handle: "marie" })
     await p.addProject!({ code: "CRM", name: "CRM replatforming" })
     const w = write()
-    await w.addBoard!({ code: "SC", name: "Steering committee" })
+    await write("boards").addBoard!({ code: "SC", name: "Steering committee" })
     await w.addMeeting!({ about: "#SC", title: "SteerCo Q3", date: "2026-10-28", projects: ["CRM"] }) // M-1
     await p.setHealth!({ project: "CRM", health: "amber", comment: "Design slipping 2 weeks", date: "2026-11-02" })
     await p.addMilestone!({ project: "CRM", title: "Design approved", due: "2026-12-10" }) // MS-1

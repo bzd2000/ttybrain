@@ -73,7 +73,7 @@ export function MeetingForm(props: RecordFormProps) {
   // The meeting being edited and the board codes (what a `#CODE` is: a board or a project).
   const load = async () => ({
     meeting: props.recordRef === undefined ? null : await store.meeting(props.recordRef),
-    boards: new Set((await rt.data.selectFrom("board").select("code").execute()).map((r) => String(r.code))),
+    boards: new Set((await rt.data.selectFrom("boards.board").select("code").execute()).map((r) => String(r.code))),
   })
   return (
     <With load={load} close={props.close}>

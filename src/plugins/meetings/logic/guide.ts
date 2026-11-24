@@ -25,13 +25,10 @@ Meetings are referenced as \`M-<n>\`. \`ttybrain meeting list\` shows the planne
 - \`ttybrain meeting series list\` shows them; \`series edit S-2 --every … --attendees … --until …\` changes what is still ahead (a changed \`--every\` still counts from the first date), and \`series end S-2 --on <date>\` stops it. Skip one date with \`ttybrain meeting skip M-9\` or change it with \`meeting move M-9 --to <date>\`; neither comes back.
 - A meeting always has a subject (a person, a project or a board). Meetings from before this existed have none: \`ttybrain meeting subject M-4 #CRM\`, or \`--all-without #CRM\` for all that fit (board meetings take a board, the others a project or person). A meeting with a subject keeps its kind: \`--kind\` changes both.
 
-**Boards**
+**Board meetings**
 
-- A board such as \`#MB\` "Management board" holds the board meetings: \`ttybrain board add MB "Management board"\`, then \`ttybrain meeting series add #MB "Board" --every "monthly on the last fri" --from fri\`. A meeting or series about a board is a board meeting (kind board); the board has its own talk-list (\`ttybrain talk add #MB "Budget 2027 first view"\`) and actions can link to it (\`--link #MB\`).
-- Project and board codes share one namespace: \`#MB\` is either a project or a board, and adding or renaming either refuses a code the other has. Where a project is needed (\`--project\`, \`project show\`), a board's code is refused as "a board, not a project".
-- A board has its own talk-list: \`ttybrain talk add #MB "Office move"\` (in the TUI's quick capture, \`talk #MB Office move\`; \`--project\` is not allowed on a board's item). Kind \`board\` needs a board subject, and a board meeting cannot be given a person or project as subject.
-- \`ttybrain board list\`, \`board show #MB\` (its series, next meeting and open talk items), \`board edit #MB --name … --code … --note …\`, \`board archive|restore #MB\` (an archived board takes no new meetings, series or talk items).
-- Board meetings that were about a project before boards existed were moved to a board with that project's name and the code \`<CODE>B\`; \`ttybrain plugin list\` names it until it is edited (\`ttybrain board edit #BOARDB --code MB\`).
+- A meeting or series about a board (the boards plugin's \`#MB\`, see "Boards") is a board meeting (kind board): \`ttybrain meeting series add #MB "Board" --every "monthly on the last fri" --from fri\`. Kind \`board\` needs a board subject, and a board meeting cannot be given a person or project as subject.
+- A board has its own talk-list: \`ttybrain talk add #MB "Office move"\` (in the TUI's quick capture, \`talk #MB Office move\`; \`--project\` is not allowed on a board's item). Actions can link to a board (\`--link #MB\`).
 
 **Talk-lists**
 

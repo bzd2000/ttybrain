@@ -104,7 +104,7 @@ describe("series", () => {
     expect(attendees(k, 2)).toEqual(["anna", "karim"])
     const onProject = await failure(w(k, "addSeries", { about: "CRM", title: "Board", kind: "board", every: "monthly on the last fri", from: "today" }))
     expect([onProject.name, onProject.message, onProject.field]).toEqual(["ValidationError", "a board meeting needs a board; #CRM is a project", "kind"])
-    await w(k, "addBoard", { code: "MB", name: "Management board" })
+    await w(k, "addBoard", { code: "MB", name: "Management board" }, "boards")
     const board = await w(k, "addSeries", { about: "MB", title: "Board", kind: "board", every: "monthly on the last fri", from: "today" })
     expect(board).toMatchObject({ ref: "S-2", kind: "board", about: "#MB", attendees: [], next: "2026-11-27" })
   })

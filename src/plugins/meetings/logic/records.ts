@@ -1,8 +1,7 @@
 // Lookups shared by the operations and the commands (reading the plugin's own tables), and the record types
-// `meeting` (M-), `series` (S-) and `talk_item` (T-) (the `board` type, `#CODE`, is in boards.ts). People (@handle) and
-// projects (#CODE) are resolved through the kernel's record types; a subject (the person, project or board a meeting,
-// series or talk item is about) is a person or project as a soft reference shown through their views, or a board of
-// this plugin.
+// `meeting` (M-), `series` (S-) and `talk_item` (T-). People (@handle), projects and boards (#CODE) are resolved
+// through the kernel's record types; a subject (the person, project or board a meeting, series or talk item is about)
+// is a soft reference shown through their views (people.person, projects.project, boards.board).
 import {
   currentContext,
   formatRef,
@@ -16,7 +15,7 @@ import {
   type PluginContext,
   type PluginRuntime,
 } from "@ttybrain/api"
-import type { AgendaItem, BoardRecord, MeetingRecord, SeriesRecord, SubjectType } from "./schema"
+import type { AgendaItem, MeetingRecord, SeriesRecord, SubjectType } from "./schema"
 
 // How many records a "did you mean" looks through (a person's whole team and stakeholders, every project).
 const TAG_CANDIDATES = 1000
@@ -26,6 +25,8 @@ const str = (v: unknown): string | null => (v === null || v === undefined ? null
 const NAMES: Record<string, string> = { project: "a project", board: "a board" }
 
 export type Subject = { type: SubjectType; id: number; ref: string }
+// A board as boards.board shows it.
+export type Board = { ref: string; id: number; code: string; name: string; archived: boolean }
 export type Store = ReturnType<typeof makeStore>
 
 export function makeStore(ctx: PluginRuntime) {
@@ -122,44 +123,19 @@ export function makeStore(ctx: PluginRuntime) {
     return new ValidationError(`#${code} is ${NAMES[found.type] ?? `a ${found.type}`}, not ${NAMES[wanted] ?? `a ${wanted}`}`, { hint })
   }
 
-  // ---- boards (this plugin's own): by code only, never by id (codes have a letter, so `#12` is never a board).
-  const toBoard = (r: Record<string, unknown>): BoardRecord => ({
-    ref: `#${r.code}`,
-    id: Number(r.id),
-    code: String(r.code),
-    name: String(r.name),
-    note: str(r.note),
-    archived: r.archived_at !== null,
-  })
-  const boardRow = () => db.selectFrom("board").select(["id", "code", "name", "note", "archived_at"])
+  // ---- boards (the boards plugin's, through boards.board): by code only, never by id (codes have a letter, so `#12`
+  // is never a board). None while boards.board cannot be read.
+  const boardView = () => db.selectFrom("boards.board").select(["id", "code", "name", "archived_at"])
+  const toBoard = (r: Record<string, unknown>): Board => ({ ref: `#${r.code}`, id: Number(r.id), code: String(r.code), name: String(r.name), archived: r.archived_at !== null })
   async function boardCodeId(input: string): Promise<number | null> {
-    const row = await db.selectFrom("board").select("id").where("code", "=", normalizeCode(input)).executeTakeFirst()
+    const row = await unlessUnavailable(undefined as Record<string, unknown> | undefined, () => boardView().where("code", "=", normalizeCode(input)).executeTakeFirst())
     return row ? Number(row.id) : null
   }
-  async function boardById(id: number): Promise<BoardRecord> {
-    const row = await boardRow().where("id", "=", id).executeTakeFirst()
-    if (!row) throw new NotFoundError(`no board with id ${id}`)
-    return toBoard(row)
+  async function boardById(id: number): Promise<Board | null> {
+    const row = await unlessUnavailable(undefined as Record<string, unknown> | undefined, () => boardView().where("id", "=", id).executeTakeFirst())
+    return row ? toBoard(row) : null
   }
-  async function boardCodes(): Promise<string[]> {
-    return (await db.selectFrom("board").select("code").orderBy("code").execute()).map((r) => String(r.code))
-  }
-  async function board(input: string): Promise<BoardRecord> {
-    const code = normalizeCode(input)
-    const id = await boardCodeId(code)
-    if (id !== null) return boardById(id)
-    throw (
-      (await otherType(code, "board", 'run "ttybrain board list" for the board codes')) ??
-      new NotFoundError(`unknown board "${code}"`, { suggestions: suggest(code, await boardCodes()) })
-    )
-  }
-  const archivedBoard = (b: Pick<BoardRecord, "ref">) => new ValidationError(`${b.ref} is archived`, { hint: `restore it first: ttybrain board restore ${b.ref}` })
-  // A board that may take new meetings, series and talk items (and edits): not archived.
-  async function activeBoard(input: string): Promise<BoardRecord> {
-    const b = await board(input)
-    if (b.archived) throw archivedBoard(b)
-    return b
-  }
+  const archivedBoard = (b: Pick<Board, "ref">) => new ValidationError(`${b.ref} is archived`, { hint: `restore it first: ttybrain board restore ${b.ref}` })
 
   async function personId(handle: string): Promise<number> {
     const h = normalizeHandle(handle)
@@ -179,11 +155,11 @@ export function makeStore(ctx: PluginRuntime) {
 
   // The display ref of a subject or project tag, through the people and projects views: `@handle`, `#CODE`; `—` when
   // the record is gone; `person:<id>` / `project:<id>` while no plugin registers the type (as actions' links show). A
-  // board's code from the own table.
+  // board's code through boards.board.
   async function subjectRef(type: SubjectType, id: number): Promise<string> {
     if (type === "board") {
-      const b = await db.selectFrom("board").select("code").where("id", "=", id).executeTakeFirst()
-      return b ? `#${b.code}` : GONE
+      const b = await boardById(id)
+      return b ? b.ref : GONE
     }
     const row =
       type === "person"
@@ -236,7 +212,7 @@ export function makeStore(ctx: PluginRuntime) {
   // A subject that may take a new meeting, series or talk item: an archived board takes none.
   async function activeSubject(input: string): Promise<Subject> {
     const s = await subject(input)
-    if (s.type === "board" && (await boardById(s.id)).archived) throw archivedBoard(s)
+    if (s.type === "board" && (await boardById(s.id))?.archived) throw archivedBoard(s)
     return s
   }
 
@@ -316,9 +292,6 @@ export function makeStore(ctx: PluginRuntime) {
     otherType,
     boardCodeId,
     boardById,
-    boardCodes,
-    board,
-    activeBoard,
     seriesId,
     series,
     talkId,

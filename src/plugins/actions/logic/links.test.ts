@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { runCli } from "../../../kernel/cli/dispatch"
 import { runWithContext } from "../../../kernel/context"
+import { boards } from "../../boards/logic/index"
 import { meetings } from "../../meetings/logic/index"
 import { people } from "../../people/logic/index"
 import { projects } from "../../projects/logic/index"
@@ -43,7 +44,7 @@ const BOB = { type: "person", id: 2, ref: "@bob" }
 const M1 = { type: "meeting", id: 1, ref: "M-1" }
 
 beforeEach(async () => {
-  k = await makeTestKernel({ plugins: [people, projects, meetings, actions] })
+  k = await makeTestKernel({ plugins: [people, projects, boards, meetings, actions] })
   await ok("project", "add", "CRM", "CRM replatforming")
   await ok("project", "add", "ERP", "ERP upgrade")
   await ok("person", "add", "Peter Stone", "--handle", "peter", "--stakeholder")

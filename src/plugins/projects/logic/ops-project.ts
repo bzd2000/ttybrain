@@ -109,15 +109,15 @@ export function registerProjectOps(ctx: PluginContext, store: Store): void {
     return c
   }
 
-  // A code no other project has, and no board (the meetings plugin's, read through meetings.board): project and board
+  // A code no other project has, and no board (the boards plugin's, read through boards.board): project and board
   // codes are one namespace, since both are written `#CODE`. Codes are stored upper-case on both sides.
   async function free(c: string): Promise<void> {
     if ((await store.codeId(c)) !== null) throw new ConflictError(`project "${c}" already exists`, { hint: "choose another code" })
     let board: unknown
     try {
-      board = await db.selectFrom("meetings.board").select("id").where("code", "=", c).executeTakeFirst()
+      board = await db.selectFrom("boards.board").select("id").where("code", "=", c).executeTakeFirst()
     } catch (e) {
-      if (!(e instanceof ViewUnavailableError)) throw e // meetings not loaded: no boards to clash with
+      if (!(e instanceof ViewUnavailableError)) throw e // boards not loaded: no boards to clash with
     }
     if (board) throw new ConflictError(`code "${c}" is already used by the board #${c}`, { hint: "project and board codes share one namespace; choose another code" })
   }

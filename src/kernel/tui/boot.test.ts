@@ -79,7 +79,8 @@ test("loadTuiParts imports each ok plugin's tui entry; built-ins and externals a
   const parts = await loadTuiParts(k)
   expect(parts.errors).toEqual([])
   expect(parts.builtin).toHaveLength(5)
-  expect(parts.builtin.map((p) => p.plugin)).toEqual(k.plugins.filter((p) => p.source === "built-in").map((p) => p.id))
+  // Every built-in with a ttybrain.tui entry (boards has none yet), in load order.
+  expect(parts.builtin.map((p) => p.plugin)).toEqual(k.plugins.filter((p) => p.source === "built-in" && p.id !== "boards").map((p) => p.id))
   expect(parts.external.map((p) => p.plugin)).toEqual(["ext"])
 })
 

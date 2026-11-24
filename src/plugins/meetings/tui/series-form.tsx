@@ -25,7 +25,7 @@ export function SeriesForm(props: RecordFormProps) {
   // A person's name, for the title of their 1:1 series; the board codes, for the kind a `#CODE` gives.
   const load = async () => ({
     name: about !== undefined && about.startsWith("@") ? await rt.records.label(about).catch(() => null) : null,
-    boards: new Set((await rt.data.selectFrom("board").select("code").execute()).map((r) => String(r.code))),
+    boards: new Set((await rt.data.selectFrom("boards.board").select("code").execute()).map((r) => String(r.code))),
   })
   const kindOf = (ref: string, boards: Set<string>) =>
     ref.startsWith("@") ? "one_on_one" : ref.startsWith("#") ? (boards.has(ref.slice(1).toUpperCase()) ? "board" : "project") : null

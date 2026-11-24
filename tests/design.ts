@@ -219,7 +219,7 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
     const m1 = await meetings.addMeeting!({ about: "#CRM", title: "SteerCo", date: "2026-10-28", projects: ["CRM"], attendees: ["peter", "marie", "tom"] })
     await meetings.closeMeeting!({ ref: m1.ref })
     const attendees = ["peter", "marie", "luc", "tom", "anna", "bob", "karim", "sofie"]
-    await meetings.addBoard!({ code: "SC", name: "Steering committee" })
+    await w("boards").addBoard!({ code: "SC", name: "Steering committee" })
     const m2 = await meetings.addMeeting!({ about: "#SC", title: "Steering committee Q4", date: "2026-12-04", attendees })
     const ask = "Approve 2-week shift of design milestone and release of contingency budget."
     await meetings.addAgendaItem!({ meeting: m2.ref, text: "Minutes & open actions" })
@@ -401,7 +401,7 @@ export async function seedMeetings(kernel: Kernel): Promise<void> {
       ["HRP", "HR self-service portal"],
     ])
       await projects.addProject!({ code, name })
-    await meetings.addBoard!({ code: "BOARD", name: "Management board" })
+    await w("boards").addBoard!({ code: "BOARD", name: "Management board" })
     for (const [project, person, role] of [
       ["CRM", "peter", "sponsor"],
       ["CRM", "marie", "business owner"],

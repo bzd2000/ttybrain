@@ -5,7 +5,8 @@
 // things to raise with a person or about a project. 004 (design §5.3): the talk items a meeting kept open for next time
 // when it was closed, so a held meeting still shows what it covered. 005: whether a held meeting closed itself (the
 // `auto-close` upkeep), so closing it again can say so. 006 (design §5.7): boards, and `board` as a subject type of
-// meetings, series and talk items.
+// meetings, series and talk items; 007 board.talk_stayed. 008 (3.0.0): boards are the boards plugin's; the board
+// table is emptied by the handover, and what this plugin keeps of it is `board_talk_stayed`.
 import { sql, Type, type Kysely, type PluginContext, type Static } from "@ttybrain/api"
 
 export const MEETING_KINDS = ["one_on_one", "project", "board"] as const
@@ -81,18 +82,6 @@ export const TalkRecord = Type.Object({
   meeting: Opt, // M-n it was discussed in
 })
 export type TalkRecord = Static<typeof TalkRecord>
-
-// A board (design §5.7): its code (`#MB`), name and optional note. An archived one takes no new meetings, series or
-// talk items until it is restored.
-export const BoardRecord = Type.Object({
-  ref: Text, // #CODE
-  id: Type.Integer(),
-  code: Text,
-  name: Text,
-  note: Opt,
-  archived: Type.Boolean(),
-})
-export type BoardRecord = Static<typeof BoardRecord>
 
 const inList = (col: string, xs: readonly string[]) => sql.raw(`${col} in (${xs.map((x) => `'${x}'`).join(", ")})`)
 
@@ -444,6 +433,14 @@ async function migration007(db: Kysely<any>): Promise<void> {
   await db.schema.alterTable("board").addColumn("talk_stayed", "integer", (c) => c.notNull().defaultTo(0)).execute()
 }
 
+// Boards are the boards plugin's (3.0.0): it imports the rows of `board` (its own step; boards.ts here empties the
+// table after), but `talk_stayed`, which only this plugin's notice reads: kept here, one row per board whose
+// project kept its open talk items. The emptied `board` table stays (a data step makes no schema change).
+async function migration008(db: Kysely<any>): Promise<void> {
+  await db.schema.createTable("board_talk_stayed").addColumn("board_id", "integer", (c) => c.primaryKey()).execute() // soft reference to a boards board
+  await db.insertInto("board_talk_stayed").columns(["board_id"]).expression(db.selectFrom("board").select("id").where("talk_stayed", "=", 1)).execute()
+}
+
 // In order. Exported so that upgrade tests can build a database as an earlier version left it.
 export const MIGRATIONS: ReadonlyArray<readonly [string, (db: Kysely<any>) => Promise<void>]> = [
   ["001", migration001],
@@ -453,6 +450,7 @@ export const MIGRATIONS: ReadonlyArray<readonly [string, (db: Kysely<any>) => Pr
   ["005", migration005],
   ["006", migration006],
   ["007", migration007],
+  ["008", migration008],
 ]
 
 export function registerSchema(ctx: PluginContext): void {

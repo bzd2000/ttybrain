@@ -165,7 +165,7 @@ export function MeetingsScreen() {
       series.push({ ref: s.ref, title: s.title, kind: s.kind, about: await upcoming.about(subject), subject, rhythm: rhythmLabel(parseRhythm(s.rhythm), "short"), next: s.next })
     }
     series.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || (a.next ?? "9999").localeCompare(b.next ?? "9999") || Number(a.ref.slice(2)) - Number(b.ref.slice(2)))
-    const boards = (await rt.data.selectFrom("board").select(["code", "name"]).where("archived_at", "is", null).orderBy("code").execute()).map((r) => ({
+    const boards = (await rt.data.selectFrom("boards.board").select(["code", "name"]).where("archived_at", "is", null).orderBy("code").execute()).map((r) => ({
       ref: `#${String(r.code)}`,
       code: String(r.code),
       name: String(r.name),

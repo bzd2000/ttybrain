@@ -38,13 +38,13 @@ out="$(ttybrain inbox add "x #CRM")"; echo "$out"
 expect_in "inbox add" "I-1" "$out"
 # The built-ins are discovered from dist-node/plugins/*/package.json (written by the build).
 out="$(ttybrain plugin list)"; echo "$out"
-for p in people inbox; do
-  echo "$out" | grep -Eq "^$p +1\.0\.0 +built-in +ok" || fail "plugin list: expected \"$p 1.0.0 built-in ok\", got: $out"
-done
 for p in projects actions; do
   echo "$out" | grep -Eq "^$p +2\.0\.0 +built-in +ok" || fail "plugin list: expected \"$p 2.0.0 built-in ok\", got: $out"
 done
-echo "$out" | grep -Eq "^meetings +2\.1\.0 +built-in +ok" || fail "plugin list: expected \"meetings 2.1.0 built-in ok\", got: $out"
+for p in people inbox boards; do
+  echo "$out" | grep -Eq "^$p +1\.0\.0 +built-in +ok" || fail "plugin list: expected \"$p 1.0.0 built-in ok\", got: $out"
+done
+echo "$out" | grep -Eq "^meetings +3\.0\.0 +built-in +ok" || fail "plugin list: expected \"meetings 3.0.0 built-in ok\", got: $out"
 # A series makes its occurrences ahead; a later write's upkeep makes none twice.
 out="$(ttybrain meeting series add @anna "1:1 Anna" --every "2 weeks on wed" --from wed)"; echo "$out"
 expect_in "meeting series add" "S-1 1:1 Anna: every 2 weeks on wed, next " "$out"
@@ -134,6 +134,24 @@ out="$(TTYBRAIN_HOME="$meetings_home" ttybrain board edit BOARDB --code MB)"; ec
 expect_in "board edit" "#MB Management board" "$out"
 out="$(TTYBRAIN_HOME="$meetings_home" ttybrain project add mb "Mobile" 2>&1 || true)"; echo "$out"
 expect_in "code namespace" 'error: code "MB" is already used by the board #MB' "$out"
+# The boards handover on Node (plan ruling P2): a board meetings 2.1.0 still held in its own table, with a meeting about
+# it, moves to the boards plugin with its id and fields when both start (the import made to run again here), and
+# meetings' copy is emptied; the next board gets the next id.
+meetings_eval 'db.prepare("INSERT INTO meetings_board (id, code, name, note, archived_at, from_project_id, created_at, updated_at, talk_stayed) VALUES (7, ?, ?, ?, NULL, NULL, ?, ?, 0)").run("OLDB", "Old board", "kept", "2026-01-01T00:00:00", "2026-01-02T00:00:00")' >/dev/null
+meetings_eval 'db.prepare("INSERT INTO meetings_meeting (id, title, date, kind, status, notes, subject_type, subject_id, auto_close, created_at, updated_at) VALUES (50, ?, ?, ?, ?, ?, ?, 7, 0, ?, ?)").run("Old board", "2026-01-09", "board", "held", "", "board", "2026-01-01T00:00:00", "2026-01-01T00:00:00")' >/dev/null
+meetings_eval 'db.exec("DELETE FROM boards_handover; DELETE FROM boards_handover_row"); db.prepare("DELETE FROM kernel_plugin_migration WHERE id IN (?, ?, ?)").run("upgrade:from-meetings", "upgrade:boards-handover", "upgrade:boards-leftovers")' >/dev/null
+out="$(TTYBRAIN_HOME="$meetings_home" ttybrain meeting show M-50)"; echo "$out"
+expect_in "boards handover: about" "  about: #OLDB" "$out"
+out="$(TTYBRAIN_HOME="$meetings_home" ttybrain board list --json)"; echo "$out"
+expect_in "boards handover: list" '"ref": "#OLDB",
+    "id": 7,
+    "code": "OLDB",
+    "name": "Old board",
+    "note": "kept"' "$out"
+out="$(meetings_eval '[db.prepare("SELECT count(*) AS n FROM meetings_board").get(), db.prepare("SELECT id, code, created_at, updated_at FROM boards_board WHERE id = 7").get()]')"; echo "$out"
+expect_in "boards handover: one copy" '[{"n":0},{"id":7,"code":"OLDB","created_at":"2026-01-01T00:00:00","updated_at":"2026-01-02T00:00:00"}]' "$out"
+out="$(TTYBRAIN_HOME="$meetings_home" ttybrain board add NEWB "New board" --json)"; echo "$out"
+expect_in "boards handover: next id" '"id": 8' "$out"
 
 # The fixture plugin (tests/fixtures/plugin-contracts), built with `ttybrain plugin build` and loaded on Node: first as a
 # folder in TTYBRAIN_PLUGINS, then packed and installed with `ttybrain plugin add <tgz>` through npm (offline: no dependencies).

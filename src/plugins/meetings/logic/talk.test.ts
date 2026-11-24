@@ -63,7 +63,7 @@ async function boot(today = "2026-11-20"): Promise<TestKernel> {
   await w(home, "addPerson", { name: "Bob Willems", handle: "bob" }, "people")
   await w(home, "addProject", { code: "CRM", name: "CRM replatforming" }, "projects")
   await w(home, "addProject", { code: "ERP", name: "ERP upgrade" }, "projects")
-  await w(home, "addBoard", { code: "BOARD", name: "Management board" })
+  await w(home, "addBoard", { code: "BOARD", name: "Management board" }, "boards")
   return home
 }
 async function later(today: string): Promise<Kernel> {
