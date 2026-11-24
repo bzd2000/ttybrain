@@ -325,6 +325,18 @@ describe("the boards handover", () => {
     expect((await ok(k, "meeting", "show", "M-4")).out).not.toContain("#NEW")
   })
 
+  test("a dangling action link to a deleted board id also keeps the counter past it", async () => {
+    await legacyDatabase()
+    const old = await boot([people, projects, actions, meetingsV21, inbox])
+    old.db.raw.prepare("INSERT INTO actions_link (action_id, record_type, record_id) VALUES (1, 'board', 8)").run([])
+    await close(old)
+
+    const k = await boot(builtinPlugins)
+    expect(k.plugins.map((p) => [p.id, p.status, p.error ?? null])).toEqual(builtinPlugins.map((p) => [p.id, "ok", null]))
+    expect(all(k, "SELECT seq FROM sqlite_sequence WHERE name = 'boards_board'")).toEqual([{ seq: 8 }])
+    expect((await ok(k, "board", "add", "NEW", "New board", "--json")).json.id).toBe(9)
+  })
+
   test("a legacy board's code a project took meanwhile stops the move whole, with a hint naming both", async () => {
     await legacyDatabase()
     const off = await boot(builtinPlugins, without("boards"))

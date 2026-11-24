@@ -67,7 +67,7 @@ export function registerBoards(ctx: PluginContext, store: Store): void {
         },
       },
       // The highest board id this plugin knows (0 when none): of its board table, and of the boards its meetings,
-      // series and talk items name (a board deleted long ago may still be named). The boards plugin allocates above
+      // series and talk items name, and of the actions' links to a board (a board deleted long ago may still be named). The boards plugin allocates above
       // it, so no new board takes an id something here already points at.
       legacyMaxId: {
         input: Type.Object({}),
@@ -78,7 +78,9 @@ export function registerBoards(ctx: PluginContext, store: Store): void {
             const row = await db.selectFrom(table).select((eb) => eb.fn.max("subject_id").as("m")).where("subject_type", "=", "board").executeTakeFirst()
             max = Math.max(max, Number(row?.m ?? 0))
           }
-          return { max }
+          // A link of an action to a board (the published actions.link view) may name one deleted long ago too.
+          const link = await db.selectFrom("actions.link").select((eb) => eb.fn.max("record_id").as("m")).where("record_type", "=", "board").executeTakeFirst()
+          return { max: Math.max(max, Number(link?.m ?? 0)) }
         },
       },
       // Every board row still in this plugin's table, by id (talk_stayed is not a board's: it stays, migration 008).

@@ -544,14 +544,14 @@ Plan: `docs/superpowers/plans/2026-11-24-boards-plugin.md` (ledger `.superpowers
 - **Boards requires `projects ^2`** (the plan said nothing). Discovery loads built-ins by requires, so without it boards' `#` type registers before projects' and the user-visible order changes (`⚠ unknown board`, the label error, resolve order). Cost: with projects off, boards and meetings are off. The alternative is a kernel rule for shared-prefix order.
 - **The notice data is split:** `from_project_id` in boards (`addBoard`'s `fromProject`, read `madeFromProjects`), `talk_stayed` in meetings' `board_talk_stayed` (migration 008). Cost: two tables for one notice.
 - **The board view opens on Summary** (its first tab, like a project on Overview), so Enter on screen 5's Boards panel and `#BOARD` land there, not on Meetings.
-- **Counter seeding** looks only at meetings' references (`legacyMaxId`: its board table, and the board `subject_id`s of meetings, series and talk items): boards can't be deleted, only archived, so nothing else can hold a missing id. The counter is moved by inserting and deleting a placeholder row in the step (a plugin cannot write `sqlite_sequence`).
+- **Counter seeding** looks only at meetings' references (`legacyMaxId`: its board table, the board `subject_id`s of meetings, series and talk items, and actions' board links): boards can't be deleted, only archived, so nothing else can hold a missing id. The counter is moved by inserting and deleting a placeholder row in the step (a plugin cannot write `sqlite_sequence`).
 - **The import also refuses a code a project has taken** (nothing moves, a hint names both), and the id-clash hint says it should not happen and not to delete boards.
 - **Archive key:** the Summary first used `A` with a confirm; it now follows the person's Summary: `Del` archives (confirm), `r` restores (no confirm). Projects' record view has no archive key in the TUI; its list's `a` toggles archived.
 
 ### Deferred minor findings
 
 - Summary and the board form repeat the project Overview and form patterns (accepted).
-- `help` command order changed: boards loads after projects, so `board` lists after `project` and before `inbox`, `talk` and `meeting` (the README says so).
+- `help` command order changed: `inbox` moved from after `action` to after `board` (action, person, …, decision, board, inbox, talk, meeting); the README says so.
 - The Summary frames were checked through frame dumps (118x36, 80x24), not in a real terminal; no mock draws the tab.
 - The handover's two-step shape (copy in boards, empty in meetings) leaves meetings' emptied `board` table in place for good (no DDL in a step).
 

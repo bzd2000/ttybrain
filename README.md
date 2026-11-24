@@ -83,7 +83,7 @@ Boards are now their own plugin (`boards` 1.0.0), and `meetings` is 3.0.0. On th
 
 - `boards` needs `projects` (they share the code namespace), and `meetings` needs `boards`: with projects off, boards and meetings are off too (their data waits). Switching boards on later moves the boards then; nothing is shown twice or lost.
 - If a project has taken a code a board used while boards was off, the move waits and `plugin list` says which code to change.
-- `ttybrain help` lists the `board` commands right after the `project` ones (before `inbox`, `talk` and `meeting`), where they used to come with the meetings commands.
+- In `ttybrain help`, `inbox` now comes after `board` (it used to follow `action`): the order is `action`, `person`, …, `decision`, `board`, `inbox`, `talk`, `meeting`.
 - As with the earlier upgrades, ttybrain copies the database to `ttybrain.db.bak-v<N>` first, and an older build should not be used afterwards.
 
 ## Development
