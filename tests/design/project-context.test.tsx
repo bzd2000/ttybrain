@@ -32,8 +32,7 @@ async function until(t: RenderedTui, check: (frame: string) => boolean): Promise
 const inside = (frame: string, i: number) => (line(frame, i).split("│")[1] ?? "").slice(1).trimEnd()
 
 async function openContext(width: number, height: number): Promise<{ t: RenderedTui; frame: string }> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width, height })
   tui.input.pressKey("2")
   await until(tui, (f) => f.includes("CRM replatforming"))

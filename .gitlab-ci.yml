@@ -12,15 +12,28 @@ sast:
   stage: test
 include:
 - template: Security/SAST.gitlab-ci.yml
-test:
+# The tests run in three parallel jobs (scripts/test-groups.ts: every test file is in exactly one group, and
+# test-logic fails when one is in none or two). A hung test fails its job instead of blocking it for the 1 h default.
+.bun-tests:
   stage: test
   image: oven/bun:1.4.4
-  # A full run takes about 6 minutes; a hung test fails the job instead of blocking it for the 1 h default.
   timeout: 20 minutes
-  script:
+  before_script:
   - bun install --frozen-lockfile
+test-logic:
+  extends: .bun-tests
+  script:
+  - bun scripts/test-groups.ts check
   - bun typecheck
-  - bun test --timeout 30000
+  - bun scripts/test-groups.ts logic --timeout 30000
+test-tui:
+  extends: .bun-tests
+  script:
+  - bun scripts/test-groups.ts tui --timeout 30000
+test-design:
+  extends: .bun-tests
+  script:
+  - bun scripts/test-groups.ts design --timeout 30000
 node-smoke:
   stage: test
   image: node:26

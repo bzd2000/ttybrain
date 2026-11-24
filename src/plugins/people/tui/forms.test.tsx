@@ -163,7 +163,7 @@ describe("note form", () => {
     expect(lineWith(frame, "Kind")).toContain("one_on_one")
     expect(frame).not.toContain("Person*")
     expect(lineWith(frame, "Date")).toContain("2026-11-13")
-    t.input.pressKey("escape")
+    t.input.pressEscape()
     await until(t, (f) => !f.includes("New note"))
     void overlay!.openForm("note", "note", { prefill: { person: "@peter" } })
     frame = await until(t, (f) => f.includes("New note · @peter"))

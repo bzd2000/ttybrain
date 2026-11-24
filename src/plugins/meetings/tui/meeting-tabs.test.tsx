@@ -80,7 +80,7 @@ async function open(ref: string, tabs = 0, opts: { width?: number; height?: numb
   if (opts.extra) await inCtx(opts.extra)
   tui = await renderTui(kernel, { width: opts.width ?? 120, height: opts.height ?? 32 })
   tui.input.pressKey("5")
-  await until(tui, (f) => f.includes("Meetings ·"))
+  await until(tui, (f) => f.includes("5 Meetings") && f.includes("Series"))
   await tui.nav.open(ref)
   await until(tui, (f) => f.includes("Agenda") && f.includes("Prep"))
   for (let i = 0; i < tabs; i++) tui.input.pressArrow("right")

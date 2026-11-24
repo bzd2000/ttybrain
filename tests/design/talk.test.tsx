@@ -48,8 +48,7 @@ const TALK = [3, 42, 7, 8]
 const ACTIONS = [5, 31, 6]
 
 async function annaTalk(width = 118, height = 36): Promise<{ t: RenderedTui; frame: string }> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
-  await seedMeetings(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width, height })
   await tui.nav.open("@anna", "talk")
   const ready = (f: string) => f.includes("To talk about · 4 open") && f.includes("Anna's actions") && f.includes("Talk 4")
@@ -168,8 +167,7 @@ test("Talk keys: J/K reorder, Del drops after a confirmation, n adds for Anna, e
 
 // M9: `t` on any tab of a person or project (the meetings plugin's record key) opens the talk form for it.
 test("t on a person's Summary and a project's Overview opens the talk-item form with the subject filled in", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
-  await seedMeetings(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   const t = tui
   await t.nav.open("@anna")

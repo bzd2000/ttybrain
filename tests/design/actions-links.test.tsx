@@ -63,8 +63,7 @@ async function actionsTab(t: RenderedTui, ref: string, ready: string): Promise<s
 const WIDE = [5, 58, 8, 30, 7]
 
 test("a project's Actions tab: the screen's columns, the project left out of Linked to", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   const frame = await actionsTab(tui, "#CRM", "Invite Marie to design walkthrough")
   // The meetings plugin's Meetings and Talk sit before Context (the 2026-11-20 `project` design); the tabs no longer
@@ -92,8 +91,7 @@ test("a project's Actions tab: the screen's columns, the project left out of Lin
 })
 
 test("a person's and a meeting's Actions tabs list the actions linked to them; n links the new one", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   let frame = await actionsTab(tui, "@peter", "Send revised budget to Peter")
   expect(line(frame, 2)).toBe("  Summary   Talk 0   Meetings   Notes 3   Projects & roles 2   Actions 1")
@@ -120,8 +118,7 @@ test("a person's and a meeting's Actions tabs list the actions linked to them; n
 })
 
 test("l edits the links: @ and M- autocomplete, a removed link is unlinked", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   tui.input.pressKey("4")
   await until(tui, (f) => f.includes("Send revised budget to Peter"))

@@ -42,8 +42,7 @@ const cols = (texts: string[], widths = COLS) =>
 const inside = (frame: string, i: number) => (line(frame, i).split("│")[1] ?? "").slice(1).trimEnd()
 
 test("Projects as designed", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   tui.input.pressKey("2")
   const frame = await until(tui, (f) => f.includes("HR self-service portal") && f.includes("BI2"))
@@ -87,8 +86,7 @@ test("Projects as designed", async () => {
 })
 
 test("a free-text filter extends the footer; a long code shows whole", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   const w = kernel.runtime("projects")!.self().write as Record<string, (i: any) => Promise<any>>
   await runWithContext(kernel.context(), () => w.addProject!({ code: "LONGCODE12345678", name: "Long one" }))
   tui = await renderTui(kernel, { width: 118, height: 36 })
@@ -105,8 +103,7 @@ test("a free-text filter extends the footer; a long code shows whole", async () 
 
 // At 80×24 columns drop from the right (Effort, Risk, Act., then Next milestone with Due); codes and names stay whole.
 test("Projects at 80x24 drops columns, never names or codes", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width: 80, height: 24 })
   tui.input.pressKey("2")
   const frame = await until(tui, (f) => f.includes("BI2") && f.includes("Warehouse scanners"))
@@ -119,8 +116,7 @@ test("Projects at 80x24 drops columns, never names or codes", async () => {
 // The footer says which statuses are listed: the design's `status=active` for its view (active, with on-hold
 // projects under them), `closed` added when a Closed group shows, and `+archived` while `a` shows archived ones.
 test("Projects footer names what is shown", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   tui.input.pressKey("2")
   let frame = await until(tui, (f) => f.includes("BI2"))

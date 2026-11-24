@@ -79,8 +79,7 @@ async function small(width = 118, height = 36): Promise<RenderedTui> {
 }
 
 async function designed(): Promise<RenderedTui> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
-  await seedMeetings(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   tui.input.pressKey("5")
   await until(tui, (f) => f.includes("Held, closes itself") && f.split("BOARD").length > 2)

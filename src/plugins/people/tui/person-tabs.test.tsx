@@ -111,7 +111,7 @@ describe("person record view", () => {
 
     t.input.pressKey("n")
     frame = await until(t, (f) => f.includes("New note · @marie"))
-    t.input.pressKey("escape")
+    t.input.pressEscape()
     await until(t, (f) => !f.includes("New note · @marie"))
 
     // A team member who is a stakeholder too.

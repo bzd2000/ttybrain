@@ -98,7 +98,7 @@ describe("milestones tab", () => {
     t.input.pressTab()
     await type(t, "2026-11-26")
     t.input.pressKey("s", { ctrl: true })
-    frame = await until(t, "Design approved 26 Nov")
+    frame = await untilThat(t, (f) => lineWith(f, "Design approved").includes("26 Nov"))
     expect(lineWith(frame, "Design approved")).toContain("○ Design approved")
     expect(lineWith(frame, "Design approved")).toContain("26 Nov")
     expect(await rows("milestone", ["title", "due_date", "project_id"])).toEqual([{ title: "Design approved", due_date: "2026-11-26", project_id: 1 }])

@@ -38,8 +38,7 @@ const cols = (ref: string, time: string, text: string) => `${ref.padEnd(5)} ${ti
 const inside = (frame: string, i: number) => (line(frame, i).split("│")[1] ?? "").slice(1).trimEnd()
 
 async function open(width: number, height: number): Promise<{ t: RenderedTui; frame: string }> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })
-  await seedDesign(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })
   tui = await renderTui(kernel, { width, height })
   tui.input.pressKey("6")
   const frame = await until(tui, (f) => f.includes("New · 3") && f.includes("dismissed") && f.includes("unknown project"))

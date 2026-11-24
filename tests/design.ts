@@ -1,7 +1,8 @@
 // The look-and-feel conformance helpers: `seedDesign(kernel)` seeds the example data of the screen designs
 // (docs/superpowers/specs/2026-11-13-pm-screens.html) through the plugins' write operations, and the span helpers
-// read a rendered frame's colours. Use with `makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12" })`
-// (the designs' today, Thu 12 Nov 2026). Ids follow the seed, not the mock (A-1 rather than A-27).
+// read a rendered frame's colours. Use with `makeTestKernel({ plugins: builtinPlugins, today: "2026-11-12", seed: seedDesign })`
+// (the designs' today, Thu 12 Nov 2026), which seeds once per test process and copies the database into each
+// test's home (tests/helpers.ts). Ids follow the seed, not the mock (A-1 rather than A-27).
 import { rgbToHex, TextAttributes, type CapturedFrame, type CapturedSpan } from "@opentui/core"
 import { runWithContext, type Origin } from "../src/kernel/context"
 import { addDays } from "../src/kernel/dates"
@@ -344,7 +345,7 @@ export async function seedLongRefs(kernel: Kernel): Promise<void> {
 }
 
 // The 2026-11-20 meeting designs' data (docs/superpowers/specs/2026-11-20-ttybrain-meeting-screens.html), as of
-// Fri 20 Nov 2026: use with `makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })`.
+// Fri 20 Nov 2026: use with `makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })`.
 // - People: Anna Peeters, Bob Willems, Sofie Lambert, Karim Haddad, Mathias Wouters (team); Marie Dubois, Peter
 //   Janssens (stakeholders; Marie last seen 2 Oct, 49 days ago). Projects CRM (amber), ERP (red), HRP, BOARD.
 // - Series S-1 … S-7 in the `meetings` mock's order: 1:1 Anna (every 2 weeks on Mon from 9 Nov), 1:1 Bob (Wed, from

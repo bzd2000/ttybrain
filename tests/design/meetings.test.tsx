@@ -42,8 +42,7 @@ const UPCOMING = [10, 27, 7, 7, 6]
 const SERIES = [20, 7, 17]
 
 async function screen5(width = 118, height = 36): Promise<{ t: RenderedTui; frame: string }> {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
-  await seedMeetings(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width, height })
   tui.input.pressKey("5")
   // Settled: both tables drawn (BOARD on each), the one-off marker in place where it fits.
@@ -122,8 +121,7 @@ test("Meetings at 80×24: Talk and Act. give way, codes and names whole", async 
 })
 
 test("New recurring meeting as designed (from Karim's person view): rows, read-back, title, footer and bar", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20" })
-  await seedMeetings(kernel)
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width: 118, height: 36 })
   const t = tui
   // N on Karim's Meetings tab, as the design's form is opened.
