@@ -79,8 +79,7 @@ describe("discoverPlugins", () => {
       expect(c.source).toBe("built-in")
       expect(c.error).toBeUndefined()
       expect(c.def?.id).toBe(c.id)
-      // boards has no TUI part yet (its board view is still the meetings plugin's).
-      expect(c.tui).toBe(c.id === "boards" ? undefined : pathToFileURL(join(builtinPluginDir(), c.id, "tui", "index.tsx")).href)
+      expect(c.tui).toBe(pathToFileURL(join(builtinPluginDir(), c.id, "tui", "index.tsx")).href)
     }
     const modules = (globalThis as { __TTYBRAIN_MODULES__?: Record<string, Record<string, unknown>> }).__TTYBRAIN_MODULES__
     expect(typeof modules?.["@ttybrain/api"]?.definePlugin).toBe("function")

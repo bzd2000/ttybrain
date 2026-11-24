@@ -126,7 +126,7 @@ test("Meetings at 80×24: Talk and Act. give way, codes and names whole", async 
   expect(line(frame, 23)).toBe(" tab panel   enter open   n one-off   N series   s skip date   m move date")
 })
 
-test("Meetings (screen 5): Boards under Series, archived ones left out; Tab reaches it, Enter opens the board", async () => {
+test("Meetings (screen 5): Boards under Series, archived ones left out; Tab reaches it, Enter opens the board (on Summary)", async () => {
   kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   const w = kernel.runtime("boards")!.self().write as Record<string, (i: unknown) => Promise<unknown>>
   await runWithContext(kernel.context(), async () => {
@@ -172,9 +172,10 @@ test("Meetings (screen 5): Boards under Series, archived ones left out; Tab reac
   await titled("Boards · 2", 11, theme.accent)
   expect(fgAt(await t.spans(), "Boards · 2", 11)).toBe(theme.accent)
   t.input.pressEnter()
-  frame = await until(t, (f) => f.includes("Past meetings"))
+  // The board's view opens on its first tab, the boards plugin's Summary (as a project's opens on Overview).
+  frame = await until(t, (f) => f.includes("Status") && f.includes("active"))
   expect(line(frame, 0)).toMatch(/^ ttybrain · {2}5 Meetings ▾ {2}› BOARD Management board +●/)
-  expect(line(frame, 2)).toBe("  Meetings   Talk")
+  expect(line(frame, 2)).toBe("  Summary   Meetings   Talk")
 })
 
 test("New recurring meeting: a board's code makes Kind board", async () => {

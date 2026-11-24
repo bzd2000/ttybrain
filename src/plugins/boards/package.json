@@ -4,5 +4,5 @@
   "private": true,
   "type": "module",
   "main": "logic/index.ts",
-  "ttybrain": { "plugin": true, "id": "boards" }
+  "ttybrain": { "plugin": true, "id": "boards", "tui": "tui/index.tsx" }
 }

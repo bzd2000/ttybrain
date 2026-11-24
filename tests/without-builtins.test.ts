@@ -21,8 +21,8 @@ const DEPENDANTS: Record<string, string[]> = {
   meetings: [],
   inbox: [],
 }
-// The built-ins with a TUI part (boards has none yet: its board view is still the meetings plugin's).
-const WITH_TUI = BUILTINS.filter((id) => id !== "boards")
+// Every built-in has a TUI part.
+const WITH_TUI = BUILTINS
 const KERNEL_THINGS = ["help", "guide", "plugin", "report"]
 
 let home: string | undefined

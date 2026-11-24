@@ -66,13 +66,19 @@ export function registerBoards(ctx: PluginContext, store: Store): void {
           }
         },
       },
-      // The highest id still in this plugin's board table (0 when empty); the boards plugin allocates above it.
+      // The highest board id this plugin knows (0 when none): of its board table, and of the boards its meetings,
+      // series and talk items name (a board deleted long ago may still be named). The boards plugin allocates above
+      // it, so no new board takes an id something here already points at.
       legacyMaxId: {
         input: Type.Object({}),
         output: Type.Object({ max: Type.Integer() }),
         run: async () => {
-          const row = await db.selectFrom("board").select((eb) => eb.fn.max("id").as("m")).executeTakeFirst()
-          return { max: Number(row?.m ?? 0) }
+          let max = Number((await db.selectFrom("board").select((eb) => eb.fn.max("id").as("m")).executeTakeFirst())?.m ?? 0)
+          for (const table of ["meeting", "series", "talk_item"] as const) {
+            const row = await db.selectFrom(table).select((eb) => eb.fn.max("subject_id").as("m")).where("subject_type", "=", "board").executeTakeFirst()
+            max = Math.max(max, Number(row?.m ?? 0))
+          }
+          return { max }
         },
       },
       // Every board row still in this plugin's table, by id (talk_stayed is not a board's: it stays, migration 008).

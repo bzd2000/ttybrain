@@ -303,4 +303,71 @@ describe("the boards handover", () => {
     expect(all(moved, "SELECT id, code FROM boards_board ORDER BY id").map((r) => r.code)).toEqual(["MB", "CRMB", "OLD", "PROG", "MB2"])
     expect(all(moved, "SELECT * FROM meetings_board")).toEqual([])
   })
+
+  test("the counter starts past the highest board id meetings still names, so a deleted board's meetings are not re-pointed", async () => {
+    await legacyDatabase()
+    // Board 9 was deleted long ago (no row left), but a held meeting still names it.
+    const old = await boot([people, projects, actions, meetingsV21, inbox])
+    old.db.raw
+      .prepare(
+        `INSERT INTO meetings_meeting (id, title, date, kind, status, notes, subject_type, subject_id, series_id, series_date, auto_close, created_at, updated_at)
+         VALUES (4, 'Gone board', '2026-09-25', 'board', 'held', '', 'board', 9, NULL, NULL, 1, ?, ?)`,
+      )
+      .run([T, T] as any)
+    await close(old)
+
+    const k = await boot(builtinPlugins)
+    expect(k.plugins.map((p) => [p.id, p.status, p.error ?? null])).toEqual(builtinPlugins.map((p) => [p.id, "ok", null]))
+    expect(all(k, `SELECT ${BOARD_COLUMNS} FROM boards_board ORDER BY id`)).toEqual(LEGACY_ROWS) // no placeholder left
+    expect(all(k, "SELECT seq FROM sqlite_sequence WHERE name = 'boards_board'")).toEqual([{ seq: 9 }])
+    expect((await ok(k, "board", "add", "NEW", "New board", "--json")).json.id).toBe(10)
+    expect(all(k, "SELECT subject_type, subject_id FROM meetings_meeting WHERE id = 4")).toEqual([{ subject_type: "board", subject_id: 9 }])
+    expect((await ok(k, "meeting", "show", "M-4")).out).not.toContain("#NEW")
+  })
+
+  test("a legacy board's code a project took meanwhile stops the move whole, with a hint naming both", async () => {
+    await legacyDatabase()
+    const off = await boot(builtinPlugins, without("boards"))
+    await ok(off, "project", "add", "MB", "Mobile") // boards is off: nothing to check the code against
+    await close(off)
+
+    const clash = await boot(builtinPlugins)
+    const boards = clash.plugins.find((p) => p.id === "boards")!
+    expect(boards.status).toBe("ok")
+    expect(boards.error).toBe(`data step "from-meetings" failed: cannot move the meetings plugin's boards: #MB is already used by the project #MB`)
+    expect(boards.hint).toBe(
+      'your data is untouched (the boards stay in the meetings plugin until they can move); the board #MB "Management board" and the project #MB "Mobile" have the same code, and project and board codes share one namespace: give the project another code: ttybrain project edit #MB --code <CODE>',
+    )
+    expect(all(clash, "SELECT * FROM boards_board")).toEqual([])
+    expect(all(clash, "SELECT count(*) AS n FROM meetings_board")).toEqual([{ n: 4 }])
+    expect(all(clash, "SELECT * FROM boards_handover")).toEqual([])
+    expect(all(clash, "SELECT id FROM kernel_plugin_migration WHERE plugin = 'boards' AND id LIKE 'upgrade:%'")).toEqual([]) // pending
+    await ok(clash, "project", "edit", "MB", "--code", "MOB")
+    await close(clash)
+
+    const moved = await boot(builtinPlugins)
+    expect(moved.plugins.every((p) => p.status === "ok" && p.error === undefined)).toBe(true)
+    expect(all(moved, `SELECT ${BOARD_COLUMNS} FROM boards_board ORDER BY id`)).toEqual(LEGACY_ROWS)
+    expect(all(moved, "SELECT * FROM meetings_board")).toEqual([])
+  })
+
+  test("an id taken meanwhile stops the move whole, and the hint says the ids clash", async () => {
+    await legacyDatabase()
+    // A legacy board with an id above RESERVED: a board added while meetings is off takes the same id.
+    const old = await boot([people, projects, actions, meetingsV21, inbox])
+    old.db.raw.prepare(`INSERT INTO meetings_board (${BOARD_COLUMNS}, talk_stayed) VALUES (?, 'HIGH', 'High board', NULL, NULL, NULL, ?, ?, 0)`).run([RESERVED + 1, T, T] as any)
+    await close(old)
+    const k = await boot(builtinPlugins, without("meetings"))
+    expect((await ok(k, "board", "add", "IT", "IT board", "--json")).json.id).toBe(RESERVED + 1)
+    await close(k)
+
+    const clash = await boot(builtinPlugins)
+    const boards = clash.plugins.find((p) => p.id === "boards")!
+    expect(boards.error).toBe(`data step "from-meetings" failed: cannot move the meetings plugin's boards: id ${RESERVED + 1} (#IT) is already taken in the boards plugin`)
+    expect(boards.hint).toBe(
+      "your data is untouched (the boards stay in the meetings plugin until they can move); a board added since has the id of one of them (the ids clash, not the codes), which should not happen: don't delete boards to make room, report it",
+    )
+    expect(all(clash, "SELECT id, code FROM boards_board")).toEqual([{ id: RESERVED + 1, code: "IT" }])
+    expect(all(clash, "SELECT count(*) AS n FROM meetings_board")).toEqual([{ n: 5 }])
+  })
 })
