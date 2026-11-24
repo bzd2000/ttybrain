@@ -1,5 +1,5 @@
 // The board view's Summary tab (the boards plugin's tui part): the board's facts, `e` the board form (Code, Name,
-// Note) and `A` archive / restore after a confirmation, writing only through the board operations. Seeded through
+// Note) and `Del` archive (after a confirmation) / `r` restore, writing only through the board operations. Seeded through
 // the write ops; opened with nav.open("#MB").
 import { afterEach, describe, expect, test } from "bun:test"
 import { builtinPlugins } from "../../../../tests/builtins"
@@ -84,29 +84,27 @@ describe("board view · Summary", () => {
     expect((await boards()).map((b) => b.code)).toEqual(["MB2"])
   })
 
-  test("A archives after a confirmation, and A again restores", async () => {
+  test("Del archives after a confirmation, and r restores", async () => {
     setMessageTimeout(100) // the status bar's message gives the hints back soon
     const t = await open()
-    expect(lineWith(await t.frame(), "esc back")).toContain("A archive")
-    t.input.pressKey("A")
+    expect(lineWith(await t.frame(), "esc back")).toContain("del archive")
+    t.input.pressKey("DELETE")
     let frame = await until(t, (f) => f.includes("Archive #MB?"))
     t.input.pressKey("n")
     frame = await until(t, (f) => !f.includes("Archive #MB?"))
     expect((await boards())[0].archived_at).toBeNull()
 
-    t.input.pressKey("A")
+    t.input.pressKey("DELETE")
     await until(t, (f) => f.includes("Archive #MB?"))
     t.input.pressKey("y")
     frame = await until(t, (f) => f.includes("archived since"))
     expect(frame).toContain("archived #MB") // the status bar's message, then the hints again
-    frame = await until(t, (f) => f.includes("A restore"))
+    frame = await until(t, (f) => f.includes("r restore"))
     expect(lineWith(frame, "Status")).toMatch(/Status {10}archived since 13 Nov 2026/)
-    expect(lineWith(frame, "esc back")).toContain("A restore")
+    expect(lineWith(frame, "esc back")).toContain("r restore")
     expect((await boards())[0].archived_at).not.toBeNull()
 
-    t.input.pressKey("A")
-    await until(t, (f) => f.includes("Restore #MB?"))
-    t.input.pressKey("y")
+    t.input.pressKey("r")
     frame = await until(t, (f) => lineWith(f, "Status").includes("active"))
     expect((await boards())[0].archived_at).toBeNull()
   })

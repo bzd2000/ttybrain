@@ -1,8 +1,8 @@
 // The board view's Summary tab (design §5.7; no mock draws it): the "Summary" panel with the board's facts laid out as
 // a project's Overview has them, a muted label column of 14 cells and 2 cells before the values (the longest label's
 // width on a narrow panel): Code (cyan), Name, Note (— without one) and Status (`active`, or `archived since 10 Oct
-// 2026`, muted). `e` opens the board form; a code edit moves the view to the new ref. `A` archives the board, or
-// restores an archived one, after a confirmation. The bar is the tab's own, as the project's Overview has it.
+// 2026`, muted). `e` opens the board form; a code edit moves the view to the new ref. `Del` archives the board (after a
+// confirmation) and `r` restores an archived one, as on a person's Summary. The bar is the tab's own, as the project's Overview has it.
 import { createEffect, createSignal, onCleanup, Show } from "solid-js"
 import { act, Panel, printable, shortDate, theme, toneColor, useKeys, useNav, useOverlay, useQuery, useRuntime, useScreenKeys, type Hint, type Tone } from "@ttybrain/api/tui"
 import { makeStore } from "../logic/records"
@@ -51,7 +51,7 @@ export function BoardSummary(props: { recordRef: string }) {
     const hints: Hint[] = [
       { key: "←→", label: "tabs" },
       { key: "e", label: "edit" },
-      { key: "A", label: archived() ? "restore" : "archive" },
+      archived() ? { key: "r", label: "restore" } : { key: "Del", label: "archive" },
       { key: "Esc", label: "back" },
     ]
     onCleanup(keys.hints(hints, { exact: true, frame: [] }))
@@ -67,11 +67,9 @@ export function BoardSummary(props: { recordRef: string }) {
     await nav.open(saved)
   }
   // Ask first, then write (never await a question inside act).
-  const toggleArchive = async (ref: string, isArchived: boolean) => {
-    const question = isArchived ? `Restore ${ref}?` : `Archive ${ref}? Its meetings and talk-list stay; it takes no new ones until it is restored.`
-    if (!(await overlay.confirm(question))) return
-    const op = isArchived ? "restoreBoard" : "archiveBoard"
-    await act(() => rt.self().write[op]!({ board: ref }), { ok: () => `${isArchived ? "restored" : "archived"} ${ref}` })
+  const archive = async (ref: string) => {
+    if (!(await overlay.confirm(`Archive ${ref}? Its meetings and talk-list stay; it takes no new ones until it is restored.`))) return
+    await act(() => rt.self().write.archiveBoard!({ board: ref }), { ok: () => `archived ${ref}` })
   }
 
   useScreenKeys((key) => {
@@ -79,7 +77,11 @@ export function BoardSummary(props: { recordRef: string }) {
     if (b === undefined) return
     const ch = printable(key)
     if (ch === "e") void edit(b.ref)
-    else if (ch === "A") void toggleArchive(b.ref, b.archived)
+    else if (key.name === "delete") {
+      if (!b.archived) void archive(b.ref)
+    } else if (ch === "r") {
+      if (b.archived) void act(() => rt.self().write.restoreBoard!({ board: b.ref }), { ok: () => `restored ${b.ref}` })
+    }
     else return
     key.preventDefault()
   })

@@ -3,7 +3,7 @@
 // the code cyan as a project's, the tabs Summary · Meetings · Talk without counts (Summary is the boards plugin's,
 // Meetings and Talk the meetings plugin's; Review Focus 4):
 // - Summary: the "Summary" panel with the board's facts as a project's Overview has them (a 14-cell muted label
-//   column): Code (cyan), Name, Note, Status (active, or archived since its date); its bar `e edit   A archive`.
+//   column): Code (cyan), Name, Note, Status (active, or archived since its date); its bar `e edit   Del archive`.
 // - Meetings: "Board · monthly, last Fri" (Next, With, "To talk about · 2" and the board's talk-list), "Past
 //   meetings" (`30 Oct    Board    —`), and, as there is no Prep for a board, "Your actions for BOARD · 1" on the
 //   right; the project tab's bar. Enter on the series opens its next meeting under the board's crumb (`› BOARD
@@ -69,7 +69,7 @@ test("Board · Summary: the board's facts, first of the three tabs", async () =>
   expect(line(frame, 3).length).toBe(117) // a one-cell gutter on both sides
   expect([4, 5, 6, 7].map((i) => inside(frame, i, 0))).toEqual(FACTS)
   expect(line(frame, 8)).toMatch(/^ ╰─+╯$/)
-  expect(line(frame, 35)).toBe(" ←→ tabs   e edit   A archive   esc back   i capture")
+  expect(line(frame, 35)).toBe(" ←→ tabs   e edit   del archive   esc back   i capture")
 
   const spans = await t.spans()
   expect(fgAt(spans, "BOARD", 0)).toBe(theme.cyan)
@@ -190,7 +190,7 @@ test("Board view at 80×24: the code, the names and the panels whole", async () 
       expect(line(frame, 3)).toMatch(/^ ╭─ Summary ─+╮$/)
       expect([4, 5, 6, 7].map((i) => inside(frame, i, 0))).toEqual(FACTS)
       expect(line(frame, 8)).toMatch(/^ ╰─+╯$/)
-      expect(line(frame, 23)).toBe(" ←→ tabs   e edit   A archive   esc back   i capture")
+      expect(line(frame, 23)).toBe(" ←→ tabs   e edit   del archive   esc back   i capture")
     } else if (tab === "meetings") {
       expect(line(frame, 3)).toMatch(/^ ╭─ Board · monthly, last Fri ─+╮ ╭─ Your actions for BOARD · 1 ─+╮$/)
       expect(inside(frame, 5, 0)).toBe("With       Marie D., Peter J.")
