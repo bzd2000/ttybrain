@@ -37,15 +37,27 @@ const cols = (widths: number[], texts: string[]) =>
     .join(" ")
     .trimEnd()
 // The text inside the left or right panel on line `i` (between `│ ` and ` │`), without trailing spaces.
+// The outer widths of the panels whose top borders are on line `i` (`╭` to `╮`, each).
+const boxWidths = (frame: string, i: number) => [...line(frame, i).matchAll(/╭[^╮]*╮/g)].map((m) => m[0].length)
+// Every grid row's two panels (the lines with two top borders from line `from`, not the lead block's 1.35 : 1) have
+// the same outer width: the Attention design's two columns.
+const expectEqualColumns = (frame: string, from = 0) => {
+  const rows = frame.split("\n").map((_, i) => i).filter((i) => i >= from && boxWidths(frame, i).length === 2 && !line(frame, i).includes("Upcoming meetings"))
+  expect(rows.length).toBeGreaterThan(0)
+  for (const i of rows) {
+    const [a, b] = boxWidths(frame, i)
+    expect({ line: i, left: a }).toEqual({ line: i, left: b! })
+  }
+}
 const inside = (frame: string, i: number, side: 0 | 1) => (line(frame, i).split("│")[1 + 2 * side] ?? "").slice(1).trimEnd()
 
-// At 118 wide the left panel has 54 cells inside, the right one 53.
+// At 118 wide both grid panels have 53 cells inside (the cell an odd width leaves over stays empty on the right).
 // Beside the lead panel (Upcoming meetings, 1.35 : 1) the right column has 45 cells inside.
-const ACTIONS_L = [5, 32, 7, 7]
+const ACTIONS_L = [5, 31, 7, 7]
 const ACTIONS_SIDE = [5, 23, 7, 7]
 const PROJECTS = [2, 6, 43]
 const PROJECTS_SIDE = [2, 6, 35]
-const MILESTONES = [6, 38, 8]
+const MILESTONES = [6, 37, 8]
 const RISKS = [5, 6, 33, 6]
 const STAKEHOLDERS = [17, 24, 10]
 
@@ -110,6 +122,9 @@ test("Attention as designed", async () => {
     "last contact over 30 days, high influence first",
   ])
   expect(line(frame, 23)).toMatch(/^ ╰─+╯ ╰─+╯$/)
+  // The grid's two columns have the same width in every row (57 cells each at 118: 53 inside).
+  expectEqualColumns(frame, 6)
+  for (const i of [6, 12, 19]) expect(boxWidths(frame, i)).toEqual([57, 57])
   expect(frame).not.toContain("BI2")
   expect(frame).not.toContain("Nadia")
 
@@ -165,6 +180,8 @@ for (const [width, height] of [[118, 36], [80, 24]] as const)
     expect(at(/ R-1000 +DATAPLATFORM2027 .+ risk /).length).toBe(1) // the high risk
     expect(at(/ Alexandra Vandenberghe +never /).length).toBe(1) // the stakeholder: whole name and age
     expect(frame).not.toMatch(/DATAPLATFORM202?…|DATAPL\w*…|A-100…|R-100…|Alexandra Vande\w*…/)
+    // The grid's two columns: the same width in every row.
+    expectEqualColumns(frame)
   })
 
 // The 2026-11-20 `home` design: "Upcoming meetings · next 7 days" first (top left, paired with Overdue actions), its
@@ -227,6 +244,8 @@ test("Attention: Upcoming meetings as designed (2026-11-20 home)", async () => {
   ])
   expect(line(frame, 19)).toMatch(/^ ╰─+╯ ╰─+╯$/)
   for (let i = 20; i < 35; i++) expect(line(frame, i)).toBe("")
+  // Below the lead block, the grid's two columns have the same width (the lead block keeps its 1.35 : 1).
+  expectEqualColumns(frame, 13)
   expect(line(frame, 35)).toBe(" tab panel   enter open   x done   t to talk   i capture   g or 1-6 screens   ? help")
 
   const spans = await tui.spans()

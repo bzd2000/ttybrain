@@ -1,4 +1,4 @@
-// The Attention screen (slot 1, route id "overview"): the plugins' panels in priority order, in paired grid rows
+// The Attention screen (slot 1, route id "overview"): the plugins' panels in priority order, in paired grid rows (two columns of equal width)
 // when they fit, else in two columns balanced by height (overviewLayout.ts), Tab moving through them in priority
 // order. The screen loads every panel through useQuery, so it knows each one's row count and can size them to fit
 // the screen: each panel shows its count in the title (unless its `count` is false; rows with a `group` are not
@@ -111,9 +111,16 @@ export function OverviewScreen() {
       />
     </PluginScope>
   )
-  // A grid row's cell, or a column: half the width (the lead block's columns: the lead's weight against 1).
+  // A grid row's cell, or a column: half the width, the same for both whatever they hold (a cell left over on an
+  // odd width stays empty on the right); the lead block's columns: the lead's weight against 1.
+  const half = () => Math.max(0, Math.floor((dims().width - 3) / 2))
   const Half = (props: { indexes: number[]; weight?: number }) => (
-    <box flexDirection="column" flexGrow={props.weight ?? 1} flexBasis={0} minHeight={0} overflow="hidden">
+    <box
+      flexDirection="column"
+      {...(props.weight === undefined ? { width: half(), flexShrink: 0 } : { flexGrow: props.weight, flexBasis: 0 })}
+      minHeight={0}
+      overflow="hidden"
+    >
       <For each={props.indexes}>{(i) => <Item i={i} />}</For>
     </box>
   )
@@ -131,7 +138,7 @@ export function OverviewScreen() {
         <Show when={lead().length > 0}>
           <box flexDirection="row" gap={1} flexShrink={0}>
             <Half indexes={lead()} weight={panels[0]!.lead} />
-            <Half indexes={side()} />
+            <Half indexes={side()} weight={1} />
           </box>
         </Show>
         <Show

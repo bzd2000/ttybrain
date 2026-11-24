@@ -102,13 +102,13 @@ test("a panel's header row, its note on the bottom border, and the selected row'
   tui = await renderTui(kernel, { parts: [part([])], width: 100, height: 30 })
   const frame = await until(tui, (f) => f.includes("Before T-1 · gadgets") && f.includes("gadget 2"))
   const top = indexOf(frame, "Things · 3")
-  // Inside the left panel (the text between `│ ` and ` │`).
+  // Inside the left panel (the text between `│ ` and ` │`): 44 cells, as the right one (two columns of equal width).
   const inside = (i: number) => (lines(frame)[i]!.split("│")[1] ?? "").slice(1).trimEnd()
   expect([1, 2, 3, 4, 5, 6, 7, 8].map((d) => inside(top + d))).toEqual([
-    "Ref   " + "Name".padEnd(33) + "Size",
-    "T-1   " + "thing 1".padEnd(33) + "size 1",
-    "T-2   " + "thing 2".padEnd(33) + "size 2",
-    "T-3   " + "thing 3".padEnd(33) + "size 3",
+    "Ref   " + "Name".padEnd(32) + "Size",
+    "T-1   " + "thing 1".padEnd(32) + "size 1",
+    "T-2   " + "thing 2".padEnd(32) + "size 2",
+    "T-3   " + "thing 3".padEnd(32) + "size 3",
     "",
     "Before T-1 · gadgets",
     "GD-1  gadget 1",
