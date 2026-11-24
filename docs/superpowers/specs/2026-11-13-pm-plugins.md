@@ -35,9 +35,10 @@ Companion to [`2026-11-13-pm-design.md`](2026-11-13-pm-design.md). That document
 | Plugin | Requires | Reads views of | Record types (display prefix) | Screens (key) |
 |---|---|---|---|---|
 | `people` | — | projects, actions | `person` (`@handle`), `note` (`N-`), `goal` (`G-`) | People (3) |
-| `projects` | `people ^1` | people, meetings (`^2`), actions | `project` (`#CODE`), `milestone` (`MS-`), `deliverable` (`D-`), `risk` (`R-`), `decision` (`DE-`) | Projects (2) |
-| `actions` | — | people, projects, meetings (`^2`) | `action` (`A-`) | Actions (4) |
-| `meetings` | `projects ^2`, `people ^1`, `actions ^2` | people, projects, actions | `meeting` (`M-`), `series` (`S-`), `talk_item` (`T-`), `agenda_item` (no prefix) | Meetings (5) |
+| `projects` | `people ^1` | people, meetings (`^3`), boards, actions | `project` (`#CODE`), `milestone` (`MS-`), `deliverable` (`D-`), `risk` (`R-`), `decision` (`DE-`) | Projects (2) |
+| `boards` | `projects ^2` | projects | `board` (`#CODE`, shared prefix) | (the board view on screen 5) |
+| `actions` | — | people, projects, meetings (`^3`), boards | `action` (`A-`) | Actions (4) |
+| `meetings` | `projects ^2`, `people ^1`, `actions ^2`, `boards ^1` | people, projects, actions, boards | `meeting` (`M-`), `series` (`S-`), `talk_item` (`T-`), `agenda_item` (no prefix) | Meetings (5) |
 | `inbox` | — | — | `inbox_item` (`I-`) | Inbox (6) |
 | `assistant` | — | all (as tools) | — | — (side pane) |
 
@@ -126,7 +127,7 @@ The portfolio, and everything you follow up per project: health, milestones, del
 | `decision` | `project_id → project` (optional), `date`, `title`, `description`, `decided_by`, `meeting_id → meeting` **(soft)** |
 | `involvement` | `project_id → project`, `person_id → person` **(soft)**, `role`; unique (project, person, role) |
 
-**Shared code namespace.** `#` is shared with the `board` record type of `meetings` (`sharedPrefix: true` on this plugin's record type and tag type): `addProject` and `editProject` refuse a code a board has (`code "MB" is already used by the board #MB`, hint, exit 3, case-insensitive) by reading `meetings.board`; while `meetings` is not loaded the check is skipped. Asked for a project by a board's code (`project show #MB`), it answers `#MB is a board, not a project` (hint `run "ttybrain project list" for the project codes`).
+**Shared code namespace.** `#` is shared with the `board` record type of `boards` (`sharedPrefix: true` on this plugin's record type and tag type): `addProject` and `editProject` refuse a code a board has (`code "MB" is already used by the board #MB`, hint, exit 3, case-insensitive) by reading `boards.board`; while `boards` is not loaded the check is skipped. Asked for a project by a board's code (`project show #MB`), it answers `#MB is a board, not a project` (hint `run "ttybrain project list" for the project codes`).
 
 `projects` requires `people` and stores person IDs as soft references. It validates them on every write and shows names by joining `people.person`, never the internal `person` table.
 
@@ -146,7 +147,7 @@ Views take no injected clock, so nothing in them depends on "today": `actions.ac
 
 The project `context` Markdown is **not** in a view, because it's large. It's read with `getContext`.
 
-It reads `people.person`, for owner and involvement names and for validating person references, `meetings.meeting` (`^2`, optional), for meeting titles on decisions, `meetings.board` (optional, for the code namespace), and `actions.action` and `actions.link` (optional), for the open-action counts it shows (`open_actions` on a project record in the CLI and TUI; it is no longer a column of `projects.project`).
+It reads `people.person`, for owner and involvement names and for validating person references, `meetings.meeting` (`^3`, optional), for meeting titles on decisions, `boards.board` (optional, for the code namespace), and `actions.action` and `actions.link` (optional), for the open-action counts it shows (`open_actions` on a project record in the CLI and TUI; it is no longer a column of `projects.project`).
 
 ### Exposed operations
 
@@ -203,7 +204,7 @@ ttybrain report status <project>
 
 What you or someone else has to do: an owner, an optional due date and links to the records the action concerns (projects, people, meetings). Split out of `projects` in the 2.0 releases of both; the actions the projects plugin held were handed over once, ids and history intact (see the follow-ups, "Actions plugin").
 
-`actions` requires nothing. It reads `people.person` (owner and linked-person names), `projects.project` (codes) and `meetings.meeting` (`^2`: titles and dates), all optional: a link to a record whose plugin is not loaded shows as `<type>:<id>`, a gone record as `—`.
+`actions` requires nothing. It reads `people.person` (owner and linked-person names), `projects.project` (codes) and `meetings.meeting` (`^3`: titles and dates) and `boards.board` (the archived check), all optional: a link to a record whose plugin is not loaded shows as `<type>:<id>`, a gone record as `—`.
 
 ### Data
 
@@ -261,16 +262,50 @@ ttybrain action list|show|add|edit|link|unlink|done|cancel|delete
 
 ---
 
+## 2b. `boards`
+
+Version 1.0.0; requires `projects ^2` (so projects' `#` type is registered first), reads `projects` (`^2`) and `meetings` (`^3`, optional, for the handover and `board show`). Boards are the subjects of board meetings; the user decided on 2026-11-24 that they are a plugin of their own (design §5.7).
+
+### Data
+
+| Table | Columns |
+|---|---|
+| `board` | `code` (unique, 2-16 `A-Z`/`0-9` with at least one letter, upper-cased), `name`, `note`, `archived_at`, `from_project_id` **(soft)** (set by meetings' `boards-from-projects` step through `addBoard`'s `fromProject`, cleared by the first edit or archive; it drives the notice), `created_at`, `updated_at`. `id` is `AUTOINCREMENT`. Boards are never deleted, only archived |
+| `handover`, `handover_row` | the record of the one-time import from meetings (as actions') |
+
+### Published views
+
+`boards.board` (v1): id, code, name, archived_at (the columns of the former `meetings.board`).
+
+### Exposed operations
+
+Writes: `addBoard` (also `fromProject`), `editBoard`, `archiveBoard`, `restoreBoard` (describe lines, codes and errors as they were in meetings). Reads: `importedLegacy`, `madeFromProjects` (boards made from a project and not edited since, for meetings' notice). A new id is `max(own, meetings.legacyMaxId) + 1` before the import, or above 1 000 000 while meetings cannot be read.
+
+### CLI
+
+`board add <CODE> <name> [--note]`, `board list [--archived]`, `board show <#CODE>` (with series, next meeting and open talk items from meetings, when loaded), `board edit`, `board archive|restore`: flags, output, JSON and exit codes as before the move. `#` shares its prefix with projects (one namespace; the check is in boards against `projects.project` and in projects against `boards.board`).
+
+### Handover
+
+Step `from-meetings`: waits while meetings is not loaded; imports every row of meetings' read `legacyBoards()` with the same id, code, name, note, archived_at, from_project_id and timestamps, atomically and once; refuses (nothing moves, the step stays pending) a code that a board or a project has taken or an id a new board took meanwhile, with a hint; seeds the counter above the highest id meetings' meetings, series and talk items refer to. Meetings' own step empties its table once `importedLegacy()` says so. Each copy is visible once, whichever plugin is off (with boards off, meetings is off and its rows wait).
+
+### UI
+
+Record type `board` crumb (`› MB Management board`, code cyan), form `board` (Code, Name, Note), recordTab `Summary` (first of the board view's tabs: the facts; `e` edit, `Del` archive, `r` restore). Meetings adds Meetings and Talk tabs; screen 5's Boards panel (meetings') reads `boards.board`.
+
+---
+
 ## 3. `meetings`
 
-Every meeting is about a person (a 1:1), a project (a project meeting) or a board (`#MB`, its own record), either one-off or an occurrence of a recurring series. It covers the agenda with an "ask" per item, the generated prep, notes during the meeting, closing (also by itself), the boards, the talk-lists of people, projects and boards, and the reports and export. Design: `docs/superpowers/specs/2026-11-20-ttybrain-meetings-actions-design.md` §5. Version 2.1.0 (2.0.0 changed the kinds in the published `meeting` view; 2.1.0 adds boards, additively); it requires `projects ^2`, `people ^1`, `actions ^2`.
+Every meeting is about a person (a 1:1), a project (a project meeting) or a board (`#MB`, a `boards` record), either one-off or an occurrence of a recurring series. It covers the agenda with an "ask" per item, the generated prep, notes during the meeting, closing (also by itself), the talk-lists of people, projects and boards, and the reports and export. Design: `docs/superpowers/specs/2026-11-20-ttybrain-meetings-actions-design.md` §5. Version 3.0.0 (2.0.0 changed the kinds in the published `meeting` view; 2.1.0 added boards; 3.0.0 moves the boards to the `boards` plugin and drops the `meetings.board` view); it requires `projects ^2`, `people ^1`, `actions ^2`, `boards ^1`.
 
 ### Data
 
 | Table | Columns |
 |---|---|
 | `meeting` | `title`, `date`, `kind` (`one_on_one`, `project`, `board`), `status` (planned/held/cancelled), `subject_type` (`person`/`project`/`board`) and `subject_id` **(soft)** (kind `board` ⇔ a board subject), `series_id → series` and `series_date` (unique together: an occurrence is made once, even when skipped or moved), `auto_close` (1: it closes itself 3 days after its date), `closed_itself`, `since_date`, `notes` (Markdown). `id` is `AUTOINCREMENT`: a deleted meeting's number is never reused |
-| `board` | `code` (unique, 2–16 `A-Z`/`0-9` with at least one letter, upper-cased), `name`, `note`, `archived_at`, `from_project_id` **(soft)** (set by the `boards-from-projects` step, cleared by the first edit or archive; it drives the notice), `talk_stayed` (1 when the step left the project's open talk items on the project), `created_at`, `updated_at`. `id` is `AUTOINCREMENT` |
+| `board` | emptied: the legacy table of meetings 2.x, whose rows the `boards` plugin imported (see its handover); it stays, no DDL in a step |
+| `board_talk_stayed` | `board_id` **(soft)**: the boards the `boards-from-projects` step left with the project's open talk items on the project (for the notice) |
 | `series` | `subject_type`, `subject_id` **(soft)**, `title`, `kind`, `rhythm` (as typed: `every 2 weeks on wed`), `first_date`, `end_date` (optional) |
 | `series_attendee` | `series_id → series`, `person_id` **(soft)** |
 | `talk_item` | `subject_type` (person, project or board), `subject_id` **(soft)**, `text`, `project_id` **(soft)** (the tag on a person's item), `added_date`, `position`, `last_position`, `status` (open/discussed/dropped), `meeting_id → meeting` (where it was ticked), `status_date`. `id` is `AUTOINCREMENT` |
@@ -278,7 +313,7 @@ Every meeting is about a person (a 1:1), a project (a project meeting) or a boar
 | `attendee` | `meeting_id → meeting`, `person_id → person` **(soft)** |
 | `agenda_item` | `meeting_id → meeting`, `position`, `text`, `project_id → project` **(soft)**, `ask` |
 
-Migration 006 adds `board` and widens the `subject_type` CHECK of `series`, `meeting` and `talk_item` to include `board` (rebuilt the rule-6 way, ids and `AUTOINCREMENT` counters kept); 007 adds `board.talk_stayed`. The data step `boards-from-projects` (below) moves existing data.
+Migration 006 added `board` (since moved, see above) and widens the `subject_type` CHECK of `series`, `meeting` and `talk_item` to include `board` (rebuilt the rule-6 way, ids and `AUTOINCREMENT` counters kept); 007 added `board.talk_stayed` and 008 moves it to `board_talk_stayed`. The data step `boards-from-projects` (below) moves existing data, making its boards through `boards.addBoard`; the step `boards-handover` empties the legacy `board` table once boards has imported it.
 
 `attendee` and `agenda_item` have no `ON DELETE` action (rule 6 of the data rules): where a meeting is deleted its children are deleted explicitly. Existing meetings are kept by migration 002: `steering` and `other` become `project`, `board` stays, every meeting keeps its number, title, date, status, attendees, agenda, asks, notes and since date, and none has a subject until `meeting subject` gives it one (it is then listed under "No subject" and never closes itself).
 
@@ -291,13 +326,12 @@ Migration 006 adds `board` and widens the `subject_type` CHECK of `series`, `mee
 | `meetings.talk_item` (v1) | id, subject_type, subject_id, text, project_id, added_date, position, status, meeting_id, status_date |
 | `meetings.agenda_item` (v1) | id, meeting_id, position, text, project_id, ask |
 | `meetings.attendee` (v1) | meeting_id, person_id |
-| `meetings.board` (v1) | id, code, name, archived_at |
 
-It reads `people.person` (attendee and subject names), `projects.project` (agenda project codes and names, subjects) and `actions.action` / `actions.link` (the actions linked to a meeting, for the minutes and the prep). `projects` and `actions` read `meetings.meeting` at `^2`; `projects` also reads `meetings.board` (optional) to keep codes apart, and `actions` to refuse an archived board.
+It reads `people.person` (attendee and subject names), `projects.project` (agenda project codes and names, subjects), `boards.board` (board subjects) and `actions.action` / `actions.link` (the actions linked to a meeting, for the minutes and the prep). `projects` and `actions` read `meetings.meeting` at `^3` (the view itself is v2); `projects` reads `boards.board` (optional) to keep codes apart, and `actions` to refuse an archived board.
 
-Record types: `meeting` (`M-n`), `series` (`S-n`), `talk_item` (`T-n`) and `board` (`#CODE`: shares the `#` prefix with `projects.project`, by `sharedPrefix: true` on both its record type and its tag type; it resolves by code only, never by id, and its search covers boards that are not archived); all resolvable and searchable (a talk item by its text). A meeting's, series' or talk item's subject that is gone (a deleted person, an archived or switched-off project) shows as `—`, never an error.
+Record types: `meeting` (`M-n`), `series` (`S-n`), `talk_item` (`T-n`) (the `board` record type is the `boards` plugin's); all resolvable and searchable (a talk item by its text). A meeting's, series' or talk item's subject that is gone (a deleted person, an archived or switched-off project) shows as `—`, never an error.
 
-**Boards and the kind rule.** `kindFor`: a board subject gives kind `board`; kind `board` with any other subject is refused (`a board meeting needs a board; #CRM is a project`, hint `make it about a board (#MB); add one: ttybrain board add <CODE> <name>`); `project` on a board or `1:1` on a board is refused likewise. A board meeting keeps its kind: `setSubject` with a person or a project is refused. An archived board refuses new meetings, series, talk items and (through `actions`) links (`#MB is archived`, hint `ttybrain board restore #MB`), and the `occurrences` upkeep skips its series. A talk item on a board takes no project tag. A project code where a board is needed, and the reverse, gives `#MB is a board, not a project` (or `#CRM is a project, not a board`) with a hint.
+**Boards and the kind rule.** `kindFor`: a board subject gives kind `board`; kind `board` with any other subject is refused (`a board meeting needs a board; #CRM is a project`, hint `make it about a board (#MB); add one: ttybrain board add <CODE> <name>`); `project` on a board or `1:1` on a board is refused likewise. A board meeting keeps its kind: `setSubject` with a person or a project is refused. An archived board refuses new meetings, series, talk items and (through `actions`) links (`#MB is archived`, hint `ttybrain board restore #MB`), and the `occurrences` upkeep skips its series. A talk item on a board takes no project tag. Boards are the `boards` plugin's (section below): meetings reads `boards.board` for them. A project code where a board is needed, and the reverse, gives `#MB is a board, not a project` (or `#CRM is a project, not a board`) with a hint.
 
 **Data step `boards-from-projects`** (`ctx.upgrade`, once): for each project that is the subject of a board-kind meeting or series it makes a board with the project's name and the code `<CODE>B` (the code cut to 15 characters so the `B` stays, then `…B2`, `…B3` while taken by a board or a project) and moves the series (with all occurrences) and board-kind meetings to it. The project keeps its code, actions and everything else. Its open talk items move too when the project hosts no other meetings or series; otherwise they stay (`talk_stayed`). `ctx.notices` names each such board in `plugin list` and Help (`board #CRMB "CRM" now holds the board meetings of project #CRM; rename it: ttybrain board edit #CRMB --code <CODE>`) until it is first edited.
 
