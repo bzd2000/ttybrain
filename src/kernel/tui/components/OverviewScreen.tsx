@@ -1,4 +1,4 @@
-// The Attention screen (slot 1, route id "overview"): the plugins' panels in priority order, in paired grid rows (two columns of equal width)
+// The Attention screen (slot 1, route id "overview"): the plugins' panels in priority order, in paired grid rows (two columns of equal width, or with a lead its split)
 // when they fit, else in two columns balanced by height (overviewLayout.ts), Tab moving through them in priority
 // order. The screen loads every panel through useQuery, so it knows each one's row count and can size them to fit
 // the screen: each panel shows its count in the title (unless its `count` is false; rows with a `group` are not
@@ -26,7 +26,7 @@ import type { Registered } from "../registry"
 import { PluginScope, useApp } from "../scope"
 import { theme } from "../theme"
 import type { OverviewColumn, OverviewKeyDef, OverviewPanelDef, OverviewRow } from "../types"
-import { layoutOverview, MAX_ROWS, type PanelPlace } from "./overviewLayout"
+import { layoutOverview, MAX_ROWS, overviewColumns, type PanelPlace } from "./overviewLayout"
 import { Panel } from "./Panel"
 import { createKeySource, fitWidth, Table, type KeySource, type TableColumn, type TableGroup, type TableRow } from "./Table"
 
@@ -111,18 +111,12 @@ export function OverviewScreen() {
       />
     </PluginScope>
   )
-  // A grid row's cell, or a column: half the width, the same for both whatever they hold; the gap between them takes
-  // the cell an uneven split leaves over, so their outer edges line up with the lead block's. The lead block's
-  // columns: the lead's weight against 1.
-  const half = () => Math.max(0, Math.floor((dims().width - 3) / 2))
-  const gridGap = () => 1 + ((dims().width - 3) % 2)
-  const Half = (props: { indexes: number[]; weight?: number }) => (
-    <box
-      flexDirection="column"
-      {...(props.weight === undefined ? { width: half(), flexShrink: 0 } : { flexGrow: props.weight, flexBasis: 0 })}
-      minHeight={0}
-      overflow="hidden"
-    >
+  // The two columns (overviewColumns): with a lead the lead block's split on every row, so one column edge runs down
+  // the screen; else equal halves, the gap taking the cell an uneven split leaves. The same widths whatever a row
+  // holds, so the outer edges line up with the header's.
+  const cols = createMemo(() => overviewColumns(dims().width, panels[0]?.lead))
+  const Half = (props: { indexes: number[]; side: 0 | 1 }) => (
+    <box flexDirection="column" width={props.side === 0 ? cols().left : cols().right} flexShrink={0} minHeight={0} overflow="hidden">
       <For each={props.indexes}>{(i) => <Item i={i} />}</For>
     </box>
   )
@@ -138,24 +132,24 @@ export function OverviewScreen() {
     <Show when={panels.length > 0} fallback={<text fg={theme.muted}>No panels yet: plugins add them here.</text>}>
       <box flexDirection="column" paddingLeft={1} paddingRight={1} flexGrow={1} minHeight={0} overflow="hidden">
         <Show when={lead().length > 0}>
-          <box flexDirection="row" gap={1} flexShrink={0}>
-            <Half indexes={lead()} weight={panels[0]!.lead} />
-            <Half indexes={side()} weight={1} />
+          <box flexDirection="row" gap={cols().gap} flexShrink={0}>
+            <Half indexes={lead()} side={0} />
+            <Half indexes={side()} side={1} />
           </box>
         </Show>
         <Show
           when={isGrid()}
           fallback={
-            <box flexDirection="row" gap={gridGap()} flexGrow={1} minHeight={0} overflow="hidden">
-              <For each={groups()}>{(list) => <Half indexes={list} />}</For>
+            <box flexDirection="row" gap={cols().gap} flexGrow={1} minHeight={0} overflow="hidden">
+              <For each={groups()}>{(list, k) => <Half indexes={list} side={k() === 0 ? 0 : 1} />}</For>
             </box>
           }
         >
           <For each={groups()}>
             {(pair) => (
-              <box flexDirection="row" gap={gridGap()} flexShrink={0}>
-                <Half indexes={pair.slice(0, 1)} />
-                <Half indexes={pair.slice(1)} />
+              <box flexDirection="row" gap={cols().gap} flexShrink={0}>
+                <Half indexes={pair.slice(0, 1)} side={0} />
+                <Half indexes={pair.slice(1)} side={1} />
               </box>
             )}
           </For>

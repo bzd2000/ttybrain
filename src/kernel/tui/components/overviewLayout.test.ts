@@ -1,6 +1,6 @@
 // The Overview layout: alternating columns when they fit, balanced and capped when they do not.
 import { describe, expect, test } from "bun:test"
-import { layoutOverview, wrappedLines } from "./overviewLayout"
+import { layoutOverview, overviewColumns, wrappedLines } from "./overviewLayout"
 
 const full = (rows: number) => ({ rows, empty: "Nothing." })
 
@@ -70,5 +70,27 @@ describe("overview layout", () => {
     expect(places.slice(0, 2).map((p) => p.height)).toEqual([5, 5])
     const tight = layoutOverview([{ ...full(5), extra: 5, lead: 1.35 }, full(6), full(6), full(6), full(6)], 14, 80)
     expect(tight.every((p) => p.part === undefined)).toBe(true)
+  })
+
+  test("the columns: equal halves (the gap takes an uneven split's cell); with a lead its weight on every row", () => {
+    expect(overviewColumns(118)).toEqual({ left: 57, right: 57, gap: 2 })
+    expect(overviewColumns(80)).toEqual({ left: 38, right: 38, gap: 2 })
+    expect(overviewColumns(79)).toEqual({ left: 38, right: 38, gap: 1 })
+    expect(overviewColumns(118, 1.35)).toEqual({ left: 66, right: 49, gap: 1 })
+    expect(overviewColumns(80, 1.35)).toEqual({ left: 44, right: 33, gap: 1 })
+  })
+
+  test("with a lead the grid below it wraps each panel at its column's width (45 cells inside on the right at 118)", () => {
+    // 48 characters: one line at 62 (left), two at 45 (right).
+    const empty = "No late milestones and none in the next 14 days."
+    const places = layoutOverview([{ ...full(0), lead: 1.35 }, full(1), { rows: 0, empty }, { rows: 0, empty }], 34, 118)
+    expect(places.map((p) => [p.part, p.row, p.column, p.height])).toEqual([
+      ["lead", undefined, 0, 3],
+      ["side", undefined, 1, 3],
+      [undefined, 0, 0, 4],
+      [undefined, 0, 1, 4],
+    ])
+    const plain = layoutOverview([{ rows: 0, empty }, { rows: 0, empty }], 34, 118)
+    expect(plain.map((p) => p.height)).toEqual([3, 3])
   })
 })
