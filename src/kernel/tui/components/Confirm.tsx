@@ -19,7 +19,7 @@ export function Confirm(props: { text: string; answer(yes: boolean): void }) {
     else if (ch === "n" || key.name === "escape") props.answer(false)
   })
   return (
-    <box border borderColor={theme.accent} backgroundColor={theme.panel} paddingLeft={1} paddingRight={1}>
+    <box border borderStyle="rounded" borderColor={theme.accent} backgroundColor={theme.panel} paddingLeft={1} paddingRight={1}>
       <text fg={theme.text}>{`${props.text}  y yes · n no`}</text>
     </box>
   )

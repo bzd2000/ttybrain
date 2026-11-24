@@ -12,8 +12,7 @@ import type { SubjectType, TalkRecord } from "../logic/schema"
 import { defined, save, With } from "./forms"
 
 export const TALK_TITLE = "New talk item"
-const LOOK = { labelWidth: 14, tabLabel: "field" }
-const FOOTER = "ctrl+s save · esc cancel"
+const LOOK = { labelWidth: 14 }
 const given = (v: string | null | undefined) => (v === null || v === undefined || v.trim() === "" ? undefined : v)
 
 export function TalkForm(props: RecordFormProps) {
@@ -46,7 +45,7 @@ export function TalkForm(props: RecordFormProps) {
             if (Object.keys(input).length === 1) return Promise.resolve({ ok: true, ref: t.ref })
             return save(() => rt.self().write.editTalk!(input), props, "saved", { project: "project" })
           }
-          return <Form title={`Edit ${t.ref}`} fields={fields} look={LOOK} footer={FOOTER} submit={submit} close={props.close} />
+          return <Form title={`Edit ${t.ref}`} fields={fields} look={LOOK} submit={submit} close={props.close} />
         }
         const fields: FieldSpec[] = [
           { name: "about", label: "About", kind: "refs", required: true, show: "labelType", initial: props.prefill?.about },
@@ -68,7 +67,7 @@ export function TalkForm(props: RecordFormProps) {
             { project: "project", about: "about" },
           )
         const start = props.prefill?.about === undefined ? undefined : "text"
-        return <Form title={TALK_TITLE} fields={fields} look={LOOK} footer={FOOTER} {...(start ? { start } : {})} submit={submit} close={props.close} />
+        return <Form title={TALK_TITLE} fields={fields} look={LOOK} {...(start ? { start } : {})} submit={submit} close={props.close} />
       }}
     </With>
   )

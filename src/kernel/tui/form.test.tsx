@@ -11,6 +11,8 @@ import { bootKernel, type Kernel } from "../host"
 import { Form } from "./components/Form"
 import { act, useQuery, useRuntime } from "./data"
 import { useOverlay, type Overlay } from "./overlay"
+import { rgbToHex } from "@opentui/core"
+import { theme } from "./theme"
 import { defineTui, type RecordFormProps, type TuiDef } from "./types"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -279,6 +281,12 @@ const things = async () =>
 
 const lineWith = (frame: string, s: string) => frame.split("\n").find((l) => l.includes(s)) ?? ""
 const statusLine = (frame: string) => frame.trimEnd().split("\n").at(-1)!
+// The label of the focused field: the one row drawn with an input (the selection background), the others as read.
+const focusedLabel = async (t: RenderedTui) => {
+  const spans = await t.spans()
+  const at = spans.lines.findIndex((l) => l.spans.some((s) => s.text.length >= 16 && rgbToHex(s.bg) === theme.selectedBg))
+  return at < 0 ? undefined : /│ (\S+(?: \S+)*)/.exec(spans.lines[at]!.spans.map((s) => s.text).join(""))?.[1]
+}
 
 describe("forms", () => {
   test("derived values count as where the form starts: no draft for an untouched form; a restore keeps them following", async () => {
@@ -405,18 +413,18 @@ describe("forms", () => {
     void overlay!.openForm("thing", "looks")
     let frame = await t.frame()
     // The enum reads its value's label, then the others, muted, in brackets.
-    expect(lineWith(frame, "Kind")).toContain("Kind  1:1 (project · board)")
+    expect(lineWith(frame, "Kind")).toMatch(/│ Kind +1:1 \(project · board\)/)
     expect(lineWith(frame, "Ends")).toContain("never")
-    expect(frame.split("\n").find((l) => l.includes("ctrl+s save · esc cancel"))).toMatch(/─ ctrl\+s save · esc cancel ─┘/)
+    expect(frame.split("\n").find((l) => l.includes("ctrl+s save · esc cancel"))).toMatch(/─ ctrl\+s save · esc cancel ─╯/)
     // `start`: typing goes into Title; its note follows the value.
     await t.input.typeText("abc")
     frame = await t.frame()
-    expect(lineWith(frame, "› Title")).toContain("abc")
+    expect(lineWith(frame, "│ Title ")).toContain("abc")
     const lines = frame.split("\n")
-    expect(lines[lines.findIndex((l) => l.includes("› Title")) + 1]).toContain("→ ABC")
+    expect(lines[lines.findIndex((l) => l.includes("│ Title ")) + 1]).toContain("→ ABC")
     t.input.pressTab({ shift: true })
     t.input.pressArrow("right")
-    expect(lineWith(await t.frame(), "Kind")).toContain("Kind  project (1:1 · board)")
+    expect(lineWith(await t.frame(), "Kind")).toMatch(/│ Kind +project \(1:1 · board\)/)
     t.input.pressKey("s", { ctrl: true })
     await t.settle()
     expect(submitted).toEqual([{ kind: "project", title: "abc", ends: null }])
@@ -464,13 +472,12 @@ describe("forms", () => {
     t.input.pressEnter()
     let frame = await t.frame()
     expect(frame).toContain("New thing")
-    expect(lineWith(frame, "Title")).toContain("›")
-    expect(lineWith(frame, "Due")).not.toContain("›")
+    expect(await focusedLabel(t)).toBe("Title")
     t.input.pressTab()
     t.input.pressEnter() // last field: still nothing (no save)
     frame = await t.frame()
     expect(frame).toContain("New thing")
-    expect(lineWith(frame, "Due")).toContain("›")
+    expect(await focusedLabel(t)).toBe("Due")
     expect(await things()).toEqual([])
   })
 
@@ -479,9 +486,9 @@ describe("forms", () => {
     overlay!.openForm("thing")
     await t.frame()
     t.input.pressTab()
-    expect(lineWith(await t.frame(), "Due")).toContain("›")
+    expect(await focusedLabel(t)).toBe("Due")
     t.input.pressTab({ shift: true })
-    expect(lineWith(await t.frame(), "Title")).toContain("›")
+    expect(await focusedLabel(t)).toBe("Title")
   })
 
   test("date field shows invalid date", async () => {

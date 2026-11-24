@@ -23,10 +23,15 @@
 //   keys until `r` (restore), `x` (discard) or Esc (close, keeping the draft); an equal draft is deleted silently.
 // - `footer`: muted text on the form's bottom border, right-aligned (`ctrl+s save · esc cancel`); `start`: the field
 //   focused first. A field's `derive` sets its value from the others until it is edited.
-// - `look` (as the screen designs draw a form): a rounded panel with the title padded on its top border, a muted
-//   label column `labelWidth` wide (no `›` or `*`), only the focused field as an input and the others as read (a
-//   field's `show`: refs by label, with their type, a date as its day; the placeholder when empty), and Tab's hint
-//   labelled `tabLabel` (`tab field`). A field's `note` is worked out from the current values of the own fields (Field.tsx).
+// - Every form is drawn as the screen designs draw one (the 2026-11-20 `series` mock): a rounded panel with the
+//   title padded on its top border, `ctrl+s save · esc cancel` on its bottom border (unless `footer` says
+//   otherwise), a muted label column (no `›` or `*`; its longest label and 4 cells, or `look.labelWidth`), only the
+//   focused field as an input and the others as read (a field's `show`: refs by label, with their type, a date as
+//   its day, which is also how a date field reads without one; the placeholder when empty; a longtext its first
+//   line; a value too long for its column ends in `…` after a whole word), and Tab's hint labelled `tab field`
+//   (`look.tabLabel`). On a narrow terminal the label column gives way first (down to its longest label), then the
+//   inputs; an error under a field wraps in the value column. A field's `note` is worked out from the current
+//   values of the own fields (Field.tsx).
 import { createEffect, createMemo, onCleanup, createSignal, For, onMount, Show, useContext } from "solid-js"
 import { runWithContext } from "../../context"
 import { parseDate } from "../../dates"
@@ -40,19 +45,46 @@ import { PluginScope, useApp } from "../scope"
 import { theme } from "../theme"
 import type { FieldDef } from "../../fields"
 import { DraftPrompt } from "./DraftPrompt"
-import { Field, type FieldDisplay, type FieldSpec, type Suggestion } from "./Field"
+import { useTerminalDimensions } from "@opentui/solid"
+import { Field, LOOK_INPUT_WIDTH, type FieldDisplay, type FieldSpec, type Suggestion } from "./Field"
 import { dayDate } from "../format"
 
 export type { FieldSpec } from "./Field"
 
 export type FormValues = Record<string, string | null>
-export type FormLook = { labelWidth: number; tabLabel?: string }
+// The label column's width (default: the longest label and 4 cells) and Tab's hint (default `field`).
+export type FormLook = { labelWidth?: number; tabLabel?: string }
+export const FORM_FOOTER = "ctrl+s save · esc cancel"
 // A failure may name the field to show its error under (`field`), for an error that names none itself (an
 // operation's NotFoundError for one of the values, say); a ValidationError's own `field` is used otherwise.
 export type SubmitResult = { ok: true; ref?: string } | { ok: false; error: unknown; field?: string }
 
 export { ESC_WINDOW_MS }
 export const SUGGESTION_LIMIT = 8
+// The cells a form row takes besides its label column and value: the border and the padding on both sides.
+const FRAME = 4
+const GAP = 2 // between the label column and the value, and between an input and its preview
+const PREVIEW = 12 // a date field's `→ 2026-11-15` or `invalid date`
+const MIN_INPUT = 16
+
+// Pieces of text cut to `width` cells: whole words, then `…` (a single word longer than the room is cut).
+export function fitDisplay(pieces: FieldDisplay, width: number): FieldDisplay {
+  const text = pieces.map((p) => p.text).join("")
+  if (text.length <= width) return pieces
+  const room = Math.max(0, width - 1)
+  const cut = text.slice(0, room + 1)
+  const at = cut.lastIndexOf(" ")
+  const keep = (at > 0 ? cut.slice(0, at) : text.slice(0, room)).trimEnd().length
+  const out: FieldDisplay = []
+  let used = 0
+  for (const p of pieces) {
+    if (used >= keep) break
+    const t = p.text.slice(0, keep - used)
+    used += t.length
+    out.push({ ...p, text: t })
+  }
+  return [...out, { text: "…", muted: true }]
+}
 
 // The kernel prefixes an operation's input errors with the operation (`todo.addThing: title must not be blank`);
 // under the field the field's own message is enough.
@@ -81,7 +113,7 @@ export function Form(props: {
   // The record type whose extra fields (kernel.fields) follow the own ones, and the record they start from.
   recordType?: string
   recordRef?: string
-  // Muted text on the bottom border, right-aligned.
+  // Muted text on the bottom border, right-aligned (default FORM_FOOTER).
   footer?: string
   // The name of the field focused first (default: the first field), as when the first is filled in already.
   start?: string
@@ -92,6 +124,7 @@ export function Form(props: {
   const { kernel, registry, track } = useApp()
   const keys = useKeys()
   const today = kernel.clock.today()
+  const dims = useTerminalDimensions()
 
   const initial = (f: FieldSpec): string | null => {
     if (f.initial !== undefined && f.initial !== null) return f.initial
@@ -225,14 +258,14 @@ export function Form(props: {
     }
   })
 
-  // --- the look's values as read: refs resolved to their labels (and type), dates as their day ---
+  // --- values as read: refs resolved to their labels (and type), dates as their day ---
+  const showOf = (f: FieldSpec): FieldSpec["show"] => f.show ?? (f.kind === "date" ? "day" : undefined)
   const refWords = (v: string | null) => (v ?? "").split(/[\s,]+/).filter((w) => w !== "")
   const resolved = useQuery(
     async () => {
       const out = new Map<string, { label: string; type: string }>()
-      if (!props.look) return out
       for (const f of props.fields)
-        if (f.show === "label" || f.show === "labelType")
+        if (showOf(f) === "label" || showOf(f) === "labelType")
           for (const w of refWords(valueOf(f.name))) {
             if (out.has(w)) continue
             try {
@@ -243,25 +276,32 @@ export function Form(props: {
           }
       return out
     },
-    { key: () => (props.look ? props.fields.filter((f) => f.show === "label" || f.show === "labelType").map((f) => valueOf(f.name)).join("\n") : "") },
+    { key: () => props.fields.filter((f) => showOf(f) === "label" || showOf(f) === "labelType").map((f) => valueOf(f.name)).join("\n") },
   )
-  const displayOf = (f: FieldSpec): FieldDisplay | undefined => {
-    if (!props.look) return undefined
+  // A value as read, cut to the inputs' width (the form keeps its width as the focus moves).
+  const displayOf = (f: FieldSpec): FieldDisplay => fitDisplay(readOf(f), layout().input)
+  const readOf = (f: FieldSpec): FieldDisplay => {
     const raw = (valueOf(f.name) ?? "").trim()
     if (raw === "") return [{ text: f.placeholder ?? "", muted: true }]
-    if (f.show === "day") {
+    const show = showOf(f)
+    // A longtext's first line, `…` when more follow.
+    if (f.kind === "longtext") {
+      const [first, ...more] = raw.split("\n")
+      return more.length > 0 ? [{ text: first!.trimEnd() }, { text: " …", muted: true }] : [{ text: raw }]
+    }
+    if (show === "day") {
       try {
         return [{ text: dayDate(parseDate(raw, today)) }]
       } catch {
         return [{ text: raw }]
       }
     }
-    if (f.show === "label" || f.show === "labelType") {
+    if (show === "label" || show === "labelType") {
       const words = refWords(raw)
       const found = words.map((w) => resolved.data()?.get(w))
       const text = words.map((w, i) => found[i]?.label ?? w).join(", ")
       const type = found[0]?.type
-      return f.show === "labelType" && type !== undefined ? [{ text }, { text: ` · ${type}`, muted: true }] : [{ text }]
+      return show === "labelType" && type !== undefined ? [{ text }, { text: ` · ${type}`, muted: true }] : [{ text }]
     }
     return [{ text: raw }]
   }
@@ -441,7 +481,7 @@ export function Form(props: {
     if (offer()) return // the draft prompt shows its own
     const longtext = current()?.kind === "longtext"
     const drop = keys.hints([
-      { key: "Tab", label: props.look?.tabLabel ?? "next field" },
+      { key: "Tab", label: props.look?.tabLabel ?? "field" },
       ...(longtext ? [{ key: "Enter", label: "new line" }] : []),
       { key: "Ctrl+S", label: "save" },
       { key: "Esc", label: "cancel" },
@@ -487,7 +527,18 @@ export function Form(props: {
     }
   }, { whileTyping: true })
 
-  const labelWidth = () => props.look?.labelWidth ?? Math.max(0, ...fields().map((f) => f.label.length + (f.required ? 1 : 0))) + 2
+  // The label column, the inputs (a value as read is cut to their width) and the value column (what the terminal
+  // leaves right of the labels: an error widens the form up to it, then wraps at words), for the terminal's width:
+  // the label column gives way first, down to its longest label, then the inputs.
+  const layout = createMemo(() => {
+    const longest = Math.max(0, ...fields().map((f) => f.label.length))
+    const want = props.look?.labelWidth ?? longest + 4
+    const room = dims().width - FRAME
+    const preview = fields().some((f) => f.kind === "date") ? GAP + PREVIEW : 0
+    const label = Math.max(Math.min(longest, want), Math.min(want, room - GAP - LOOK_INPUT_WIDTH - preview))
+    const input = Math.max(MIN_INPUT, Math.min(LOOK_INPUT_WIDTH, room - label - GAP - preview))
+    return { label, input, value: Math.max(input + preview, room - label - GAP) }
+  })
 
   // A plugin's fieldEditor for an extra field, in that plugin's scope.
   const customEditor = (f: FieldSpec, focused: () => boolean) => {
@@ -505,15 +556,16 @@ export function Form(props: {
   return (
     <box
       border
-      borderStyle={props.look ? "rounded" : undefined}
-      titleColor={props.look ? theme.accent : undefined}
+      borderStyle="rounded"
+      titleColor={theme.accent}
       borderColor={theme.accent}
       backgroundColor={theme.panel}
       flexDirection="column"
-      minWidth={60}
+      minWidth={Math.min(60, dims().width)}
+      maxWidth={dims().width}
       paddingLeft={1}
       paddingRight={1}
-      title={props.look ? ` ${props.title} ` : props.title}
+      title={` ${props.title} `}
     >
       <Show when={ready() ? offer() : undefined}>
         {(d: () => Draft<FormValues>) => <DraftPrompt savedAt={d().savedAt} restore={restore} discard={discardDraft} close={() => props.close()} />}
@@ -528,10 +580,12 @@ export function Form(props: {
               value={valueOf(f.name)}
               focused={focused()}
               editor={editor}
-              labelWidth={labelWidth()}
+              labelWidth={layout().label}
+              inputWidth={layout().input}
+              valueWidth={layout().value}
               preview={datePreview(f)?.text}
               note={noteOf(f)}
-              plain={props.look !== undefined}
+              plain
               display={displayOf(f)}
               previewError={datePreview(f)?.error}
               error={fieldErrors()[f.name]}
@@ -556,7 +610,7 @@ export function Form(props: {
       <Show when={formError()}>
         <text fg={theme.red}>{`✗ ${formError()}`}</text>
       </Show>
-      <Show when={props.footer}>
+      <Show when={props.footer ?? FORM_FOOTER}>
         {(f: () => string) => (
           // On the bottom border row, one `─` before the corner (as a Panel footer).
           <text position="absolute" bottom={-1} right={1} fg={theme.muted} bg={theme.panel} wrapMode="none">

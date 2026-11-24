@@ -259,7 +259,7 @@ describe("People screen", () => {
     t.input.pressKey("j") // marie
     t.input.pressKey("e")
     let frame = await until(t, (f) => f.includes("Edit @marie"))
-    expect(lineWith(frame, "Name*")).toContain("Marie Dubois")
+    expect(frame).toMatch(/│ Name +Marie Dubois/)
     await t.input.typeText(" M")
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, (f) => f.includes("Marie Dubois M"))

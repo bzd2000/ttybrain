@@ -161,8 +161,8 @@ describe("note form", () => {
     let frame = await until(t, (f) => f.includes("New note"))
     expect(frame).toContain("New note · @tina")
     expect(lineWith(frame, "Kind")).toContain("one_on_one")
-    expect(frame).not.toContain("Person*")
-    expect(lineWith(frame, "Date")).toContain("2026-11-13")
+    expect(frame).not.toContain("│ Person ")
+    expect(lineWith(frame, "Date")).toContain("Fri 13 Nov")
     t.input.pressEscape()
     await until(t, (f) => !f.includes("New note"))
     void overlay!.openForm("note", "note", { prefill: { person: "@peter" } })
@@ -185,7 +185,7 @@ describe("note form", () => {
     const t = await open(async () => void (await peter()))
     void overlay!.openForm("note", "note", {})
     const frame = await until(t, (f) => f.includes("New note"))
-    expect(frame).toMatch(/Person\*/)
+    expect(frame).toMatch(/│ Person /)
   })
 
   test("edit note clears its project", async () => {
@@ -196,7 +196,7 @@ describe("note form", () => {
     void overlay!.openForm("note", "note", { recordRef: "N-1" })
     let frame = await until(t, (f) => f.includes("Edit N-1"))
     expect(lineWith(frame, "Project")).toContain("#CRM")
-    expect(frame).not.toMatch(/Person\*/)
+    expect(frame).not.toMatch(/│ Person /)
     t.input.pressTab()
     t.input.pressTab() // project
     for (let i = 0; i < 4; i++) t.input.pressBackspace()
@@ -211,7 +211,7 @@ describe("goal form", () => {
     const t = await open(async () => void (await peter()))
     void overlay!.openForm("goal", "goal", { prefill: { person: "@peter" } })
     let frame = await until(t, (f) => f.includes("New goal · @peter"))
-    expect(frame).not.toMatch(/Person\*/)
+    expect(frame).not.toMatch(/│ Person /)
     await t.input.typeText("Sponsor the rollout")
     t.input.pressTab()
     await t.input.typeText("2026-12-01")

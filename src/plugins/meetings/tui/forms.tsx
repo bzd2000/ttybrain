@@ -90,7 +90,7 @@ export function MeetingForm(props: RecordFormProps) {
         }
         // What it is about comes first; a new meeting's kind may be left empty: it then follows from that.
         const fields: FieldSpec[] = [
-          { name: "about", label: "About", kind: "refs", required: true, initial: m?.about },
+          { name: "about", label: "About", kind: "refs", required: true, show: "labelType", initial: m?.about },
           { name: "title", label: "Title", kind: "text", required: true, initial: m?.title },
           { name: "kind", label: "Kind", kind: "enum", values: KINDS, labels: KIND_FIELD_LABELS, required: m !== null, derive: (v) => kindOf(v.about) },
           { name: "date", label: "Date", kind: "date", required: true, initial: m?.date ?? rt.clock.today() },
