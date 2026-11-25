@@ -286,12 +286,59 @@ describe("series form", () => {
     await until(t, (f) => f.includes("restore"))
     t.input.pressKey("r")
     frame = await until(t, (f) => !f.includes("restore") && lineWith(f, "First date").includes("Mon 16 Nov"))
-    expect(lineWith(frame, "Rhythm")).toContain("weekly on mon")
+    expect(lineWith(frame, "Occurrence")).toContain("weekly on mon")
     for (let i = 0; i < 3; i++) t.input.pressBackspace()
     await t.input.typeText("wed")
     frame = await until(t, (f) => lineWith(f, "First date").includes("Wed 18 Nov"))
     expect(lineWith(frame, "First date")).toContain("Wed 18 Nov")
     expect(lineWith(frame, "Attendees")).toContain("Marie Dubois")
+  })
+})
+
+describe("series form: Occurrence", () => {
+  test("Enter lists the phrases the First date allows; each one picked saves as that rhythm; custom… lets one be typed", async () => {
+    const t = await open()
+    // Today is Fri 13 Nov 2026.
+    const offered = ["weekly on fri", "every 2 weeks on fri", "every 4 weeks on fri", "monthly on the 2nd fri", "monthly on day 13"]
+    for (const [i, phrase] of offered.entries()) {
+      void overlay!.openForm("series", "series", { prefill: { about: "@marie" }, draftFor: `@marie:${i}` })
+      let frame = await until(t, (f) => f.includes("Marie Dubois · person") && statusLine(f).includes("tab field"))
+      expect(lineWith(frame, "Occurrence")).toMatch(/│ Occurrence /)
+      t.input.pressEnter()
+      frame = await until(t, (f) => f.includes("custom…"))
+      for (const p of [...offered, "custom…"]) expect(frame).toContain(` ${p} `)
+      for (let k = 0; k < i; k++) t.input.pressArrow("down")
+      t.input.pressEnter()
+      frame = await until(t, (f) => !f.includes("custom…"))
+      expect(lineWith(frame, "Occurrence")).toContain(phrase)
+      expect(lineWith(frame, "First date")).toContain("Fri 13 Nov")
+      t.input.pressKey("s", { ctrl: true })
+      await until(t, (f) => !f.includes("New recurring meeting"))
+    }
+    // custom…: the list closes, the phrase is typed.
+    void overlay!.openForm("series", "series", { prefill: { about: "@marie" }, draftFor: "@marie:custom" })
+    await until(t, (f) => f.includes("Marie Dubois · person") && statusLine(f).includes("tab field"))
+    t.input.pressEnter()
+    await until(t, (f) => f.includes("custom…"))
+    await t.input.typeText("c")
+    t.input.pressEnter()
+    await until(t, (f) => !f.includes("custom…"))
+    await t.input.typeText("monthly on the last tue")
+    await until(t, (f) => f.includes("→ Tue 24 Nov"))
+    t.input.pressKey("s", { ctrl: true })
+    await until(t, (f) => !f.includes("New recurring meeting"))
+    const rows = kernel!.db.raw.prepare("SELECT rhythm FROM meetings_series ORDER BY id").all([]) as Array<{ rhythm: string }>
+    expect(rows.map((r) => r.rhythm)).toEqual([...offered, "monthly on the last tue"])
+  })
+
+  test("the list follows the First date: Wed 25 Nov offers its weekday, the 4th and the last Wednesday, day 25", async () => {
+    const t = await open()
+    void overlay!.openForm("series", "series", { prefill: { about: "@marie", from: "2026-11-25" }, draftFor: "@marie:wed" })
+    await until(t, (f) => f.includes("Marie Dubois · person") && statusLine(f).includes("tab field"))
+    t.input.pressEnter()
+    const frame = await until(t, (f) => f.includes("custom…"))
+    for (const p of ["weekly on wed", "every 2 weeks on wed", "every 4 weeks on wed", "monthly on the 4th wed", "monthly on the last wed", "monthly on day 25"])
+      expect(frame).toContain(` ${p} `)
   })
 })
 

@@ -42,6 +42,11 @@ export type FieldSpec = {
   // The value worked out from the form's other values, followed until the field is edited (a kind from what the
   // meeting is about); undefined: leave it.
   derive?: (values: Record<string, string | null>) => string | null | undefined
+  // Values a text field offers in a drop-down (Enter opens it; <Form>), from the form's current values (own fields,
+  // by name): `label` reads in the list (default: the value). The field stays free text.
+  choices?: (values: Record<string, string | null>) => Array<{ value: string; label?: string }>
+  // The label of a last entry in the `choices` list that closes it to type a value by hand (`custom…`).
+  custom?: string
   // Whether the field is shown, from the form's current values (own fields, by name): a hidden field takes no
   // focus and reaches `submit` as null (a talk item's Project only for a person's item). One that throws shows.
   when?: (values: Record<string, string | null>) => boolean
@@ -56,6 +61,8 @@ export const INPUT_WIDTH = 32
 // The look's inputs (Form `look`): wide enough for a phrase such as `every 2 weeks on wednesday` to show whole.
 export const LOOK_INPUT_WIDTH = 40
 export const LONGTEXT_MAX_LINES = 4
+// The column of a field's `prefix` (a weekday and two spaces).
+export const PREFIX_WIDTH = 5
 
 function LongText(props: { value: string | null; focused: boolean; width: number; onInput(value: string): void }) {
   let area: TextareaRenderable | undefined
@@ -93,6 +100,9 @@ export function Field(props: {
   value: string | null
   focused: boolean
   labelWidth: number
+  // Muted text in front of the editor, in a column of its own (a date field's weekday, `Mon  `); "" keeps the column
+  // blank. The input is that much narrower, so the field keeps its width.
+  prefix?: string
   // Shown right of the editor (a date field's `→ 2026-11-15`), dimmed or red when `previewError`.
   preview?: string
   // The spec's note for the current values.
@@ -117,7 +127,7 @@ export function Field(props: {
   // Plain and not focused: the value as read (an enum keeps its labels).
   const asText = () =>
     props.plain === true && !props.focused && props.editor === undefined && (props.spec.kind !== "enum" || props.spec.labels === undefined)
-  const inputWidth = () => props.inputWidth ?? (props.plain ? LOOK_INPUT_WIDTH : INPUT_WIDTH)
+  const inputWidth = () => (props.inputWidth ?? (props.plain ? LOOK_INPUT_WIDTH : INPUT_WIDTH)) - (props.prefix === undefined ? 0 : PREFIX_WIDTH)
   return (
     <box flexDirection="column">
       <box flexDirection="row" gap={gap()}>
@@ -132,6 +142,9 @@ export function Field(props: {
         <Show when={props.editor === undefined} fallback={asText() ? null : props.editor}>
           {/* Kept mounted while the value shows as text (only hidden), so it has focus as soon as the field does. */}
           <box flexDirection="row" visible={!asText()} width={asText() ? 0 : undefined} flexShrink={0}>
+          <Show when={props.prefix !== undefined && !asText()}>
+            <text fg={theme.muted} width={PREFIX_WIDTH} flexShrink={0} wrapMode="none">{props.prefix}</text>
+          </Show>
           <Show
             when={props.spec.kind === "enum"}
             fallback={

@@ -1,11 +1,17 @@
 // <Form>: the overlay every create and edit goes through (spec §9 "Forms").
 // - One meaning per key: Tab / Shift+Tab move between fields; Enter is "new line" (it reaches a longtext field's
-//   textarea, and does nothing in any one-line field: it never saves and never moves); Ctrl+S, or Esc then `s`
+//   textarea, opens a one-line field's drop-down when it has one, and otherwise does nothing: it never saves and
+//   never moves); Ctrl+S, or Esc then `s`
 //   (also Alt+S, which is how a fast Esc s arrives), submits from anywhere. Esc not followed by `s` within
 //   ESC_WINDOW_MS cancels.
-// - enum fields cycle with ←→; record fields autocomplete from the kernel's record type search (↑↓ pick, Tab
-//   accepts); a refs field (several refs, space-separated) autocompletes its last word from the record type whose
-//   prefix starts it (`#cr`, `@an`, `M-`), Tab replacing that word with the ref and a space; date fields preview the parsed ISO date (`→ 2026-11-15`) or `invalid date`, with the CLI's parsing.
+// - Drop-downs (Dropdown.tsx; docs/architecture.md, Forms): Enter opens an enum field's values, a text field's
+//   `choices` (with its `custom` entry) or a record field's candidates under the field (above it near the bottom);
+//   ↑↓ move, Enter picks, a letter jumps (enum, choices), Esc closes the list only, Tab moves on, Ctrl+S closes it
+//   unpicked and saves. enum fields also cycle with ←→; record fields autocomplete from the kernel's record type
+//   search as typed, in that list (↑↓ pick, Enter or Tab accepts); a refs field (several refs, space-separated) autocompletes its last word from the record type whose
+//   prefix starts it (`#cr`, `@an`, `M-`), Tab replacing that word with the ref and a space; date fields preview the parsed ISO date (`→ 2026-11-15`) or `invalid date`, with the CLI's parsing, show the
+//   weekday in front of the input while focused, and take ←→ (empty: today; a date: a day, Shift a week; other text:
+//   the cursor).
 // - While the form is open it holds text focus, so single-letter global keys type into the field.
 // - A failed submit keeps the form open with its values: a ValidationError naming a field (or a failed
 //   SubmitResult's `field`) shows under that field as `✗ <message>`, any other error at the bottom. While a submit is in flight (`saving…`, busy retries
@@ -33,9 +39,10 @@
 //   changes it. On a narrow terminal the label column gives way first (down to its longest label), then the
 //   inputs; an error under a field wraps in the value column. A field's `note` is worked out from the current
 //   values of the own fields (Field.tsx).
+import type { BoxRenderable, KeyEvent } from "@opentui/core"
 import { createEffect, createMemo, onCleanup, createSignal, For, onMount, Show, useContext } from "solid-js"
 import { runWithContext } from "../../context"
-import { parseDate } from "../../dates"
+import { addDays, parseDate } from "../../dates"
 import { ValidationError } from "../../errors"
 import { act, NO_REF_FOR_EXTRAS, useQuery, withFormExtras, type PendingExtras } from "../data"
 import { DRAFT_KEPT, FormDraftKey, sameValues, useDraftKey, type Draft } from "../drafts"
@@ -46,6 +53,7 @@ import { PluginScope, useApp } from "../scope"
 import { theme } from "../theme"
 import type { FieldDef } from "../../fields"
 import { DraftPrompt } from "./DraftPrompt"
+import { Dropdown, DROPDOWN_ROWS } from "./Dropdown"
 import { useTerminalDimensions } from "@opentui/solid"
 import { Field, LOOK_INPUT_WIDTH, type FieldDisplay, type FieldSpec, type Suggestion } from "./Field"
 import { dayDate } from "../format"
@@ -94,6 +102,8 @@ const OP_PREFIX = /^[\w-]+\.[\w-]+: /
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 type Extra = { key: string; plugin: string; def: FieldDef }
+// An entry of an enum or choices field's drop-down: null is the empty choice (`—`); `custom` closes the list to type.
+type Choice = { value: string | null; label: string; custom?: boolean }
 
 // The word a refs field is typing: after its last space (empty right after one).
 const lastWord = (value: string) => /\S*$/.exec(value)![0]
@@ -317,7 +327,7 @@ export function Form(props: {
     const f = current()
     if (!f || !suggesting()) return null
     const value = valueOf(f.name) ?? ""
-    if (f.kind === "record") return f.recordType && value.trim() !== "" ? { types: [f.recordType], text: value.trim() } : null
+    if (f.kind === "record") return f.recordType ? { types: [f.recordType], text: value.trim() } : null
     if (f.kind !== "refs") return null
     const word = lastWord(value)
     const defs = word === "" ? [] : kernel.records.typesOfRef(word)
@@ -345,6 +355,114 @@ export function Form(props: {
     setValue(f.name, f.kind === "refs" ? `${value.slice(0, value.length - lastWord(value).length)}${s.ref} ` : s.ref)
     setSuggesting(false)
     return true
+  }
+
+  // --- drop-downs: an enum field's values, a text field's `choices`, a record field's candidates (the autocomplete
+  // above, shown as a list under the field) ---
+  const [listOpen, setListOpen] = createSignal(false)
+  const [highlight, setHighlight] = createSignal(0)
+  const choicesOf = (f: FieldSpec): Choice[] | undefined => {
+    if (f.kind === "enum") {
+      const vs: Array<string | null> = f.required ? [...(f.values ?? [])] : [null, ...(f.values ?? [])]
+      return vs.map((v) => ({ value: v, label: v === null ? "—" : (f.labels?.[v] ?? v) }))
+    }
+    if (!f.choices || f.kind !== "text") return undefined
+    let list: Array<{ value: string; label?: string }> = []
+    try {
+      list = f.choices(values())
+    } catch {}
+    return [...list.map((c) => ({ value: c.value, label: c.label ?? c.value })), ...(f.custom !== undefined ? [{ value: null, label: f.custom, custom: true }] : [])]
+  }
+  // What the open list shows, and which entry is selected.
+  const listItems = (): string[] => {
+    const f = current()
+    if (!f) return []
+    if (f.kind === "record") return suggesting() ? suggestions().map((s) => `${s.ref} ${s.label}`) : []
+    return listOpen() ? (choicesOf(f) ?? []).map((c) => c.label) : []
+  }
+  const listIndex = () => (current()?.kind === "record" ? picked() : highlight())
+  const listShown = () => listItems().length > 0
+  const openList = (f: FieldSpec) => {
+    if (f.kind === "record") {
+      setPicked(0)
+      return setSuggesting(true)
+    }
+    const cs = choicesOf(f) ?? []
+    setHighlight(Math.max(0, cs.findIndex((c) => !c.custom && c.value === valueOf(f.name))))
+    setListOpen(true)
+  }
+  const pickChoice = (f: FieldSpec) => {
+    const c = (choicesOf(f) ?? [])[highlight()]
+    setListOpen(false)
+    if (!c || c.custom) return
+    touch(f.name)
+    setValue(f.name, c.value)
+  }
+  // A letter: the first entry whose label starts with it (the next one when the selected one does already).
+  const jump = (ch: string) => {
+    const labels = listItems().map((l) => l.toLowerCase())
+    const c = ch.toLowerCase()
+    const n = labels.length
+    const from = labels[highlight()]?.startsWith(c) ? highlight() + 1 : 0
+    for (let k = 0; k < n; k++) {
+      const i = (from + k) % n
+      if (labels[i]!.startsWith(c)) return setHighlight(i)
+    }
+  }
+  // A key that came with an Esc in front (a fast Esc then the key arrives as Alt+key); Alt+S still saves.
+  const escPrefixed = (key: KeyEvent) => (key.meta || key.option) && !key.ctrl && key.name !== "s" && key.name !== "escape"
+  // The keys while an enum or choices list is open; true when the key was the list's.
+  const listKey = (f: FieldSpec, key: KeyEvent): boolean => {
+    if (!listOpen() || f.kind === "record") return false
+    if (escPrefixed(key)) {
+      // Esc and the next key arrived together (Alt+key): the Esc closes the list, the key goes on as usual.
+      setListOpen(false)
+      return false
+    }
+    key.preventDefault() // nothing reaches the field's input meanwhile
+    const n = listItems().length
+    if (key.name === "escape") setListOpen(false)
+    else if (key.name === "s" && (key.ctrl || key.meta || key.option)) {
+      setListOpen(false)
+      submit()
+    } else if (key.name === "tab") move(key.shift ? -1 : 1)
+    else if (key.name === "return") pickChoice(f)
+    else if (key.name === "up") setHighlight((h) => Math.max(0, h - 1))
+    else if (key.name === "down") setHighlight((h) => Math.min(n - 1, h + 1))
+    else {
+      const ch = printable(key)
+      if (ch !== undefined && ch.trim() !== "") jump(ch)
+    }
+    return true
+  }
+  // ←→ in a date field: empty, today (Shift too); a date, a day (Shift: a week) earlier or later; text that does not
+  // parse, nothing (the cursor moves).
+  const shiftDate = (f: FieldSpec, key: KeyEvent): boolean => {
+    const raw = (valueOf(f.name) ?? "").trim()
+    let next: string
+    if (raw === "") next = today
+    else {
+      try {
+        next = addDays(parseDate(raw, today), (key.name === "left" ? -1 : 1) * (key.shift ? 7 : 1))
+      } catch {
+        return false
+      }
+    }
+    key.preventDefault()
+    touch(f.name)
+    setValue(f.name, next)
+    return true
+  }
+  // A date field's weekday in front of its input while focused (`Mon  `); blank while it does not parse.
+  const weekdayOf = (f: FieldSpec): string | undefined => {
+    if (f.kind !== "date") return undefined
+    const raw = (valueOf(f.name) ?? "").trim()
+    if (raw === "") return ""
+    try {
+      return dayDate(parseDate(raw, today)).slice(0, 3)
+    } catch {
+      return ""
+    }
   }
 
   const datePreview = (f: FieldSpec): { text: string; error: boolean } | undefined => {
@@ -454,6 +572,7 @@ export function Form(props: {
 
   const move = (d: number) => {
     setSuggesting(false)
+    setListOpen(false)
     setIndex((i) => Math.min(fields().length - 1, Math.max(0, i + d)))
   }
   const cycle = (f: FieldSpec, d: number) => {
@@ -481,13 +600,23 @@ export function Form(props: {
   // A focused longtext field says Enter adds a line.
   createEffect(() => {
     if (offer()) return // the draft prompt shows its own
-    const longtext = current()?.kind === "longtext"
-    const drop = keys.hints([
-      { key: "Tab", label: props.look?.tabLabel ?? "field" },
-      ...(longtext ? [{ key: "Enter", label: "new line" }] : []),
-      { key: "Ctrl+S", label: "save" },
-      { key: "Esc", label: "cancel" },
-    ])
+    const kind = current()?.kind
+    const drop = keys.hints(
+      listShown()
+        ? [
+            { key: "↑↓", label: "move" },
+            { key: "Enter", label: "pick" },
+            { key: "Esc", label: "close" },
+            { key: "Ctrl+S", label: "save" },
+          ]
+        : [
+            { key: "Tab", label: props.look?.tabLabel ?? "field" },
+            ...(kind === "longtext" ? [{ key: "Enter", label: "new line" }] : []),
+            ...(kind === "date" ? [{ key: "←→", label: "day" }, { key: "Shift+←→", label: "week" }] : []),
+            { key: "Ctrl+S", label: "save" },
+            { key: "Esc", label: "cancel" },
+          ],
+    )
     onCleanup(drop)
   })
 
@@ -502,25 +631,38 @@ export function Form(props: {
       return
     }
     const f = current()
-    if (key.name === "escape") {
+    if (f?.kind === "record" && listShown() && escPrefixed(key)) setSuggesting(false) // as listKey
+    if (f && listKey(f, key)) return
+    if (key.name === "escape" && f?.kind === "record" && listShown()) {
+      // The candidates close; the form stays (nothing armed).
+      key.preventDefault()
+      setSuggesting(false)
+    } else if (key.name === "escape") {
+      setSuggesting(false)
       key.preventDefault()
       if (saving()) return // the save goes on (busy retry included); cancelling now would still create the record
       draft.flush()
       esc.arm()
     } else if (key.name === "s" && (key.ctrl || key.meta || key.option)) {
       key.preventDefault()
+      setSuggesting(false)
       submit()
     } else if (key.name === "tab") {
       key.preventDefault()
       if (key.shift) move(-1)
       else if (!accept()) move(1)
     } else if (key.name === "return") {
-      // A longtext field's textarea takes Enter as a new line; anywhere else it does nothing.
+      // A longtext field's textarea takes Enter as a new line; an enum, choices or record field opens its list (a
+      // record field's open list: Enter picks); anywhere else it does nothing.
       if (f?.kind !== "longtext") key.preventDefault()
+      if (f?.kind === "record" && listShown()) accept()
+      else if (f && (f.kind === "record" || choicesOf(f) !== undefined)) openList(f)
     } else if ((key.name === "up" || key.name === "down") && suggestions().length > 0) {
       key.preventDefault()
       const d = key.name === "up" ? -1 : 1
       setPicked((p) => Math.min(suggestions().length - 1, Math.max(0, p + d)))
+    } else if ((key.name === "left" || key.name === "right") && f?.kind === "date" && shiftDate(f, key)) {
+      // shifted (or set to today)
     } else if ((key.name === "left" || key.name === "right") && f?.kind === "enum") {
       key.preventDefault()
       cycle(f, key.name === "left" ? -1 : 1)
@@ -557,8 +699,33 @@ export function Form(props: {
     )
   }
 
+  // Where the open list goes: under the field when it fits above the status bar, else above it when it fits there,
+  // else on the roomier side, scrolling; at the value column, as wide as its longest entry (never past the form).
+  let root: BoxRenderable | undefined
+  const rowBoxes = new Map<string, BoxRenderable>()
+  const listPlace = () => {
+    const items = listItems()
+    const f = current()
+    const row = f && rowBoxes.get(f.name)
+    if (items.length === 0 || !row || !root) return undefined
+    const y = row.y
+    const below = dims().height - 1 - (y + 1)
+    const above = y
+    let rows = Math.min(items.length, DROPDOWN_ROWS)
+    let down = true
+    if (below < rows + 2) {
+      down = !(above >= rows + 2 || above > below)
+      rows = Math.max(1, Math.min(rows, (down ? below : above) - 2))
+    }
+    const rel = y - root.y - 1 // the field's row in the form's padding box
+    const left = layout().label + GAP
+    const width = Math.max(6, Math.min(layout().width - 2 - left, Math.max(...items.map((l) => l.length)) + 4))
+    return { top: down ? rel + 1 : rel - (rows + 2), left, width, rows }
+  }
+
   return (
     <box
+      ref={(r: BoxRenderable) => (root = r)}
       border
       borderStyle="rounded"
       titleColor={theme.accent}
@@ -578,8 +745,10 @@ export function Form(props: {
           const focused = () => keys.active() && !offer() && index() === i()
           const editor = customEditor(f, focused)
           return (
+            <box ref={(r: BoxRenderable) => rowBoxes.set(f.name, r)} flexDirection="column">
             <Field
               spec={f}
+              prefix={focused() ? weekdayOf(f) : undefined}
               value={valueOf(f.name)}
               focused={focused()}
               editor={editor}
@@ -592,7 +761,7 @@ export function Form(props: {
               display={displayOf(f)}
               previewError={datePreview(f)?.error}
               error={fieldErrors()[f.name]}
-              suggestions={index() === i() ? suggestions() : []}
+              suggestions={index() === i() && f.kind === "refs" ? suggestions() : []}
               picked={picked()}
               onInput={(v) => {
                 if (v === (valueOf(f.name) ?? "")) return // the echo of a value set here (an accepted suggestion)
@@ -604,9 +773,15 @@ export function Form(props: {
                 }
               }}
             />
+            </box>
           )
         }}
       </For>
+      <Show when={listPlace()}>
+        {(p: () => { top: number; left: number; width: number; rows: number }) => (
+          <Dropdown items={listItems()} index={listIndex()} top={p().top} left={p().left} width={p().width} rows={p().rows} />
+        )}
+      </Show>
       <Show when={saving()}>
         <text fg={theme.muted}>saving…</text>
       </Show>

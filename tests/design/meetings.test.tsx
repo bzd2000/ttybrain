@@ -169,7 +169,7 @@ test("New recurring meeting as designed (from Karim's person view): rows, read-b
   t.input.pressKey("N")
   // The form has the keys once its bar shows.
   await until(t, (f) => f.includes("Karim Haddad · person") && line(f, 35) === " tab field   ctrl+s save   esc cancel")
-  // It starts on Rhythm, with About, Title, Kind and Attendees filled in.
+  // It starts on Occurrence (the design says Rhythm: an accepted difference), with About, Title, Kind and Attendees filled in.
   await t.input.typeText("every 2 weeks on wednesday")
   let frame = await until(t, (f) => f.includes("→ Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …") && f.includes("Wed 25 Nov "))
   const rows = frame.split("\n")
@@ -185,7 +185,7 @@ test("New recurring meeting as designed (from Karim's person view): rows, read-b
     "About           Karim Haddad · person",
     "Title           1:1 Karim",
     "Kind            1:1 (project · board)",
-    "Rhythm          every 2 weeks on wednesday",
+    "Occurrence      every 2 weeks on wednesday",
     "                → Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …",
     "First date      Wed 25 Nov",
     "Attendees       Karim Haddad",
