@@ -100,27 +100,37 @@ describe("bootTui", () => {
     expect(k.runtime("projects")).toBeDefined()
   })
 
-  test("built-in slots 2-6; two screens on one slot fail the later part", () => {
+  test("built-in slots 2-7; two screens on one slot fail the later part; 8 is not a built-in slot", () => {
     const reg = bootTui(
       k,
-      [part("projects", (ui) => ui.screen(screen("projects", 2))), part("people", (ui) => ui.screen(screen("people", 2))), part("inbox", (ui) => ui.screen(screen("inbox", 6)))],
+      [
+        part("projects", (ui) => ui.screen(screen("projects", 2))),
+        part("people", (ui) => ui.screen(screen("people", 2))),
+        part("inbox", (ui) => ui.screen(screen("inbox", 6))),
+        part("boards", (ui) => ui.screen(screen("boards", 7))),
+        part("actions", (ui) => ui.screen(screen("actions", 8))),
+      ],
       { builtin: true },
     )
     expect(reg.screens().map((s) => [s.id, s.slot])).toEqual([
       ["projects", 2],
       ["inbox", 6],
+      ["boards", 7],
     ])
-    expect(reg.screenBySlot(6)?.id).toBe("inbox")
-    expect(reg.errors()).toEqual([{ plugin: "people", error: 'people: slot 2 is already taken by screen "projects"' }])
+    expect(reg.screenBySlot(7)?.id).toBe("boards")
+    expect(reg.errors()).toEqual([
+      { plugin: "people", error: 'people: slot 2 is already taken by screen "projects"' },
+      { plugin: "actions", error: "actions: slot 8 must be between 2 and 7" },
+    ])
   })
 
-  test("external parts ignore slot and get 7, 8, … in order", () => {
+  test("external parts ignore slot and get 8, 9, … in order", () => {
     const reg = bootTui(k, [part("projects", (ui) => ui.screen(screen("projects", 2))), part("people", (ui) => ui.screen(screen("people", 2)))], { builtin: false })
     expect(reg.screens().map((s) => [s.id, s.slot])).toEqual([
-      ["projects", 7],
-      ["people", 8],
+      ["projects", 8],
+      ["people", 9],
     ])
-    expect(reg.screenBySlot(8)?.id).toBe("people")
+    expect(reg.screenBySlot(9)?.id).toBe("people")
     expect(reg.errors()).toEqual([])
   })
 
@@ -131,7 +141,7 @@ describe("bootTui", () => {
     })
     expect(reg.screens().map((s) => [s.id, s.slot])).toEqual([
       ["projects", 2],
-      ["people", 7],
+      ["people", 8],
     ])
     expect(reg.errors()).toEqual([{ plugin: "projects", error: 'tui part for "projects": a part for this plugin is already loaded' }])
   })

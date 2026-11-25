@@ -260,7 +260,7 @@ export function fitHints(hints: Hint[], width: number, pinned: string[] = []): H
   return hints.filter((h) => keep.has(h))
 }
 
-// One hint: the key (and its `alt`) in accent, the words muted: `enter open`, `g or 1-6 screens`.
+// One hint: the key (and its `alt`) in accent, the words muted: `enter open`, `g or 1-7 screens`.
 function HintText(props: { hint: Hint }) {
   return (
     <box flexDirection="row" gap={1} flexShrink={0}>

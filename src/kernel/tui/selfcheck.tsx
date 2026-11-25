@@ -5,7 +5,7 @@
 // quick capture (`i`) opened over them with a `#tag` typed, which must render in the project-code colour (the
 // textarea's SyntaxStyle highlight).
 // With `--expect-screen <title>` it then boots with discovery (the plugins folder from TTYBRAIN_PLUGINS in the
-// environment), renders, presses `7` (the first external screen) and requires `7 <title>` in the header.
+// environment), renders, presses `8` (the first external screen, after the built-ins' 2–7) and requires `8 <title>` in the header.
 // Run: `bun src/kernel/tui/selfcheck.tsx` or, after the Node build,
 // `node --experimental-ffi dist-node/kernel/tui/selfcheck.js`. Prints `tui ok` on success.
 import { rgbToHex, SyntaxStyle } from "@opentui/core"
@@ -206,7 +206,7 @@ async function checkCapture(kernel: Awaited<ReturnType<typeof bootKernel>>, regi
   }
 }
 
-// An external plugin from TTYBRAIN_PLUGINS: its tui entry is loaded through the shared modules and its screen gets key 7.
+// An external plugin from TTYBRAIN_PLUGINS: its tui entry is loaded through the shared modules and its screen gets key 8.
 async function checkExternalScreen(clock: ReturnType<typeof fixedClock>, title: string): Promise<void> {
   const home = mkdtempSync(join(tmpdir(), "pm-tui-selfcheck-"))
   const plugins = process.env.TTYBRAIN_PLUGINS
@@ -224,11 +224,11 @@ async function checkExternalScreen(clock: ReturnType<typeof fixedClock>, title: 
       const setup = await testRender(() => <TuiApp kernel={kernel} registry={registry} refreshMs={20} expose={(h) => (handle = h)} />, { width: 100, height: 24 })
       try {
         await setup.renderOnce()
-        setup.mockInput.pressKey("7")
+        setup.mockInput.pressKey("8")
         await handle!.idle()
         await setup.renderOnce()
         const header = setup.captureCharFrame().split("\n")[0] ?? ""
-        check(header.includes(`ttybrain ·  7 ${title}`), `key 7 did not open the "${title}" screen: "${header}"`)
+        check(header.includes(`ttybrain ·  8 ${title}`), `key 8 did not open the "${title}" screen: "${header}"`)
       } finally {
         setup.renderer.destroy()
       }

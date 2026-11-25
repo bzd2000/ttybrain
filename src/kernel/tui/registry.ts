@@ -19,10 +19,10 @@ import type {
 // Keys the kernel's global key map owns (spec §9), plus `c` for the assistant (phase 7). Screen-local keys
 // are not reserved: the focused screen's handler runs before global actions.
 export const RESERVED_KEYS: ReadonlySet<string> = new Set(["j", "k", "n", "e", "x", "g", "q", "?", "/", "1", "2", "3", "4", "5", "6", "7", "8", "9", "c"])
-// Slot 1 is the kernel's Attention screen; built-in screens may take 2–6; the rest are numbered from 7 in order.
+// Slot 1 is the kernel's Attention screen; built-in screens may take 2–7; the rest are numbered from 8 in order.
 export const OVERVIEW_SLOT = 1
-const BUILTIN_SLOTS = { min: 2, max: 6 }
-const FIRST_FREE_SLOT = 7
+const BUILTIN_SLOTS = { min: 2, max: 7 }
+const FIRST_FREE_SLOT = 8
 
 type Owned<T> = { plugin: string } & T
 
@@ -51,7 +51,7 @@ export class TuiRegistry {
 
   // --- getters ---
 
-  // Built-in screens by their slot, then the others numbered 7, 8, … in registration order.
+  // Built-in screens by their slot, then the others numbered 8, 9, … in registration order.
   screens(): Array<Registered<ScreenDef> & { slot: number }> {
     const fixed = this.screenList.filter((s) => s.slot !== undefined).sort((a, b) => a.slot! - b.slot!)
     const numbered = this.screenList.filter((s) => s.slot === undefined)

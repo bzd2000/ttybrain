@@ -141,7 +141,7 @@ test("Attention as designed", async () => {
   expect(frame).not.toContain("Nadia")
 
   // The 2026-11-20 design's bar (no row keys: the focused meetings panel is empty).
-  expect(line(frame, 35)).toBe(" tab panel   enter open   i capture   g or 1-6 screens   ? help")
+  expect(line(frame, 35)).toBe(" tab panel   enter open   i capture   g or 1-7 screens   ? help")
 
   let spans = await tui.spans()
   // Project codes cyan, ids muted, overdue red.
@@ -265,7 +265,7 @@ test("Attention: Upcoming meetings as designed (2026-11-20 home)", async () => {
   expectOneEdge(frame, LEAD_EDGE[118]!)
   expectAlignedEdges(frame, 118)
   for (const i of [1, 13, 16]) expect(boxWidths(frame, i)).toEqual([66, 49])
-  expect(line(frame, 35)).toBe(" tab panel   enter open   x done   t to talk   i capture   g or 1-6 screens   ? help")
+  expect(line(frame, 35)).toBe(" tab panel   enter open   x done   t to talk   i capture   g or 1-7 screens   ? help")
 
   const spans = await tui.spans()
   expect(isSelected(spans, "1:1 Anna r")).toBe(true)

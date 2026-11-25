@@ -1,5 +1,5 @@
 // A board's view (design §5.7, plan ruling B4; no mock draws it): a record view of the type `board`, opened from
-// screen 5's Boards panel or any `#CODE` of a board, under screen 5's chip. The boards plugin gives it its crumb
+// the boards plugin's screen 7 or any `#CODE` of a board, under screen 7's chip. The boards plugin gives it its crumb
 // (`› BOARD Management board`) and its first tab, Summary; this plugin the next two, without counts, laid out as a
 // project's:
 // - Meetings: a panel per series (`Board · monthly, last Fri`: Next, With, "To talk about · n" and the board's

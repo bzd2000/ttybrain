@@ -63,13 +63,13 @@ test("new → build → load", async () => {
   const parts = await loadTuiParts(k)
   expect(parts.errors).toEqual([])
   tui = await renderTui(k, { parts: parts.builtin, external: parts.external, width: 100, height: 30 })
-  tui.input.pressKey("7")
+  tui.input.pressKey("8") // an external screen: 8 and up
   let frame = await tui.frame()
   for (let i = 0; i < 100 && !frame.includes("1 First"); i++) {
     await new Promise((r) => setTimeout(r, 20))
     frame = await tui.frame()
   }
-  expect(frame.split("\n")[0]).toContain("ttybrain ·  7 Demo")
+  expect(frame.split("\n")[0]).toContain("ttybrain ·  8 Demo")
   expect(frame).toContain("1 First")
 })
 

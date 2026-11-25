@@ -181,7 +181,7 @@ test("a built plugin loads in ttybrain and its UI is reactive", async () => {
   expect(parts.errors).toEqual([])
   const tui = await renderTui(kernel, { parts: [], external: parts.external })
   try {
-    tui.input.pressKey("7")
+    tui.input.pressKey("8") // an external screen: 8 and up
     expect(await tui.frame()).toContain("count 0")
     tui.input.pressKey("+")
     expect(await tui.frame()).toContain("count 1")

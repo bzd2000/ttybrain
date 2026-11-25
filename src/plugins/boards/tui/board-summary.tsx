@@ -13,6 +13,9 @@ const GAP = 2
 const VALUE_ROOM = 30
 const COMPACT_LABEL = Math.max(...LABELS.map((l) => l.length))
 
+// Del's confirmation, here and on the Boards screen.
+export const archiveQuestion = (ref: string) => `Archive ${ref}? Its meetings and talk-list stay; it takes no new ones until it is restored.`
+
 const fullDate = (iso: string) => `${shortDate(iso)} ${iso.slice(0, 4)}`
 
 function Fact(props: { name: string; at: number; text: string; tone?: Tone | undefined }) {
@@ -68,7 +71,7 @@ export function BoardSummary(props: { recordRef: string }) {
   }
   // Ask first, then write (never await a question inside act).
   const archive = async (ref: string) => {
-    if (!(await overlay.confirm(`Archive ${ref}? Its meetings and talk-list stay; it takes no new ones until it is restored.`))) return
+    if (!(await overlay.confirm(archiveQuestion(ref)))) return
     await act(() => rt.self().write.archiveBoard!({ board: ref }), { ok: () => `archived ${ref}` })
   }
 
