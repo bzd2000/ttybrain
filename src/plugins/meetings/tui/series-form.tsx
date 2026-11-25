@@ -1,21 +1,32 @@
 // The "New recurring meeting" form (the 2026-11-20 `series` design), on the record type `series` (form id `series`),
 // drawn in the designs' form look (Form `look`): a rounded panel, a 14-cell label column, only the focused field as
 // an input, `ctrl+s save · esc cancel` on the bottom border and `tab field` in the bar.
-// - About (`prefill.about`: filled in when opened from a person or project, which then starts on Rhythm and titles
+// - About (`prefill.about`: filled in when opened from a person or project, which then starts on Occurrence and titles
 //   a person's series `1:1 <first name>`), shown as `Karim Haddad · person`.
 // - Kind (`1:1 (project · board)`) follows About as it is typed (a person: 1:1, a project: project, a board: board)
 //   until changed.
-// - Rhythm, with the dates it gives read back under it (`→ Wed 25 Nov, 9 Dec, 23 Dec, 6 Jan …`).
+// - Occurrence (the rhythm; the design's `Rhythm`), with the dates it gives read back under it (`→ Wed 25 Nov, 9 Dec,
+//   23 Dec, 6 Jan …`); Enter lists the phrases the First date allows (`weekly on wed` … `monthly on day 25`, then
+//   `custom…` to type one), each one parseRhythm takes.
 // - First date: the rhythm's first date from today until changed, shown as `Wed 25 Nov`.
 // - Attendees: the person it is about until changed, shown by name. Ends: `never` when empty.
 // Saved with addSeries, which makes the occurrences of the next 8 weeks.
 import { Form, useRuntime, type FieldSpec, type FormValues, type RecordFormProps } from "@ttybrain/api/tui"
-import { rhythmFirst, rhythmPreview } from "../logic/rhythm"
+import { parseDate } from "@ttybrain/api"
+import { rhythmChoices, rhythmFirst, rhythmPreview } from "../logic/rhythm"
 import { defined, KIND_FIELD_LABELS, KINDS, save, tags, With } from "./forms"
 
 export const SERIES_TITLE = "New recurring meeting"
 const LOOK = { labelWidth: 14 }
 const blank = (v: string | null | undefined) => v === null || v === undefined || v.trim() === ""
+// The First date as typed, else today (the Occurrence list is built from it).
+const firstDate = (v: string | null | undefined, today: string) => {
+  try {
+    return blank(v) ? today : parseDate(v!, today)
+  } catch {
+    return today
+  }
+}
 const firstRef = (v: string | null | undefined) => (v ?? "").trim().split(/[\s,]+/)[0] ?? ""
 
 export function SeriesForm(props: RecordFormProps) {
@@ -45,7 +56,15 @@ export function SeriesForm(props: RecordFormProps) {
             labels: KIND_FIELD_LABELS,
             derive: (v) => kindOf(firstRef(v.about), boards),
           },
-          { name: "every", label: "Rhythm", kind: "text", required: true, note: (v) => rhythmPreview(v.every, v.from, today) },
+          {
+            name: "every",
+            label: "Occurrence",
+            kind: "text",
+            required: true,
+            note: (v) => rhythmPreview(v.every, v.from, today),
+            choices: (v) => rhythmChoices(firstDate(v.from, today)).map((value) => ({ value })),
+            custom: "custom…",
+          },
           { name: "from", label: "First date", kind: "date", show: "day", placeholder: "today", derive: (v) => rhythmFirst(v.every, today) ?? null },
           { name: "attendees", label: "Attendees", kind: "refs", show: "label", derive: (v) => (firstRef(v.about).startsWith("@") ? firstRef(v.about) : null) },
           { name: "until", label: "Ends", kind: "date", show: "day", placeholder: "never" },

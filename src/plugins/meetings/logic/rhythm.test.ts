@@ -1,6 +1,6 @@
 // Rhythms (design §5.2): the four phrases, the dates they give and how they read back.
 import { describe, expect, test } from "bun:test"
-import { parseRhythm, rhythmDates, rhythmLabel, rhythmPreview, rhythmText } from "./rhythm"
+import { parseRhythm, rhythmChoices, rhythmDates, rhythmLabel, rhythmPreview, rhythmText } from "./rhythm"
 
 describe("rhythmPreview (the series form's read-back)", () => {
   test("the next four dates from the first date, today when none", () => {
@@ -112,5 +112,28 @@ describe("rhythmLabel", () => {
       expect(rhythmLabel(parseRhythm(text), "short")).toBe(short)
       expect(rhythmLabel(parseRhythm(text), "long")).toBe(long)
     }
+  })
+})
+
+describe("rhythmChoices (the series form's Occurrence list)", () => {
+  test("from the first date's weekday and day of month; each parses and gives that date first", () => {
+    expect(rhythmChoices("2026-11-25")).toEqual([
+      "weekly on wed",
+      "every 2 weeks on wed",
+      "every 4 weeks on wed",
+      "monthly on the 4th wed",
+      "monthly on the last wed",
+      "monthly on day 25",
+    ])
+    for (const date of ["2026-11-25", "2026-11-02", "2026-11-30", "2026-12-15", "2027-02-28"])
+      for (const phrase of rhythmChoices(date)) {
+        expect(rhythmText(parseRhythm(phrase))).toBe(phrase)
+        expect(rhythmDates(parseRhythm(phrase), date, date, date)).toEqual([date])
+      }
+  })
+
+  test("no 5th: the 29th to 31st offer the last weekday only; early in the month no last", () => {
+    expect(rhythmChoices("2026-11-30")).toEqual(["weekly on mon", "every 2 weeks on mon", "every 4 weeks on mon", "monthly on the last mon", "monthly on day 30"])
+    expect(rhythmChoices("2026-11-02")).toEqual(["weekly on mon", "every 2 weeks on mon", "every 4 weeks on mon", "monthly on the 1st mon", "monthly on day 2"])
   })
 })

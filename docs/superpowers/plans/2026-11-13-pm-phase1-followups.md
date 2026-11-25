@@ -558,3 +558,18 @@ Plan: `docs/superpowers/plans/2026-11-24-boards-plugin.md` (ledger `.superpowers
 ### For the side-by-side review
 
 - Board view: Summary (new, no mock), Meetings, Talk. Check against a project's Overview and the tab row `Summary   Meetings   Talk`.
+
+## Form pickers (2026-11-25)
+
+Branch `feature/form-pickers`. Drop-downs in forms (enum, `choices`, record), the series form's Occurrence list.
+
+### Rulings made during the form pickers (and what each costs if wrong)
+
+- **Occurrence, not Rhythm.** The series form's field is labelled `Occurrence`; the `series` mock (2026-11-20 meetings design §3) still says `Rhythm`. Accepted difference, the user's decision of 2026-11-25; `tests/design/meetings.test.tsx` checks `Occurrence`. The op input (`every`), the stored phrase and the CLI's `--every` are unchanged, and the read-only facts (`Rhythm    monthly, 4th Tue` on the record views, the Series panel's column) keep `Rhythm`.
+- **Ctrl+S with a list open** closes it without picking and saves the values as they are (the highlighted entry is not taken). Tab with an enum or choices list open closes it and moves; with a record list open it takes the selected candidate (as before).
+- **Esc with a list open** closes the list only and arms nothing; an Esc that arrives glued to the next key (Alt+key) closes the list and lets the key through, so the list adds no delay and swallows nothing.
+
+### Deferred minor findings
+
+- The drop-down's place is read from the field's last layout (renderable `y`) when it opens or its entries change; a form that reflows while it is open (an error appearing above) leaves it in place until then.
+- Checked through test frames (100×30, 80×24), not in a real terminal.

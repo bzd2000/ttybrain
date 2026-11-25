@@ -140,3 +140,21 @@ export function rhythmFirst(every: string | null | undefined, today: string): st
     return undefined
   }
 }
+
+// The phrases the series form offers for a first date (its Occurrence list), canonical and in this order: weekly,
+// every 2 and every 4 weeks on its weekday; monthly on its nth weekday (1st-4th) and on the last one when it is the
+// month's last such day; monthly on its day of the month. Each gives `date` itself as its first date.
+export function rhythmChoices(date: string): string[] {
+  const day = weekday(date)
+  const [y, m, d] = date.split("-").map(Number) as [number, number, number]
+  const nth = Math.ceil(d / 7)
+  const out: Rhythm[] = [
+    { every: "weeks", weeks: 1, day },
+    { every: "weeks", weeks: 2, day },
+    { every: "weeks", weeks: 4, day },
+  ]
+  if (nth <= 4) out.push({ every: "month", nth: nth as 1 | 2 | 3 | 4, day })
+  if (d + 7 > daysIn(y, m)) out.push({ every: "month", nth: -1, day })
+  out.push({ every: "month-day", date: d })
+  return out.map(rhythmText)
+}
