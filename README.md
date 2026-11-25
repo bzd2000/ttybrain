@@ -1,6 +1,6 @@
 # ttybrain
 
-A personal project-portfolio tool: a CLI (`ttybrain <thing> <verb>`, also usable by an AI agent) and, from phase 2, a terminal UI built with [OpenTUI](https://opentui.com) and Solid. It is a small plugin kernel plus plugins (`people`, `projects`, `actions`, `meetings` (meetings, series, talk-lists and boards), `inbox`); the built-ins are ordinary plugins that can be switched off, and you can add your own. Data is one SQLite file under `TTYBRAIN_HOME` (default `~/.ttybrain`). It runs on Bun 1.3.14+ and Node.js 26.4+. See `docs/architecture.md`.
+A personal project-portfolio tool: a CLI (`ttybrain <thing> <verb>`, also usable by an AI agent) and, from phase 2, a terminal UI built with [OpenTUI](https://opentui.com) and Solid. It is a small plugin kernel plus plugins (`people`, `projects`, `boards`, `actions`, `meetings` (meetings, series and talk-lists), `inbox`); the built-ins are ordinary plugins that can be switched off, and you can add your own. Data is one SQLite file under `TTYBRAIN_HOME` (default `~/.ttybrain`). It runs on Bun 1.3.14+ and Node.js 26.4+. See `docs/architecture.md`.
 
 ## CLI
 
@@ -76,6 +76,15 @@ A board (`#MB`, "Management board") is now its own record in the `meetings` plug
 - `ttybrain plugin list` and the Help screen (`?`) name each new board until you edit it. Rename it with `ttybrain board edit #BOARDB --code MB` (also `--name`); the notice then goes away. Project and board codes share one namespace, so a board cannot take the code of an existing project (an archived one too): to call it `BOARD`, rename the project first (`ttybrain project edit BOARD --code OLDBOARD`), then `ttybrain board edit #BOARDB --code BOARD`.
 - Board meetings that had no subject stay without one until you assign it: `ttybrain meeting subject M-4 #MB`, or `ttybrain meeting subject --all-without #MB` for the board meetings (and `--all-without #CRM` for the others). A meeting that already has a subject keeps its kind; to change both, use `--kind` (`meeting subject M-4 #MB --kind board`, and back with `--kind project`). For scripts: `meeting subject --all-without … --json` now returns `{ "meetings": [...], "skipped": n, "reason"? }` instead of a bare array; the array is under `meetings`.
 - As with the earlier upgrades, ttybrain copies the database to `ttybrain.db.bak-v<N>` first, and an older build should not be used afterwards. `meetings` is now 2.1.0, additive: it publishes a new `meetings.board` view, and `meetings.meeting` (v2) can now have `subject_type` `board`.
+
+## Upgrading to the boards plugin
+
+Boards are now their own plugin (`boards` 1.0.0), and `meetings` is 3.0.0. On the first start after upgrading, every board moves from meetings to boards once, keeping its id, code, name, note, archived state and timestamps; its meetings, series, talk items and action links still point at it, and `#CODE`, `board add|list|show|edit|archive|restore` and the board view work as before (the board view gains a Summary tab: `e` edit, `Del` archive, `r` restore). Boards can't be deleted, only archived. Notes:
+
+- `boards` needs `projects` (they share the code namespace), and `meetings` needs `boards`: with projects off, boards and meetings are off too (their data waits). Switching boards on later moves the boards then; nothing is shown twice or lost.
+- If a project has taken a code a board used while boards was off, the move waits and `plugin list` says which code to change.
+- In `ttybrain help`, `inbox` now comes after `board` (it used to follow `action`): the order is `action`, `person`, …, `decision`, `board`, `inbox`, `talk`, `meeting`.
+- As with the earlier upgrades, ttybrain copies the database to `ttybrain.db.bak-v<N>` first, and an older build should not be used afterwards.
 
 ## Development
 

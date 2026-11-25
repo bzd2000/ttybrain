@@ -44,14 +44,14 @@ test("disable adds the id to plugins.disabled, keeping other config keys", async
 
 test("disable names the plugins that will be skipped too", async () => {
   const k = await boot()
-  expect(await run(k, "plugin", "disable", "projects")).toEqual({ code: 0, out: "disabled projects; also skipped: meetings (requires projects)\n", err: "" })
+  expect(await run(k, "plugin", "disable", "projects")).toEqual({ code: 0, out: "disabled projects; also skipped: boards (requires projects), meetings (requires boards, projects)\n", err: "" })
   writeFileSync(configFile(), "{}")
   const json = await run(k, "plugin", "disable", "projects", "--json")
   expect(json.code).toBe(0)
-  expect(JSON.parse(json.out)).toEqual({ id: "projects", disabled: true, alsoSkipped: ["meetings"] })
-  // Transitively: people → projects → meetings; meetings requires both.
+  expect(JSON.parse(json.out)).toEqual({ id: "projects", disabled: true, alsoSkipped: ["boards", "meetings"] })
+  // Transitively: people → projects → boards → meetings; meetings requires all three.
   expect((await run(k, "plugin", "disable", "people")).out).toBe(
-    "disabled people; also skipped: meetings (requires people, projects), projects (requires people)\n",
+    "disabled people; also skipped: boards (requires projects), meetings (requires boards, people, projects), projects (requires people)\n",
   )
   expect(config()).toEqual({ plugins: { disabled: ["projects", "people"] } })
 })

@@ -1,7 +1,7 @@
 // The meetings plugin's tui part: the Meetings screen (slot 5), the Attention panel "Upcoming meetings · next 7 days",
 // a 1:1 or project meeting's in-progress view (its only view, ruling M11) and a board meeting's Agenda, Prep, Notes
 // and Export tabs, a person's Talk (order 12) and Meetings (15) tabs, a project's Meetings (72) and Talk (75) tabs,
-// a board's view (board-view.tsx: Meetings and Talk, its crumb `› BOARD Management board` cyan, on screen 5), the
+// a board's view (board-view.tsx: Meetings and Talk after the boards plugin's Summary, on screen 5), the
 // meeting, agenda item, attendees and move forms, the new recurring meeting form (record type `series`), the
 // talk-item form (record type `talk_item`) and quick capture's route to a talk-list (`talk @anna …`, `talk #MB …`).
 import { dayDate, defineTui } from "@ttybrain/api/tui"

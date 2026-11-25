@@ -38,12 +38,14 @@ describe("bin/pm.ts", () => {
   test("pm boots the built-ins through discovery", async () => {
     const r = await pm("plugin", "list", "--json")
     expect({ code: r.code, err: r.err }).toEqual({ code: 0, err: "" })
-    // Load order: built-ins by folder name (actions, inbox, meetings, people, projects), then the requires sort.
+    // Load order: built-ins by folder name (actions, boards, inbox, meetings, people, projects), then the requires sort
+    // (boards after projects and people, which it requires).
     expect(JSON.parse(r.out).map((p: { id: string; source: string; status: string }) => `${p.id} ${p.source} ${p.status}`)).toEqual([
       "actions built-in ok",
-      "inbox built-in ok",
       "people built-in ok",
       "projects built-in ok",
+      "boards built-in ok",
+      "inbox built-in ok",
       "meetings built-in ok",
     ])
   })

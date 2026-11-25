@@ -325,7 +325,7 @@ export function makeStore(rt: PluginRuntime) {
     }
     return (await tryRef(ref)) ?? (/^[#@]/.test(ref) ? null : await tryRef(`#${ref}`))
   }
-  // A record a new link may point at: it resolves, and a project, person or board (meetings.board) is not archived.
+  // A record a new link may point at: it resolves, and a project, person or board (boards.board) is not archived.
   async function target(input: string): Promise<Target> {
     const t = input.trim() === "" ? null : await lookup(input)
     if (t === null) throw new ValidationError(`unknown record "${input.trim()}"`, { field: "links", hint: LINK_HINT })
@@ -337,7 +337,7 @@ export function makeStore(rt: PluginRuntime) {
       if (p?.archived) throw archivedPerson(p)
     } else if (t.type === "board") {
       const b = await unlessUnavailable(undefined as { code: unknown; archived_at: unknown } | undefined, () =>
-        db.selectFrom("meetings.board").select(["code", "archived_at"]).where("id", "=", t.id).executeTakeFirst(),
+        db.selectFrom("boards.board").select(["code", "archived_at"]).where("id", "=", t.id).executeTakeFirst(),
       )
       if (b && b.archived_at !== null) throw new ValidationError(`#${b.code} is archived`, { hint: `restore it first: ttybrain board restore #${b.code}` })
     }

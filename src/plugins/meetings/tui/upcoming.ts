@@ -110,7 +110,7 @@ export function makeUpcoming(rt: Runtime) {
       return { text: String(p.name).split(/\s+/)[0]!, tone }
     }
     if (subject.type === "board") {
-      const b = await db.selectFrom("board").select("code").where("id", "=", subject.id).executeTakeFirst()
+      const b = await orNothing(undefined as Record<string, unknown> | undefined, () => db.selectFrom("boards.board").select("code").where("id", "=", subject.id).executeTakeFirst())
       return b ? { text: String(b.code), tone: "cyan" } : MUTED_DASH
     }
     const p = await orNothing(undefined as Record<string, unknown> | undefined, () => db.selectFrom("projects.project").select("code").where("id", "=", subject.id).executeTakeFirst())

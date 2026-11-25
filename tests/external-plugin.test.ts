@@ -85,7 +85,7 @@ type Row = { id: string; version: string; source: string; status: string; error:
 async function listed(k: TestKernel): Promise<Row[]> {
   const r = await cli(k, ["plugin", "list", "--json"])
   expect(r.code).toBe(0)
-  return (JSON.parse(r.out) as Row[]).filter((p) => !["people", "projects", "actions", "meetings", "inbox"].includes(p.id)).sort((a, b) => (a.id < b.id ? -1 : 1))
+  return (JSON.parse(r.out) as Row[]).filter((p) => !["people", "projects", "boards", "actions", "meetings", "inbox"].includes(p.id)).sort((a, b) => (a.id < b.id ? -1 : 1))
 }
 
 // Runs `fn` with TTYBRAIN_PLUGIN_INSTALLER set (`ttybrain plugin add` reads process.env, as pm's entry point passes it).
@@ -286,9 +286,10 @@ test.each(failureCases)("failure: %s — pm still starts", async (_name, c) => {
   const builtins = all.filter((p) => p.source === "built-in")
   expect(builtins.map((p) => [p.id, p.status])).toEqual([
     ["actions", "ok"],
-    ["inbox", "ok"],
     ["people", "ok"],
     ["projects", "ok"],
+    ["boards", "ok"],
+    ["inbox", "ok"],
     ["meetings", "ok"],
   ])
   expect(all.filter((p) => p.source !== "built-in")).toEqual(c.rows)
@@ -353,9 +354,10 @@ test("a plugin built before the rename is reported, not fatal", async () => {
   const all = JSON.parse((await cli(k, ["plugin", "list", "--json"])).out) as Row[]
   expect(all.filter((p) => p.source === "built-in").map((p) => [p.id, p.status])).toEqual([
     ["actions", "ok"],
-    ["inbox", "ok"],
     ["people", "ok"],
     ["projects", "ok"],
+    ["boards", "ok"],
+    ["inbox", "ok"],
     ["meetings", "ok"],
   ])
   const message = 'built for pm; rename "pm" to "ttybrain" in package.json and @pm/ imports to @ttybrain/, then run "ttybrain plugin build" (or update the plugin)'

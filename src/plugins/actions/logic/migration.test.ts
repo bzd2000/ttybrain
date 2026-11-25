@@ -9,6 +9,7 @@ import { runCli } from "../../../kernel/cli/dispatch"
 import { fixedClock } from "../../../kernel/clock"
 import { bootKernel, type Kernel } from "../../../kernel/host"
 import type { PluginContext, PluginDef } from "../../../kernel/plugin"
+import { boards } from "../../boards/logic/index"
 import { meetings } from "../../meetings/logic/index"
 import { people } from "../../people/logic/index"
 import { projects } from "../../projects/logic/index"
@@ -54,10 +55,11 @@ describe("actions migration 002: links", () => {
     const kept = rows(`SELECT ${KEPT} FROM actions_action ORDER BY id`)
     await k.shutdown()
 
-    k = await boot([people, projects, meetings, actions])
+    k = await boot([people, projects, boards, meetings, actions])
     expect(k.plugins.map((p) => [p.id, p.status, p.error ?? null])).toEqual([
       ["people", "ok", null],
       ["projects", "ok", null],
+      ["boards", "ok", null],
       ["actions", "ok", null],
       ["meetings", "ok", null],
     ])

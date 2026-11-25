@@ -1,6 +1,9 @@
 // A board's view (design §5.7, plan ruling B4). No mock draws it: it is laid out as a project's Meetings and Talk
 // tabs (the 2026-11-20 `project` design), on screen 5 (`5 Meetings ▾`), the crumb `› BOARD Management board` with
-// the code cyan as a project's, the tabs Meetings · Talk without counts:
+// the code cyan as a project's, the tabs Summary · Meetings · Talk without counts (Summary is the boards plugin's,
+// Meetings and Talk the meetings plugin's; Review Focus 4):
+// - Summary: the "Summary" panel with the board's facts as a project's Overview has them (a 14-cell muted label
+//   column): Code (cyan), Name, Note, Status (active, or archived since its date); its bar `e edit   Del archive`.
 // - Meetings: "Board · monthly, last Fri" (Next, With, "To talk about · 2" and the board's talk-list), "Past
 //   meetings" (`30 Oct    Board    —`), and, as there is no Prep for a board, "Your actions for BOARD · 1" on the
 //   right; the project tab's bar. Enter on the series opens its next meeting under the board's crumb (`› BOARD
@@ -44,21 +47,45 @@ const inside = (frame: string, i: number, side: 0 | 1) => {
   return (side === 0 ? (parts[1] ?? "") : (parts[parts.length - 2] ?? "")).slice(1).trimEnd()
 }
 
-async function board(tab: "meetings" | "talk", width = 118, height = 36): Promise<{ t: RenderedTui; frame: string }> {
+async function board(tab: "summary" | "meetings" | "talk", width = 118, height = 36): Promise<{ t: RenderedTui; frame: string }> {
   kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
   tui = await renderTui(kernel, { width, height })
   await tui.nav.open("#BOARD", tab)
-  const ready = (f: string) => (tab === "meetings" ? f.includes("Past meetings") && f.includes("A-5") : f.includes("To talk about · 2 open") && f.includes("A-5"))
+  const ready = (f: string) => (tab === "summary" ? f.includes("Status") && f.includes("active") : tab === "meetings" ? f.includes("Past meetings") && f.includes("A-5") : f.includes("To talk about · 2 open") && f.includes("A-5"))
   await until(tui, ready)
   await tui.settle()
   return { t: tui, frame: await until(tui, ready) }
 }
 
+// The facts' value column starts at 16 (a 14-cell label and 2 cells), inside the panel's border and padding.
+const FACTS = ["Code            BOARD", "Name            Management board", "Note            —", "Status          active"]
+
+test("Board · Summary: the board's facts, first of the three tabs", async () => {
+  const { t, frame } = await board("summary")
+  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}5 Meetings ▾ {2}› BOARD Management board +● 2 new in inbox {2}Fri 20 Nov 2026$/)
+  expect(line(frame, 1).trim()).toBe("")
+  expect(line(frame, 2)).toBe("  Summary   Meetings   Talk")
+  expect(line(frame, 3)).toMatch(/^ ╭─ Summary ─+╮$/)
+  expect(line(frame, 3).length).toBe(117) // a one-cell gutter on both sides
+  expect([4, 5, 6, 7].map((i) => inside(frame, i, 0))).toEqual(FACTS)
+  expect(line(frame, 8)).toMatch(/^ ╰─+╯$/)
+  expect(line(frame, 35)).toBe(" ←→ tabs   e edit   del archive   esc back   i capture")
+
+  const spans = await t.spans()
+  expect(fgAt(spans, "BOARD", 0)).toBe(theme.cyan)
+  expect(fgAt(spans, "Summary", 2)).toBe(theme.accent)
+  expect(fgAt(spans, "Meetings", 2)).toBe(theme.muted)
+  expect(fgAt(spans, "Summary", 3)).toBe(theme.muted) // the panel takes no focus, as a project's Overview
+  for (const [label, i] of [["Code", 4], ["Name", 5], ["Note", 6], ["Status", 7]] as const) expect(fgAt(spans, label, i)).toBe(theme.muted)
+  expect(fgAt(spans, "BOARD", 4)).toBe(theme.cyan)
+  expect(fgAt(spans, "Management board", 5)).toBe(theme.text)
+})
+
 test("Board · Meetings: its series panel, past meetings and your actions", async () => {
   const { t, frame } = await board("meetings")
   expect(line(frame, 0)).toMatch(/^ ttybrain · {2}5 Meetings ▾ {2}› BOARD Management board +● 2 new in inbox {2}Fri 20 Nov 2026$/)
   expect(line(frame, 1).trim()).toBe("")
-  expect(line(frame, 2)).toBe("  Meetings   Talk")
+  expect(line(frame, 2)).toBe("  Summary   Meetings   Talk")
   expect(line(frame, 3)).toMatch(/^ ╭─ Board · monthly, last Fri ─+╮ ╭─ Your actions for BOARD · 1 ─+╮$/)
   expect([4, 5, 6, 7, 8, 9].map((i) => inside(frame, i, 0))).toEqual([
     "Next       Fri 27 Nov",
@@ -127,7 +154,7 @@ test("Board view: quick capture starts with the board's tag", async () => {
 
 test("Board · Talk: the board's talk-list, without a Project column", async () => {
   const { t, frame } = await board("talk")
-  expect(line(frame, 2)).toBe("  Meetings   Talk")
+  expect(line(frame, 2)).toBe("  Summary   Meetings   Talk")
   expect(line(frame, 3)).toMatch(/^ ╭─ To talk about · 2 open ─+╮ ╭─ Meetings ─+╮$/)
   const ITEMS = [3, 50]
   expect([4, 5, 6].map((i) => inside(frame, i, 0))).toEqual([
@@ -150,7 +177,7 @@ test("Board · Talk: the board's talk-list, without a Project column", async () 
 })
 
 test("Board view at 80×24: the code, the names and the panels whole", async () => {
-  for (const tab of ["meetings", "talk"] as const) {
+  for (const tab of ["summary", "meetings", "talk"] as const) {
     const { frame } = await board(tab, 80, 24)
     const rows = frame.replace(/\n$/, "").split("\n")
     expect(rows.length).toBe(24)
@@ -158,7 +185,13 @@ test("Board view at 80×24: the code, the names and the panels whole", async () 
     expect(line(frame, 0)).toMatch(/^ ttybrain · {2}5 Meetings ▾ {2}› BOARD /)
     expect(frame).not.toMatch(/BOAR…|Marie D…|Peter J…/)
     expect([...frame.matchAll(/╭/g)].length).toBe([...frame.matchAll(/╰/g)].length)
-    if (tab === "meetings") {
+    expect(line(frame, 2)).toBe("  Summary   Meetings   Talk")
+    if (tab === "summary") {
+      expect(line(frame, 3)).toMatch(/^ ╭─ Summary ─+╮$/)
+      expect([4, 5, 6, 7].map((i) => inside(frame, i, 0))).toEqual(FACTS)
+      expect(line(frame, 8)).toMatch(/^ ╰─+╯$/)
+      expect(line(frame, 23)).toBe(" ←→ tabs   e edit   del archive   esc back   i capture")
+    } else if (tab === "meetings") {
       expect(line(frame, 3)).toMatch(/^ ╭─ Board · monthly, last Fri ─+╮ ╭─ Your actions for BOARD · 1 ─+╮$/)
       expect(inside(frame, 5, 0)).toBe("With       Marie D., Peter J.")
       expect(inside(frame, 12, 0)).toBe("30 Oct    Board")

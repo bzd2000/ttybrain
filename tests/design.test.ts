@@ -67,7 +67,7 @@ test("seedDesign seeds the designs' people, projects, actions, meetings and inbo
       { title: "Steering committee Q4", date: "2026-12-04", status: "planned", kind: "board", subject_type: "board" },
     ])
     // M-2's board (plan ruling B5).
-    expect(await db("meetings").selectFrom("board").select(["code", "name"]).execute()).toEqual([{ code: "SC", name: "Steering committee" }])
+    expect(await db("boards").selectFrom("board").select(["code", "name"]).execute()).toEqual([{ code: "SC", name: "Steering committee" }])
     const agenda = await db("meetings").selectFrom("agenda_item").select(["text", "ask"]).where("meeting_id", "=", 2).orderBy("position").execute()
     expect(agenda.map((a: any) => a.text)).toEqual(["Minutes & open actions", "CRM status", "ERP vendor decision", "HR portal pilot go/no-go", "AOB"])
     expect(agenda[1].ask).toBe("Approve 2-week shift of design milestone and release of contingency budget.")

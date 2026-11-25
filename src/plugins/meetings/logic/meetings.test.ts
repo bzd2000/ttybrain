@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../../tests/helpers"
 import { builtinPlugins } from "../../../../tests/builtins"
+import { boards } from "../../boards/logic/index"
 import { people } from "../../people/logic/index"
 import { actions } from "../../actions/logic/index"
 import { projects } from "../../projects/logic/index"
@@ -19,8 +20,8 @@ const viewCols = (kernel: TestKernel, name: string) =>
 
 describe("meetings plugin skeleton", () => {
   test("meetings loads after projects and people and publishes its views", async () => {
-    k = await makeTestKernel({ plugins: [meetings, projects, people, actions] })
-    expect(meetings.requires).toEqual({ projects: "^2", people: "^1", actions: "^2" })
+    k = await makeTestKernel({ plugins: [meetings, projects, people, actions, boards] })
+    expect(meetings.requires).toEqual({ projects: "^2", people: "^1", actions: "^2", boards: "^1" })
     expect(viewCols(k, "meeting")).toEqual(["id", "title", "date", "kind", "status", "subject_type", "subject_id", "series_id"])
     expect(viewCols(k, "agenda_item")).toEqual(["id", "meeting_id", "position", "text", "project_id", "ask"])
     expect(viewCols(k, "attendee")).toEqual(["meeting_id", "person_id"])
@@ -59,7 +60,7 @@ const agenda = (meetingId: number) =>
   )
 
 async function boot() {
-  k = await makeTestKernel({ plugins: [meetings, projects, people, actions] })
+  k = await makeTestKernel({ plugins: [meetings, projects, people, actions, boards] })
   await w("addPerson", { name: "Peter Janssens", handle: "peter" }, "people")
   await w("addPerson", { name: "Marie Dubois", handle: "marie" }, "people")
   await w("addPerson", { name: "Tom Peeters", handle: "tom" }, "people")
@@ -101,7 +102,7 @@ describe("meetings operations", () => {
 
   test("the subject gives the kind; a 1:1 needs a person, a project meeting a project, a board meeting a board; steering and other mean project", async () => {
     await boot()
-    await w("addBoard", { code: "MB", name: "Management board" })
+    await w("addBoard", { code: "MB", name: "Management board" }, "boards")
     expect((await w("addMeeting", { about: "#CRM", title: "a", date: "today" })).kind).toBe("project")
     const onProject = await failure(w("addMeeting", { about: "CRM", title: "b", date: "today", kind: "board" }))
     expect([onProject.name, onProject.message, onProject.field]).toEqual(["ValidationError", "a board meeting needs a board; #CRM is a project", "kind"])
@@ -215,7 +216,7 @@ describe("meetings operations", () => {
   test("close and cancel rules", async () => {
     await boot()
     await w("addMeeting", steerco)
-    await w("addBoard", { code: "MB", name: "Management board" })
+    await w("addBoard", { code: "MB", name: "Management board" }, "boards")
     await w("addMeeting", { about: "#MB", title: "Board", date: "2026-12-10", kind: "board" })
     await w("addAction", { title: "Send the minutes", meeting: "M-1" }, "actions")
     await w("addDecision", { title: "Go with B", meeting: "M-2" }, "projects")

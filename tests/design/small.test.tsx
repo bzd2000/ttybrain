@@ -213,6 +213,17 @@ const SCREENS: Screen[] = [
     },
   },
   {
+    name: "Board · Summary",
+    meetings: true,
+    must: ["BOARD", "Management board"],
+    chip: "5 Meetings",
+    panels: true,
+    open: async (t) => {
+      await t.nav.open("#BOARD", "summary")
+      return settled(t, (f) => f.includes("Status") && f.includes("active"))
+    },
+  },
+  {
     name: "Board · Meetings",
     meetings: true,
     must: ["BOARD", "Board · monthly, last Fri", "Your actions for BOARD", "Marie D., Peter J.", "30 Oct    Board"],

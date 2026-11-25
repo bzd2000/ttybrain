@@ -225,7 +225,7 @@ test("Quick capture to a board's talk-list", async () => {
   expect((await talkItems("#BOARD")).length).toBe(3)
 
   // A code both a project and a board has (a data error the shared namespace prevents) is not swallowed: it is why.
-  kernel!.db.raw.prepare("INSERT INTO meetings_board (code, name, created_at, updated_at) VALUES ('CRM', 'Clash', '2026-11-20', '2026-11-20')").run([])
+  kernel!.db.raw.prepare("INSERT INTO boards_board (code, name, created_at, updated_at) VALUES ('CRM', 'Clash', '2026-11-20', '2026-11-20')").run([])
   t.input.pressKey("i")
   await until(t, (f) => f.includes("Capture to inbox"))
   await t.input.typeText("talk #CRM budget")

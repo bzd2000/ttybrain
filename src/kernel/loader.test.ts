@@ -71,10 +71,10 @@ describe("discoverPlugins", () => {
     expect(cs[3]!.dir).toBe(join(paths.plugins, "node_modules", "ttybrain-plugin-b"))
   })
 
-  test("the real built-in folder yields the five built-ins", async () => {
+  test("the real built-in folder yields the six built-ins", async () => {
     const { paths } = setup()
     const cs = await discoverPlugins(paths, config())
-    expect(cs.map((c) => c.id).sort()).toEqual(["actions", "inbox", "meetings", "people", "projects"])
+    expect(cs.map((c) => c.id).sort()).toEqual(["actions", "boards", "inbox", "meetings", "people", "projects"])
     for (const c of cs) {
       expect(c.source).toBe("built-in")
       expect(c.error).toBeUndefined()
