@@ -30,7 +30,7 @@ ttybrain plugin add ./contracts               # install a folder, an npm name or
 ttybrain plugin remove contracts --yes        # delete/uninstall; add --purge-data to drop its data too
 ```
 
-External plugins live in `~/.ttybrain/plugins` (`TTYBRAIN_PLUGINS`): plugin folders, or npm dependencies of its `package.json`. They run in ttybrain's process with full access; ttybrain warns on the first add. `ttybrain plugin add` uses `npm` (or `bun add` under Bun without npm; `TTYBRAIN_PLUGIN_INSTALLER=npm|bun` forces one). See `docs/superpowers/specs/2026-11-13-pm-plugins.md` ("Writing an external plugin").
+External plugins live in `~/.ttybrain/plugins` (`TTYBRAIN_PLUGINS`): plugin folders, or npm dependencies of its `package.json`. They run in ttybrain's process with full access; ttybrain warns on the first add. `ttybrain plugin add` uses `npm` (or `bun add` under Bun without npm; `TTYBRAIN_PLUGIN_INSTALLER=npm|bun` forces one). See `docs/superpowers/specs/2026-11-13-pm-plugins.md` ("Writing an external plugin"). The built-in screens now use keys `1`-`7` (7 is Boards), so external plugins' screens are numbered from `8` (they were from `7`).
 
 ### Linking `ttybrain` onto your PATH
 

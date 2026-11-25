@@ -9,12 +9,14 @@ import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from
 import {
   act,
   dayDate,
+  displayWidth,
   fitWidth,
   notify,
   Panel,
   printable,
   Table,
   theme,
+  truncate,
   useKeys,
   useNav,
   useOverlay,
@@ -37,6 +39,7 @@ const FILTER_HINTS: Hint[] = [
 ]
 const CODE_MIN = 5 // the Code column's title and a gap
 const CODE_MAX = 16 // codes are 2–16 characters and never cut
+const NEXT_WIDTH = 22 // the Next meeting column
 
 type Activity = { next: { title: string; date: string } | null; talk: number }
 type Board = BoardRecord & Activity
@@ -53,14 +56,22 @@ const MUTED_DASH: Cell = { text: "—", tone: "muted" }
 
 function row(b: Board, withStatus: boolean): TableRow {
   const muted = (text: string): Cell => ({ text, tone: "muted" })
-  const next = b.next === null ? null : `${dayDate(b.next.date)} ${b.next.title}`
+  // The date stays whole; only the meeting's name is cut (`Fri 27 Nov Quarterly…`).
+  const next = b.next === null ? null : { date: `${dayDate(b.next.date)} `, title: b.next.title }
+  const nextCell = (dim = false): Cell => {
+    if (next === null) return MUTED_DASH
+    // Cut to the room the date leaves, never ending in a space before the `…`.
+    const cut = truncate(next.title, NEXT_WIDTH - displayWidth(next.date))
+    const title = cut === next.title ? cut : `${cut.slice(0, -1).trimEnd()}…`
+    return { text: next.date + title, ...(dim ? { tone: "muted" as const } : {}) }
+  }
   const talk = b.talk === 0 ? muted("0") : String(b.talk)
   // An archived board is drawn muted all through.
   return {
     ref: b.ref,
     cells: b.archived
-      ? { code: muted(b.code), name: muted(b.name), next: next === null ? MUTED_DASH : muted(next), talk: muted(String(b.talk)), status: muted("archived") }
-      : { code: { text: b.code, tone: "cyan" }, name: b.name, next: next ?? MUTED_DASH, talk, ...(withStatus ? { status: "active" } : {}) },
+      ? { code: muted(b.code), name: muted(b.name), next: nextCell(true), talk: muted(String(b.talk)), status: muted("archived") }
+      : { code: { text: b.code, tone: "cyan" }, name: b.name, next: nextCell(), talk, ...(withStatus ? { status: "active" } : {}) },
   }
 }
 
@@ -125,7 +136,7 @@ export function BoardsScreen() {
     { id: "code", title: "Code", width: fitWidth(shown().map((b) => b.code), CODE_MIN, CODE_MAX) },
     { id: "name", title: "Name", width: "grow", minWidth: 20 },
     // Narrow terminals drop Status, then Talk, then Next meeting.
-    { id: "next", title: "Next meeting", width: 22, drop: 1 },
+    { id: "next", title: "Next meeting", width: NEXT_WIDTH, drop: 1 },
     { id: "talk", title: "Talk", width: 6, drop: 2 },
     ...(archived() ? [{ id: "status", title: "Status", width: 8, drop: 3 }] : []),
   ]
@@ -152,10 +163,9 @@ export function BoardsScreen() {
       selected()?.archived === true ? { key: "r", label: "restore" } : { key: "Del", label: "archive" },
       { key: "/", label: "filter" },
       { key: "a", label: "archived" },
-      { key: "↑↓", label: "select" },
     ]
-    // The frame's `g or 1-7 screens` and `? help`; `q quit` does not fit at 118 columns.
-    onCleanup(keys.hints(on ? FILTER_HINTS : hints, on ? undefined : { exact: true, frame: ["g", "?"] }))
+    // Exact, so the Table's `↑↓ select` is left out (the bar fits at 118 columns with the frame's three hints).
+    onCleanup(keys.hints(on ? FILTER_HINTS : hints, on ? undefined : { exact: true, frame: ["g", "?", "q"] }))
   })
   const endFilter = (value: string) => {
     setFilter(value.trim())

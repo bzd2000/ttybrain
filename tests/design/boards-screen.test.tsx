@@ -78,7 +78,7 @@ test("Boards (screen 7): the active boards with their next meeting and open talk
   expect(frame).not.toContain("Old board")
   expect(frame).not.toContain("Status")
   expect(line(frame, 34)).toMatch(/^ ╰─+╯$/)
-  expect(line(frame, 35)).toBe(" enter open   n new   e edit   del archive   / filter   a archived   ↑↓ select   i capture   g or 1-7 screens   ? help")
+  expect(line(frame, 35)).toBe(" enter open   n new   e edit   del archive   / filter   a archived   i capture   g or 1-7 screens   ? help   q quit")
   const spans = await t.spans()
   expect(fgAt(spans, "Boards", 1)).toBe(theme.accent)
   expect(fgAt(spans, "Code", 2)).toBe(theme.muted)
@@ -225,4 +225,39 @@ test("Boards: empty state", async () => {
   const frame = await until(tui, (f) => f.includes("No boards yet. Press n to add one."))
   expect(frame).toContain("No boards yet. Press n to add one.")
   expect(line(frame, 1)).toMatch(/Boards · 0/)
+})
+
+test("Boards: a long meeting name is cut with `…`, its date stays whole", async () => {
+  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
+  await inCtx(async () => {
+    await write().addBoard!({ code: "IAB", name: "Architecture board" })
+    const meetings = kernel!.runtime("meetings")!.self().write as Record<string, (i: unknown) => Promise<unknown>>
+    await meetings.addSeries!({ about: "#IAB", title: "Quarterly architecture review", every: "monthly on the last fri", from: "2026-11-27" })
+  })
+  tui = await renderTui(kernel, { width: 118, height: 36 })
+  tui.input.pressKey("7")
+  const frame = await until(tui, (f) => f.includes("Architecture board") && f.includes("Fri 27 Nov Quarterly"))
+  // Next meeting is 22 cells: the date (11) whole, the name cut to the rest (no space before the `…`).
+  expect(lineWith(frame, "Architecture board")).toMatch(/│ IAB +Architecture board +Fri 27 Nov Quarterly… +0 +│/)
+  expect(fgAt(await tui.spans(), "Fri 27 Nov", "Architecture board")).toBe(theme.text)
+})
+
+test("Boards without the meetings plugin: Next meeting `—`, Talk `0`", async () => {
+  const { default: people } = await import("../../src/plugins/people/logic/index")
+  const { default: projects } = await import("../../src/plugins/projects/logic/index")
+  const { default: boardsPlugin } = await import("../../src/plugins/boards/logic/index")
+  const { default: projectsTui } = await import("../../src/plugins/projects/tui/index")
+  const { default: peopleTui } = await import("../../src/plugins/people/tui/index")
+  const { default: boardsTui } = await import("../../src/plugins/boards/tui/index")
+  kernel = await makeTestKernel({ plugins: [people, projects, boardsPlugin] })
+  expect(kernel.plugins.map((p) => p.id).sort()).toEqual(["boards", "people", "projects"])
+  await inCtx(() => write().addBoard!({ code: "MB", name: "Management board" }))
+  tui = await renderTui(kernel, { width: 118, height: 36, parts: [projectsTui, boardsTui, peopleTui] })
+  tui.input.pressKey("7")
+  const frame = await until(tui, (f) => f.includes("Management board"))
+  expect(line(frame, 0)).toContain("7 Boards ▾")
+  expect(lineWith(frame, "Management board")).toMatch(/│ MB +Management board +— +0 +│/)
+  const spans = await tui.spans()
+  expect(fgAt(spans, "—", "Management board")).toBe(theme.muted)
+  expect(fgAt(spans, "0 ", "Management board")).toBe(theme.muted)
 })
