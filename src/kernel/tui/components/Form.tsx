@@ -9,7 +9,9 @@
 //   ↑↓ move, Enter picks, a letter jumps (enum, choices), Esc closes the list only, Tab moves on, Ctrl+S closes it
 //   unpicked and saves. enum fields also cycle with ←→; record fields autocomplete from the kernel's record type
 //   search as typed, in that list (↑↓ pick, Enter or Tab accepts); a refs field (several refs, space-separated) autocompletes its last word from the record type whose
-//   prefix starts it (`#cr`, `@an`, `M-`), Tab replacing that word with the ref and a space; date fields preview the parsed ISO date (`→ 2026-11-15`) or `invalid date`, with the CLI's parsing.
+//   prefix starts it (`#cr`, `@an`, `M-`), Tab replacing that word with the ref and a space; date fields preview the parsed ISO date (`→ 2026-11-15`) or `invalid date`, with the CLI's parsing, show the
+//   weekday in front of the input while focused, and take ←→ (empty: today; a date: a day, Shift a week; other text:
+//   the cursor).
 // - While the form is open it holds text focus, so single-letter global keys type into the field.
 // - A failed submit keeps the form open with its values: a ValidationError naming a field (or a failed
 //   SubmitResult's `field`) shows under that field as `✗ <message>`, any other error at the bottom. While a submit is in flight (`saving…`, busy retries
@@ -40,7 +42,7 @@
 import type { BoxRenderable, KeyEvent } from "@opentui/core"
 import { createEffect, createMemo, onCleanup, createSignal, For, onMount, Show, useContext } from "solid-js"
 import { runWithContext } from "../../context"
-import { parseDate } from "../../dates"
+import { addDays, parseDate } from "../../dates"
 import { ValidationError } from "../../errors"
 import { act, NO_REF_FOR_EXTRAS, useQuery, withFormExtras, type PendingExtras } from "../data"
 import { DRAFT_KEPT, FormDraftKey, sameValues, useDraftKey, type Draft } from "../drafts"
@@ -433,6 +435,36 @@ export function Form(props: {
     }
     return true
   }
+  // ←→ in a date field: empty, today (Shift too); a date, a day (Shift: a week) earlier or later; text that does not
+  // parse, nothing (the cursor moves).
+  const shiftDate = (f: FieldSpec, key: KeyEvent): boolean => {
+    const raw = (valueOf(f.name) ?? "").trim()
+    let next: string
+    if (raw === "") next = today
+    else {
+      try {
+        next = addDays(parseDate(raw, today), (key.name === "left" ? -1 : 1) * (key.shift ? 7 : 1))
+      } catch {
+        return false
+      }
+    }
+    key.preventDefault()
+    touch(f.name)
+    setValue(f.name, next)
+    return true
+  }
+  // A date field's weekday in front of its input while focused (`Mon  `); blank while it does not parse.
+  const weekdayOf = (f: FieldSpec): string | undefined => {
+    if (f.kind !== "date") return undefined
+    const raw = (valueOf(f.name) ?? "").trim()
+    if (raw === "") return ""
+    try {
+      return dayDate(parseDate(raw, today)).slice(0, 3)
+    } catch {
+      return ""
+    }
+  }
+
   const datePreview = (f: FieldSpec): { text: string; error: boolean } | undefined => {
     if (f.kind !== "date") return undefined
     const raw = (valueOf(f.name) ?? "").trim()
@@ -580,6 +612,7 @@ export function Form(props: {
         : [
             { key: "Tab", label: props.look?.tabLabel ?? "field" },
             ...(kind === "longtext" ? [{ key: "Enter", label: "new line" }] : []),
+            ...(kind === "date" ? [{ key: "←→", label: "day" }, { key: "Shift+←→", label: "week" }] : []),
             { key: "Ctrl+S", label: "save" },
             { key: "Esc", label: "cancel" },
           ],
@@ -628,6 +661,8 @@ export function Form(props: {
       key.preventDefault()
       const d = key.name === "up" ? -1 : 1
       setPicked((p) => Math.min(suggestions().length - 1, Math.max(0, p + d)))
+    } else if ((key.name === "left" || key.name === "right") && f?.kind === "date" && shiftDate(f, key)) {
+      // shifted (or set to today)
     } else if ((key.name === "left" || key.name === "right") && f?.kind === "enum") {
       key.preventDefault()
       cycle(f, key.name === "left" ? -1 : 1)
@@ -713,6 +748,7 @@ export function Form(props: {
             <box ref={(r: BoxRenderable) => rowBoxes.set(f.name, r)} flexDirection="column">
             <Field
               spec={f}
+              prefix={focused() ? weekdayOf(f) : undefined}
               value={valueOf(f.name)}
               focused={focused()}
               editor={editor}

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { makeTestKernel, type TestKernel } from "../../../tests/helpers"
 import { renderTui, type RenderedTui } from "../../../tests/tui"
 import { builtinPlugins } from "../../../tests/builtins"
-import { bgAt } from "../../../tests/design"
+import { bgAt, fgAt } from "../../../tests/design"
 import { definePlugin, type PluginDef } from "../api"
 import { runWithContext } from "../context"
 import { Form, type FieldSpec } from "./components/Form"
@@ -267,5 +267,82 @@ describe("form drop-downs", () => {
     t.input.pressEnter()
     const frame = await until(t, (f) => listRows(f).length > 0)
     expect(statusLine(frame).trim()).toBe("↑↓ move   enter pick   esc close   ctrl+s save")
+  })
+})
+
+describe("date field arrows", () => {
+  test("empty: → (or ←, Shift+→) puts today; a date: ←→ a day, Shift+←→ a week", async () => {
+    const t = await open("date")
+    let frame = await t.frame()
+    expect(statusLine(frame)).toContain("←→ day   shift+←→ week")
+    t.input.pressArrow("right")
+    frame = await until(t, (f) => f.includes("→ 2026-11-13"))
+    expect(lineWith(frame, "Due")).toContain("2026-11-13")
+    t.input.pressArrow("right")
+    await until(t, (f) => f.includes("→ 2026-11-14"))
+    t.input.pressArrow("left")
+    t.input.pressArrow("left")
+    await until(t, (f) => f.includes("→ 2026-11-12"))
+    t.input.pressArrow("right", { shift: true })
+    await until(t, (f) => f.includes("→ 2026-11-19"))
+    t.input.pressArrow("left", { shift: true })
+    t.input.pressArrow("left", { shift: true })
+    frame = await until(t, (f) => f.includes("→ 2026-11-05"))
+    expect(lineWith(frame, "Due")).toContain("→ 2026-11-05")
+    t.input.pressKey("s", { ctrl: true })
+    await t.settle()
+    expect(submitted).toEqual([{ due: "2026-11-05" }])
+  })
+
+  test("empty: ← and Shift+→ put today too", async () => {
+    const t = await open("date")
+    t.input.pressArrow("left")
+    await until(t, (f) => f.includes("→ 2026-11-13"))
+    for (let i = 0; i < 10; i++) t.input.pressBackspace()
+    await until(t, (f) => !f.includes("→ 2026-11-13"))
+    t.input.pressArrow("right", { shift: true })
+    const frame = await until(t, (f) => f.includes("→ 2026-11-13"))
+    expect(lineWith(frame, "Due")).toContain("→ 2026-11-13")
+  })
+
+  test("text that is not a date: the arrows move the cursor, so it can be edited", async () => {
+    const t = await open("date")
+    await t.input.typeText("abc")
+    t.input.pressArrow("left")
+    await t.input.typeText("X")
+    let frame = await until(t, (f) => f.includes("abXc"))
+    expect(lineWith(frame, "Due")).toContain("abXc")
+    expect(lineWith(frame, "Due")).toContain("invalid date")
+    // A date typed by hand shifts like any other.
+    t.input.pressArrow("right")
+    for (let i = 0; i < 4; i++) t.input.pressBackspace()
+    await t.input.typeText("+1d")
+    await until(t, (f) => f.includes("→ 2026-11-14"))
+    t.input.pressArrow("right")
+    frame = await until(t, (f) => f.includes("→ 2026-11-15"))
+    expect(lineWith(frame, "Due")).toContain("2026-11-15")
+  })
+
+  test("while editing, a muted weekday in front of the date follows it; none for empty or invalid text; same width", async () => {
+    const t = await open("date")
+    let frame = await t.frame()
+    const border = lineWith(frame, "╭─ Date ")
+    expect(lineWith(frame, "│ Due")).toMatch(/│ Due +│/) // empty: no weekday
+    t.input.pressArrow("right")
+    frame = await until(t, (f) => f.includes("→ 2026-11-13"))
+    expect(lineWith(frame, "│ Due")).toMatch(/│ Due +Fri  2026-11-13 +→ 2026-11-13/)
+    expect(fgAt(await t.spans(), "Fri  2026")).toBe(theme.muted)
+    t.input.pressArrow("right")
+    frame = await until(t, (f) => f.includes("→ 2026-11-14"))
+    expect(lineWith(frame, "│ Due")).toMatch(/│ Due +Sat  2026-11-14/)
+    const at = lineWith(frame, "│ Due").indexOf("2026-11-14")
+    expect(lineWith(frame, "╭─ Date ")).toBe(border)
+    for (let i = 0; i < 10; i++) t.input.pressBackspace()
+    await t.input.typeText("zz")
+    frame = await until(t, (f) => f.includes("invalid date"))
+    // The weekday's column stays, blank: the input does not move.
+    expect(lineWith(frame, "│ Due").indexOf("zz")).toBe(at)
+    expect(lineWith(frame, "│ Due")).toMatch(/│ Due +zz/)
+    expect(lineWith(frame, "╭─ Date ")).toBe(border)
   })
 })
