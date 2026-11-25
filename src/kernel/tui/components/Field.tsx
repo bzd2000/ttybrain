@@ -42,6 +42,11 @@ export type FieldSpec = {
   // The value worked out from the form's other values, followed until the field is edited (a kind from what the
   // meeting is about); undefined: leave it.
   derive?: (values: Record<string, string | null>) => string | null | undefined
+  // Values a text field offers in a drop-down (Enter opens it; <Form>), from the form's current values (own fields,
+  // by name): `label` reads in the list (default: the value). The field stays free text.
+  choices?: (values: Record<string, string | null>) => Array<{ value: string; label?: string }>
+  // The label of a last entry in the `choices` list that closes it to type a value by hand (`custom…`).
+  custom?: string
   // Whether the field is shown, from the form's current values (own fields, by name): a hidden field takes no
   // focus and reaches `submit` as null (a talk item's Project only for a person's item). One that throws shows.
   when?: (values: Record<string, string | null>) => boolean
@@ -117,7 +122,7 @@ export function Field(props: {
   // Plain and not focused: the value as read (an enum keeps its labels).
   const asText = () =>
     props.plain === true && !props.focused && props.editor === undefined && (props.spec.kind !== "enum" || props.spec.labels === undefined)
-  const inputWidth = () => props.inputWidth ?? (props.plain ? LOOK_INPUT_WIDTH : INPUT_WIDTH)
+  const inputWidth = () => (props.inputWidth ?? (props.plain ? LOOK_INPUT_WIDTH : INPUT_WIDTH))
   return (
     <box flexDirection="column">
       <box flexDirection="row" gap={gap()}>
