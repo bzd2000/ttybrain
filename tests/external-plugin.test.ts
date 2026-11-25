@@ -199,14 +199,14 @@ async function renderLoaded(k: TestKernel): Promise<RenderedTui> {
   return tui
 }
 
-test("TUI: screen 7 and the project tab", async () => {
+test("TUI: screen 8 and the project tab", async () => {
   const k = await boot(pluginsWithBuilt())
   expect((await cli(k, ["project", "add", "CRM", "CRM"])).code).toBe(0)
   expect((await cli(k, ["contract", "add", "CRM", "Support"])).code).toBe(0)
   const t = await renderLoaded(k)
-  t.input.pressKey("7")
+  t.input.pressKey("8") // an external screen: 8 and up
   let frame = await until(t, (f) => f.includes("C-1 Support"))
-  expect(frame.split("\n")[0]).toContain("ttybrain ·  7 Contracts")
+  expect(frame.split("\n")[0]).toContain("ttybrain ·  8 Contracts")
   expect(frame).toContain("C-1 Support · #CRM")
 
   t.input.pressKey("2")
@@ -318,7 +318,7 @@ test("failure: an async tui activate rejecting — pm still starts", async () =>
     tui.input.pressKey("?")
     expect(await until(tui, (f) => f.includes("Plugin problems"))).toContain("contracts: tui activate must be synchronous")
     tui.input.pressKey("?")
-    tui.input.pressKey("7")
+    tui.input.pressKey("8")
     expect((await tui.frame()).split("\n")[0]).not.toContain("Contracts")
     await new Promise((r) => setTimeout(r, 20))
     expect(rejections).toEqual([])

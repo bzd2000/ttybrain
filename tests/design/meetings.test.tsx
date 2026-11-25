@@ -2,8 +2,7 @@
 // screens.html): Upcoming by week on the left (accent week rows, the week after dimmed, "Held, closes itself Sat · 1"
 // after a blank line), Series · 7 on the right with their short rhythm, and the design's bar; and the `series` design's
 // "New recurring meeting" form. Seeded with the meeting designs' data, today Fri 20 Nov 2026, 118×36 (and 80×24).
-// Under Series, "Boards · 1" (design §5.7; no mock draws it): the code cyan and the name, archived boards left out;
-// Series is then as tall as its rows. Tab cycles Upcoming → Series → Boards, Enter on a board opens its view.
+// Tab and Shift+Tab switch between the two panels. (The boards have their own screen 7, the boards plugin's.)
 // The CRM steering's Act. is amber: its one action (the design's A-27) is overdue, as the Attention design's own
 // Overdue panel shows.
 import { afterEach, expect, test } from "bun:test"
@@ -12,7 +11,6 @@ import { bgAt, fgAt, isSelected, line, seedMeetings } from "../design"
 import { makeTestKernel, type TestKernel } from "../helpers"
 import { renderTui, type RenderedTui } from "../tui"
 import { theme } from "../../src/kernel/tui/theme"
-import { runWithContext } from "../../src/kernel/context"
 
 let kernel: TestKernel | undefined
 let tui: RenderedTui | undefined
@@ -120,62 +118,35 @@ test("Meetings at 80×24: Talk and Act. give way, codes and names whole", async 
   expect(lineWith(frame, "Fri 27")).toMatch(/Fri 27 +Board +BOARD +│/)
   expect(frame).not.toMatch(/BOAR…|CR…|Kari…|Sofi…/)
   expect(inside(frame, 2, 1)).toMatch(/^Series +About$/)
-  // Review Focus 5: the Boards panel keeps the code and the name whole.
-  expect(line(frame, 11)).toMatch(/│ ╭─ Boards · 1 ─+╮$/)
-  expect(inside(frame, 12, 1)).toBe("BOARD Management board")
+  expect(line(frame, 22)).toMatch(/^ ╰─+╯ ╰─+╯$/)
   expect(line(frame, 23)).toBe(" tab panel   enter open   n one-off   N series   s skip date   m move date")
 })
 
-test("Meetings (screen 5): Boards under Series, archived ones left out; Tab reaches it, Enter opens the board (on Summary)", async () => {
-  kernel = await makeTestKernel({ plugins: builtinPlugins, today: "2026-11-20", seed: seedMeetings })
-  const w = kernel.runtime("boards")!.self().write as Record<string, (i: unknown) => Promise<unknown>>
-  await runWithContext(kernel.context(), async () => {
-    await w.addBoard!({ code: "OLD", name: "Old board" })
-    await w.archiveBoard!({ board: "#OLD" })
-    await w.addBoard!({ code: "PROGRAMME2027", name: "Programme board" })
-  })
-  tui = await renderTui(kernel, { width: 118, height: 36 })
-  const t = tui
-  t.input.pressKey("5")
-  let frame = await until(t, (f) => f.includes("Boards · 2") && f.includes("Held, closes itself"))
-  await t.settle()
-  frame = await until(t, (f) => f.includes("Boards · 2") && f.includes("Held, closes itself"))
-  // The mock's Series rows as they were; the panel ends under its last row, Boards follows.
-  expect(inside(frame, 9, 1)).toBe(cols(SERIES, ["Board", "BOARD", "monthly, last Fri"]))
-  expect(line(frame, 10)).toMatch(/│ ╰─+╯$/)
-  expect(line(frame, 11)).toMatch(/│ ╭─ Boards · 2 ─+╮$/)
-  // The code column as wide as the longest code (codes whole), then the name.
-  expect([12, 13, 14].map((i) => inside(frame, i, 1))).toEqual(["BOARD         Management board", "PROGRAMME2027 Programme board", ""])
-  expect(frame).not.toContain("Old board")
-  expect(line(frame, 34)).toMatch(/╯ ╰─+╯$/)
-  let spans = await t.spans()
-  expect(fgAt(spans, "BOARD         Management", 12)).toBe(theme.cyan)
-  expect(fgAt(spans, "Management board", 12)).toBe(theme.text)
-  expect(fgAt(spans, "PROGRAMME2027", 13)).toBe(theme.cyan)
-  expect(fgAt(spans, "Boards · 2", 11)).toBe(theme.muted)
-  // Tab: Series, then Boards (its first row selected), then back to Upcoming; Shift+Tab the other way.
-  // Waits until `title` on line `row` is drawn in `color`.
-  const titled = async (title: string, row: number, color: string) => {
-    for (let i = 0; i < 150 && fgAt(await t.spans(), title, row) !== color; i++) await new Promise((r) => setTimeout(r, 10))
+test("Meetings (screen 5): Series runs to the bottom, as the mock draws it; Tab and Shift+Tab switch panel", async () => {
+  const { t, frame } = await screen5()
+  expect(frame).not.toContain("Boards")
+  expect(frame).not.toContain("Management board")
+  expect(line(frame, 34)).toMatch(/^ ╰─+╯ ╰─+╯$/)
+  // Waits until `title` on line 1 is drawn in `color`.
+  const titled = async (title: string, color: string) => {
+    for (let i = 0; i < 150 && fgAt(await t.spans(), title, 1) !== color; i++) await new Promise((r) => setTimeout(r, 10))
   }
   t.input.pressTab()
+  await titled("Series · 7", theme.accent)
+  let spans = await t.spans()
+  expect(fgAt(spans, "Series · 7", 1)).toBe(theme.accent)
+  expect(fgAt(spans, "Upcoming", 1)).toBe(theme.muted)
   t.input.pressTab()
-  await titled("Boards · 2", 11, theme.accent)
+  await titled("Upcoming", theme.accent)
   spans = await t.spans()
-  expect(fgAt(spans, "Boards · 2", 11)).toBe(theme.accent)
+  expect(fgAt(spans, "Upcoming", 1)).toBe(theme.accent)
   expect(fgAt(spans, "Series · 7", 1)).toBe(theme.muted)
-  expect(isSelected(spans, "Management board")).toBe(true)
-  t.input.pressTab()
-  await titled("Upcoming", 1, theme.accent)
-  expect(fgAt(await t.spans(), "Upcoming", 1)).toBe(theme.accent)
   t.input.pressTab({ shift: true })
-  await titled("Boards · 2", 11, theme.accent)
-  expect(fgAt(await t.spans(), "Boards · 2", 11)).toBe(theme.accent)
-  t.input.pressEnter()
-  // The board's view opens on its first tab, the boards plugin's Summary (as a project's opens on Overview).
-  frame = await until(t, (f) => f.includes("Status") && f.includes("active"))
-  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}5 Meetings ▾ {2}› BOARD Management board +●/)
-  expect(line(frame, 2)).toBe("  Summary   Meetings   Talk")
+  await titled("Series · 7", theme.accent)
+  expect(fgAt(await t.spans(), "Series · 7", 1)).toBe(theme.accent)
+  t.input.pressTab({ shift: true })
+  await titled("Upcoming", theme.accent)
+  expect(fgAt(await t.spans(), "Upcoming", 1)).toBe(theme.accent)
 })
 
 test("New recurring meeting: a board's code makes Kind board", async () => {

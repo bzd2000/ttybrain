@@ -188,7 +188,7 @@ test("an async tui activate fails the part only", async () => {
     // The registry itself: the failed part's screen is gone, the built-ins' screens stay.
     const registry = bootTui(kernel, builtinTuiParts, { builtin: true, external: [asyncPart] })
     expect(registry.screens().filter((sc) => sc.plugin === "ext")).toEqual([])
-    expect(registry.screens().map((sc) => sc.slot)).toEqual([2, 3, 4, 5, 6])
+    expect(registry.screens().map((sc) => sc.slot)).toEqual([2, 3, 4, 5, 6, 7])
     expect(registry.errors()).toEqual([{ plugin: "ext", error: "ext: tui activate must be synchronous" }])
     await new Promise((r) => setTimeout(r, 20))
     expect(rejections).toEqual([])

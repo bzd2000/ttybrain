@@ -140,12 +140,12 @@ const SCREENS: Screen[] = [
   {
     name: "Meetings",
     meetings: true,
-    must: [...MEETING_WORDS, "BOARD Management board"], // the Boards panel's code and name
+    must: MEETING_WORDS,
     chip: "5 Meetings",
     panels: true,
     open: async (t) => {
       t.input.pressKey("5")
-      const ready = (f: string) => f.includes("Held, closes itself") && f.split("BOARD").length > 3
+      const ready = (f: string) => f.includes("Held, closes itself") && f.split("BOARD").length > 2
       await until(t, ready)
       await t.settle()
       return until(t, ready)
@@ -213,10 +213,21 @@ const SCREENS: Screen[] = [
     },
   },
   {
+    name: "Boards",
+    meetings: true,
+    must: ["BOARD", "Management board"],
+    chip: "7 Boards",
+    panels: true,
+    open: async (t) => {
+      t.input.pressKey("7")
+      return settled(t, (f) => f.includes("Fri 27 Nov Board"))
+    },
+  },
+  {
     name: "Board · Summary",
     meetings: true,
     must: ["BOARD", "Management board"],
-    chip: "5 Meetings",
+    chip: "7 Boards",
     panels: true,
     open: async (t) => {
       await t.nav.open("#BOARD", "summary")
@@ -227,7 +238,7 @@ const SCREENS: Screen[] = [
     name: "Board · Meetings",
     meetings: true,
     must: ["BOARD", "Board · monthly, last Fri", "Your actions for BOARD", "Marie D., Peter J.", "30 Oct    Board"],
-    chip: "5 Meetings",
+    chip: "7 Boards",
     panels: true,
     open: async (t) => {
       await t.nav.open("#BOARD", "meetings")
@@ -238,7 +249,7 @@ const SCREENS: Screen[] = [
     name: "Board · Talk",
     meetings: true,
     must: ["BOARD", "Your actions for BOARD"],
-    chip: "5 Meetings",
+    chip: "7 Boards",
     panels: true,
     open: async (t) => {
       await t.nav.open("#BOARD", "talk")
@@ -249,7 +260,7 @@ const SCREENS: Screen[] = [
     name: "Board meeting",
     meetings: true,
     must: ["BOARD", "CRM", "ERP", "HRP"],
-    chip: "5 Meetings",
+    chip: "7 Boards",
     panels: true,
     open: async (t) => {
       await t.nav.open("#BOARD", "meetings")

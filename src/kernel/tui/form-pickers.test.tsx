@@ -88,7 +88,7 @@ async function open(formId: string, size: { width?: number; height?: number } = 
   })
   tui = await renderTui(kernel, { external: [pickPart], ...size })
   await tui.settle()
-  tui.input.pressKey("7")
+  tui.input.pressKey("8") // external screens start at 8 (7 is Boards)
   await until(tui, (f) => f.includes("pick screen"))
   void overlay!.openForm("pickthing", formId)
   await until(tui, (f) => f.includes("ctrl+s save · esc cancel"))

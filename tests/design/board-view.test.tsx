@@ -1,5 +1,5 @@
 // A board's view (design §5.7, plan ruling B4). No mock draws it: it is laid out as a project's Meetings and Talk
-// tabs (the 2026-11-20 `project` design), on screen 5 (`5 Meetings ▾`), the crumb `› BOARD Management board` with
+// tabs (the 2026-11-20 `project` design), on screen 7 (`7 Boards ▾`, the boards plugin's), the crumb `› BOARD Management board` with
 // the code cyan as a project's, the tabs Summary · Meetings · Talk without counts (Summary is the boards plugin's,
 // Meetings and Talk the meetings plugin's; Review Focus 4):
 // - Summary: the "Summary" panel with the board's facts as a project's Overview has them (a 14-cell muted label
@@ -62,7 +62,7 @@ const FACTS = ["Code            BOARD", "Name            Management board", "Not
 
 test("Board · Summary: the board's facts, first of the three tabs", async () => {
   const { t, frame } = await board("summary")
-  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}5 Meetings ▾ {2}› BOARD Management board +● 2 new in inbox {2}Fri 20 Nov 2026$/)
+  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}7 Boards ▾ {2}› BOARD Management board +● 2 new in inbox {2}Fri 20 Nov 2026$/)
   expect(line(frame, 1).trim()).toBe("")
   expect(line(frame, 2)).toBe("  Summary   Meetings   Talk")
   expect(line(frame, 3)).toMatch(/^ ╭─ Summary ─+╮$/)
@@ -83,7 +83,7 @@ test("Board · Summary: the board's facts, first of the three tabs", async () =>
 
 test("Board · Meetings: its series panel, past meetings and your actions", async () => {
   const { t, frame } = await board("meetings")
-  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}5 Meetings ▾ {2}› BOARD Management board +● 2 new in inbox {2}Fri 20 Nov 2026$/)
+  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}7 Boards ▾ {2}› BOARD Management board +● 2 new in inbox {2}Fri 20 Nov 2026$/)
   expect(line(frame, 1).trim()).toBe("")
   expect(line(frame, 2)).toBe("  Summary   Meetings   Talk")
   expect(line(frame, 3)).toMatch(/^ ╭─ Board · monthly, last Fri ─+╮ ╭─ Your actions for BOARD · 1 ─+╮$/)
@@ -123,7 +123,7 @@ test("Board · Meetings: Enter opens the next board meeting under the board's cr
   const { t } = await board("meetings")
   t.input.pressEnter()
   let frame = await until(t, (f) => f.includes("Board talk-list · 2"))
-  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}5 Meetings ▾ {2}› BOARD Management board › Board Fri 27 Nov +● 2 new in inbox {2}Fri 20 Nov 2026$/)
+  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}7 Boards ▾ {2}› BOARD Management board › Board Fri 27 Nov +● 2 new in inbox {2}Fri 20 Nov 2026$/)
   expect(fgAt(await t.spans(), "BOARD", 0)).toBe(theme.cyan)
   t.input.pressEscape()
   frame = await until(t, (f) => f.includes("Past meetings"))
@@ -182,7 +182,7 @@ test("Board view at 80×24: the code, the names and the panels whole", async () 
     const rows = frame.replace(/\n$/, "").split("\n")
     expect(rows.length).toBe(24)
     for (const l of rows) expect(l.length).toBeLessThanOrEqual(80)
-    expect(line(frame, 0)).toMatch(/^ ttybrain · {2}5 Meetings ▾ {2}› BOARD /)
+    expect(line(frame, 0)).toMatch(/^ ttybrain · {2}7 Boards ▾ {2}› BOARD /)
     expect(frame).not.toMatch(/BOAR…|Marie D…|Peter J…/)
     expect([...frame.matchAll(/╭/g)].length).toBe([...frame.matchAll(/╰/g)].length)
     expect(line(frame, 2)).toBe("  Summary   Meetings   Talk")

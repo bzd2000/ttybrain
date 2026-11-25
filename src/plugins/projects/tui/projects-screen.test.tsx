@@ -65,7 +65,7 @@ const health = async (code: string) =>
     return row?.health ?? null
   })
 
-const HINTS = ["enter open", "n new", "e edit", "h health", "/ filter", "a archived", "↑↓ select", "i capture", "g or 1-6 screens", "? help", "q quit"]
+const HINTS = ["enter open", "n new", "e edit", "h health", "/ filter", "a archived", "↑↓ select", "i capture", "g or 1-7 screens", "? help", "q quit"]
 
 describe("Projects screen", () => {
   test("sorted by health then next milestone", async () => {

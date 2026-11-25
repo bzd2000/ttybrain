@@ -14,7 +14,7 @@ import type { KeyEvent } from "@opentui/core"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { createContext, createSignal, onCleanup, onMount, useContext, type Accessor } from "solid-js"
 
-// `alt`: a second key for the same thing, shown as `<key> or <alt> <label>` (`g or 1-6 screens`).
+// `alt`: a second key for the same thing, shown as `<key> or <alt> <label>` (`g or 1-7 screens`).
 export type Hint = { key: string; label: string; alt?: string }
 // `exact`: these hints are the whole of the layer's own part of the status bar: hints registered without it on the
 // same layer (a Table's `↑↓ select`, say) are left out while it is registered. `frame` (with `exact`, on the screen
@@ -44,7 +44,7 @@ export const GLOBAL_KEYS: Hint[] = [
 ]
 
 // The hints the frame adds on a screen (not in an overlay, not while typing), after the global actions' hints;
-// `lastSlot` is the highest screen number key (`g or 1-6 screens`).
+// `lastSlot` is the highest screen number key (`g or 1-7 screens`).
 export function frameHints(lastSlot: number): Hint[] {
   return [
     { key: "g", ...(lastSlot > 1 ? { alt: `1-${lastSlot}` } : {}), label: "screens" },

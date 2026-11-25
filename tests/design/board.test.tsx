@@ -1,5 +1,5 @@
 // A board meeting's Agenda tab, as the 2026-11-20 `board` design draws it: opened from the board BOARD's Meetings
-// tab, the crumb `5 Meetings ▾ › BOARD Management board › Board Fri 27 Nov` (design §5.7: a board is no project; the
+// tab, the crumb `7 Boards ▾ › BOARD Management board › Board Fri 27 Nov` (the mock's `5 Meetings ▾` predates screen 7) (design §5.7: a board is no project; the
 // mock's chip is `2 Projects`); the tabs Agenda · Prep · Notes · Export
 // (+ the actions plugin's Actions, already accepted); "Agenda · 5" (1.3 : 1: # muted, Item, Project cyan, Ask, `—`
 // muted for none) beside "Board talk-list · 2" (`·` muted, then `A adds one to the agenda`); the bar `←→ tabs   n
@@ -55,7 +55,7 @@ async function board(width = 118, height = 36): Promise<{ t: RenderedTui; frame:
 
 test("Board meeting as designed", async () => {
   const { t, frame } = await board()
-  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}5 Meetings ▾ {2}› BOARD Management board › Board Fri 27 Nov +● 2 new in inbox {2}Fri 20 Nov 2026$/)
+  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}7 Boards ▾ {2}› BOARD Management board › Board Fri 27 Nov +● 2 new in inbox {2}Fri 20 Nov 2026$/)
   expect(line(frame, 1).trim()).toBe("")
   expect(line(frame, 2)).toBe("  Agenda   Prep   Notes   Export   Actions 1")
   expect(line(frame, 3)).toMatch(/^ ╭─ Agenda · 5 ─+╮ ╭─ Board talk-list · 2 ─+╮$/)
@@ -109,7 +109,7 @@ test("A takes a talk item onto the agenda and ticks it discussed in this meeting
 test("Board meeting at 80×24: codes whole, panels keep their borders, whole hints", async () => {
   const { frame } = await board(80, 24)
   // The parent's name gives way first, then the meeting's text; the code stays whole.
-  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}5 Meetings ▾ {2}› BOARD › Board… +● 2 new in inbox/)
+  expect(line(frame, 0)).toMatch(/^ ttybrain · {2}7 Boards ▾ {2}› BOARD › Board Fr… +● 2 new in inbox/)
   expect(frame).toMatch(/2\. +CRM status +CRM /)
   expect(frame).toMatch(/4\. +HR portal pilot go\/no-go +HRP/)
   expect(frame).not.toMatch(/CR…|HR…|ER…/)

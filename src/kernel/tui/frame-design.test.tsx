@@ -120,7 +120,7 @@ test("status bar as designed", async () => {
   const frame = await t.frame()
   // The mock's `x done` is FEATURE A14, so it is left out; the 2026-11-20 home design draws no `q quit` (and its
   // `x done` / `t to talk` show only while the Upcoming meetings panel has rows).
-  expect(line(frame, HEIGHT - 1).trim()).toBe("tab panel   enter open   i capture   g or 1-6 screens   ? help")
+  expect(line(frame, HEIGHT - 1).trim()).toBe("tab panel   enter open   i capture   g or 1-7 screens   ? help")
   const spans = await t.spans()
   const bar = HEIGHT - 1
   expect(fgAt(spans, "tab ", bar)).toBe(theme.accent)
@@ -129,15 +129,15 @@ test("status bar as designed", async () => {
   expect(fgAt(spans, "i capture", bar)).toBe(theme.accent)
   expect(fgAt(spans, "capture", bar)).toBe(theme.muted)
   expect(fgAt(spans, "g or", bar)).toBe(theme.accent)
-  expect(fgAt(spans, "or 1-6", bar)).toBe(theme.muted)
-  expect(fgAt(spans, "1-6", bar)).toBe(theme.accent)
+  expect(fgAt(spans, "or 1-7", bar)).toBe(theme.muted)
+  expect(fgAt(spans, "1-7", bar)).toBe(theme.accent)
   expect(fgAt(spans, "screens", bar)).toBe(theme.muted)
 })
 
 test("switcher drops down under the chip", async () => {
   const t = await open()
   t.input.pressKey("g")
-  const frame = await until(t, (f) => f.includes("6  Inbox"))
+  const frame = await until(t, (f) => f.includes("7  Boards"))
   expect(line(frame, 0)).toContain("1 Attention ▴")
   // A 26-wide focused box on the line under the header, hanging under the chip: it starts 2 cells before the chip,
   // as the design's does (column 4 under `pm · `; `ttybrain · ` puts the chip at 12, so 10). No title.
@@ -147,11 +147,12 @@ test("switcher drops down under the chip", async () => {
   const top = rows(frame)[1]!
   expect(top.slice(left, left + 26)).toBe(`╭${"─".repeat(24)}╮`)
   expect(frame).not.toContain("Screens")
-  const list = rows(frame).slice(2, 8).map((l) => l.slice(left, left + 26))
+  const list = rows(frame).slice(2, 9).map((l) => l.slice(left, left + 26))
   expect(list[0]).toMatch(/^│ 1  Attention\s+│$/)
   expect(list[1]).toMatch(/^│ 2  Projects\s+7 │$/)
   expect(list[5]).toMatch(/^│ 6  Inbox\s+3 │$/)
-  expect(rows(frame)[8]!.slice(left, left + 26)).toBe(`╰${"─".repeat(24)}╯`)
+  expect(list[6]).toMatch(/^│ 7  Boards\s+1 │$/)
+  expect(rows(frame)[9]!.slice(left, left + 26)).toBe(`╰${"─".repeat(24)}╯`)
   const spans = await t.spans()
   expect(fgAt(spans, `╭${"─".repeat(24)}╮`, 1)).toBe(theme.borderFocused)
   // The slot is muted, the title text, a count muted except the Inbox's (amber); the current screen is selected.
@@ -161,7 +162,7 @@ test("switcher drops down under the chip", async () => {
   expect(bgAt(spans, "1  Attention", 2)).toBe(theme.selectedBg)
   expect(fgAt(spans, "1  Attention", 2)).toBe(theme.accent)
   // The switcher's bar.
-  expect(line(frame, HEIGHT - 1).trim()).toBe("↑↓ move   1-6 jump   enter go   esc close")
+  expect(line(frame, HEIGHT - 1).trim()).toBe("↑↓ move   1-7 jump   enter go   esc close")
   // The screen behind is dimmed, the header too; the status bar (the switcher's own keys) is not.
   expect(fgAt(spans, "Thu 12 Nov 2026", 0)).not.toBe(theme.muted)
   expect(fgAt(spans, "● 3 new in inbox", 0)).not.toBe(theme.amber)

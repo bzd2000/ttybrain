@@ -156,7 +156,7 @@ export function TuiApp(props: { kernel: Kernel; registry: TuiRegistry; refreshMs
   // What loaded plugins' ctx.notices said at boot.
   const notices = () => kernel.plugins.flatMap((p) => (p.notices ?? []).map((n) => `${p.id}: ${n}`))
   // On a screen (not in an overlay, not while typing) the bar is the screen's hints, then the global actions'
-  // (`i capture`, unless an exact registration says `globals: false`), then the frame's (`g or 1-6 screens`,
+  // (`i capture`, unless an exact registration says `globals: false`), then the frame's (`g or 1-7 screens`,
   // `? help`, `q quit`, or those an exact registration asks for).
   const lastSlot = Math.max(...screens.map((s) => s.slot))
   const hints = () => {
