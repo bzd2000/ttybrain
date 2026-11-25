@@ -10,7 +10,7 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 const isThenable = (v: unknown): v is PromiseLike<unknown> =>
   (typeof v === "object" || typeof v === "function") && v !== null && typeof (v as { then?: unknown }).then === "function"
 
-// `parts` are booted with `opts.builtin` (built-in parts may claim screen slots 2–6; others are numbered from 7),
+// `parts` are booted with `opts.builtin` (built-in parts may claim screen slots 2–7; others are numbered from 8),
 // then `opts.external` with builtin false, all into one registry.
 export function bootTui(kernel: Kernel, parts: TuiDef[], opts: { builtin?: boolean; external?: TuiDef[] } = {}): TuiRegistry {
   const registry = new TuiRegistry()

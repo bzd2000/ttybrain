@@ -44,7 +44,7 @@ async function until(t: RenderedTui, check: (frame: string) => boolean): Promise
 async function start(width: number, height: number): Promise<RenderedTui> {
   kernel = await makeTestKernel({ plugins: [...builtinPlugins, probePlugin], seed: seedDesign })
   tui = await renderTui(kernel, { width, height, external: [probePart] })
-  tui.input.pressKey("7")
+  tui.input.pressKey("8")
   await until(tui, (f) => f.includes("probe screen"))
   return tui
 }

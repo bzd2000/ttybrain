@@ -36,7 +36,7 @@ Companion to [`2026-11-13-pm-design.md`](2026-11-13-pm-design.md). That document
 |---|---|---|---|---|
 | `people` | — | projects, actions | `person` (`@handle`), `note` (`N-`), `goal` (`G-`) | People (3) |
 | `projects` | `people ^1` | people, meetings (`^3`), boards, actions | `project` (`#CODE`), `milestone` (`MS-`), `deliverable` (`D-`), `risk` (`R-`), `decision` (`DE-`) | Projects (2) |
-| `boards` | `projects ^2` | projects | `board` (`#CODE`, shared prefix) | (the board view on screen 5) |
+| `boards` | `projects ^2` | projects, meetings (`^3`) | `board` (`#CODE`, shared prefix) | Boards (7) |
 | `actions` | — | people, projects, meetings (`^3`), boards | `action` (`A-`) | Actions (4) |
 | `meetings` | `projects ^2`, `people ^1`, `actions ^2`, `boards ^1` | people, projects, actions, boards | `meeting` (`M-`), `series` (`S-`), `talk_item` (`T-`), `agenda_item` (no prefix) | Meetings (5) |
 | `inbox` | — | — | `inbox_item` (`I-`) | Inbox (6) |
@@ -291,7 +291,9 @@ Step `from-meetings`: waits while meetings is not loaded; imports every row of m
 
 ### UI
 
-Record type `board` crumb (`› #MB Management board`, the code cyan as a project's), form `board` (Code, Name, Note), recordTab `Summary` (first of the board view's tabs: the facts; `e` edit, `Del` archive, `r` restore). Meetings adds Meetings and Talk tabs; screen 5's Boards panel (meetings') reads `boards.board`.
+Record type `board` crumb (`› #MB Management board`, the code cyan as a project's), form `board` (Code, Name, Note), recordTab `Summary` (first of the board view's tabs: the facts; `e` edit, `Del` archive, `r` restore). Meetings adds Meetings and Talk tabs.
+
+Screen 7 **Boards** (slot 7, `records: ["board"]`, so an open board shows `7 Boards ▾`; the switcher counts the boards that are not archived): one panel `Boards · n` (n: the active boards shown), the active boards by code, columns Code (cyan, as wide as the longest code) · Name · Next meeting (`Fri 27 Nov Board`: its day date, whole, and title, cut with `…` when long; a muted `—` without one) · Talk (open talk items; a muted `0`), the last two from meetings' read `boardActivity` (`—` and `0` while meetings is not loaded). `a` shows the archived ones under the active ones (muted) with a Status column (`active`, `archived`), the footer `archived shown`; `/` filters on code or name (Enter applies, Esc clears; footer `filter: …`). Keys: Enter opens the board (Summary), `n` new (the board form), `e` edit (an archived row: `press r to restore`), `Del` archive (the Summary's confirmation), `r` restore an archived row. The bar: `enter open   n new   e edit   del archive   / filter   a archived   i capture   g or 1-7 screens   ? help   q quit` (`r restore` in place of `del archive` on an archived row). Empty: `No boards yet. Press n to add one.`; no match: `No boards match the filter.`
 
 ---
 
@@ -355,7 +357,7 @@ Two upkeeps (`ctx.upkeep`, see the architecture primer) keep the data current wi
 | `talkList` | `about` | `{ open, carried, carriedFrom? }`: the open talk items of a person or project (a project's include open people's items tagged with it); the carried ones were added before the subject's last held meeting |
 | `agendaFor` | `meeting` | a planned meeting's agenda: the subject's open items (a project's also the tagged people's items) and the items ticked in this meeting; a held meeting's: what was discussed in it and what was kept at close |
 | `agreeLinks` | `meeting` | the refs an action agreed in the meeting links to: the meeting and what it is about |
-| `boardActivity` | `board` | `{ series, next, talk }`: the board's open series (ref and rhythm line), its next planned meeting and its open talk items, for boards' `board show` |
+| `boardActivity` | `board` | `{ series, next, talk }`: the board's open series (ref and rhythm line), its next planned meeting and its open talk items, for boards' `board show` and screen 7 |
 | `legacyBoards` | none | `{ boards }`: the rows still in meetings' own `board` table (2.1's boards), for boards' `from-meetings` handover |
 | `legacyMaxId` | none | `{ max }`: the highest board id meetings knows: its `board` table, the board subjects of its meetings, series and talk items, and the board links of `actions.link` (a board deleted long ago may still be named); boards allocates above it |
 
@@ -523,6 +525,8 @@ The built-ins above are packages like any other (`src/plugins/<id>/package.json`
 - no other `@opentui/*` package;
 - the logic entry, directly or through its own files, must not import the UI modules or `@ttybrain/api/tui`;
 - a plugin built against an older ttybrain that uses a since-removed export fails at load with `rebuild the plugin with this ttybrain`; rebuild it.
+
+**Screen keys.** The built-in screens use `1`-`7` (7 is Boards since 2026-11-25), so an external plugin's screens are numbered from `8` (they were from `7`), in load order.
 
 **Rules.** Everything in `docs/architecture.md` applies: data only through `ctx.data`, views and operations; schema changes only in migrations (external plugins may not create triggers); a tui `activate` must be synchronous; importing and `activate` each time out after 5 s. A failing plugin is isolated and shown by `ttybrain plugin list` and in Help; ttybrain keeps running.
 

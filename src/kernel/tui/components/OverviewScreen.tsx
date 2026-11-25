@@ -10,7 +10,7 @@
 // `keys` act on its selected row, and its `detail` shows a block for the selected row under the rows (↓ on the last
 // row moves into it, ↑ on its first row back; its own `keys` and Enter act on its rows). The status bar shows
 // `tab panel`, `enter open`, then the focused panel's detail keys and its own (while it has rows), the global
-// actions' and `g or 1-6 screens`, `? help` (the Attention design draws no `q quit`). On a row of the panel, the
+// actions' and `g or 1-7 screens`, `? help` (the Attention design draws no `q quit`). On a row of the panel, the
 // detail block's first row is the one its keys act on (shown selected). A first panel with `lead` takes the left
 // column of the top block (overviewLayout.ts). The screen has one key handler: it routes keys to the focused panel,
 // whose tables take theirs through it (Table `keySource`).
