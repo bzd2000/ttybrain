@@ -1,6 +1,6 @@
 // The exposed write operations on milestones, deliverables, risks and decisions. Each returns the record with
 // its `ref`; `describe` gives the change-set line (plugin reference §2). Every write needs an active project and
-// active owners: archived ones are refused with a hint to restore them first. An owner may be `me` (or `@me`).
+// active owners: archived ones are refused with a hint to restore them first. An owner may be `@me` (or `me`).
 import { Deleted, NonBlank, Type, ValidationError, type PluginContext, type Static } from "@ttybrain/api"
 import { DeliverableRecord, DecisionRecord, DeliverableStatus, MilestoneRecord, RiskRecord, RiskType, Severity, type Items } from "./items"
 import { clean, date, now, today } from "./ops-project"

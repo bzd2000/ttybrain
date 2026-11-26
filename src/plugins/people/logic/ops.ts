@@ -81,7 +81,7 @@ const date = (input: string, field: string) => {
 const roles = (p: { is_team?: boolean; is_stakeholder?: boolean }) =>
   [p.is_team ? "team" : "", p.is_stakeholder ? "stakeholder" : ""].filter(Boolean).join(", ")
 
-// "me" is the CLI token for the user (`--owner me`), so no person may have it as a handle.
+// `@me` is the user (`--owner @me`, bare `me` too), so no person may have the handle "me".
 const ME = "me"
 
 export function registerOps(ctx: PluginContext, store: Store): void {
@@ -91,7 +91,7 @@ export function registerOps(ctx: PluginContext, store: Store): void {
     const handle = normalizeHandle(input)
     if (!HANDLE.test(handle)) throw new ValidationError(`invalid handle "${input}"`, { field: "handle", hint: "use lowercase letters, digits and -" })
     if (handle === ME)
-      throw new ValidationError(`handle "${ME}" is reserved`, { field: "handle", hint: `"${ME}" means you (as in --owner ${ME}); choose another --handle` })
+      throw new ValidationError(`handle "${ME}" is reserved`, { field: "handle", hint: `"@${ME}" means you (as in --owner @${ME}); choose another --handle` })
     const other = await store.handleId(handle)
     if (other !== null && other !== self) throw new ConflictError(`handle "${handle}" is taken`, { hint: "choose another --handle" })
     return handle

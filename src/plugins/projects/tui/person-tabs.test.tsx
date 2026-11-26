@@ -175,11 +175,11 @@ describe("projects' person tabs", () => {
     const order = ["A-1", "A-2", "A-3", "A-5", "A-4"].map((r) => indexOf(frame, `${r} `))
     expect(order).toEqual([...order].sort((a, b) => a - b))
     // Marie herself is left out of Linked to; closed actions say what became of them.
-    expect(lineWith(frame, "A-1 ")).toMatch(/A-1\s+Send revised budget\s+me\s+—\s+10 Nov/)
+    expect(lineWith(frame, "A-1 ")).toMatch(/A-1\s+Send revised budget\s+@me\s+—\s+10 Nov/)
     expect(lineWith(frame, "A-2 ")).toMatch(/A-2\s+Review contract\s+Marie\s+CRM\s+20 Nov/)
     expect(lineWith(frame, "A-3 ")).toMatch(/A-3\s+Collect quotes\s+Marie\s+—\s+—/)
     expect(lineWith(frame, "A-5 ")).toMatch(/A-5\s+Book workshop\s+Marie\s+—\s+done/)
-    expect(lineWith(frame, "A-4 ")).toMatch(/A-4\s+Sign off scope\s+me\s+—\s+done/)
+    expect(lineWith(frame, "A-4 ")).toMatch(/A-4\s+Sign off scope\s+@me\s+—\s+done/)
     const spans = await t.spans()
     const a1 = spans.lines.find((l) => l.spans.map((s) => s.text).join("").includes("Send revised budget"))!
     expect(rgbToHex(a1.spans.find((s) => s.text.includes("10 Nov"))!.fg).toLowerCase()).toBe(theme.red)

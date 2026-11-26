@@ -116,8 +116,8 @@ describe("meetings reports", () => {
         "",
         "| ID | Action | Owner | Due | Why |",
         "| --- | --- | --- | --- | --- |",
-        "| ! A-1 | Send revised budget to Peter | me | 2026-11-10 | overdue |",
-        "| ! A-2 | Share integration specs | me |  | previous meeting |",
+        "| ! A-1 | Send revised budget to Peter | @me | 2026-11-10 | overdue |",
+        "| ! A-2 | Share integration specs | @me |  | previous meeting |",
         "",
         "### Ask",
         "",
@@ -188,7 +188,7 @@ describe("meetings reports", () => {
         "",
         "| ID | Action | Owner | Due | Project |",
         "| --- | --- | --- | --- | --- |",
-        "| A-2 | Share integration specs | me |  | CRM |",
+        "| A-2 | Share integration specs | @me |  | CRM |",
         "| A-3 | Book the venue | @peter | 2026-11-20 |  |",
         "",
       ].join("\n"),
@@ -255,12 +255,12 @@ describe("meetings reports", () => {
     const actions = await section("Actions")
     expect(actions.compact).toEqual({
       title: "Overdue actions",
-      lines: [{ icon: { text: "!", tone: "red" }, text: [{ text: "A-1 Send revised budget to Peter" }], aside: { text: "me · -3d", tone: "red" } }],
+      lines: [{ icon: { text: "!", tone: "red" }, text: [{ text: "A-1 Send revised budget to Peter" }], aside: { text: "@me · -3d", tone: "red" } }],
     })
     // The table (Markdown, text) still lists every action due before the meeting, and the previous meeting's.
     expect(actions.rows.map((r: any) => r.ID)).toEqual(["A-1", "A-3", "A-2"])
     const md = (await ok("report", "board", "M-2")).out
-    expect(md).toContain("| ! A-3 | Draft cutover plan | me | 2026-11-20 | overdue |")
+    expect(md).toContain("| ! A-3 | Draft cutover plan | @me | 2026-11-20 | overdue |")
     expect((await ok("report", "board", "M-2", "--format", "text")).out).toContain("A-3")
     // The since is the previous meeting's date: "since last meeting".
     expect((await section("Decisions")).compact.title).toBe("Decisions since last meeting")

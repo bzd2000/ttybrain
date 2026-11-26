@@ -66,7 +66,7 @@ describe("actions", () => {
     expect((await run("action", "list", "--project", "NOPE", "--json")).code).toBe(2)
   })
 
-  test('action add "Send roadmap" --for peter --due fri → 2026-11-20, owner null; the text list shows me', async () => {
+  test('action add "Send roadmap" --for peter --due fri → 2026-11-20, owner null; the text list shows @me', async () => {
     const a = await ok("action", "add", "Send roadmap", "--for", "peter", "--due", "fri", "--json")
     expect(a.json).toEqual({
       ref: "A-1",
@@ -100,16 +100,16 @@ describe("actions", () => {
         formatTable(COLUMNS, [row("A-2", "Call vendor", "#CRM", "@bob", "", "2026-11-01")]),
         "",
         "This week",
-        formatTable(COLUMNS, [row("A-3", "Book room", "", "me", "", "2026-11-15")]),
+        formatTable(COLUMNS, [row("A-3", "Book room", "", "@me", "", "2026-11-15")]),
         "",
         "Next week",
-        formatTable(COLUMNS, [row("A-1", "Send roadmap", "", "me", "@peter", "2026-11-20")]),
+        formatTable(COLUMNS, [row("A-1", "Send roadmap", "", "@me", "@peter", "2026-11-20")]),
         "",
         "Later",
-        formatTable(COLUMNS, [row("A-4", "Draft plan", "", "me", "", "2026-12-01")]),
+        formatTable(COLUMNS, [row("A-4", "Draft plan", "", "@me", "", "2026-12-01")]),
         "",
         "No date",
-        formatTable(COLUMNS, [row("A-5", "Read spec", "", "me", "", "")]),
+        formatTable(COLUMNS, [row("A-5", "Read spec", "", "@me", "", "")]),
       ].join("\n") + "\n",
     )
     expect((await ok("action", "list", "--for", "peter", "--json")).json.map((a: any) => a.ref)).toEqual(["A-1"])
@@ -167,7 +167,7 @@ describe("actions", () => {
     expect(await k.records.resolveAny("A-1")).toEqual({ type: "action", id: 1 })
     expect(await k.records.label("A-1")).toBe("Send roadmap")
     const d = (op: string, input: unknown) => inCtx(() => k.ops.describe("actions", op, input))
-    expect(await d("addAction", { title: "Tell Peter", forPerson: "peter", due: "fri" })).toBe('+ action "Tell Peter" (me, for @peter, due 2026-11-20)')
+    expect(await d("addAction", { title: "Tell Peter", forPerson: "peter", due: "fri" })).toBe('+ action "Tell Peter" (@me, for @peter, due 2026-11-20)')
     expect(await d("addAction", { title: "Spec", owner: "bob", project: "CRM" })).toBe('+ action "Spec" (@bob, CRM)')
     expect(await d("editAction", { ref: "A-1", title: "x", due: "mon" })).toBe("~ A-1 title, due")
     expect(await d("completeAction", { ref: "A-1" })).toBe("~ A-1 done")
@@ -175,10 +175,22 @@ describe("actions", () => {
     expect(await d("deleteAction", { ref: "A-1" })).toBe('- action A-1 "Send roadmap"')
     const out = await inCtx(() => api().write.addAction!({ title: "Via op", owner: "me" }))
     expect([out.ref, out.owner_id]).toEqual(["A-2", null])
-    expect(await d("addAction", { title: "Mine", owner: "@me" })).toBe('+ action "Mine" (me)')
+    expect(await d("addAction", { title: "Mine", owner: "@me" })).toBe('+ action "Mine" (@me)')
     const at = await inCtx(() => api().write.addAction!({ title: "Via @me", owner: "@ME" }))
     expect([at.ref, at.owner_id, at.owner]).toEqual(["A-3", null, null])
     const bob = await ok("action", "add", "To Bob", "--owner", "bob", "--json")
     expect((await ok("action", "edit", bob.json.ref, "--owner", "@me", "--json")).json).toMatchObject({ owner: null, owner_id: null })
+  })
+
+  // The user is shown as `@me` (as people are `@anna`); `@me` is the documented input, bare `me` still works. JSON
+  // keeps `owner: null` for me (unchanged since actions 2.0).
+  test("the user is @me in text; --owner @me and me both work; JSON owner stays null", async () => {
+    expect((await ok("action", "add", "Mine", "--owner", "@me")).out).toBe("A-1 Mine (@me)\n")
+    expect((await ok("action", "add", "Also mine", "--owner", "me")).out).toBe("A-2 Also mine (@me)\n")
+    expect((await ok("action", "add", "Default")).out).toBe("A-3 Default (@me)\n")
+    expect((await ok("action", "show", "A-2")).out).toBe("A-2 Also mine\n  status: open\n  owner: @me\n")
+    expect((await ok("action", "show", "A-1", "--json")).json).toMatchObject({ owner: null, owner_id: null })
+    expect((await ok("action", "list", "--owner", "@me", "--json")).json.map((a: any) => a.ref)).toEqual(["A-1", "A-2", "A-3"])
+    expect((await ok("action", "list", "--owner", "me", "--json")).json.map((a: any) => a.ref)).toEqual(["A-1", "A-2", "A-3"])
   })
 })

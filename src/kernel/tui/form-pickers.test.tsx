@@ -54,8 +54,8 @@ const LOW_FIELDS: FieldSpec[] = [
   { name: "size", label: "Size", kind: "enum", values: ["xs", "s", "m", "l", "xl", "xxl"], required: true },
 ]
 const DATE_FIELDS: FieldSpec[] = [{ name: "due", label: "Due", kind: "date" }]
-// A record field with a fixed first entry (`extra`), as an owner's `me`.
-const EXTRA_FIELDS: FieldSpec[] = [{ name: "owner", label: "Owner", kind: "record", recordType: "person", extra: [{ value: "me", label: "me" }] }]
+// A record field with a fixed first entry (`extra`), as an owner's `@me`.
+const EXTRA_FIELDS: FieldSpec[] = [{ name: "owner", label: "Owner", kind: "record", recordType: "person", extra: [{ value: "@me" }] }]
 
 let overlay: Overlay | undefined
 function Home() {
@@ -222,24 +222,28 @@ describe("form drop-downs", () => {
     expect(submitted[0]?.owner).toBe("@bob")
   })
 
-  test("record with extra: its entries come first, by label, narrowed by the typed text (prefix or not); picking one takes its value", async () => {
+  test("record with extra: its entries come first, by label, narrowed by the typed text (prefix or not, on either side); picking one takes its value", async () => {
     const t = await open("extra")
     t.input.pressEnter()
     let frame = await until(t, (f) => listRows(f).length > 2)
-    expect(listRows(frame)).toEqual(["me", "@anna Anna Peeters", "@bob Bob Stone"])
+    expect(listRows(frame)).toEqual(["@me", "@anna Anna Peeters", "@bob Bob Stone"])
     await t.input.typeText("bo")
     frame = await until(t, (f) => listRows(f).length === 1)
     expect(listRows(frame)).toEqual(["@bob Bob Stone"])
     for (let i = 0; i < 2; i++) t.input.pressBackspace()
+    await t.input.typeText("m") // without the prefix: `@me` still matches
+    frame = await until(t, (f) => listRows(f)[0] === "@me")
+    expect(listRows(frame)[0]).toBe("@me")
+    t.input.pressBackspace()
     await t.input.typeText("@M")
-    frame = await until(t, (f) => listRows(f)[0] === "me")
-    expect(listRows(frame)[0]).toBe("me")
+    frame = await until(t, (f) => listRows(f)[0] === "@me")
+    expect(listRows(frame)[0]).toBe("@me")
     t.input.pressEnter()
     frame = await until(t, (f) => listRows(f).length === 0)
-    expect(lineWith(frame, "Owner")).toMatch(/Owner +me/)
+    expect(lineWith(frame, "Owner")).toMatch(/Owner +@me/)
     t.input.pressKey("s", { ctrl: true })
     await t.settle()
-    expect(submitted).toEqual([{ owner: "me" }])
+    expect(submitted).toEqual([{ owner: "@me" }])
   })
 
   test("choices: Enter lists the field's choices from the form's values; custom… closes the list to type", async () => {

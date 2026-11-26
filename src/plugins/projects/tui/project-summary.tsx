@@ -188,7 +188,7 @@ export function ProjectSummary(props: { recordRef: string }) {
         ref: x.ref,
         cells: {
           title: x.title,
-          owner: x.owner_me ? { text: "me", tone: "muted" } : x.ownerName === null ? "" : firstName(x.ownerName),
+          owner: x.owner_me ? { text: "@me", tone: "muted" } : x.ownerName === null ? "" : firstName(x.ownerName),
           status: { text: label(x.status), tone: STATUS_TONE[x.status] ?? "muted" },
           due: { text: due, tone: delivered || x.due_date === null ? "muted" : x.due_date < today() ? "red" : undefined },
         },

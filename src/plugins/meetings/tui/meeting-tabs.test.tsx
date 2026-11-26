@@ -351,7 +351,7 @@ describe("meeting tabs", () => {
     })
     frame = await until(t, (f) => f.includes("DE-1 Go with vendor B"))
     expect(frame).toContain("A-3 Book the room · @peter · 20 Nov")
-    expect(frame).toContain("A-4 Circulate the pack · me")
+    expect(frame).toContain("A-4 Circulate the pack · @me")
     expect(frame).toContain("DE-1 Go with vendor B")
     expect(frame).toMatch(/Agenda   Prep   Notes   Export/)
     expect(frame).not.toContain("Share integration specs")

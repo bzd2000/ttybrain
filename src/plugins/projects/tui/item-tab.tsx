@@ -42,9 +42,9 @@ export type ItemKind = {
   deleteOp: string
 }
 
-// Refs muted, people (owners, for) magenta, and `me` or none (`—`) muted, as on the designed screens.
+// Refs muted, people (owners, for) magenta, `@me` too (as a handle), and none (`—`) muted.
 const REF: TableColumn = { id: "ref", title: "Ref", width: 6, tone: () => "muted" }
-const person = (text: string | null | undefined, none = "—"): Cell => (text && text !== "me" ? { text, tone: "magenta" } : { text: text || none, tone: "muted" })
+const person = (text: string | null | undefined, none = "—"): Cell => (text ? { text, tone: "magenta" } : { text: none, tone: "muted" })
 const DELIVERABLE_FLOW = ["not_started", "in_progress", "in_review", "delivered"]
 const byDate = (key: string) => (a: Rec, b: Rec) => (a[key] ?? "9999") < (b[key] ?? "9999") ? -1 : (a[key] ?? "9999") > (b[key] ?? "9999") ? 1 : a.id - b.id
 const SEVERITY: Record<string, number> = { high: 0, medium: 1, low: 2 }

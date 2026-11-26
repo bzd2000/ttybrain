@@ -27,8 +27,8 @@ type KindForm = {
 }
 
 const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? null) === (b ?? null)
-// An owner's drop-down starts with me (the operations take `me`; empty is no owner).
-const ME = [{ value: "me" }]
+// An owner's drop-down starts with `@me` (the operations take it; empty is no owner).
+const ME = [{ value: "@me" }]
 const RISK_TYPES = ["risk", "issue"]
 const SEVERITIES = ["low", "medium", "high"]
 const STATUSES = ["not_started", "in_progress", "in_review", "delivered"]

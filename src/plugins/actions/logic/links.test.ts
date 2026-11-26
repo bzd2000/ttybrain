@@ -97,7 +97,7 @@ describe("actions: links", () => {
     expect([both.json.project, both.json.links]).toEqual(["#CRM", [CRM, ERP]])
     const d = (op: string, input: unknown) => inCtx(() => k.ops.describe("actions", op, input))
     expect(await d("addAction", { title: "Spec", owner: "bob", project: "CRM", links: ["ERP", "M-1"] })).toBe('+ action "Spec" (@bob, CRM, #ERP, M-1)')
-    expect(await d("addAction", { title: "Spec", links: ["#NOPE"] })).toBe('+ action "Spec" (me, #NOPE)')
+    expect(await d("addAction", { title: "Spec", links: ["#NOPE"] })).toBe('+ action "Spec" (@me, #NOPE)')
   })
 
   test("an unknown or unusable ref is a validation error with a hint", async () => {
@@ -240,7 +240,7 @@ describe("actions: links", () => {
     await ok("action", "add", "Unrelated") // A-3
     const minutes = (await ok("report", "minutes", "M-1", "--format", "json")).json
     const section = minutes.sections.find((s: any) => s.title === "Actions")
-    expect(section.rows).toEqual([{ ID: "A-1", Action: "From the meeting", Owner: "me", Due: null, Project: "ERP" }])
+    expect(section.rows).toEqual([{ ID: "A-1", Action: "From the meeting", Owner: "@me", Due: null, Project: "ERP" }])
     expect((await ok("meeting", "close", "M-1", "--json")).json.logged).toEqual({ actions: 1, decisions: 0 })
     expect((await ok("project", "show", "CRM", "--json")).json.open_actions).toBe(1)
     expect((await ok("project", "show", "ERP", "--json")).json.open_actions).toBe(1)

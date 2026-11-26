@@ -4,7 +4,7 @@
 // and the sections are simply not run.
 import { dueLabel, type Cell, type Mark, type PluginContext, type ReportCompact } from "@ttybrain/api"
 import { makeOverview, type OverviewAction } from "./overview"
-import { today, type ProjectActions } from "./ops"
+import { ME, today, type ProjectActions } from "./ops"
 import type { Store } from "./records"
 
 type Row = Record<string, Cell>
@@ -52,12 +52,12 @@ function registerStatusSection(ctx: PluginContext, store: Store): void {
         for (const a of list)
           if (!seen.has(a.ref)) {
             seen.add(a.ref)
-            rows.push({ ID: a.ref, Action: a.title, Owner: a.owner ?? "me", Due: a.due_date, Why: why })
+            rows.push({ ID: a.ref, Action: a.title, Owner: a.owner ?? ME, Due: a.due_date, Why: why })
             marks.push({ icon: "!", ...(why === "overdue" ? { tone: "red" as const } : {}) })
             // The compact form lists only what is overdue today, in red (`! A-27 Send revised budget to Peter
-            // me · -3d`); the table keeps everything due before the reference and the previous meeting's actions.
+            // @me · -3d`); the table keeps everything due before the reference and the previous meeting's actions.
             if (a.due_date !== null && a.due_date < t) {
-              const owner = a.owner === null ? "me" : (who.get(a.owner) ?? a.owner)
+              const owner = a.owner === null ? ME : (who.get(a.owner) ?? a.owner)
               lines.push({ icon: { text: "!", tone: "red" }, text: [{ text: `${a.ref} ${a.title}` }], aside: { text: `${owner} · ${dueLabel(a.due_date, t)}`, tone: "red" } })
             }
           }

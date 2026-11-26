@@ -116,7 +116,7 @@ export function actionCells(r: Row, meetings: Map<number, Meeting>, today: strin
   return {
     id: { text: r.rec.ref, tone: "muted" },
     title: r.rec.title,
-    owner: r.ownerName === null ? { text: "me", tone: "muted" } : r.ownerName,
+    owner: r.ownerName === null ? { text: "@me", tone: "muted" } : r.ownerName,
     linked: linkedCell(r.rec, meetings, opts.except),
     due: dueCell(r.rec, today, opts.due),
   }

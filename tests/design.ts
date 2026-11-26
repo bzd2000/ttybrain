@@ -253,7 +253,7 @@ export async function seedDesign(kernel: Kernel): Promise<void> {
     await people.addNote!({ person: "sofie", kind: "one_on_one", text: "Wants project mgmt training next year", date: "2026-11-11" })
     await people.addGoal!({ person: "sofie", title: "PM training 2027" })
     const action = await actions.addAction!({ title: "Send training plan options", due: "2026-11-15" })
-    return `1:1 note on Sofie · goal "PM training 2027" · action ${action.ref} (me, Sun)`
+    return `1:1 note on Sofie · goal "PM training 2027" · action ${action.ref} (@me, Sun)`
   })
   await handled("2026-11-11T16:45:00", "2026-11-11T18:05:00", "#ERP decision: go with vendor B, signed off by steering", async () => {
     const decision = await projects.addDecision!({ project: "ERP", title: "Select vendor B", date: "2026-11-11" })
@@ -358,10 +358,10 @@ export async function seedLongRefs(kernel: Kernel): Promise<void> {
 // - Talk-lists: Anna 4 open (Tue … today, two tagged ERP and CRM) and 1 carried over from her 1:1 of 9 Nov (where 3
 //   were discussed); Bob 1, Karim 2, Sofie none; CRM 2 of its own (3 with Anna's CRM item), ERP 1 (2 with Anna's),
 //   the board 2.
-// - Actions as screen 4 draws them: Send revised budget to Peter (me, CRM @peter, CRM steering 27 Oct, 14 Nov),
-//   Review her test strategy draft (me, @anna, 1:1 Anna 9 Nov, 16 Nov), Book vendor demo slot (Bob, ERP, 17 Nov), Ask
-//   HR about the AWS training budget (me, @anna, Mon 23), Draft 2027 budget first view (me, BOARD, Board 27 Nov, Thu
-//   26), Renew domain certificates (me, Fri 27), Solution design v1 (Anna, CRM, Fri 27). Ids follow the seed.
+// - Actions as screen 4 draws them: Send revised budget to Peter (@me, CRM @peter, CRM steering 27 Oct, 14 Nov),
+//   Review her test strategy draft (@me, @anna, 1:1 Anna 9 Nov, 16 Nov), Book vendor demo slot (Bob, ERP, 17 Nov), Ask
+//   HR about the AWS training budget (@me, @anna, Mon 23), Draft 2027 budget first view (@me, BOARD, Board 27 Nov, Thu
+//   26), Renew domain certificates (@me, Fri 27), Solution design v1 (Anna, CRM, Fri 27). Ids follow the seed.
 // - The inbox: 2 new items. Only through the plugins' write operations; a failing write throws.
 export async function seedMeetings(kernel: Kernel): Promise<void> {
   const w = (plugin: string) => kernel.runtime(plugin)!.self().write as Write

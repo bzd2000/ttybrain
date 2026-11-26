@@ -123,7 +123,7 @@ test("Meeting prep as designed", async () => {
     "Decisions since last meeting",
     "·  Phase 1 excludes marketing automation                     28 Oct",
     "Overdue actions",
-    "!  A-1 Send revised budget to Peter                          me · -3d",
+    "!  A-1 Send revised budget to Peter                          @me · -3d",
     "",
     "Ask for this meeting (your text)",
     "Approve 2-week shift of design milestone and release of contingency budget.",
@@ -160,7 +160,7 @@ test("Meeting prep as designed", async () => {
   // though the board pack's table (Markdown and text) still lists it.
   expect(fgAt(spans, "!", "A-1 Send")).toBe(theme.red)
   expect(fgAt(spans, "A-1 Send", "A-1 Send")).toBe(theme.text)
-  expect(fgAt(spans, "me · -3d", "A-1 Send")).toBe(theme.red)
+  expect(fgAt(spans, "@me · -3d", "A-1 Send")).toBe(theme.red)
   expect(frame).not.toContain("A-4 Prepare SteerCo deck input")
   const report = async (...format: string[]) => {
     let out = ""
@@ -168,7 +168,7 @@ test("Meeting prep as designed", async () => {
     expect(code).toBe(0)
     return out
   }
-  expect(await report()).toContain("| ! A-4 | Prepare SteerCo deck input | me | 2026-11-13 | overdue |")
+  expect(await report()).toContain("| ! A-4 | Prepare SteerCo deck input | @me | 2026-11-13 | overdue |")
   expect(await report("--format", "text")).toContain("Prepare SteerCo deck input")
   // The ask.
   expect(fgAt(spans, "Ask for this meeting", "(your text)")).toBe(theme.muted)
