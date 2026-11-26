@@ -58,7 +58,7 @@ type Store = ReturnType<typeof makeStore>
 type Runtime = ReturnType<typeof useRuntime>
 
 // The actions and decisions linked to the meeting, in the order they were logged, one line each, in coloured
-// pieces: the ref muted, the owner's handle magenta (`me` muted).
+// pieces: the ref muted, the owner's handle magenta (`@me` too, as a handle).
 async function loggedLines(rt: Runtime, store: Store, m: MeetingRecord): Promise<CellPart[][]> {
   const actions = await store.unlessUnavailable([] as Array<{ id: unknown; title: unknown; due_date: unknown; owner_id: unknown; handle: unknown }>, () =>
     rt.data
@@ -74,14 +74,14 @@ async function loggedLines(rt: Runtime, store: Store, m: MeetingRecord): Promise
   const decisions = await store.unlessUnavailable([] as Array<{ id: unknown; title: unknown }>, () =>
     rt.data.selectFrom("projects.decision").select(["id", "title"]).where("meeting_id", "=", m.id).orderBy("id").execute(),
   )
-  const owner = (r: (typeof actions)[number]) => (r.owner_id === null ? "me" : r.handle === null ? `person:${r.owner_id}` : `@${r.handle}`)
+  const owner = (r: (typeof actions)[number]) => (r.owner_id === null ? "@me" : r.handle === null ? `person:${r.owner_id}` : `@${r.handle}`)
   const out: CellPart[][] = []
   for (const r of actions) {
     const who = owner(r)
     out.push([
       { text: await rt.records.refOf("action", Number(r.id)), tone: "muted" },
       { text: ` ${r.title} · ` },
-      { text: who, tone: who === "me" ? "muted" : "magenta" },
+      { text: who, tone: "magenta" },
       ...(r.due_date === null ? [] : [{ text: ` · ${shortDate(String(r.due_date))}` }]),
     ])
   }

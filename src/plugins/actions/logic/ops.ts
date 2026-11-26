@@ -1,4 +1,4 @@
-// The exposed operations on actions. An action's owner is a soft person reference where empty (or `me`) means me.
+// The exposed operations on actions. An action's owner is a soft person reference where empty (or `@me`) means me.
 // It links to any records (`links`: `#CRM`, `@anna`, `M-4`); `project`, `forPerson` (the stakeholder it is for) and
 // `meeting` are shorthand for a link of that type (on edit each replaces the links of its type; empty clears them).
 // `linkAction` / `unlinkAction` add and remove one. Each write returns the action record with its `ref`; `describe`
@@ -51,7 +51,8 @@ export const date = (input: string, field: string) => {
     throw e
   }
 }
-// `me` or `@me` (any case) names the user, who is stored as no owner.
+// `@me` (also bare `me`, kept for old scripts; any case) names the user, who is stored as no owner and shown as `@me`.
+export const ME = "@me"
 export const isMe = (input: string) => /^@?me$/i.test(input.trim())
 const blank = (v: string | null | undefined) => v === null || v === undefined || v.trim() === ""
 // Ascending by due date, undated last, then by id.
@@ -177,7 +178,7 @@ export function registerOps(ctx: PluginContext, store: Store): void {
         input: AddAction,
         output: ActionRecord,
         describe: async (i: AddInput) => {
-          const parts = [blank(i.owner) || isMe(i.owner!) ? "me" : await store.personLabel(i.owner!)]
+          const parts = [blank(i.owner) || isMe(i.owner!) ? ME : await store.personLabel(i.owner!)]
           if (!blank(i.forPerson)) parts.push(`for ${await store.personLabel(i.forPerson!)}`)
           if (!blank(i.project)) parts.push(await store.codeLabel(i.project!))
           for (const l of i.links ?? []) parts.push(await store.linkLabel(l))

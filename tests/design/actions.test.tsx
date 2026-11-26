@@ -1,6 +1,6 @@
 // Screen 4, Actions, as the 2026-11-20 screen design draws it (docs/superpowers/specs/2026-11-20-ttybrain-meeting-
 // screens.html, "4 Actions"; it replaces the 2026-11-13 mock's Proj. and For / from columns): the columns ID / Action /
-// Owner / Linked to / Due, group rows (Overdue red, This week / Next week accent, no counts), muted ids and `me`,
+// Owner / Linked to / Due, group rows (Overdue red, This week / Next week accent, no counts), muted ids and `@me`,
 // "Linked to" with codes cyan, `@handles` magenta and meetings (title and date) muted, `—` muted when there are no
 // links, next week's due dates as weekdays, the `status:open` footer and the status bar with `l links`. Seeded with
 // the 2026-11-13 designs' example data (the 2026-11-20 mock's data is the meetings rework's), today Thu 12 Nov 2026,
@@ -51,16 +51,16 @@ test("Actions as designed", async () => {
   expect([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((i) => inside(frame, i))).toEqual([
     cols(["ID", "Action", "Owner", "Linked to", "Due"]),
     "Overdue",
-    cols(["A-1", "Send revised budget to Peter", "me", "CRM @peter", "9 Nov"]),
+    cols(["A-1", "Send revised budget to Peter", "@me", "CRM @peter", "9 Nov"]),
     cols(["A-2", "Book vendor demo slot", "Bob", "ERP SteerCo 28 Oct", "10 Nov"]),
     cols(["A-3", "Review test strategy", "Anna", "DWH", "11 Nov"]),
     "This week",
-    cols(["A-4", "Prepare SteerCo deck input", "me", "CRM Steering committee… 4 Dec", "Fri"]),
+    cols(["A-4", "Prepare SteerCo deck input", "@me", "CRM Steering committee… 4 Dec", "Fri"]),
     cols(["A-5", "Confirm licence count", "Karim", "IAM", "Fri"]),
-    cols(["A-7", "Send training plan options", "me", "—", "Sun"]),
+    cols(["A-7", "Send training plan options", "@me", "—", "Sun"]),
     "Next week",
     cols(["A-6", "Align migration scope with DWH team", "Bob", "CRM", "Mon"]),
-    cols(["A-8", "Invite Marie to design walkthrough", "me", "CRM @marie", "Tue"]),
+    cols(["A-8", "Invite Marie to design walkthrough", "@me", "CRM @marie", "Tue"]),
     cols(["A-9", "Pilot user list", "Sofie", "HRP", "Wed"]),
     "Later · 34",
   ])
@@ -74,11 +74,11 @@ test("Actions as designed", async () => {
   expect(fgAt(spans, "This week", 7)).toBe(theme.accent)
   expect(fgAt(spans, "Next week", 11)).toBe(theme.accent)
   expect(fgAt(spans, "Later", 15)).toBe(theme.muted)
-  // Headers and ids muted; `me` muted, owners plain; links: codes cyan, people magenta, meetings and `—` muted.
+  // Headers and ids muted; `@me` muted, owners plain; links: codes cyan, people magenta, meetings and `—` muted.
   for (const h of ["ID", "Action", "Owner", "Linked to", "Due"]) expect(fgAt(spans, h, 2)).toBe(theme.muted)
   for (const [id, at] of [["A-2", 5], ["A-5", 9], ["A-9", 14]] as const) expect(fgAt(spans, id, at)).toBe(theme.muted)
-  expect(fgAt(spans, "me", 8)).toBe(theme.muted)
-  expect(fgAt(spans, "me", 13)).toBe(theme.muted)
+  expect(fgAt(spans, "@me", 8)).toBe(theme.muted)
+  expect(fgAt(spans, "@me", 13)).toBe(theme.muted)
   expect(fgAt(spans, "Bob", 5)).toBe(theme.text)
   expect(fgAt(spans, "Karim", 9)).toBe(theme.text)
   for (const [code, at] of [["CRM @", 4], ["ERP", 5], ["DWH", 6], ["CRM S", 8], ["IAM", 9], ["HRP", 14]] as const) expect(fgAt(spans, code, at)).toBe(theme.cyan)

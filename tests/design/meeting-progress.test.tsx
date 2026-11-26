@@ -116,9 +116,9 @@ test("1:1 in progress as designed: tick two items, agree an action, the frame", 
   expect(line(frame, 8)).toMatch(/^ ╭─ Agreed actions · 2 ─+╮ │/)
   expect([9, 10, 11, 12].map((i) => inside(frame, i, 0))).toEqual([
     cols(ACTIONS, ["new", "Hand over DWH reviews to Mathias", "Anna", "4 Dec"]),
-    cols(ACTIONS, ["new", "Approve AWS training", "me", "Fri"]),
+    cols(ACTIONS, ["new", "Approve AWS training", "@me", "Fri"]),
     "Open from before",
-    cols(ACTIONS, ["A-2", "Review her test strategy draft", "me", "-7d"]),
+    cols(ACTIONS, ["A-2", "Review her test strategy draft", "@me", "-7d"]),
   ])
   // The notes, in paragraphs; both columns end on the same line.
   expect(inside(frame, 2, 1)).toBe("AWS: she wants the Solutions Architect Associate in")
@@ -137,7 +137,7 @@ test("1:1 in progress as designed: tick two items, agree an action, the frame", 
   expect(fgAt(spans, "ERP", 4)).toBe(theme.cyan)
   expect(isSelected(spans, "Her view on Vendor B's architecture")).toBe(true)
   expect(fgAt(spans, "new", 9)).toBe(theme.accent)
-  expect(fgAt(spans, "me", 10)).toBe(theme.muted)
+  expect(fgAt(spans, "@me", 10)).toBe(theme.muted)
   expect(fgAt(spans, "Open from before", 11)).toBe(theme.muted)
   expect(fgAt(spans, "A-2", 12)).toBe(theme.muted)
   expect(fgAt(spans, "-7d", 12)).toBe(theme.red)
@@ -157,7 +157,7 @@ test("1:1 in progress as designed: tick two items, agree an action, the frame", 
   // The agreed action is a real action at once: on screen 4, linked to Anna and the meeting.
   t.input.pressKey("4")
   frame = await until(t, (f) => f.includes("Approve AWS training"))
-  expect(frame.split("\n").find((l) => l.includes("Approve AWS training"))).toMatch(/A-9 +Approve AWS training +me +@anna 1:1 Anna 23 Nov +Fri/)
+  expect(frame.split("\n").find((l) => l.includes("Approve AWS training"))).toMatch(/A-9 +Approve AWS training +@me +@anna 1:1 Anna 23 Nov +Fri/)
 })
 
 test("closing the 1:1 (x): closeMeeting's message, notes on Anna, unticked items kept", async () => {

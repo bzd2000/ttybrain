@@ -594,3 +594,22 @@ Branch `feature/owner-me`. Deliverables and risks can be owned by you (`--owner 
 ### Deferred minor findings
 
 - `--link @me` (an action's links) is not "me": links are records, and you are not one.
+
+## The user is @me everywhere (2026-11-26)
+
+Branch `feature/at-me`. The user asked for `@me` everywhere, to match people (`@anna`). Input documents `@me` (`--owner @me`, filters, forms); bare `me` stays an undocumented alias, without a warning.
+
+### Rulings made (and what each costs if wrong)
+
+- **Accepted design difference (the user's decision, 2026-11-26).** The mocks draw the user as `me`: the Actions screen's Owner column, the meeting's Agreed actions, the project Overview's deliverables and actions, meeting prep's overdue lines. The build draws `@me`; the design tests (`tests/design/actions*.test.tsx`, `meeting-progress`, `meeting-prep`, `project-detail`, `inbox`) expect `@me`.
+- **Colour.** Muted where the other owners are first names in text colour (Actions screen, Agreed actions, the project Overview; the Attention panels show no owner), as the mocks draw `me`; magenta where the other owners are `@handle` in magenta (the projects item tabs' Owner, the meeting's logged lines), so `@me` reads as one of them there.
+- **JSON, actions:** `owner` stays `null` for you (with `owner_id` null), unchanged since actions 2.0: no rule says JSON follows display, and `null` is how scripts have told "mine" so far.
+- **JSON, deliverables and risks:** `owner` is now `"@me"` (was `"me"` in projects 2.1.0, released with owner "me"), consistent with persons (`"@bob"`). This changes a released value: noted in the README ("Upgrading to @me"); `owner_me` is unchanged and is the stable test. The projects version stays 2.1.0: its views did not change (no view carries `owner`), only the records the operations return.
+- **Report cells** (project-status Owner, minutes, the Overview's sections) are display, so their JSON reads `@me` too.
+- **Kernel:** a record field's `extra` entries now match with the type's prefix left out on both sides, so `@me` is listed for `m` as for `@m` (`Form.tsx`, test in `form-pickers.test.tsx`). The Actions screen's filter reads `owner:me` as `owner:@me`.
+
+### Deferred minor findings
+
+- Change sets recorded before this change keep their summaries as written (`+ action "…" (me)`).
+- The people plugin's reserved-handle message still names the handle `"me"` (that is the handle refused); its hint now says `--owner @me`.
+

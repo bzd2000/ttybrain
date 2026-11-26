@@ -339,12 +339,14 @@ export function Form(props: {
       if (!k) return []
       const all: Suggestion[] = []
       if ("extra" in k && k.extra) {
-        // A record field's fixed entries first, while the typed text (its type's prefix left out) starts one.
+        // A record field's fixed entries first, while the typed text starts one's value or label (the type's prefix
+        // left out on either side: `m` and `@M` both start `@me`).
         const prefix = kernel.records.byName(k.types[0]!)?.prefix ?? ""
-        const typed = (k.text.startsWith(prefix) ? k.text.slice(prefix.length) : k.text).toLowerCase()
+        const bare = (t: string) => (prefix !== "" && t.startsWith(prefix) ? t.slice(prefix.length) : t).toLowerCase()
+        const typed = bare(k.text)
         for (const x of k.extra) {
           const label = x.label ?? x.value
-          if (x.value.toLowerCase().startsWith(typed) || label.toLowerCase().startsWith(typed)) all.push({ ref: x.value, label, extra: true })
+          if (bare(x.value).startsWith(typed) || bare(label).startsWith(typed)) all.push({ ref: x.value, label, extra: true })
         }
       }
       for (const type of k.types) all.push(...((await kernel.records.byName(type)?.search(k.text, SUGGESTION_LIMIT)) ?? []))

@@ -181,7 +181,7 @@ ttybrain involve     add|remove        # ttybrain involve add CRM marie --role "
 ttybrain report status <project>
 ```
 
-**Owners of deliverables and risks.** An owner is a person (`bob`, `@bob`), **you** (`me` or `@me`, any case) or nobody (left out on `add`; an empty `--owner ""` on `edit` clears it). You are stored as `owner_me = 1` with `owner_id` null, so "you" and "nobody" stay apart (rows from before projects 2.1 have `owner_me = 0`: their null owner stays "nobody"). `--json` records carry `owner` (`"me"`, `"@bob"` or null) and `owner_me` (boolean); the views carry both columns (added in 2.1, compatible: `owner_id` is null for you and for nobody). `deliverable list` and `risk list` take `--owner me` as well as a person. The TUI shows you as `me`, muted (as an action's owner), nobody as `—` in the item tabs and blank on the Overview; the item forms' Owner drop-down starts with `me`. Milestones have no owner.
+**Owners of deliverables and risks.** An owner is a person (`bob`, `@bob`), **you** (`@me`, any case; bare `me` still works) or nobody (left out on `add`; an empty `--owner ""` on `edit` clears it). You are stored as `owner_me = 1` with `owner_id` null, so "you" and "nobody" stay apart (rows from before projects 2.1 have `owner_me = 0`: their null owner stays "nobody"). `--json` records carry `owner` (`"@me"`, `"@bob"` or null; projects 2.1.0 wrote `"me"`) and `owner_me` (boolean); the views carry both columns (added in 2.1, compatible: `owner_id` is null for you and for nobody). `deliverable list` and `risk list` take `--owner @me` as well as a person. Text output shows you as `@me`; the TUI shows `@me` in magenta in the item tabs (as the other owners' handles) and muted on the Overview (where people are first names), nobody as `—` in the item tabs and blank on the Overview; the item forms' Owner drop-down starts with `@me`. Milestones have no owner.
 
 ### UI and other contributions
 
@@ -234,7 +234,7 @@ Readers: `meetings` (minutes and notes), `people` (follow-ups) and `projects` (o
 
 | Write | Input | Change-set line |
 |---|---|---|
-| `addAction` | `title`, `owner?`, `due?`, `notes?`, `links?: string[]` (any refs), shorthands `project?`, `forPerson?`, `meeting?` | `+ action "Send the roadmap" (me, #CRM, due 2026-11-20)` |
+| `addAction` | `title`, `owner?`, `due?`, `notes?`, `links?: string[]` (any refs), shorthands `project?`, `forPerson?`, `meeting?` | `+ action "Send the roadmap" (@me, #CRM, due 2026-11-20)` |
 | `editAction` | `ref`, the same fields; `links` replaces all links, an empty value clears a field | `~ A-41 due, links` (the changed fields) |
 | `linkAction` / `unlinkAction` | `{ ref, to }`: one record ref; `unlinkAction` is always allowed (a gone link by `<type>:<id>`) | `~ A-41 link #ERP`, `~ A-41 unlink @peter` |
 | `completeAction` / `cancelAction` | `ref`, `date?` | `~ A-41 done`, `~ A-41 cancelled` |
@@ -248,7 +248,7 @@ An action counts as archived (writes refused, hidden from Attention and the over
 ttybrain action list|show|add|edit|link|unlink|done|cancel|delete
 ```
 
-`list` groups Overdue / This week / Next week / Later / No date, with `--open --overdue --owner` (a person, or `me` / `@me`) `--project --for --meeting --link <ref>`. `add` and `edit` take `--owner` (empty, `me` or `@me` = you), `--due`, `--notes`, `--project`, `--for`, `--meeting` (shorthand for links) and `--link <ref>` (repeatable). `--json` keeps the `ActionRecord` fields (`ref id title due_date status done_date owner_id owner project_id project for_person_id for meeting_id meeting notes`; the three link fields are the first link of that type) and adds `links: [{ type, id, ref }]`. Exit codes as everywhere.
+`list` groups Overdue / This week / Next week / Later / No date, with `--open --overdue --owner` (a person, or `@me`; bare `me` still works) `--project --for --meeting --link <ref>`. `add` and `edit` take `--owner` (empty or `@me` = you; bare `me` still works; text output shows you as `@me`, `--json` keeps `owner: null`), `--due`, `--notes`, `--project`, `--for`, `--meeting` (shorthand for links) and `--link <ref>` (repeatable). `--json` keeps the `ActionRecord` fields (`ref id title due_date status done_date owner_id owner project_id project for_person_id for meeting_id meeting notes`; the three link fields are the first link of that type) and adds `links: [{ type, id, ref }]`. Exit codes as everywhere.
 
 ### UI and other contributions
 

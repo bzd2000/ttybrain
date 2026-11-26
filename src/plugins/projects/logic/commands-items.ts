@@ -20,7 +20,7 @@ const projectArg = { name: "project", required: false }
 export function registerItemCommands(ctx: PluginContext, store: Store, items: Items): void {
   const write = () => ctx.self().write
   const projectFilter = async (q: any, column: string, input: unknown) => (input === undefined ? q : q.where(column, "=", (await store.project(String(input))).id))
-  // `me` / `@me` is me; anything else a person.
+  // `@me` (or `me`) is me; anything else a person.
   const ownerFilter = async (q: any, alias: string, input: unknown) =>
     input === undefined ? q : isMe(String(input)) ? q.where(`${alias}.owner_me`, "=", 1) : q.where(`${alias}.owner_id`, "=", (await store.person(String(input))).id)
 
@@ -94,7 +94,7 @@ export function registerItemCommands(ctx: PluginContext, store: Store, items: It
     verb: "list",
     summary: "list deliverables by due date",
     args: [projectArg],
-    flags: { status: oneOf(DELIVERABLE_STATUSES, "only this status"), owner: text("only this owner (me, or a person)", "handle"), milestone: text("only this milestone", "MS-n") },
+    flags: { status: oneOf(DELIVERABLE_STATUSES, "only this status"), owner: text("only this owner (@me, or a person)", "@me|handle"), milestone: text("only this milestone", "MS-n") },
     run: async ({ args, flags }) => {
       let q = await projectFilter(items.deliverableQuery(), "d.project_id", args.project)
       q = await ownerFilter(q, "d", flags.owner)
@@ -105,7 +105,7 @@ export function registerItemCommands(ctx: PluginContext, store: Store, items: It
       return { json: list, text: list.length ? formatTable(["ref", "project", "title", "owner", "due", "status", "milestone"], rows) : "no deliverables" }
     },
   })
-  const deliverableFlags = { owner: text("the owner: me, or a person", "handle"), due: date("the due date"), milestone: text("link a milestone of the project", "MS-n") }
+  const deliverableFlags = { owner: text("the owner: @me, or a person", "@me|handle"), due: date("the due date"), milestone: text("link a milestone of the project", "MS-n") }
   const deliverableMap = { owner: "owner", due: "due", milestone: "milestone" }
   const deliverableLine = (d: DeliverableRecord) => `${d.ref} ${d.title} (${d.project}, ${d.status})`
   ctx.command({
@@ -168,7 +168,7 @@ export function registerItemCommands(ctx: PluginContext, store: Store, items: It
       type: oneOf(RISK_TYPES, "only risks or only issues"),
       severity: oneOf(SEVERITIES, "only this severity"),
       status: oneOf(RISK_STATUSES, "only this status"),
-      owner: text("only this owner (me, or a person)", "handle"),
+      owner: text("only this owner (@me, or a person)", "@me|handle"),
     },
     run: async ({ args, flags }) => {
       let q = await projectFilter(items.riskQuery(), "r.project_id", args.project)
@@ -181,7 +181,7 @@ export function registerItemCommands(ctx: PluginContext, store: Store, items: It
       return { json: list, text: list.length ? formatTable(["ref", "project", "type", "title", "severity", "owner", "status"], rows) : "no risks" }
     },
   })
-  const riskFlags = { owner: text("the owner: me, or a person", "handle"), description: text("what it is", "text"), mitigation: text("how it is handled", "text") }
+  const riskFlags = { owner: text("the owner: @me, or a person", "@me|handle"), description: text("what it is", "text"), mitigation: text("how it is handled", "text") }
   const riskMap = { owner: "owner", description: "description", mitigation: "mitigation" }
   const riskLine = (r: RiskRecord) => `${r.ref} ${r.type} "${r.title}" (${r.severity}, ${r.project}, ${r.status})`
   ctx.command({

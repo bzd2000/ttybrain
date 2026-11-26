@@ -102,7 +102,7 @@ describe("project detail", () => {
     expect(lineWith(frame, "Budget overrun")).toContain("issue")
   })
 
-  test('the summary\'s deliverables: owner "me" muted, a person by first name, none left blank', async () => {
+  test('the summary\'s deliverables: owner "@me" muted, a person by first name, none left blank', async () => {
     const t = await open()
     await inCtx(async () => {
       await write().addDeliverable!({ project: "CRM", title: "Vendor shortlist", owner: "@anna", due: "2026-11-20" })
@@ -111,9 +111,9 @@ describe("project detail", () => {
     })
     const frame = await until(t, "Test plan")
     expect(lineWith(frame, "Vendor shortlist")).toMatch(/Vendor shortlist +Anna /)
-    expect(lineWith(frame, "Data model")).toMatch(/Data model +me /)
-    expect(lineWith(frame, "Test plan")).not.toMatch(/Test plan +(me|Anna) /)
-    expect(fgAt(await t.spans(), "me ", "Data model")).toBe(theme.muted)
+    expect(lineWith(frame, "Data model")).toMatch(/Data model +@me /)
+    expect(lineWith(frame, "Test plan")).not.toMatch(/Test plan +(@me|Anna) /)
+    expect(fgAt(await t.spans(), "@me ", "Data model")).toBe(theme.muted)
   })
 
   test("tab titles carry counts", async () => {

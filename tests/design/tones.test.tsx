@@ -59,7 +59,7 @@ test("a meeting's Agenda tab: codes cyan", async () => {
 })
 
 // M-1 is a project meeting: it opens on the meeting in progress (ruling M11), its agreed actions as the 2026-11-20
-// `oneonone` design draws them: the ref muted (held), an owner by first name in text colour, `me` muted.
+// `oneonone` design draws them: the ref muted (held), an owner by first name in text colour, `@me` muted.
 test("a held project meeting's agreed actions: refs muted, owners plain", async () => {
   const t = await start()
   await t.nav.open("M-1")

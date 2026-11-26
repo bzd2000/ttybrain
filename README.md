@@ -86,6 +86,12 @@ Boards are now their own plugin (`boards` 1.0.0), and `meetings` is 3.0.0. On th
 - In `ttybrain help`, `inbox` now comes after `board` (it used to follow `action`): the order is `action`, `person`, …, `decision`, `board`, `inbox`, `talk`, `meeting`.
 - As with the earlier upgrades, ttybrain copies the database to `ttybrain.db.bak-v<N>` first, and an older build should not be used afterwards.
 
+## Upgrading to @me
+
+You are now written and shown as `@me`, like a person (`@anna`): `ttybrain action add "Call vendor" --owner @me`, `ttybrain deliverable list --owner @me`, the Actions screen's filter `@me`, and the forms' Owner drop-down (`@me` first). Text output, reports (Owner columns, minutes, the Overview) and the TUI show `@me` where they showed `me`. Bare `me` still works everywhere as input, so existing scripts keep running. Nothing in the database changes.
+
+- For scripts reading `--json`: a deliverable's or risk's `owner` is now `"@me"` (it was `"me"` in projects 2.1.0); `owner_me` is still `true`, so test that instead if you need to support both. An action's `owner` stays `null` for you, as before. Report JSON (`report … --format json`) cells read `@me` where they read `me`.
+
 ## Development
 
 ```bash

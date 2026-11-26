@@ -2,7 +2,7 @@
 // tab row). Board meetings keep their tabs (Agenda · Prep · Notes · Export).
 // - left: "Talk · 2 of 5 discussed", the meeting's talk items (agendaFor: ticked first, `✓` green and the text muted
 //   and struck through; the others `○`), with the project an item is tagged with (cyan); under it "Agreed actions ·
-//   n": the actions linked to this meeting (`new` in accent while it is planned, else their A-n; owner `me` muted or
+//   n": the actions linked to this meeting (`new` in accent while it is planned, else their A-n; owner `@me` muted or
 //   a first name; due as the design reads it: `Fri`, `4 Dec`, `-7d` red, `done` green), then "Open from before": open actions linked to the subject's earlier meetings.
 // - right: "Notes" (`e edit · E $EDITOR` on its bottom border).
 // Keys (the design's bar): Space ticks the selected item discussed in this meeting, or reopens a ticked one (M5: at
@@ -161,7 +161,7 @@ export function MeetingView(props: { recordRef: string }) {
   })
   const actionCells = (a: Act, fresh: boolean): TableRow => {
     const today = rt.clock.today()
-    const owner: Cell = a.owner === null ? { text: "me", tone: "muted" } : { text: a.owner }
+    const owner: Cell = a.owner === null ? { text: "@me", tone: "muted" } : { text: a.owner }
     return {
       ref: a.ref,
       cells: {

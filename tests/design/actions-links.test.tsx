@@ -72,11 +72,11 @@ test("a project's Actions tab: the screen's columns, the project left out of Lin
   expect(line(frame, 3)).toMatch(/^ ╭─ Actions · 9 open ─+╮$/)
   expect([4, 5, 6, 7, 8, 9].map((i) => inside(frame, i))).toEqual([
     cols(["ID", "Action", "Owner", "Linked to", "Due"], WIDE),
-    cols(["A-1", "Send revised budget to Peter", "me", "@peter", "9 Nov"], WIDE),
-    cols(["A-4", "Prepare SteerCo deck input", "me", "Steering committee Q4 4 Dec", "Fri"], WIDE),
+    cols(["A-1", "Send revised budget to Peter", "@me", "@peter", "9 Nov"], WIDE),
+    cols(["A-4", "Prepare SteerCo deck input", "@me", "Steering committee Q4 4 Dec", "Fri"], WIDE),
     cols(["A-6", "Align migration scope with DWH team", "Bob", "—", "16 Nov"], WIDE),
-    cols(["A-8", "Invite Marie to design walkthrough", "me", "@marie", "17 Nov"], WIDE),
-    cols(["A-10", "Draft cutover plan", "me", "—", "23 Nov"], WIDE),
+    cols(["A-8", "Invite Marie to design walkthrough", "@me", "@marie", "17 Nov"], WIDE),
+    cols(["A-10", "Draft cutover plan", "@me", "—", "23 Nov"], WIDE),
   ])
   // `t to talk`: the meetings plugin's key on every tab of a project (M9).
   expect(line(frame, 35)).toBe(" ←→ tabs   esc back   n add   e edit   x done   d due   l links   del delete   t to talk   ↑↓ select   ? help   q quit")
@@ -95,7 +95,7 @@ test("a person's and a meeting's Actions tabs list the actions linked to them; n
   tui = await renderTui(kernel, { width: 118, height: 36 })
   let frame = await actionsTab(tui, "@peter", "Send revised budget to Peter")
   expect(line(frame, 2)).toBe("  Summary   Talk 0   Meetings   Notes 3   Projects & roles 2   Actions 1")
-  expect(inside(frame, 5)).toBe(cols(["A-1", "Send revised budget to Peter", "me", "CRM", "9 Nov"], WIDE))
+  expect(inside(frame, 5)).toBe(cols(["A-1", "Send revised budget to Peter", "@me", "CRM", "9 Nov"], WIDE))
   expect(fgAt(await tui.spans(), "CRM", 5)).toBe(theme.cyan)
   tui.input.pressEscape()
   await until(tui, (f) => !f.includes("› Peter Janssens"))
@@ -105,7 +105,7 @@ test("a person's and a meeting's Actions tabs list the actions linked to them; n
   frame = await actionsTab(tui, "M-2", "Prepare SteerCo deck input")
   expect(line(frame, 2)).toBe("  Agenda   Prep   Notes   Export   Actions 1")
   expect(line(frame, 3)).toMatch(/^ ╭─ Actions · 1 open ─+╮$/)
-  expect(inside(frame, 5)).toBe(cols(["A-4", "Prepare SteerCo deck input", "me", "CRM", "Fri"], WIDE))
+  expect(inside(frame, 5)).toBe(cols(["A-4", "Prepare SteerCo deck input", "@me", "CRM", "Fri"], WIDE))
   tui.input.pressKey("n")
   frame = await until(tui, (f) => f.includes("New action · M-2"))
   expect(lineWith(frame, "│ Links ")).toContain("M-2")
@@ -113,7 +113,7 @@ test("a person's and a meeting's Actions tabs list the actions linked to them; n
   tui.input.pressKey("s", { ctrl: true })
   frame = await until(tui, (f) => f.includes("Circulate the minutes"))
   expect(line(frame, 2)).toBe("  Agenda   Prep   Notes   Export   Actions 2")
-  expect(inside(frame, 6)).toBe(cols(["A-47", "Circulate the minutes", "me", "—", "—"], WIDE))
+  expect(inside(frame, 6)).toBe(cols(["A-47", "Circulate the minutes", "@me", "—", "—"], WIDE))
   expect(await linksOf(47)).toEqual(["meeting:2"])
 })
 
@@ -137,7 +137,7 @@ test("l edits the links: @ and M- autocomplete, a removed link is unlinked", asy
   tui.input.pressKey("s", { ctrl: true })
   frame = await until(tui, (f) => !f.includes("Links of A-1") && lineWith(f, "Send revised budget").includes("@anna"))
   // Four links in 30 cells: the meeting's title gives way, its date stays.
-  expect(inside(frame, 4)).toBe(cols(["A-1", "Send revised budget to Peter", "me", "CRM @peter @anna Steeri… 4 Dec", "9 Nov"], WIDE))
+  expect(inside(frame, 4)).toBe(cols(["A-1", "Send revised budget to Peter", "@me", "CRM @peter @anna Steeri… 4 Dec", "9 Nov"], WIDE))
   expect(await linksOf(1)).toEqual(["project:2", "person:5", "person:8", "meeting:2"])
 
   // Removing a ref unlinks it.
@@ -146,7 +146,7 @@ test("l edits the links: @ and M- autocomplete, a removed link is unlinked", asy
   for (let i = 0; i < 4; i++) tui.input.pressBackspace()
   tui.input.pressKey("s", { ctrl: true })
   frame = await until(tui, (f) => !f.includes("Links of A-1") && !lineWith(f, "Send revised budget").includes("Steeri"))
-  expect(inside(frame, 4)).toBe(cols(["A-1", "Send revised budget to Peter", "me", "CRM @peter @anna", "9 Nov"], WIDE))
+  expect(inside(frame, 4)).toBe(cols(["A-1", "Send revised budget to Peter", "@me", "CRM @peter @anna", "9 Nov"], WIDE))
   expect(await linksOf(1)).toEqual(["project:2", "person:5", "person:8"])
 })
 
@@ -271,7 +271,7 @@ test("80x24: long link lists are cut whole; codes, handles and 9-character ids s
   const person = [9, 47, 8, 7]
   expect(frame).not.toContain("Linked to")
   expect(inside(frame, lineIndex(frame, "ID "))).toBe(cols(["ID", "Action", "Owner", "Due"], person))
-  expect(inside(frame, lineIndex(frame, "A-1000001"))).toBe(cols(["A-1000001", "Agree the ingest cut-over plan with the vendor", "me", "17 Nov"], person))
+  expect(inside(frame, lineIndex(frame, "A-1000001"))).toBe(cols(["A-1000001", "Agree the ingest cut-over plan with the vendor", "@me", "17 Nov"], person))
   for (const word of ["DATAPLATFORM2027", "A-1000001", "@alexandra"]) for (let k = 2; k < word.length; k++) expect(frame).not.toContain(word.slice(0, k) + "…")
 })
 

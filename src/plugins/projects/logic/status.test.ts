@@ -211,7 +211,7 @@ describe("projects: the overview report", () => {
     expect(section("Overdue actions").columns).toEqual(["ID", "Action", "Project", "Owner", "Due"])
     expect(section("Overdue actions").rows).toEqual([
       { ID: "A-1", Action: "Chase vendor", Project: "CRM", Owner: "Bob", Due: "2026-11-01" },
-      { ID: "A-4", Action: "ERP thing", Project: "ERP", Owner: "me", Due: "2026-11-01" },
+      { ID: "A-4", Action: "ERP thing", Project: "ERP", Owner: "@me", Due: "2026-11-01" },
     ])
     expect(section("Due this week").rows.map((x: any) => x.ID)).toEqual(["A-2", "A-6"])
     expect(section("Projects needing attention").rows.map((x: any) => [x.Project, x.Health])).toEqual([

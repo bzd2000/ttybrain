@@ -27,8 +27,8 @@ export const DeliverableRecord = Type.Object({
   project: Text,
   project_id: Type.Integer(),
   title: Text,
-  owner: Opt, // "me", a person ("@bob") or null (no owner)
-  owner_me: Type.Boolean(), // owned by me: tells "me" from no owner
+  owner: Opt, // "@me" (projects 2.1 wrote "me"), a person ("@bob") or null (no owner)
+  owner_me: Type.Boolean(), // owned by me: tells me from no owner
   due_date: Opt,
   status: DeliverableStatus,
   status_changed_at: Opt,
@@ -44,7 +44,7 @@ export const RiskRecord = Type.Object({
   title: Text,
   description: Opt,
   severity: Severity,
-  owner: Opt, // "me", a person ("@bob") or null (no owner)
+  owner: Opt, // "@me", a person ("@bob") or null (no owner)
   owner_me: Type.Boolean(),
   mitigation: Opt,
   status: RiskStatus,
@@ -71,8 +71,9 @@ export const KINDS = ["milestone", "deliverable", "risk", "decision"] as const
 export const PREFIX: Record<Kind, string> = { milestone: "MS-", deliverable: "D-", risk: "R-", decision: "DE-" }
 const MEETING_PREFIX = "M-"
 
-// The user as an owner: `me`, or `@me` (any case). The people plugin reserves the handle.
-export const ME = "me"
+// The user as an owner: `@me` (bare `me` still works, for old scripts; any case), shown as `@me` like a person's
+// handle. The people plugin reserves the handle.
+export const ME = "@me"
 export const isMe = (input: string) => /^@?me$/i.test(input.trim())
 export type Owner = { owner_id: number | null; owner_me: 0 | 1 }
 
@@ -191,7 +192,7 @@ export function makeItems(ctx: PluginRuntime, store: Store) {
     if (ref !== null) await store.activeProject(ref.slice(1))
   }
 
-  // An owner as written: `me` / `@me` (any case) is me, empty is no owner, anything else an active person (a soft
+  // An owner as written: `@me` / `me` (any case) is me, empty is no owner, anything else an active person (a soft
   // reference: validated on write, never archived). undefined: not given.
   async function ownerOf(input: string | null | undefined): Promise<Owner | undefined> {
     if (input === undefined) return undefined

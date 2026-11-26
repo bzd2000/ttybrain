@@ -99,7 +99,7 @@ describe("people", () => {
     ]) {
       const r = await cli(...argv)
       expect(r.code).toBe(1)
-      expect(r.json.error).toEqual({ code: "validation", field: "handle", message: 'handle "me" is reserved', hint: '"me" means you (as in --owner me); choose another --handle' })
+      expect(r.json.error).toEqual({ code: "validation", field: "handle", message: 'handle "me" is reserved', hint: '"@me" means you (as in --owner @me); choose another --handle' })
     }
   })
 

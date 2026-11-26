@@ -211,18 +211,19 @@ describe("deliverables tab", () => {
     expect(await rows("deliverable", ["title", "status"])).toEqual([{ title: "Spec", status: "not_started" }])
   })
 
-  test('owner "me" shows muted, none as —; the Owner drop-down offers me first and saves it', async () => {
+  test('owner "@me" shows magenta like a handle, none as — (muted); the Owner drop-down offers @me first and saves it', async () => {
     const t = await open(2, async () => {
       await write().addDeliverable!({ project: "CRM", title: "Peters", owner: "@peter" })
       await write().addDeliverable!({ project: "CRM", title: "Mine", owner: "me" })
       await write().addDeliverable!({ project: "CRM", title: "Nobodys" })
     })
     let frame = await until(t, "Nobodys")
-    expect(lineWith(frame, "Mine")).toMatch(/Mine +me /)
+    expect(lineWith(frame, "Mine")).toMatch(/Mine +@me /)
     expect(lineWith(frame, "Peters")).toContain("@peter")
     expect(lineWith(frame, "Nobodys")).toMatch(/Nobodys +— /)
     const spans = await t.spans()
-    expect(fgAt(spans, "me", "Mine")).toBe(theme.muted) // not the selected row (Peters is)
+    expect(fgAt(spans, "@me", "Mine")).toBe(theme.magenta) // not the selected row (Peters is)
+    expect(fgAt(spans, "—", "Nobodys")).toBe(theme.muted)
     expect(fgAt(spans, "@peter", "Peters")).not.toBe(theme.muted)
     t.input.pressKey("n")
     await until(t, "New deliverable")
@@ -232,13 +233,13 @@ describe("deliverables tab", () => {
     frame = await until(t, "@peter Peter Janssens")
     const ls = frame.split("\n")
     const at = ls.findIndex((l) => l.includes("@peter Peter Janssens"))
-    expect(ls[at - 1]).toMatch(/│ me +│/)
-    t.input.pressEnter() // picks me
+    expect(ls[at - 1]).toMatch(/│ @me +│/)
+    t.input.pressEnter() // picks @me
     frame = await untilThat(t, (f) => !f.includes("@peter Peter Janssens"))
-    expect(frame).toMatch(/Owner +me\b/)
+    expect(frame).toMatch(/Owner +@me\b/)
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, "Ours")
-    expect(lineWith(frame, "Ours")).toMatch(/Ours +me /)
+    expect(lineWith(frame, "Ours")).toMatch(/Ours +@me /)
     expect(await rows("deliverable", ["title", "owner_id", "owner_me"])).toEqual([
       { title: "Peters", owner_id: 1, owner_me: 0 },
       { title: "Mine", owner_id: null, owner_me: 1 },
@@ -281,15 +282,15 @@ describe("risks tab", () => {
     expect(at("Low one")).toBeLessThan(at("Closed high"))
   })
 
-  test('editing a risk owned by me shows Owner me; emptying it leaves no owner', async () => {
+  test('editing a risk owned by me shows Owner @me; emptying it leaves no owner', async () => {
     const t = await open(3, async () => void (await write().addRisk!({ project: "CRM", title: "Vendor", type: "risk", severity: "high", owner: "@me" })))
     let frame = await until(t, "Vendor")
-    expect(lineWith(frame, "Vendor")).toMatch(/high +me /)
+    expect(lineWith(frame, "Vendor")).toMatch(/high +@me /)
     t.input.pressKey("e")
     frame = await until(t, "Edit R-1")
-    expect(frame).toMatch(/Owner +me\b/)
+    expect(frame).toMatch(/Owner +@me\b/)
     for (let i = 0; i < 4; i++) t.input.pressTab() // type → title → description → severity → owner
-    for (let i = 0; i < 2; i++) t.input.pressBackspace()
+    for (let i = 0; i < 3; i++) t.input.pressBackspace() // "@me"
     t.input.pressKey("s", { ctrl: true })
     frame = await untilThat(t, (f) => !f.includes("Edit R-1"))
     expect(await rows("risk", ["owner_id", "owner_me"])).toEqual([{ owner_id: null, owner_me: 0 }])
@@ -331,7 +332,7 @@ describe("actions tab", () => {
     await type(t, "Call vendor")
     t.input.pressKey("s", { ctrl: true })
     frame = await until(t, "Call vendor")
-    expect(lineWith(frame, "Call vendor")).toContain("me")
+    expect(lineWith(frame, "Call vendor")).toContain("@me")
     expect(kernel!.db.raw.prepare("SELECT title, owner_id, (SELECT record_id FROM actions_link l WHERE l.action_id = a.id AND l.record_type = 'project') AS project_id FROM actions_action a ORDER BY id").all([])).toEqual([{ title: "Call vendor", owner_id: null, project_id: 1 }])
   })
 

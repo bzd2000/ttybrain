@@ -210,7 +210,7 @@ export function registerReports(ctx: PluginContext, store: Store, talks: Talks):
           .execute()
         for (const l of links) if (!code.has(Number(l.action_id))) code.set(Number(l.action_id), l.code === null ? null : String(l.code))
       }
-      const owner = (r: (typeof rows)[number]) => (r.owner_id === null ? "me" : r.handle === null ? `person:${r.owner_id}` : `@${r.handle}`)
+      const owner = (r: (typeof rows)[number]) => (r.owner_id === null ? "@me" : r.handle === null ? `person:${r.owner_id}` : `@${r.handle}`)
       const out: Row[] = []
       for (const r of rows)
         out.push({

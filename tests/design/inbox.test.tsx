@@ -61,7 +61,7 @@ test("Inbox as designed", async () => {
     "",
     cols("I-3", "yesterday", "1:1 @sofie wants project mgmt training next year, follow up with options"),
     // The records its summary does not name (the note and the goal) follow it.
-    cols("", "✓ copilot", '→ 1:1 note on Sofie · goal "PM training 2027" · action A-7 (me, Sun) · N-1, G-1'),
+    cols("", "✓ copilot", '→ 1:1 note on Sofie · goal "PM training 2027" · action A-7 (@me, Sun) · N-1, G-1'),
     "",
     cols("I-2", "Mon 9 Nov", "#CRM #DWH migration overlap, Bob to align with DWH team"),
     cols("", "✓ copilot", '→ action A-6 (Bob, Mon) · risk R-11 "Data migration volume unknown"'),

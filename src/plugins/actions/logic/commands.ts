@@ -1,9 +1,9 @@
 // `ttybrain action list|show|add|edit|link|unlink|done|cancel|delete`. Reads go through ctx.data (the own tables,
 // people through people.person, projects through projects.project); writes only through ctx.self().write.*. An
-// empty owner is me, shown as `me`. `--link <ref>` (repeatable) names any record; `--project`, `--for` and
+// empty owner is me, shown as `@me`. `--link <ref>` (repeatable) names any record; `--project`, `--for` and
 // `--meeting` are shorthand for a link of that type.
 import { addDays, currentContext, formatTable, parseRef, ValidationError, weekEnd, type FlagDef, type PluginContext } from "@ttybrain/api"
-import { byDue, isMe } from "./ops"
+import { byDue, isMe, ME } from "./ops"
 import { LINK_HINT, type ActionRecord, type Store, type Target } from "./records"
 
 const text = (description: string, placeholder?: string): FlagDef => ({ type: "string", description, ...(placeholder ? { placeholder } : {}) })
@@ -30,14 +30,14 @@ function group(a: ActionRecord, today: string): string {
 }
 const GROUPS = ["Overdue", "Earlier", "This week", "Next week", "Later", "No date"]
 
-const line = (a: ActionRecord) => `${a.ref} ${a.title} (${a.owner ?? "me"}${a.due_date ? `, due ${a.due_date}` : ""}${a.status !== "open" ? `, ${a.status}` : ""})`
+const line = (a: ActionRecord) => `${a.ref} ${a.title} (${a.owner ?? ME}${a.due_date ? `, due ${a.due_date}` : ""}${a.status !== "open" ? `, ${a.status}` : ""})`
 
 // `action show`: the title line, then one `  label: value` line per field that has a value.
 function showText(a: ActionRecord): string {
   const lines = [`${a.ref} ${a.title}`]
   const field = (label: string, v: string | null) => v && lines.push(`  ${label}: ${v}`)
   field("status", a.status === "done" && a.done_date ? `done (${a.done_date})` : a.status)
-  field("owner", a.owner ?? "me")
+  field("owner", a.owner ?? ME)
   field("due", a.due_date)
   field("links", a.links.map((l) => l.ref).join(", ") || null)
   field("notes", a.notes)
@@ -54,7 +54,7 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
     flags: {
       open: bool("only open actions"),
       overdue: bool("only open actions due before today"),
-      owner: text("only this owner (me, or a person)", "me|handle"),
+      owner: text("only this owner (@me, or a person)", "@me|handle"),
       project: text("only actions linked to this project", "code"),
       for: text("only actions linked to this person", "handle"),
       meeting: text("only actions linked to this meeting", "M-n"),
@@ -91,7 +91,7 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
       const blocks = GROUPS.map((g) => {
         const rows = list
           .filter((a) => group(a, today) === g)
-          .map((a) => ({ ref: a.ref, title: a.title, project: a.project, owner: a.owner ?? "me", for: a.for, due: a.due_date, status: a.status }))
+          .map((a) => ({ ref: a.ref, title: a.title, project: a.project, owner: a.owner ?? ME, for: a.for, due: a.due_date, status: a.status }))
         return rows.length ? `${g}\n${formatTable(COLUMNS, rows)}` : ""
       }).filter(Boolean)
       return { json: list, text: blocks.join("\n\n") }
@@ -110,7 +110,7 @@ export function registerCommands(ctx: PluginContext, store: Store): void {
   })
 
   const fieldFlags = {
-    owner: text("the owner (a person; empty or me: you)", "handle"),
+    owner: text("the owner (a person; empty or @me: you)", "handle"),
     project: text("link to this project", "code"),
     for: text("link to the stakeholder it is for", "handle"),
     meeting: text("link to the meeting it comes from", "M-n"),

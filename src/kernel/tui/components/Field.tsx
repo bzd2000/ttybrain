@@ -47,7 +47,7 @@ export type FieldSpec = {
   choices?: (values: Record<string, string | null>) => Array<{ value: string; label?: string }>
   // The label of a last entry in the `choices` list that closes it to type a value by hand (`custom…`).
   custom?: string
-  // Fixed entries a record field's drop-down offers before the record type's candidates (an owner's `me`): shown by
+  // Fixed entries a record field's drop-down offers before the record type's candidates (an owner's `@me`): shown by
   // their label (default: the value), kept while the typed text (without the type's prefix) starts their value or
   // label, any case, and taken as their value.
   extra?: Array<{ value: string; label?: string }>
