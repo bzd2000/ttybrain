@@ -8,6 +8,8 @@ import { useOverlay, type Overlay } from "../../../kernel/tui/overlay"
 import { builtinPlugins } from "../../../../tests/builtins"
 import { actionsTui } from "../../actions/tui/index"
 import { projectsTui } from "./index"
+import { fgAt } from "../../../../tests/design"
+import { theme } from "../../../kernel/tui/theme"
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -209,6 +211,42 @@ describe("deliverables tab", () => {
     expect(await rows("deliverable", ["title", "status"])).toEqual([{ title: "Spec", status: "not_started" }])
   })
 
+  test('owner "me" shows muted, none as —; the Owner drop-down offers me first and saves it', async () => {
+    const t = await open(2, async () => {
+      await write().addDeliverable!({ project: "CRM", title: "Peters", owner: "@peter" })
+      await write().addDeliverable!({ project: "CRM", title: "Mine", owner: "me" })
+      await write().addDeliverable!({ project: "CRM", title: "Nobodys" })
+    })
+    let frame = await until(t, "Nobodys")
+    expect(lineWith(frame, "Mine")).toMatch(/Mine +me /)
+    expect(lineWith(frame, "Peters")).toContain("@peter")
+    expect(lineWith(frame, "Nobodys")).toMatch(/Nobodys +— /)
+    const spans = await t.spans()
+    expect(fgAt(spans, "me", "Mine")).toBe(theme.muted) // not the selected row (Peters is)
+    expect(fgAt(spans, "@peter", "Peters")).not.toBe(theme.muted)
+    t.input.pressKey("n")
+    await until(t, "New deliverable")
+    await type(t, "Ours")
+    t.input.pressTab() // owner
+    t.input.pressEnter()
+    frame = await until(t, "@peter Peter Janssens")
+    const ls = frame.split("\n")
+    const at = ls.findIndex((l) => l.includes("@peter Peter Janssens"))
+    expect(ls[at - 1]).toMatch(/│ me +│/)
+    t.input.pressEnter() // picks me
+    frame = await untilThat(t, (f) => !f.includes("@peter Peter Janssens"))
+    expect(frame).toMatch(/Owner +me\b/)
+    t.input.pressKey("s", { ctrl: true })
+    frame = await until(t, "Ours")
+    expect(lineWith(frame, "Ours")).toMatch(/Ours +me /)
+    expect(await rows("deliverable", ["title", "owner_id", "owner_me"])).toEqual([
+      { title: "Peters", owner_id: 1, owner_me: 0 },
+      { title: "Mine", owner_id: null, owner_me: 1 },
+      { title: "Nobodys", owner_id: null, owner_me: 0 },
+      { title: "Ours", owner_id: null, owner_me: 1 },
+    ])
+  })
+
   test("validation error from op shows under field", async () => {
     const t = await open(2)
     t.input.pressKey("n")
@@ -241,6 +279,20 @@ describe("risks tab", () => {
     const at = (s: string) => frame.indexOf(s)
     expect(at("High one")).toBeLessThan(at("Low one"))
     expect(at("Low one")).toBeLessThan(at("Closed high"))
+  })
+
+  test('editing a risk owned by me shows Owner me; emptying it leaves no owner', async () => {
+    const t = await open(3, async () => void (await write().addRisk!({ project: "CRM", title: "Vendor", type: "risk", severity: "high", owner: "@me" })))
+    let frame = await until(t, "Vendor")
+    expect(lineWith(frame, "Vendor")).toMatch(/high +me /)
+    t.input.pressKey("e")
+    frame = await until(t, "Edit R-1")
+    expect(frame).toMatch(/Owner +me\b/)
+    for (let i = 0; i < 4; i++) t.input.pressTab() // type → title → description → severity → owner
+    for (let i = 0; i < 2; i++) t.input.pressBackspace()
+    t.input.pressKey("s", { ctrl: true })
+    frame = await untilThat(t, (f) => !f.includes("Edit R-1"))
+    expect(await rows("risk", ["owner_id", "owner_me"])).toEqual([{ owner_id: null, owner_me: 0 }])
   })
 
   test("x closes risk", async () => {

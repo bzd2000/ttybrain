@@ -15,7 +15,7 @@ const same = (a: string | null | undefined, b: string | null | undefined) => (a 
 const fields = (r: ActionRecord | null, links: string): FieldSpec[] => [
   { name: "title", label: "Title", kind: "text", required: true, initial: r?.title },
   { name: "due", label: "Due", kind: "date", initial: r?.due_date },
-  { name: "owner", label: "Owner (empty = me)", kind: "record", recordType: "person", initial: r?.owner },
+  { name: "owner", label: "Owner (empty = me)", kind: "record", recordType: "person", extra: [{ value: "me" }], initial: r?.owner },
   { name: "links", label: "Links", kind: "refs", initial: links === "" ? null : links },
   { name: "notes", label: "Notes", kind: "longtext", initial: r?.notes },
 ]

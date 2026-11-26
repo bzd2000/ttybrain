@@ -19,7 +19,7 @@ import { registerViews } from "./views"
 export const projects = definePlugin({
   id: "projects",
   name: "Projects",
-  version: "2.0.0", // 2: the projects.project view has no open_actions (actions are the actions plugin's)
+  version: "2.1.0", // 2: the projects.project view has no open_actions (actions are the actions plugin's); 2.1: owner_me on deliverable and risk
   apiVersion: 1,
   requires: { people: "^1" }, // person references (owners, involvement) are people's records
   // people.person (owners, involvement); meetings.meeting for meeting titles, actions.action and actions.link for

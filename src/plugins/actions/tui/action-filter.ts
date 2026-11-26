@@ -1,4 +1,4 @@
-// The Actions screen's filter line: `owner:anna`, `owner:me` (or `mine`), `project:CRM`, `status:done|cancelled|all`,
+// The Actions screen's filter line: `owner:anna`, `owner:me` (or `mine`, or `@me`), `project:CRM`, `status:done|cancelled|all`,
 // linked records by their refs (`@anna`, `#CRM`, `M-4`, as the design's `@anna #CRM mine`) and free words (matched in
 // the title). The default status is `open`.
 export type ActionFilter = { owner?: string; project?: string; status: "open" | "done" | "cancelled" | "all"; links: string[]; text: string[] }
@@ -15,7 +15,7 @@ export function parseActionFilter(text: string): ActionFilter {
     if (key === "owner" && value !== "") out.owner = value
     else if (key === "project" && value !== "") out.project = value
     else if (key === "status" && (STATUSES as readonly string[]).includes(value.toLowerCase())) out.status = value.toLowerCase() as ActionFilter["status"]
-    else if (t.toLowerCase() === "mine") out.owner = "me"
+    else if (t.toLowerCase() === "mine" || t.toLowerCase() === "@me") out.owner = "me"
     else if (LINK.test(t)) out.links.push(t)
     else out.text.push(t)
   }

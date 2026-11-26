@@ -117,20 +117,21 @@ export function registerViews(ctx: PluginContext): void {
       id: "integer",
       project_id: "integer",
       title: "text",
-      owner_id: "integer",
+      owner_id: "integer", // a person; null for me and for no owner
+      owner_me: "boolean", // 1: owned by me (added in 2.1, compatible)
       due_date: "date",
       status: "text",
       status_changed_at: "text",
       milestone_id: "integer",
     },
     query: (db) =>
-      db.selectFrom("deliverable").select(["id", "project_id", "title", "owner_id", "due_date", "status", "status_changed_at", "milestone_id"]),
+      db.selectFrom("deliverable").select(["id", "project_id", "title", "owner_id", "owner_me", "due_date", "status", "status_changed_at", "milestone_id"]),
   })
 
   ctx.publish("risk", {
     version: 1,
-    columns: { id: "integer", project_id: "integer", type: "text", title: "text", severity: "text", owner_id: "integer", status: "text", closed_date: "date" },
-    query: (db) => db.selectFrom("risk").select(["id", "project_id", "type", "title", "severity", "owner_id", "status", "closed_date"]),
+    columns: { id: "integer", project_id: "integer", type: "text", title: "text", severity: "text", owner_id: "integer", owner_me: "boolean", status: "text", closed_date: "date" },
+    query: (db) => db.selectFrom("risk").select(["id", "project_id", "type", "title", "severity", "owner_id", "owner_me", "status", "closed_date"]),
   })
 
   ctx.publish("decision", {

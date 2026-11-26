@@ -14,14 +14,22 @@ import { projects } from "./index"
 let home: string
 let k: Kernel | undefined
 
-// The projects plugin as it was before migration 002.
-const before002: PluginDef = {
+// The projects plugin without the given migrations; without 003 its deliverable and risk views have no owner_me.
+const without = (...skip: string[]): PluginDef => ({
   ...projects,
   activate(ctx: PluginContext) {
-    const migration: PluginContext["migration"] = (id, up) => (id === "002" ? undefined : ctx.migration(id, up))
-    return projects.activate(new Proxy(ctx, { get: (t, p) => (p === "migration" ? migration : Reflect.get(t, p)) }))
+    const migration: PluginContext["migration"] = (id, up) => (skip.includes(id) ? undefined : ctx.migration(id, up))
+    const publish: PluginContext["publish"] = (name, def) => {
+      if (!skip.includes("003") || (name !== "deliverable" && name !== "risk")) return ctx.publish(name, def)
+      const { owner_me: _, ...columns } = def.columns
+      return ctx.publish(name, { ...def, columns, query: (db) => db.selectFrom(name).select(Object.keys(columns)) })
+    }
+    const own: Record<string, unknown> = { migration, publish }
+    return projects.activate(new Proxy(ctx, { get: (t, p) => (typeof p === "string" && p in own ? own[p] : Reflect.get(t, p)) }))
   },
-}
+})
+// Before 002 (003, which only adds columns elsewhere, applied, so this build's operations can seed it).
+const before002 = without("002")
 
 const boot = (plugin: PluginDef) =>
   bootKernel({ env: { TTYBRAIN_HOME: home, TTYBRAIN_TEST: "1" }, plugins: [people, plugin], clock: fixedClock("2026-11-13") })
@@ -42,7 +50,7 @@ describe("projects migration 002: codes of up to 16 characters", () => {
     home = mkdtempSync(join(tmpdir(), "pm-mig002-"))
     k = await boot(before002)
     expect(k.plugins.map((p) => `${p.id} ${p.status}`)).toEqual(["people ok", "projects ok"])
-    expect(rows("SELECT id FROM kernel_plugin_migration WHERE plugin = 'projects'").map((r) => r.id)).toEqual(["001"])
+    expect(rows("SELECT id FROM kernel_plugin_migration WHERE plugin = 'projects'").map((r) => r.id)).toEqual(["001", "003"])
     const w = (id: string) => k!.ops.api(id)!.write
     await runWithContext(k.context(), async () => {
       await w("people").addPerson!({ name: "Anna Smit", handle: "anna", is_team: true })
@@ -67,7 +75,7 @@ describe("projects migration 002: codes of up to 16 characters", () => {
 
     k = await boot(projects)
     expect(k.plugins.map((p) => `${p.id} ${p.status}`)).toEqual(["people ok", "projects ok"])
-    expect(rows("SELECT id FROM kernel_plugin_migration WHERE plugin = 'projects' ORDER BY id").map((r) => r.id)).toEqual(["001", "002"])
+    expect(rows("SELECT id FROM kernel_plugin_migration WHERE plugin = 'projects' ORDER BY id").map((r) => r.id)).toEqual(["001", "002", "003"])
     const sqlNow = rows("SELECT sql FROM sqlite_schema WHERE name = 'projects_project'")[0].sql as string
     expect(sqlNow).toContain("length(code) between 2 and 16 and code not glob '*[^A-Z0-9]*'")
     expect(dump()).toEqual(data)
@@ -96,5 +104,42 @@ describe("projects migration 002: codes of up to 16 characters", () => {
       /FOREIGN KEY/,
     )
     expect(() => k!.db.raw.exec("DELETE FROM projects_project WHERE code = 'CRM'")).toThrow(/FOREIGN KEY/)
+  })
+})
+
+describe('projects migration 003: owner "me" on deliverables and risks', () => {
+  test("adds owner_me; existing owners stay a person or none", async () => {
+    home = mkdtempSync(join(tmpdir(), "pm-mig003-"))
+    k = await boot(without("003"))
+    const w = (id: string) => k!.ops.api(id)!.write
+    // Rows as the 002 schema holds them (the ops of this build would write owner_me, which 002 lacks).
+    await runWithContext(k.context(), async () => {
+      await w("people").addPerson!({ name: "Anna Smit", handle: "anna", is_team: true })
+      await w("projects").addProject!({ code: "CRM", name: "CRM replatforming" })
+    })
+    k.db.raw.exec(`INSERT INTO projects_deliverable (project_id, title, owner_id, status, created_at, updated_at) VALUES
+      (1, 'Owned', 1, 'not_started', 'n', 'n'), (1, 'Nobody', NULL, 'not_started', 'n', 'n')`)
+    k.db.raw.exec(`INSERT INTO projects_risk (project_id, type, title, severity, owner_id, status, created_at, updated_at) VALUES
+      (1, 'risk', 'Owned', 'high', 1, 'open', 'n', 'n'), (1, 'issue', 'Nobody', 'low', NULL, 'open', 'n', 'n')`)
+    await k.shutdown()
+
+    k = await boot(projects)
+    expect(k.plugins.map((p) => `${p.id} ${p.status}`)).toEqual(["people ok", "projects ok"])
+    expect(rows("SELECT id FROM kernel_plugin_migration WHERE plugin = 'projects' ORDER BY id").map((r) => r.id)).toEqual(["001", "002", "003"])
+    for (const t of ["deliverable", "risk"]) {
+      expect(rows(`SELECT id, title, owner_id, owner_me FROM projects_${t} ORDER BY id`)).toEqual([
+        { id: 1, title: "Owned", owner_id: 1, owner_me: 0 },
+        { id: 2, title: "Nobody", owner_id: null, owner_me: 0 },
+      ])
+      expect(rows(`SELECT id, owner_id, owner_me FROM "projects__pub_${t}" ORDER BY id`)).toEqual([
+        { id: 1, owner_id: 1, owner_me: 0 },
+        { id: 2, owner_id: null, owner_me: 0 },
+      ])
+      expect(() => k!.db.raw.exec(`UPDATE projects_${t} SET owner_me = NULL WHERE id = 2`)).toThrow(/NOT NULL/)
+    }
+    await runWithContext(k.context(), async () => {
+      const d = await w("projects").editDeliverable!({ ref: "D-1", title: "Owned v2" })
+      expect(d).toMatchObject({ owner: "@anna", owner_me: false })
+    })
   })
 })

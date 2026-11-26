@@ -577,3 +577,20 @@ Branch `feature/form-pickers`. Drop-downs in forms (enum, `choices`, record), th
 
 - The drop-down's place is read from the field's last layout (renderable `y`) when it opens or its entries change; a form that reflows while it is open (an error appearing above) leaves it in place until then.
 - Checked through test frames (100×30, 80×24), not in a real terminal.
+
+## Owner "me" (2026-11-26)
+
+Branch `feature/owner-me`. Deliverables and risks can be owned by you (`--owner me` or `@me`, any case), apart from no owner; actions take `@me` as well as `me` (owner input, `--owner` filter, the Actions screen's filter `@me`); the Owner drop-downs of the action, deliverable and risk forms start with `me` (the record field's new `extra` entries).
+
+### Rulings made (and what each costs if wrong)
+
+- **Encoding: an `owner_me` flag** (integer 0/1, not null, default 0) next to `owner_id` on `deliverable` and `risk` (projects migration 003, columns added, no rebuild). `owner_id` stays a person reference only, so readers of the views that join `people.person` on it keep working; you are `owner_me = 1, owner_id = null`. Existing rows get 0: a null owner stays "no owner". Cost if wrong: one more column to read for anyone who wants "me".
+- **No CHECK on `owner_me`.** SQLite verifies a CHECK added by `ALTER TABLE ADD COLUMN` through a virtual table (`pragma_quick_check`), which layer 2 refuses, and a CHECK alone did not seem worth a rule-6 rebuild of two tables; the operations write only 0 or 1 (as meetings' `closed_itself`). A later rebuild of either table can add it.
+- **Views: `owner_me` added to `projects.deliverable` and `projects.risk`** at view version 1 (an added column is compatible); the plugin is 2.1.0 so a reader that needs the column can say `^2.1`.
+- **Milestones have no owner** (the request named them; their table never had one). Not added: that is a new field, not "me".
+- **Records:** `owner` is `"me"`, `"@bob"` or null and `owner_me` a boolean; the records have no `owner_id` (they never had), the views do.
+- **Action form:** a picked `me` shows `me`; an action you own still opens with an empty Owner (label `Owner (empty = me)`), as before.
+
+### Deferred minor findings
+
+- `--link @me` (an action's links) is not "me": links are records, and you are not one.

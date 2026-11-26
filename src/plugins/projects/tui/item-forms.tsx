@@ -27,6 +27,8 @@ type KindForm = {
 }
 
 const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? null) === (b ?? null)
+// An owner's drop-down starts with me (the operations take `me`; empty is no owner).
+const ME = [{ value: "me" }]
 const RISK_TYPES = ["risk", "issue"]
 const SEVERITIES = ["low", "medium", "high"]
 const STATUSES = ["not_started", "in_progress", "in_review", "delivered"]
@@ -53,7 +55,7 @@ const KINDS: Record<Kind, KindForm> = {
     label: "Deliverable",
     fields: (r) => [
       { name: "title", label: "Title", kind: "text", required: true, initial: r?.title },
-      { name: "owner", label: "Owner", kind: "record", recordType: "person", initial: r?.owner },
+      { name: "owner", label: "Owner", kind: "record", recordType: "person", extra: ME, initial: r?.owner },
       { name: "due", label: "Due", kind: "date", initial: r?.due_date },
       { name: "status", label: "Status", kind: "enum", values: STATUSES, required: true, initial: r?.status },
       { name: "milestone", label: "Milestone", kind: "record", recordType: "milestone", initial: r?.milestone },
@@ -74,7 +76,7 @@ const KINDS: Record<Kind, KindForm> = {
       { name: "title", label: "Title", kind: "text", required: true, initial: r?.title },
       { name: "description", label: "Description", kind: "longtext", initial: r?.description },
       { name: "severity", label: "Severity", kind: "enum", values: SEVERITIES, required: true, initial: r?.severity ?? "medium" },
-      { name: "owner", label: "Owner", kind: "record", recordType: "person", initial: r?.owner },
+      { name: "owner", label: "Owner", kind: "record", recordType: "person", extra: ME, initial: r?.owner },
       { name: "mitigation", label: "Mitigation", kind: "text", initial: r?.mitigation },
     ],
     addOp: "addRisk",

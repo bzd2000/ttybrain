@@ -198,6 +198,27 @@ describe("actions screen", () => {
     expect(isSelected(await t.spans(), "Fresh one")).toBe(true)
   })
 
+  test('the Owner drop-down offers me first; picking it on Anna\'s action makes it mine', async () => {
+    const t = await open()
+    t.input.pressArrow("down") // A-2, Anna's
+    t.input.pressKey("e")
+    await untilThat(t, (f) => f.includes("Edit A-2"))
+    t.input.pressTab() // due
+    t.input.pressTab() // owner
+    for (let i = 0; i < 6; i++) t.input.pressBackspace() // "@anna"
+    t.input.pressEnter()
+    let frame = await untilThat(t, (f) => f.includes("@anna Anna Smits"))
+    const ls = lines(frame)
+    const at = ls.findIndex((l) => l.includes("@anna Anna Smits"))
+    expect(ls[at - 1]).toMatch(/│ me +│/)
+    t.input.pressEnter() // picks me
+    frame = await untilThat(t, (f) => !f.includes("@anna Anna Smits"))
+    expect(frame).toMatch(/Owner \(empty = me\) +me\b/)
+    t.input.pressKey("s", { ctrl: true })
+    await untilThat(t, (f) => !f.includes("Edit A-2"))
+    expect((await rows<any>(["title", "owner_id"]))[1]).toEqual({ title: "Prepare budget", owner_id: null })
+  })
+
   test("Enter opens the action's form", async () => {
     const t = await open()
     t.input.pressEnter()
@@ -254,6 +275,11 @@ describe("actions screen", () => {
     t.input.pressEscape()
     await untilThat(t, (f) => f.includes(" status:open ─"))
     frame = await filtered("mine", "status:open owner:me")
+    expect(frame).toContain("Reply to vendor")
+    expect(frame).not.toContain("Prepare budget")
+    t.input.pressEscape()
+    await untilThat(t, (f) => f.includes(" status:open ─"))
+    frame = await filtered("@me", "status:open owner:me")
     expect(frame).toContain("Reply to vendor")
     expect(frame).not.toContain("Prepare budget")
   })

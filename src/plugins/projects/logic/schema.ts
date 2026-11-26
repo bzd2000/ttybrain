@@ -1,6 +1,6 @@
 // The projects plugin's tables (design §4 Projects, plugin reference §2) and the TypeBox shapes of its records.
 // Migration 001 creates every table, including those whose operations come in later parts of the plugin; 002 widens
-// project codes to 16 characters.
+// project codes to 16 characters; 003 lets deliverables and risks be owned by "me".
 import { sql, Type, type Kysely, type PluginContext, type Static } from "@ttybrain/api"
 
 export const PROJECT_STATUSES = ["active", "on_hold", "closed"] as const
@@ -194,5 +194,18 @@ export function registerSchema(ctx: PluginContext): void {
     await createProject(db, "project", 16)
     await db.insertInto("project").expression(db.selectFrom("project_copy").selectAll()).execute()
     await db.schema.dropTable("project_copy").execute()
+  })
+
+  // Owner "me" on deliverables and risks: a flag next to owner_id (a person, or null), so "me" (owner_me 1,
+  // owner_id null) and no owner (both empty) stay apart. Added columns, no rebuild: existing rows get 0, so a
+  // null owner stays "no owner". No CHECK: SQLite verifies an added CHECK through a virtual table, which layer 2
+  // refuses, and a CHECK alone is not worth a rule-6 rebuild; the operations write only 0 or 1 (as meetings'
+  // closed_itself).
+  ctx.migration("003", async (db) => {
+    for (const t of ["deliverable", "risk"])
+      await db.schema
+        .alterTable(t)
+        .addColumn("owner_me", "integer", (c) => c.notNull().defaultTo(0))
+        .execute()
   })
 }

@@ -17,7 +17,7 @@ When you process a note (an inbox item, meeting notes, something the user tells 
 
 - "X will do Y" or "I need to Y": add an action (see Actions).
 - "We decided …", "agreed to …": add a decision. \`ttybrain decision add "Select vendor B" --project CRM [--decided-by "Steering committee"]\`.
-- A worry about what might go wrong: add a risk; a problem that is already happening: add an issue. \`ttybrain risk add CRM "Vendor delay" --type risk|issue --severity low|medium|high [--owner bob]\`. Close one that is resolved with \`ttybrain risk close R-<n>\`.
+- A worry about what might go wrong: add a risk; a problem that is already happening: add an issue. \`ttybrain risk add CRM "Vendor delay" --type risk|issue --severity low|medium|high [--owner bob|me]\` (\`--owner me\` or \`@me\` when the user owns it; leave it out for no owner; deliverables take \`--owner\` the same way). Close one that is resolved with \`ttybrain risk close R-<n>\`.
 - A signal about how the project is going ("on track", "slipping", "budget overrun"): record a health update. \`ttybrain project edit CRM --health green|amber|red --health-comment "…"\`.
 - "X is finished", "sent for review": update the deliverable's status. \`ttybrain deliverable status D-<n> in_progress|in_review|delivered\`. Find the deliverable with \`ttybrain deliverable list CRM\` first.
 - A concern or remark from a stakeholder: add a note on that person (see People).

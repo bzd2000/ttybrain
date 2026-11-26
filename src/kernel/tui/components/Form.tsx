@@ -327,7 +327,7 @@ export function Form(props: {
     const f = current()
     if (!f || !suggesting()) return null
     const value = valueOf(f.name) ?? ""
-    if (f.kind === "record") return f.recordType ? { types: [f.recordType], text: value.trim() } : null
+    if (f.kind === "record") return f.recordType ? { types: [f.recordType], text: value.trim(), extra: f.extra } : null
     if (f.kind !== "refs") return null
     const word = lastWord(value)
     const defs = word === "" ? [] : kernel.records.typesOfRef(word)
@@ -338,6 +338,15 @@ export function Form(props: {
       const k = searchKey()
       if (!k) return []
       const all: Suggestion[] = []
+      if ("extra" in k && k.extra) {
+        // A record field's fixed entries first, while the typed text (its type's prefix left out) starts one.
+        const prefix = kernel.records.byName(k.types[0]!)?.prefix ?? ""
+        const typed = (k.text.startsWith(prefix) ? k.text.slice(prefix.length) : k.text).toLowerCase()
+        for (const x of k.extra) {
+          const label = x.label ?? x.value
+          if (x.value.toLowerCase().startsWith(typed) || label.toLowerCase().startsWith(typed)) all.push({ ref: x.value, label, extra: true })
+        }
+      }
       for (const type of k.types) all.push(...((await kernel.records.byName(type)?.search(k.text, SUGGESTION_LIMIT)) ?? []))
       if (k.types.length === 1) return all
       return all.sort((a, b) => (a.ref < b.ref ? -1 : a.ref > b.ref ? 1 : 0)).slice(0, SUGGESTION_LIMIT)
@@ -377,7 +386,7 @@ export function Form(props: {
   const listItems = (): string[] => {
     const f = current()
     if (!f) return []
-    if (f.kind === "record") return suggesting() ? suggestions().map((s) => `${s.ref} ${s.label}`) : []
+    if (f.kind === "record") return suggesting() ? suggestions().map((s) => (s.extra ? s.label : `${s.ref} ${s.label}`)) : []
     return listOpen() ? (choicesOf(f) ?? []).map((c) => c.label) : []
   }
   const listIndex = () => (current()?.kind === "record" ? picked() : highlight())

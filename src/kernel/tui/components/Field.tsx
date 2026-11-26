@@ -47,6 +47,10 @@ export type FieldSpec = {
   choices?: (values: Record<string, string | null>) => Array<{ value: string; label?: string }>
   // The label of a last entry in the `choices` list that closes it to type a value by hand (`custom…`).
   custom?: string
+  // Fixed entries a record field's drop-down offers before the record type's candidates (an owner's `me`): shown by
+  // their label (default: the value), kept while the typed text (without the type's prefix) starts their value or
+  // label, any case, and taken as their value.
+  extra?: Array<{ value: string; label?: string }>
   // Whether the field is shown, from the form's current values (own fields, by name): a hidden field takes no
   // focus and reaches `submit` as null (a talk item's Project only for a person's item). One that throws shows.
   when?: (values: Record<string, string | null>) => boolean
@@ -55,7 +59,8 @@ export type FieldSpec = {
 // A value as a <Form> shows it while not focused: pieces of text, some muted, some red (a date that does not parse).
 export type FieldDisplay = Array<{ text: string; muted?: boolean; error?: boolean }>
 
-export type Suggestion = { ref: string; label: string }
+// `extra`: a record field's fixed entry (FieldSpec.extra), shown by its label alone.
+export type Suggestion = { ref: string; label: string; extra?: boolean }
 
 export const INPUT_WIDTH = 32
 // The look's inputs (Form `look`): wide enough for a phrase such as `every 2 weeks on wednesday` to show whole.

@@ -153,7 +153,7 @@ export function ProjectSummary(props: { recordRef: string }) {
       const team: string[] = []
       for (const r of people) if (Number(r.is_team) === 1 && !team.includes(firstName(String(r.name)))) team.push(firstName(String(r.name)))
       const milestones = (await items.milestoneQuery().where("m.project_id", "=", p.id).orderBy("m.due_date").orderBy("m.id").execute()).map(items.toMilestone)
-      // Delivered ones too, with the owner's name.
+      // Delivered ones too, with the owner's name (or me).
       const deliverables = (await items.deliverableQuery().select("pp.name as owner_name").where("d.project_id", "=", p.id).orderBy("d.id").execute())
         .map((r: any) => ({ ...items.toDeliverable(r), ownerName: r.owner_name === null ? null : String(r.owner_name) }))
         .sort(byDue)
@@ -188,7 +188,7 @@ export function ProjectSummary(props: { recordRef: string }) {
         ref: x.ref,
         cells: {
           title: x.title,
-          owner: x.ownerName === null ? "" : firstName(x.ownerName),
+          owner: x.owner_me ? { text: "me", tone: "muted" } : x.ownerName === null ? "" : firstName(x.ownerName),
           status: { text: label(x.status), tone: STATUS_TONE[x.status] ?? "muted" },
           due: { text: due, tone: delivered || x.due_date === null ? "muted" : x.due_date < today() ? "red" : undefined },
         },

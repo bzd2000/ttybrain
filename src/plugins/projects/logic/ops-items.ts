@@ -1,6 +1,6 @@
 // The exposed write operations on milestones, deliverables, risks and decisions. Each returns the record with
 // its `ref`; `describe` gives the change-set line (plugin reference §2). Every write needs an active project and
-// active owners: archived ones are refused with a hint to restore them first.
+// active owners: archived ones are refused with a hint to restore them first. An owner may be `me` (or `@me`).
 import { Deleted, NonBlank, Type, ValidationError, type PluginContext, type Static } from "@ttybrain/api"
 import { DeliverableRecord, DecisionRecord, DeliverableStatus, MilestoneRecord, RiskRecord, RiskType, Severity, type Items } from "./items"
 import { clean, date, now, today } from "./ops-project"
@@ -158,7 +158,7 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
         describe: async (i: Static<typeof AddDeliverable>) => `+ deliverable "${i.title.trim()}" (${await store.codeLabel(i.project)})`,
         run: async (i: Static<typeof AddDeliverable>) => {
           const p = await store.activeProject(i.project)
-          const owner = await items.ownerId(i.owner)
+          const owner = await items.ownerOf(i.owner)
           const due = dateOf(i.due, "due")
           const milestone = await items.milestoneFor(i.milestone, p.id)
           const t = now()
@@ -168,7 +168,7 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
             .values({
               project_id: p.id,
               title: i.title.trim(),
-              owner_id: owner ?? null,
+              ...(owner ?? { owner_id: null, owner_me: 0 }),
               due_date: due ?? null,
               status,
               milestone_id: milestone ?? null,
@@ -190,14 +190,14 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
         run: async (i: Static<typeof EditDeliverable>) => {
           const d = await items.find("deliverable", i.ref)
           await items.guardProject(d.project)
-          const owner = await items.ownerId(i.owner)
+          const owner = await items.ownerOf(i.owner)
           const milestone = await items.milestoneFor(i.milestone, d.project_id)
           const due = i.due === undefined || i.due === null || i.due.trim() === "" ? (i.due === undefined ? undefined : null) : date(i.due, "due")
           await db
             .updateTable("deliverable")
             .set({
               ...(i.title !== undefined ? { title: i.title.trim() } : {}),
-              ...(owner !== undefined ? { owner_id: owner } : {}),
+              ...(owner ?? {}),
               ...(due !== undefined ? { due_date: due } : {}),
               ...(milestone !== undefined ? { milestone_id: milestone } : {}),
               updated_at: now(),
@@ -251,7 +251,7 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
         describe: (i: Static<typeof AddRisk>) => `+ ${i.type} "${i.title.trim()}" (${i.severity})`,
         run: async (i: Static<typeof AddRisk>) => {
           const p = await store.activeProject(i.project)
-          const owner = await items.ownerId(i.owner)
+          const owner = await items.ownerOf(i.owner)
           const t = now()
           const res = await db
             .insertInto("risk")
@@ -261,7 +261,7 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
               title: i.title.trim(),
               description: clean(i.description) ?? null,
               severity: i.severity,
-              owner_id: owner ?? null,
+              ...(owner ?? { owner_id: null, owner_me: 0 }),
               mitigation: clean(i.mitigation) ?? null,
               created_at: t,
               updated_at: t,
@@ -280,14 +280,14 @@ export function registerItemOps(ctx: PluginContext, store: Store, items: Items):
         run: async (i: Static<typeof EditRisk>) => {
           const r = await items.find("risk", i.ref)
           await items.guardProject(r.project)
-          const owner = await items.ownerId(i.owner)
+          const owner = await items.ownerOf(i.owner)
           await db
             .updateTable("risk")
             .set({
               ...(i.title !== undefined ? { title: i.title.trim() } : {}),
               ...(i.type !== undefined ? { type: i.type } : {}),
               ...(i.severity !== undefined ? { severity: i.severity } : {}),
-              ...(owner !== undefined ? { owner_id: owner } : {}),
+              ...(owner ?? {}),
               ...(i.description !== undefined ? { description: clean(i.description) } : {}),
               ...(i.mitigation !== undefined ? { mitigation: clean(i.mitigation) } : {}),
               updated_at: now(),
