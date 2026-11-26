@@ -122,8 +122,8 @@ The portfolio, and everything you follow up per project: health, milestones, del
 | `project` | `code` (unique, 2–16 `A-Z`/`0-9`; lower case input is upper-cased), `name`, `description`, `context` (Markdown), `context_updated_at`, `status` (active/on_hold/closed), `start_date`, `end_date`, `effort_estimate_days`, `effort_note`, `archived_at` |
 | `health_update` | `project_id → project`, `date`, `health` (green/amber/red), `comment` |
 | `milestone` | `project_id → project`, `title`, `due_date`, `done_date` |
-| `deliverable` | `project_id → project`, `title`, `owner_id → person` **(soft)**, `due_date`, `status` (not_started/in_progress/in_review/delivered), `milestone_id → milestone`, `delivered_date`, `status_changed_at` |
-| `risk` | `project_id → project`, `type` (risk/issue), `title`, `description`, `severity` (low/medium/high), `owner_id → person` **(soft)**, `mitigation`, `status` (open/closed), `closed_date` |
+| `deliverable` | `project_id → project`, `title`, `owner_id → person` **(soft)**, `owner_me` (0/1: owned by you; migration 003), `due_date`, `status` (not_started/in_progress/in_review/delivered), `milestone_id → milestone`, `delivered_date`, `status_changed_at` |
+| `risk` | `project_id → project`, `type` (risk/issue), `title`, `description`, `severity` (low/medium/high), `owner_id → person` **(soft)**, `owner_me` (0/1, as on `deliverable`), `mitigation`, `status` (open/closed), `closed_date` |
 | `decision` | `project_id → project` (optional), `date`, `title`, `description`, `decided_by`, `meeting_id → meeting` **(soft)** |
 | `involvement` | `project_id → project`, `person_id → person` **(soft)**, `role`; unique (project, person, role) |
 
@@ -138,8 +138,8 @@ The portfolio, and everything you follow up per project: health, milestones, del
 | `projects.project` | id, code, name, description, status, start_date, end_date, effort_estimate_days, `health`, `health_comment`, `health_date` (latest update), `next_milestone_title`, `next_milestone_due`, `open_risks`, archived |
 | `projects.health_update` | id, project_id, date, health, comment |
 | `projects.milestone` | id, project_id, title, due_date, done_date, `late` |
-| `projects.deliverable` | id, project_id, title, owner_id, due_date, status, status_changed_at, milestone_id |
-| `projects.risk` | id, project_id, type, title, severity, owner_id, status, closed_date |
+| `projects.deliverable` | id, project_id, title, owner_id, owner_me, due_date, status, status_changed_at, milestone_id |
+| `projects.risk` | id, project_id, type, title, severity, owner_id, owner_me, status, closed_date |
 | `projects.decision` | id, project_id, date, title, decided_by, meeting_id |
 | `projects.involvement` | project_id, person_id, role |
 
@@ -180,6 +180,8 @@ ttybrain decision    list|add|edit|delete
 ttybrain involve     add|remove        # ttybrain involve add CRM marie --role "key user"
 ttybrain report status <project>
 ```
+
+**Owners of deliverables and risks.** An owner is a person (`bob`, `@bob`), **you** (`me` or `@me`, any case) or nobody (left out on `add`; an empty `--owner ""` on `edit` clears it). You are stored as `owner_me = 1` with `owner_id` null, so "you" and "nobody" stay apart (rows from before projects 2.1 have `owner_me = 0`: their null owner stays "nobody"). `--json` records carry `owner` (`"me"`, `"@bob"` or null) and `owner_me` (boolean); the views carry both columns (added in 2.1, compatible: `owner_id` is null for you and for nobody). `deliverable list` and `risk list` take `--owner me` as well as a person. The TUI shows you as `me`, muted (as an action's owner), nobody as `—` in the item tabs and blank on the Overview; the item forms' Owner drop-down starts with `me`. Milestones have no owner.
 
 ### UI and other contributions
 
@@ -246,7 +248,7 @@ An action counts as archived (writes refused, hidden from Attention and the over
 ttybrain action list|show|add|edit|link|unlink|done|cancel|delete
 ```
 
-`list` groups Overdue / This week / Next week / Later / No date, with `--open --overdue --owner --project --for --meeting --link <ref>`. `add` and `edit` take `--owner` (empty = you), `--due`, `--notes`, `--project`, `--for`, `--meeting` (shorthand for links) and `--link <ref>` (repeatable). `--json` keeps the `ActionRecord` fields (`ref id title due_date status done_date owner_id owner project_id project for_person_id for meeting_id meeting notes`; the three link fields are the first link of that type) and adds `links: [{ type, id, ref }]`. Exit codes as everywhere.
+`list` groups Overdue / This week / Next week / Later / No date, with `--open --overdue --owner` (a person, or `me` / `@me`) `--project --for --meeting --link <ref>`. `add` and `edit` take `--owner` (empty, `me` or `@me` = you), `--due`, `--notes`, `--project`, `--for`, `--meeting` (shorthand for links) and `--link <ref>` (repeatable). `--json` keeps the `ActionRecord` fields (`ref id title due_date status done_date owner_id owner project_id project for_person_id for meeting_id meeting notes`; the three link fields are the first link of that type) and adds `links: [{ type, id, ref }]`. Exit codes as everywhere.
 
 ### UI and other contributions
 

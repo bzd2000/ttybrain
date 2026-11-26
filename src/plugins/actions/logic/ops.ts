@@ -51,8 +51,8 @@ export const date = (input: string, field: string) => {
     throw e
   }
 }
-// `me` (any case) names the user, who is stored as no owner.
-export const isMe = (input: string) => input.trim().toLowerCase() === "me"
+// `me` or `@me` (any case) names the user, who is stored as no owner.
+export const isMe = (input: string) => /^@?me$/i.test(input.trim())
 const blank = (v: string | null | undefined) => v === null || v === undefined || v.trim() === ""
 // Ascending by due date, undated last, then by id.
 export const byDue = (a: { due_date: string | null; id: number }, b: { due_date: string | null; id: number }) =>

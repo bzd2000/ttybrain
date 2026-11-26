@@ -27,7 +27,8 @@ export const DeliverableRecord = Type.Object({
   project: Text,
   project_id: Type.Integer(),
   title: Text,
-  owner: Opt,
+  owner: Opt, // "me", a person ("@bob") or null (no owner)
+  owner_me: Type.Boolean(), // owned by me: tells "me" from no owner
   due_date: Opt,
   status: DeliverableStatus,
   status_changed_at: Opt,
@@ -43,7 +44,8 @@ export const RiskRecord = Type.Object({
   title: Text,
   description: Opt,
   severity: Severity,
-  owner: Opt,
+  owner: Opt, // "me", a person ("@bob") or null (no owner)
+  owner_me: Type.Boolean(),
   mitigation: Opt,
   status: RiskStatus,
   closed_date: Opt,
@@ -69,6 +71,11 @@ export const KINDS = ["milestone", "deliverable", "risk", "decision"] as const
 export const PREFIX: Record<Kind, string> = { milestone: "MS-", deliverable: "D-", risk: "R-", decision: "DE-" }
 const MEETING_PREFIX = "M-"
 
+// The user as an owner: `me`, or `@me` (any case). The people plugin reserves the handle.
+export const ME = "me"
+export const isMe = (input: string) => /^@?me$/i.test(input.trim())
+export type Owner = { owner_id: number | null; owner_me: 0 | 1 }
+
 const ALIAS = { milestone: "m", deliverable: "d", risk: "r", decision: "d" } as const
 const str = (v: unknown): string | null => (v === null || v === undefined ? null : String(v))
 const int = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v))
@@ -85,19 +92,19 @@ export function makeItems(ctx: PluginRuntime, store: Store) {
       .selectFrom("deliverable as d")
       .innerJoin("project as p", "p.id", "d.project_id")
       .leftJoin("people.person as pp", "pp.id", "d.owner_id")
-      .select(["d.id", "d.project_id", "d.title", "d.owner_id", "d.due_date", "d.status", "d.status_changed_at", "d.delivered_date", "d.milestone_id", "p.code", "pp.handle"])
+      .select(["d.id", "d.project_id", "d.title", "d.owner_id", "d.owner_me", "d.due_date", "d.status", "d.status_changed_at", "d.delivered_date", "d.milestone_id", "p.code", "pp.handle"])
   const riskQuery = () =>
     db
       .selectFrom("risk as r")
       .innerJoin("project as p", "p.id", "r.project_id")
       .leftJoin("people.person as pp", "pp.id", "r.owner_id")
-      .select(["r.id", "r.project_id", "r.type", "r.title", "r.description", "r.severity", "r.owner_id", "r.mitigation", "r.status", "r.closed_date", "p.code", "pp.handle"])
+      .select(["r.id", "r.project_id", "r.type", "r.title", "r.description", "r.severity", "r.owner_id", "r.owner_me", "r.mitigation", "r.status", "r.closed_date", "p.code", "pp.handle"])
   const decisionQuery = () =>
     db
       .selectFrom("decision as d")
       .leftJoin("project as p", "p.id", "d.project_id")
       .select(["d.id", "d.project_id", "d.date", "d.title", "d.description", "d.decided_by", "d.meeting_id", "p.code"])
-  const owner = (r: any) => (r.owner_id === null ? null : r.handle === null ? `person:${r.owner_id}` : `@${r.handle}`)
+  const owner = (r: any) => (Number(r.owner_me) === 1 ? ME : r.owner_id === null ? null : r.handle === null ? `person:${r.owner_id}` : `@${r.handle}`)
   const toMilestone = (r: any): MilestoneRecord => ({
     ref: formatRef("MS-", Number(r.id)),
     id: Number(r.id),
@@ -114,6 +121,7 @@ export function makeItems(ctx: PluginRuntime, store: Store) {
     project_id: Number(r.project_id),
     title: String(r.title),
     owner: owner(r),
+    owner_me: Number(r.owner_me) === 1,
     due_date: str(r.due_date),
     status: r.status,
     status_changed_at: str(r.status_changed_at),
@@ -130,6 +138,7 @@ export function makeItems(ctx: PluginRuntime, store: Store) {
     description: str(r.description),
     severity: r.severity,
     owner: owner(r),
+    owner_me: Number(r.owner_me) === 1,
     mitigation: str(r.mitigation),
     status: r.status,
     closed_date: str(r.closed_date),
@@ -182,11 +191,13 @@ export function makeItems(ctx: PluginRuntime, store: Store) {
     if (ref !== null) await store.activeProject(ref.slice(1))
   }
 
-  // Owners are soft references: validated on write, never archived.
-  async function ownerId(input: string | null | undefined): Promise<number | null | undefined> {
+  // An owner as written: `me` / `@me` (any case) is me, empty is no owner, anything else an active person (a soft
+  // reference: validated on write, never archived). undefined: not given.
+  async function ownerOf(input: string | null | undefined): Promise<Owner | undefined> {
     if (input === undefined) return undefined
-    if (input === null || input.trim() === "") return null
-    return (await store.activePerson(input)).id
+    if (input === null || input.trim() === "") return { owner_id: null, owner_me: 0 }
+    if (isMe(input)) return { owner_id: null, owner_me: 1 }
+    return { owner_id: (await store.activePerson(input)).id, owner_me: 0 }
   }
 
   // A meeting is a soft reference to another plugin's record: validated only when that plugin is loaded.
@@ -209,7 +220,7 @@ export function makeItems(ctx: PluginRuntime, store: Store) {
     return m.id
   }
 
-  return { milestoneQuery, deliverableQuery, riskQuery, decisionQuery, toMilestone, toDeliverable, toRisk, toDecision, find, idOf, refOr, labelOf, guardProject, ownerId, meetingId, milestoneFor }
+  return { milestoneQuery, deliverableQuery, riskQuery, decisionQuery, toMilestone, toDeliverable, toRisk, toDecision, find, idOf, refOr, labelOf, guardProject, ownerOf, meetingId, milestoneFor }
 }
 
 export function registerItemRecordTypes(ctx: PluginContext, items: Items): void {

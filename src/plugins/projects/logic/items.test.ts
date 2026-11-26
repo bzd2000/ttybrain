@@ -44,7 +44,7 @@ describe("projects: milestones, deliverables, risks, decisions", () => {
     expect(r.json.ref).toBe("R-1")
     expect(r.json).toMatchObject({ project: "#CRM", type: "risk", title: "Vendor delay", severity: "high", owner: "@bob", status: "open", closed_date: null })
     expect(viewRows("risk")).toEqual([
-      { id: 1, project_id: 1, type: "risk", title: "Vendor delay", severity: "high", owner_id: 1, status: "open", closed_date: null },
+      { id: 1, project_id: 1, type: "risk", title: "Vendor delay", severity: "high", owner_id: 1, owner_me: 0, status: "open", closed_date: null },
     ])
     expect((await ok("project", "show", "CRM", "--json")).json.open_risks).toBe(1)
     const c = await ok("risk", "close", "R-1", "--json")
@@ -83,6 +83,7 @@ describe("projects: milestones, deliverables, risks, decisions", () => {
       project_id: 1,
       title: "Spec",
       owner_id: 1,
+      owner_me: 0,
       due_date: "2026-12-01",
       status: "delivered",
       status_changed_at: "2026-11-13T09:00:00",
